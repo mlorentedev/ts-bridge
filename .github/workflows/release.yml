@@ -38,33 +38,51 @@ jobs:
         run: |
           VERSION=${{ needs.release-please.outputs.tag_name }}
           LDFLAGS="-s -w -X main.version=${VERSION}"
-          mkdir -p dist/bin
-
-          # Build binaries
-          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-linux-amd64 .
-          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-linux-arm64 .
-          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-windows-amd64.exe .
-          GOOS=windows GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-windows-arm64.exe .
-          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-darwin-amd64 .
-          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-darwin-arm64 .
-
-          # Create distribution bundles
-          mkdir -p dist/bundle
-          cp -r scripts/ .env.example README.md LICENSE dist/bundle/
           
-          # Create archives
-          tar -czf dist/ts-bridge-source-${VERSION}.tar.gz -C dist/bundle .
-          zip -r dist/ts-bridge-source-${VERSION}.zip dist/bundle/*
+          # Platforms to build
+          PLATFORMS=("linux/amd64" "linux/arm64" "windows/amd64" "windows/arm64" "darwin/amd64" "darwin/arm64")
+          
+          mkdir -p dist/artifacts
 
-          # Checksums for binaries
-          cd dist/bin && sha256sum * > ../checksums.txt
+          for PLATFORM in "${PLATFORMS[@]}"; do
+            OS="${PLATFORM%/*}"
+            ARCH="${PLATFORM#*/}"
+            
+            # Set binary name (add .exe for windows)
+            BINARY_NAME="ts-bridge"
+            if [ "$OS" = "windows" ]; then
+              BINARY_NAME="ts-bridge.exe"
+            fi
+            
+            # Create a staging directory for this specific bundle
+            STAGING="dist/ts-bridge-${OS}-${ARCH}"
+            mkdir -p "${STAGING}"
+            
+            # Build the binary into the staging directory
+            echo "Building for ${OS}/${ARCH}..."
+            GOOS=$OS GOARCH=$ARCH go build -ldflags="${LDFLAGS}" -o "${STAGING}/${BINARY_NAME}" .
+            
+            # Copy relevant assets
+            cp .env.example README.md LICENSE "${STAGING}/"
+            cp -r scripts/ "${STAGING}/"
+            
+            # Create the archive
+            cd dist
+            if [ "$OS" = "windows" ]; then
+              zip -r "artifacts/ts-bridge-${VERSION}-${OS}-${ARCH}.zip" "ts-bridge-${OS}-${ARCH}"
+            else
+              tar -czf "artifacts/ts-bridge-${VERSION}-${OS}-${ARCH}.tar.gz" "ts-bridge-${OS}-${ARCH}"
+            fi
+            cd ..
+          done
+
+          # Generate checksums for the final archives
+          cd dist/artifacts && sha256sum * > ../checksums.txt
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: |
-            dist/bin/*
-            dist/ts-bridge-source-*.tar.gz
-            dist/ts-bridge-source-*.zip
+            dist/artifacts/*
             dist/checksums.txt
