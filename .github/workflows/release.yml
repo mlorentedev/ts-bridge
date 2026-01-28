@@ -29,38 +29,42 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.25'
 
       - name: Run tests
         run: go test -v ./...
 
-      - name: Build binaries
+      - name: Build and Package
         run: |
           VERSION=${{ needs.release-please.outputs.tag_name }}
           LDFLAGS="-s -w -X main.version=${VERSION}"
-          mkdir -p dist
+          mkdir -p dist/bin
 
-          # Linux
-          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/ts-bridge-linux-amd64 .
-          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/ts-bridge-linux-arm64 .
+          # Build binaries
+          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-linux-arm64 .
+          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-windows-amd64.exe .
+          GOOS=windows GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-windows-arm64.exe .
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/bin/ts-bridge-darwin-arm64 .
 
-          # Windows
-          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/ts-bridge-windows-amd64.exe .
-          GOOS=windows GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/ts-bridge-windows-arm64.exe .
+          # Create distribution bundles
+          mkdir -p dist/bundle
+          cp -r scripts/ .env.example README.md LICENSE dist/bundle/
+          
+          # Create archives
+          tar -czf dist/ts-bridge-source-${VERSION}.tar.gz -C dist/bundle .
+          zip -r dist/ts-bridge-source-${VERSION}.zip dist/bundle/*
 
-          # macOS
-          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/ts-bridge-darwin-amd64 .
-          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/ts-bridge-darwin-arm64 .
-
-          # Checksums
-          cd dist && sha256sum * > checksums.txt
+          # Checksums for binaries
+          cd dist/bin && sha256sum * > ../checksums.txt
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: |
-            dist/*
-            scripts/client/run.sh
-            scripts/client/run.ps1
-            .env.example
+            dist/bin/*
+            dist/ts-bridge-source-*.tar.gz
+            dist/ts-bridge-source-*.zip
+            dist/checksums.txt
