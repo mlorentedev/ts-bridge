@@ -300,10 +300,9 @@ golangci-lint run
 
 This project uses [release-please](https://github.com/googleapis/release-please) by Google for automatic semantic versioning. No manual version bumping required.
 
-#### How It Works
-
 1. **Write commits using [Conventional Commits](https://conventionalcommits.org)**:
-   ```
+
+   ```text
    feat: add new feature        → minor bump (0.1.0 → 0.2.0)
    fix: fix a bug               → patch bump (0.1.0 → 0.1.1)
    feat!: breaking change       → major bump (0.1.0 → 1.0.0)
