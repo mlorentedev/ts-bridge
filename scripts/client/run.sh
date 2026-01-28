@@ -41,6 +41,7 @@ fi
 
 # Load .env
 set -a
+# shellcheck source=/dev/null
 source "$ENV_FILE"
 set +a
 
