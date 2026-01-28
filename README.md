@@ -90,18 +90,23 @@ Note the Tailscale IP shown (e.g., `100.82.151.104`).
 
 #### Option 1: Pre-built Release Bundle (Recommended)
 
-1.  Download the bundle for your OS (e.g., `ts-bridge-linux-amd64.tar.gz`) from [Releases](https://github.com/mlorentedev/ts-bridge/releases).
-2.  Extract the archive:
+1. Download the bundle for your OS (e.g., `ts-bridge-linux-amd64.tar.gz`) from [Releases](https://github.com/mlorentedev/ts-bridge/releases).
+2. Extract the archive:
+
     ```bash
     tar -xzf ts-bridge-linux-amd64.tar.gz
     cd ts-bridge-linux-amd64
     ```
-3.  Configure:
+
+3. Configure:
+
     ```bash
     cp .env.example .env
     # Edit .env and add your TS_AUTHKEY and TS_TARGET
     ```
-4.  Run:
+
+4. Run:
+
     ```bash
     # Linux/macOS
     ./scripts/client/run.sh

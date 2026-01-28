@@ -26,7 +26,7 @@ $StateDir = Join-Path $ProjectRoot "ts-state"
 
 Write-Host ""
 Write-Host "  TAILSCALE BRIDGE (Client)" -ForegroundColor Cyan
-Write-Host "  ─────────────────────────────────────"
+Write-Host "  ---------------------------------------"
 
 # Check .env
 if (-not (Test-Path $EnvFile)) {
@@ -61,7 +61,7 @@ if (-not $KeepState -and (Test-Path $StateDir)) {
 }
 
 Write-Host "  Target: $env:TS_TARGET"
-Write-Host "  ─────────────────────────────────────"
+Write-Host "  ---------------------------------------"
 Write-Host ""
 
 # Launch bridge

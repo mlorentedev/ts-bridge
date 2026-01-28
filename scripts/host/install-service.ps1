@@ -34,7 +34,7 @@ Write-Host ""
 # --- UNINSTALL MODE ---
 if ($Uninstall) {
     Write-Host "  UNINSTALL SERVICE" -ForegroundColor Yellow
-    Write-Host "  ─────────────────────────────────────"
+    Write-Host "  ---------------------------------------"
 
     $existingTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($existingTask) {
@@ -44,14 +44,14 @@ if ($Uninstall) {
         Write-Host "  Task '$TaskName' not found" -ForegroundColor Gray
     }
 
-    Write-Host "  ─────────────────────────────────────"
+    Write-Host "  ---------------------------------------"
     Write-Host ""
     exit 0
 }
 
 # --- INSTALL MODE ---
 Write-Host "  INSTALL SERVICE" -ForegroundColor Cyan
-Write-Host "  ─────────────────────────────────────"
+Write-Host "  ---------------------------------------"
 
 # Resolve script path (relative to this script's directory)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -106,7 +106,7 @@ try {
     Write-Host ""
     Write-Host "  Task '$TaskName' installed" -ForegroundColor Green
     Write-Host "  Runs 30s after boot (as SYSTEM)" -ForegroundColor Gray
-    Write-Host "  ─────────────────────────────────────"
+    Write-Host "  ---------------------------------------"
     Write-Host ""
 } catch {
     Write-Host "  ERROR: Failed to register task" -ForegroundColor Red

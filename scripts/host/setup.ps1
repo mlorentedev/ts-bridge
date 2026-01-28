@@ -54,7 +54,7 @@ function Write-Err {
 # --- START ---
 Write-Host ""
 Write-Host "  HOST SETUP" -ForegroundColor Cyan
-Write-Host "  ─────────────────────────────────────"
+Write-Host "  ---------------------------------------"
 
 $totalSteps = if ($SkipSleep) { 6 } else { 7 }
 $step = 0
@@ -182,9 +182,9 @@ if (-not $SkipSleep) {
 
 # --- SUMMARY ---
 Write-Host ""
-Write-Host "  ─────────────────────────────────────"
+Write-Host "  ---------------------------------------"
 Write-Host "  HOST READY" -ForegroundColor Green
-Write-Host "  ─────────────────────────────────────"
+Write-Host "  ---------------------------------------"
 
 try {
     $tsIp = (tailscale ip -4 2>$null)

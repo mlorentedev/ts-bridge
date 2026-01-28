@@ -156,12 +156,12 @@ func run(cfg Config) error {
 
 func printBanner(cfg Config) {
 	fmt.Println()
-	fmt.Println("  ┌─────────────────────────────────────┐")
-	fmt.Println("  │         TAILSCALE BRIDGE            │")
-	fmt.Println("  ├─────────────────────────────────────┤")
-	fmt.Printf("  │  Local:  %-26s │\n", cfg.LocalAddr)
-	fmt.Printf("  │  Target: %-26s │\n", cfg.Target)
-	fmt.Println("  └─────────────────────────────────────┘")
+	fmt.Println("  +---------------------------------------+")
+	fmt.Println("  |         TAILSCALE BRIDGE              |")
+	fmt.Println("  +---------------------------------------+")
+	fmt.Printf("  |  Local:  %-26s  |\n", cfg.LocalAddr)
+	fmt.Printf("  |  Target: %-26s  |\n", cfg.Target)
+	fmt.Println("  +---------------------------------------+")
 	fmt.Println("  Waiting for connections...")
 	fmt.Println()
 }

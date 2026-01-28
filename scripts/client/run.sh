@@ -23,7 +23,7 @@ done
 
 echo ""
 echo "  TAILSCALE BRIDGE (Client)"
-echo "  ─────────────────────────────────────"
+echo "  ---------------------------------------"
 
 # Check .env
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -56,7 +56,7 @@ if [[ "$KEEP_STATE" == "false" ]] && [[ -d "$STATE_DIR" ]]; then
 fi
 
 echo "  Target: $TS_TARGET"
-echo "  ─────────────────────────────────────"
+echo "  ---------------------------------------"
 echo ""
 
 # Launch bridge
