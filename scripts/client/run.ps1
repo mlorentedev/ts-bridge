@@ -28,13 +28,6 @@ Write-Host ""
 Write-Host "  TAILSCALE BRIDGE (Client)" -ForegroundColor Cyan
 Write-Host "  ─────────────────────────────────────"
 
-# Check Go
-if (-not (Get-Command "go" -ErrorAction SilentlyContinue)) {
-    Write-Host "  ERROR: Go not found in PATH" -ForegroundColor Red
-    Write-Host "  Install from: https://go.dev/dl/" -ForegroundColor Gray
-    exit 1
-}
-
 # Check .env
 if (-not (Test-Path $EnvFile)) {
     Write-Host "  ERROR: .env not found" -ForegroundColor Red
@@ -73,4 +66,17 @@ Write-Host ""
 
 # Launch bridge
 Set-Location $ProjectRoot
-go run main.go
+
+$BinaryName = "ts-bridge"
+if ($IsWindows) { $BinaryName += ".exe" }
+$BinaryPath = Join-Path $ProjectRoot $BinaryName
+
+if (Test-Path $BinaryPath) {
+    & $BinaryPath
+} elseif ((Get-Command "go" -ErrorAction SilentlyContinue) -and (Test-Path "main.go")) {
+    Write-Host "  Binary not found, falling back to 'go run'..." -ForegroundColor Yellow
+    go run main.go
+} else {
+    Write-Host "  ERROR: '$BinaryName' binary not found and 'go' is not available/main.go missing." -ForegroundColor Red
+    exit 1
+}

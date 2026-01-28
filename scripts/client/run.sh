@@ -25,13 +25,6 @@ echo ""
 echo "  TAILSCALE BRIDGE (Client)"
 echo "  ─────────────────────────────────────"
 
-# Check Go
-if ! command -v go &> /dev/null; then
-    echo "  ERROR: Go not found in PATH"
-    echo "  Install from: https://go.dev/dl/"
-    exit 1
-fi
-
 # Check .env
 if [[ ! -f "$ENV_FILE" ]]; then
     echo "  ERROR: .env not found"
@@ -68,4 +61,19 @@ echo ""
 
 # Launch bridge
 cd "$PROJECT_ROOT"
-go run main.go
+
+# Determine binary name
+BINARY="./ts-bridge"
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    BINARY="./ts-bridge.exe"
+fi
+
+if [[ -f "$BINARY" ]]; then
+    "$BINARY"
+elif command -v go &> /dev/null && [[ -f "main.go" ]]; then
+    echo "  Binary not found, falling back to 'go run'..."
+    go run main.go
+else
+    echo "  ERROR: ts-bridge binary not found and 'go' is not available/main.go missing."
+    exit 1
+fi
