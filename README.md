@@ -88,32 +88,33 @@ Note the Tailscale IP shown (e.g., `100.82.151.104`).
 
 ### Client Machine (No Admin Rights)
 
-#### Windows (via Scoop - no admin required)
+#### Option 1: Pre-built Release Bundle (Recommended)
 
-```powershell
-# Install Scoop (one-time, no admin)
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+1.  Download the bundle for your OS (e.g., `ts-bridge-linux-amd64.tar.gz`) from [Releases](https://github.com/mlorentedev/ts-bridge/releases).
+2.  Extract the archive:
+    ```bash
+    tar -xzf ts-bridge-linux-amd64.tar.gz
+    cd ts-bridge-linux-amd64
+    ```
+3.  Configure:
+    ```bash
+    cp .env.example .env
+    # Edit .env and add your TS_AUTHKEY and TS_TARGET
+    ```
+4.  Run:
+    ```bash
+    # Linux/macOS
+    ./scripts/client/run.sh
+    
+    # Windows
+    .\scripts\client\run.ps1
+    ```
 
-# Install Go
-scoop install go
-
-# Clone and configure
-git clone https://github.com/mlorentedev/ts-bridge.git
-cd ts-bridge
-cp .env.example .env
-# Edit .env with your settings
-```
-
-#### Linux (no admin required)
+#### Option 2: Build from Source (requires Go)
 
 ```bash
-# Install Go to home directory (no sudo)
-curl -LO https://go.dev/dl/go1.25.0.linux-amd64.tar.gz
-mkdir -p ~/go-sdk
-tar -C ~/go-sdk -xzf go1.25.0.linux-amd64.tar.gz
-export PATH=$PATH:~/go-sdk/go/bin
-echo 'export PATH=$PATH:~/go-sdk/go/bin' >> ~/.bashrc
+# Install Go 1.25+
+# ... install instructions ...
 
 # Clone and configure
 git clone https://github.com/mlorentedev/ts-bridge.git
@@ -121,23 +122,6 @@ cd ts-bridge
 go mod tidy
 cp .env.example .env
 # Edit .env with your settings
-```
-
-#### Pre-built Binaries (no Go required)
-
-Download from [Releases](https://github.com/mlorentedev/ts-bridge/releases):
-
-```bash
-# Linux
-curl -LO https://github.com/mlorentedev/ts-bridge/releases/latest/download/ts-bridge-linux-amd64
-chmod +x ts-bridge-linux-amd64
-./ts-bridge-linux-amd64
-```
-
-```powershell
-# Windows (PowerShell)
-Invoke-WebRequest -Uri "https://github.com/mlorentedev/ts-bridge/releases/latest/download/ts-bridge-windows-amd64.exe" -OutFile "ts-bridge.exe"
-.\ts-bridge.exe
 ```
 
 ## Usage
