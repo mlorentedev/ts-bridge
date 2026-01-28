@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/mlorentedev/ts-bridge/compare/v1.0.0...v1.0.1) (2026-01-28)
+
+
+### Bug Fixes
+
+* force release please update ([0d5cb92](https://github.com/mlorentedev/ts-bridge/commit/0d5cb928467129b8a54c3182ee4dfb4000302fac))
+
 ## 1.0.0 (2026-01-28)
 
 
