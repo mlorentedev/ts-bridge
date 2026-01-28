@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/mlorentedev/ts-bridge/compare/v1.0.2...v1.0.3) (2026-01-28)
+
+
+### Bug Fixes
+
+* replace unicode box-drawing chars with ASCII for Windows compatibility ([03b7706](https://github.com/mlorentedev/ts-bridge/commit/03b7706ec8f8c10e6adcacf8d7ec2f82ad6cb53e))
+
 ## [1.0.2](https://github.com/mlorentedev/ts-bridge/compare/v1.0.1...v1.0.2) (2026-01-28)
 
 
