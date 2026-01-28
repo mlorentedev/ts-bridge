@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/mlorentedev/ts-bridge/compare/v1.0.1...v1.0.2) (2026-01-28)
+
+
+### Bug Fixes
+
+* update launch scripts to run binary instead of go run ([af3652b](https://github.com/mlorentedev/ts-bridge/commit/af3652bbdc96da8d8ea0d30a7e57aeaa21acfcef))
+
 ## [1.0.1](https://github.com/mlorentedev/ts-bridge/compare/v1.0.0...v1.0.1) (2026-01-28)
 
 
