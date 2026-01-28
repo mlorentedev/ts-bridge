@@ -143,8 +143,12 @@ func run(cfg Config) error {
 	go func() {
 		<-sigCtx.Done()
 		log.Println("Shutting down...")
-		listener.Close()
-		server.Close()
+		if err := listener.Close(); err != nil {
+			log.Printf("Error closing listener: %v", err)
+		}
+		if err := server.Close(); err != nil {
+			log.Printf("Error closing server: %v", err)
+		}
 	}()
 
 	return acceptLoop(listener, server, cfg)
