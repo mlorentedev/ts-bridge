@@ -1,0 +1,51 @@
+# Environment and secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Tailscale state
+ts-state/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+dist/
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Security tools
+.cache_ggshield
+
+# AI assistants
+.claude/
+.cursor/
+CLAUDE.md
+GEMINI.md
+AGENTS.md
+.aider*
+
+# Testing
+coverage.out
+coverage.html
