@@ -112,7 +112,7 @@ Note the Tailscale IP shown (e.g., `100.82.151.104`).
     ./scripts/client/run.sh
     
     # Windows
-    .\scripts\client\run.ps1
+    PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1
     ```
 
 #### Option 2: Build from Source (requires Go)
