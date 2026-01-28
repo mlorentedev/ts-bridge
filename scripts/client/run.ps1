@@ -67,9 +67,10 @@ Write-Host ""
 # Launch bridge
 Set-Location $ProjectRoot
 
-$BinaryName = "ts-bridge"
-if ($IsWindows) { $BinaryName += ".exe" }
-$BinaryPath = Join-Path $ProjectRoot $BinaryName
+$BinaryPath = Join-Path $ProjectRoot "ts-bridge.exe"
+if (-not (Test-Path $BinaryPath)) {
+    $BinaryPath = Join-Path $ProjectRoot "ts-bridge"
+}
 
 if (Test-Path $BinaryPath) {
     & $BinaryPath
@@ -77,6 +78,6 @@ if (Test-Path $BinaryPath) {
     Write-Host "  Binary not found, falling back to 'go run'..." -ForegroundColor Yellow
     go run main.go
 } else {
-    Write-Host "  ERROR: '$BinaryName' binary not found and 'go' is not available/main.go missing." -ForegroundColor Red
+    Write-Host "  ERROR: 'ts-bridge' binary not found and 'go' is not available/main.go missing." -ForegroundColor Red
     exit 1
 }
