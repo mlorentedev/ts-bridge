@@ -109,9 +109,9 @@ cp .env.example .env
 
 ```bash
 # Install Go to home directory (no sudo)
-curl -LO https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
+curl -LO https://go.dev/dl/go1.25.0.linux-amd64.tar.gz
 mkdir -p ~/go-sdk
-tar -C ~/go-sdk -xzf go1.21.0.linux-amd64.tar.gz
+tar -C ~/go-sdk -xzf go1.25.0.linux-amd64.tar.gz
 export PATH=$PATH:~/go-sdk/go/bin
 echo 'export PATH=$PATH:~/go-sdk/go/bin' >> ~/.bashrc
 
@@ -333,7 +333,7 @@ On every push/PR:
 |-----|-------------|
 | `test` | Build, vet, run tests with race detector and coverage |
 | `lint` | golangci-lint static analysis |
-| `security` | gosec (security scanner) + govulncheck (vulnerability check) |
+| `security` | gosec (security scanner) |
 | `shellcheck` | Validate bash scripts |
 | `build-matrix` | Cross-compile for linux/windows/darwin × amd64/arm64 |
 

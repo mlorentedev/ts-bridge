@@ -180,9 +180,24 @@ func acceptLoop(listener net.Listener, server *tsnet.Server, cfg Config) error {
 	}
 }
 
+// Buffer pool to reduce GC pressure
+var bufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 32*1024)
+		return &b
+	},
+}
+
 func handleConn(client net.Conn, server *tsnet.Server, cfg Config) {
-	defer client.Close()
+	// We close connections manually when the copy loop finishes
+	// defer client.Close()
 	addr := client.RemoteAddr().String()
+
+	if tcpConn, ok := client.(*net.TCPConn); ok {
+		// Enable KeepAlive to prevent idle timeouts (common in RDP/SSH)
+		_ = tcpConn.SetKeepAlive(true)
+		_ = tcpConn.SetKeepAlivePeriod(3 * time.Minute)
+	}
 
 	log.Printf("[+] %s connected", addr)
 
@@ -192,27 +207,39 @@ func handleConn(client net.Conn, server *tsnet.Server, cfg Config) {
 	remote, err := server.Dial(ctx, "tcp", cfg.Target)
 	if err != nil {
 		log.Printf("[-] %s dial failed: %v", addr, err)
+		_ = client.Close()
 		return
 	}
-	defer remote.Close()
+	// defer remote.Close()
 
 	log.Printf("[~] %s <-> %s", addr, cfg.Target)
 
-	// Bidirectional copy with error tracking
-	var wg sync.WaitGroup
-	wg.Add(2)
+	// Bidirectional copy
+	// When one side closes, we close the other to unblock the copy.
+	var once sync.Once
+	closeAll := func() {
+		once.Do(func() {
+			_ = client.Close()
+			_ = remote.Close()
+		})
+	}
 
-	copyWithLog := func(dst, src net.Conn, direction string) {
-		defer wg.Done()
-		n, err := io.Copy(dst, src)
+	copyConn := func(dst, src net.Conn, direction string) {
+		defer closeAll()
+
+		bufPtr := bufferPool.Get().(*[]byte)
+		defer bufferPool.Put(bufPtr)
+
+		n, err := io.CopyBuffer(dst, src, *bufPtr)
+		
+		// Ignore benign close errors
 		if err != nil && !errors.Is(err, net.ErrClosed) && !strings.Contains(err.Error(), "use of closed") {
 			log.Printf("[!] %s %s error after %d bytes: %v", addr, direction, n, err)
 		}
 	}
 
-	go copyWithLog(client, remote, "←")
-	go copyWithLog(remote, client, "→")
+	go copyConn(client, remote, "←")
+	copyConn(remote, client, "→")
 
-	wg.Wait()
 	log.Printf("[-] %s disconnected", addr)
 }
