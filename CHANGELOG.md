@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/mlorentedev/ts-bridge/compare/v1.1.0...v1.2.0) (2026-02-02)
+
+
+### Features
+
+* add observability, connection limits, and structured logging ([ef71794](https://github.com/mlorentedev/ts-bridge/commit/ef7179401842fe189d233f9aed5c0a07e960ce95))
+
+
+### Bug Fixes
+
+* issue with gosec and shellcheck in CI ([276df20](https://github.com/mlorentedev/ts-bridge/commit/276df20e76346eb3273f2a186839fb97bdcbc9c6))
+* shellcheck issue in testing suite ([83b433d](https://github.com/mlorentedev/ts-bridge/commit/83b433d8e9c8bf34b9350595451d3785221cb819))
+
 ## [1.1.0](https://github.com/mlorentedev/ts-bridge/compare/v1.0.3...v1.1.0) (2026-02-02)
 
 
