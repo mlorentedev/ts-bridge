@@ -11,53 +11,6 @@ Connect via RDP/SSH from a **non-admin machine** to an **admin machine** through
 | **Client** | No | Not installed (uses tsnet) | Initiates connection |
 | **Host** | Yes | Installed natively | Receives connection |
 
-## Architecture
-
-```text
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│  CLIENT (Non-Admin Machine)                                                     │
-│  ══════════════════════════                                                     │
-│                                                                                 │
-│   ┌────────────┐      ┌─────────────────────────────────────────────────────┐  │
-│   │ RDP Client │      │                    ts-bridge                        │  │
-│   │            │─────▶│  ┌─────────────┐         ┌────────────────────┐     │  │
-│   └────────────┘      │  │ TCP Listener│────────▶│ tsnet (ephemeral)  │     │  │
-│         │             │  │ :33389      │         │ WireGuard userspace│     │  │
-│         ▼             │  └─────────────┘         └─────────┬──────────┘     │  │
-│  127.0.0.1:33389      │                                    │                │  │
-│                       │  No admin rights required          │                │  │
-│                       │  No Tailscale installation         │                │  │
-│                       └────────────────────────────────────┼────────────────┘  │
-│                                                            │                   │
-│  ┌──────────────────────────────────────────┐              │                   │
-│  │ Restrictive Firewall                     │              │                   │
-│  │ ✗ UDP blocked                            │              │                   │
-│  │ ✗ Software installation blocked          │◀─────────────┘                   │
-│  │ ✓ HTTPS allowed (DERP relay)             │   Tunnels via HTTPS              │
-│  └──────────────────────────────────────────┘                                   │
-└─────────────────────────────────────────────────────────────────────────────────┘
-                                        │
-                                        │ Tailscale Network
-                                        │ (WireGuard encrypted)
-                                        │
-                                        ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│  HOST (Admin Machine)                                                           │
-│  ════════════════════                                                           │
-│                                                                                 │
-│   ┌─────────────────────────────────────────────────────────────────────────┐  │
-│   │                         Tailscale (Native Install)                      │  │
-│   │                         100.x.x.x                                       │  │
-│   └───────────────────────────────────┬─────────────────────────────────────┘  │
-│                                       │                                        │
-│                                       ▼                                        │
-│                          ┌────────────────────────┐                            │
-│                          │    RDP Server (:3389)  │                            │
-│                          └────────────────────────┘                            │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
 ## Why ts-bridge?
 
 | Requirement | Native Tailscale | ts-bridge |
@@ -79,87 +32,49 @@ Connect via RDP/SSH from a **non-admin machine** to an **admin machine** through
 # Run as Administrator
 cd scripts\host
 PowerShell -ExecutionPolicy Bypass -File .\setup.ps1
-
-# Optional: Auto-run at boot
-PowerShell -ExecutionPolicy Bypass -File .\install-service.ps1
 ```
 
 Note the Tailscale IP shown (e.g., `100.82.151.104`).
 
 ### Client Machine (No Admin Rights)
 
-#### Option 1: Pre-built Release Bundle (Recommended)
-
-1. Download the bundle for your OS (e.g., `ts-bridge-linux-amd64.tar.gz`) from [Releases](https://github.com/mlorentedev/ts-bridge/releases).
-2. Extract the archive:
-
-    ```bash
-    tar -xzf ts-bridge-linux-amd64.tar.gz
-    cd ts-bridge-linux-amd64
-    ```
-
-3. Configure:
-
-    ```bash
-    cp .env.example .env
-    # Edit .env and add your TS_AUTHKEY and TS_TARGET
-    ```
-
-4. Run:
-
-    ```bash
-    # Linux/macOS
-    ./scripts/client/run.sh
-    
-    # Windows
-    PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1
-    ```
-
-#### Option 2: Build from Source (requires Go)
+1. Download from [Releases](https://github.com/mlorentedev/ts-bridge/releases)
+2. Extract and configure:
 
 ```bash
-# Install Go 1.25+
-# ... install instructions ...
-
-# Clone and configure
-git clone https://github.com/mlorentedev/ts-bridge.git
-cd ts-bridge
-go mod tidy
+tar -xzf ts-bridge-linux-amd64.tar.gz
+cd ts-bridge-linux-amd64
 cp .env.example .env
-# Edit .env with your settings
+# Edit .env: set TS_AUTHKEY and TS_TARGET
+```
+
+3. Run:
+
+```bash
+# Linux/macOS
+./scripts/client/run.sh
+
+# Windows
+PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1
 ```
 
 ## Usage
-
-### Client - Linux/macOS
-
-```bash
-./scripts/client/run.sh
-
-# Keep state between runs
-./scripts/client/run.sh --keep-state
-```
-
-### Client - Windows
-
-```powershell
-PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1
-
-# Keep state between runs
-PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1 -KeepState
-```
 
 ### Connect via RDP
 
 ```bash
 # Linux
-xfreerdp /v:127.0.0.1:33389 /u:Username /cert:ignore /dynamic-resolution /bpp:16 +compression -themes -wallpaper
-
-# Linux (fixed size)
-xfreerdp /v:127.0.0.1:33389 /u:Username /cert:ignore /size:80% /bpp:16 +compression
+xfreerdp /v:127.0.0.1:33389 /u:Username /cert:ignore
 
 # Windows
 mstsc /v:127.0.0.1:33389
+```
+
+### Command Line
+
+```bash
+./ts-bridge -version    # Show version
+./ts-bridge -v          # Verbose logging
 ```
 
 ## Configuration
@@ -169,31 +84,54 @@ Create `.env` from `.env.example`:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `TS_AUTHKEY` | Yes | - | Tailscale auth key ([generate](https://login.tailscale.com/admin/settings/keys)) |
-| `TS_TARGET` | Yes | - | Host Tailscale IP:PORT (e.g., `100.x.x.x:3389`) |
+| `TS_TARGET` | Yes | - | Host IP:PORT (e.g., `100.x.x.x:3389`) |
 | `TS_LOCAL_ADDR` | No | `127.0.0.1:33389` | Local bind address |
-| `TS_HOSTNAME` | No | `ts-bridge` | Ephemeral node name |
+| `TS_HOSTNAME` | No | `ts-bridge` | Node name in Tailscale |
 | `TS_STATE_DIR` | No | `./ts-state` | State directory |
 | `TS_TIMEOUT` | No | `30s` | Connection timeout |
+| `TS_MAX_CONNECTIONS` | No | `1000` | Max concurrent connections |
+| `TS_HEALTH_ADDR` | No | (disabled) | Health endpoint (e.g., `127.0.0.1:8080`) |
+| `TS_VERBOSE` | No | `false` | Enable debug logging |
+| `TS_LOG_FORMAT` | No | `text` | Log format (`text` or `json`) |
+
+### Health Endpoint
+
+When `TS_HEALTH_ADDR` is set:
+
+```bash
+curl http://127.0.0.1:8080/health   # {"status":"ok"}
+curl http://127.0.0.1:8080/metrics  # Connection stats
+```
 
 ## How It Works
 
-### Pattern: Userspace Network Tunnel (TCP-over-WireGuard Proxy)
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│  CLIENT (Non-Admin)                                                 │
+│                                                                     │
+│   RDP Client ──▶ ts-bridge ──▶ tsnet (userspace WireGuard)         │
+│   127.0.0.1:33389              No admin required                    │
+│                                                                     │
+│   ┌─────────────────────────────────────────────┐                   │
+│   │ Firewall: UDP blocked, HTTPS allowed        │◀── Tunnels via   │
+│   └─────────────────────────────────────────────┘    DERP relay    │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              │ Tailscale Network (WireGuard encrypted)
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  HOST (Admin)                                                       │
+│                                                                     │
+│   Tailscale (Native) ──▶ RDP Server :3389                          │
+│   100.x.x.x                                                         │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-1. **Client** runs ts-bridge with an ephemeral Tailscale node via [tsnet](https://pkg.go.dev/tailscale.com/tsnet)
-2. tsnet runs WireGuard in **userspace** (no kernel module, no admin rights)
-3. Firewall blocks UDP/WireGuard but **allows HTTPS**
-4. Tailscale uses **DERP relay** (encrypted WebSocket over HTTPS)
-5. Bridge accepts local TCP and **dials target through Tailscale**
-6. All traffic is **end-to-end encrypted** (WireGuard inside HTTPS)
-7. **Host** receives connection on Tailscale IP, forwards to RDP
-8. Ephemeral node **auto-deletes** from Tailscale admin on exit
-
-## Use Cases
-
-- Access admin machine from locked-down client
-- Development on restricted networks
-- IT support without VPN infrastructure
-- Remote access through restrictive firewalls
+1. ts-bridge creates ephemeral Tailscale node via [tsnet](https://pkg.go.dev/tailscale.com/tsnet)
+2. WireGuard runs in userspace (no kernel module, no admin)
+3. If UDP blocked, uses DERP relay over HTTPS
+4. All traffic end-to-end encrypted
+5. Node auto-deletes from Tailscale on exit
 
 ## Limitations
 
@@ -204,135 +142,19 @@ Create `.env` from `.env.example`:
 | Auth key expiry | Default 90 days | Use long-lived keys |
 | Single target | One host per instance | Run multiple instances |
 
-## Project Structure
-
-```text
-ts-bridge/
-├── .github/workflows/
-│   ├── ci.yml                      # Build, test, lint, security scan
-│   └── release.yml                 # Automatic releases via release-please
-├── scripts/
-│   ├── client/                     # For non-admin machines
-│   │   ├── run.sh                  # Linux/macOS launcher (loads .env, runs bridge)
-│   │   └── run.ps1                 # Windows launcher (loads .env, runs bridge)
-│   └── host/                       # For admin machines (Windows)
-│       ├── setup.ps1               # Configure Tailscale, RDP, firewall, power
-│       └── install-service.ps1     # Register setup.ps1 as scheduled task
-├── main.go                         # Bridge source (~210 lines)
-├── main_test.go                    # Unit tests for config validation
-├── go.mod                          # Go module definition
-├── go.sum                          # Dependency checksums
-├── .env.example                    # Configuration template (copy to .env)
-├── .gitignore                      # Excludes .env, ts-state/, binaries
-├── release-please-config.json      # Semantic versioning config
-├── .release-please-manifest.json   # Current version tracker
-├── CHANGELOG.md                    # Auto-generated on releases
-├── LICENSE                         # MIT license
-└── README.md
-```
-
-### File Descriptions
-
-| File/Folder | Purpose |
-|-------------|---------|
-| `main.go` | TCP bridge using tsnet (Tailscale userspace). Validates config, creates ephemeral node, proxies connections. |
-| `main_test.go` | Tests for `loadConfig()`: validates TS_TARGET format, TS_AUTHKEY prefix, TS_TIMEOUT parsing. |
-| `.env.example` | Template with all environment variables. Copy to `.env` and fill in your values. |
-| `scripts/client/*` | Launchers that load `.env`, clear state, and run the bridge. No admin required. |
-| `scripts/host/*` | Windows scripts to configure RDP access. Require admin. Run once on host machine. |
-| `release-please-*.json` | Config for [release-please](https://github.com/googleapis/release-please). Automates semver based on [Conventional Commits](https://conventionalcommits.org). |
-| `ts-state/` | (gitignored) Tailscale ephemeral node state. Cleared on each run by default. |
-
 ## Security
 
 - **No admin footprint**: Runs entirely in userspace
-- **Ephemeral nodes**: Auto-delete from Tailscale, no traces
+- **Ephemeral nodes**: Auto-delete from Tailscale
 - **E2E encryption**: WireGuard encryption even through DERP
 - **Local only**: Binds to 127.0.0.1 by default
-- **Auth key**: Keep `.env` private, never commit
+- **Secure state**: Directory created with 0700 permissions
 
-## Troubleshooting
+## Documentation
 
-| Issue | Solution |
-|-------|----------|
-| "dial failed: context deadline exceeded" | Check host Tailscale IP and firewall |
-| "tailscale init failed" | Invalid auth key or network blocking |
-| "Connection reset by peer" | Host service down or network issue |
-| Certificate warnings | Use `/cert:ignore` with xfreerdp |
-| Slow connection | DERP relay active; normal for restricted networks |
-
-## Development
-
-### Building from Source
-
-```bash
-# Clone
-git clone https://github.com/mlorentedev/ts-bridge.git
-cd ts-bridge
-
-# Build
-go build -o ts-bridge .
-
-# Build with version info
-go build -ldflags="-s -w -X main.version=v1.0.0" -o ts-bridge .
-
-# Run tests
-go test -v ./...
-go test -race -coverprofile=coverage.out ./...
-
-# Lint
-go vet ./...
-golangci-lint run
-```
-
-### Automatic Releases
-
-This project uses [release-please](https://github.com/googleapis/release-please) by Google for automatic semantic versioning. No manual version bumping required.
-
-1. **Write commits using [Conventional Commits](https://conventionalcommits.org)**:
-
-   ```text
-   feat: add new feature        → minor bump (0.1.0 → 0.2.0)
-   fix: fix a bug               → patch bump (0.1.0 → 0.1.1)
-   feat!: breaking change       → major bump (0.1.0 → 1.0.0)
-   docs: update readme          → no release
-   chore: update dependencies   → no release
-   ```
-
-2. **Push to main** → release-please analyzes commits and creates a Release PR
-
-3. **Merge the Release PR** → automatically:
-   - Creates git tag (e.g., `v1.2.0`)
-   - Generates `CHANGELOG.md`
-   - Builds binaries for 6 platforms
-   - Publishes GitHub Release with assets
-
-#### Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `release-please-config.json` | Release behavior (type, changelog path, versioning) |
-| `.release-please-manifest.json` | Tracks current version (updated automatically) |
-
-### CI Pipeline
-
-On every push/PR:
-
-| Job | Description |
-|-----|-------------|
-| `test` | Build, vet, run tests with race detector and coverage |
-| `lint` | golangci-lint static analysis |
-| `security` | gosec (security scanner) |
-| `shellcheck` | Validate bash scripts |
-| `build-matrix` | Cross-compile for linux/windows/darwin × amd64/arm64 |
-
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feat/my-feature`
-3. Commit using Conventional Commits: `git commit -m "feat: add my feature"`
-4. Push and open a Pull Request
-5. CI must pass before merge
+- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [Operations Guide](docs/OPERATIONS.md) - Production deployment
+- [Contributing](CONTRIBUTING.md) - Development setup, testing, releases
 
 ## Support
 

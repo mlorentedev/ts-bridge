@@ -13,7 +13,7 @@ func TestLoadConfig_Valid(t *testing.T) {
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
-	cfg, err := loadConfig()
+	cfg, err := loadConfig(false)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestLoadConfig_MissingTarget(t *testing.T) {
 	os.Setenv("TS_AUTHKEY", "tskey-auth-test123")
 	defer os.Unsetenv("TS_AUTHKEY")
 
-	_, err := loadConfig()
+	_, err := loadConfig(false)
 	if err == nil {
 		t.Fatal("expected error for missing TS_TARGET")
 	}
@@ -45,7 +45,7 @@ func TestLoadConfig_MissingAuthKey(t *testing.T) {
 	os.Unsetenv("TS_AUTHKEY")
 	defer os.Unsetenv("TS_TARGET")
 
-	_, err := loadConfig()
+	_, err := loadConfig(false)
 	if err == nil {
 		t.Fatal("expected error for missing TS_AUTHKEY")
 	}
@@ -72,7 +72,7 @@ func TestLoadConfig_InvalidTargetFormat(t *testing.T) {
 			os.Setenv("TS_TARGET", tt.target)
 			defer os.Unsetenv("TS_TARGET")
 
-			_, err := loadConfig()
+			_, err := loadConfig(false)
 			if err == nil {
 				t.Errorf("expected error for invalid target %q", tt.target)
 			}
@@ -86,7 +86,7 @@ func TestLoadConfig_InvalidAuthKey(t *testing.T) {
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
-	_, err := loadConfig()
+	_, err := loadConfig(false)
 	if err == nil {
 		t.Fatal("expected error for invalid auth key format")
 	}
@@ -100,7 +100,7 @@ func TestLoadConfig_CustomTimeout(t *testing.T) {
 	defer os.Unsetenv("TS_AUTHKEY")
 	defer os.Unsetenv("TS_TIMEOUT")
 
-	cfg, err := loadConfig()
+	cfg, err := loadConfig(false)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestLoadConfig_InvalidTimeout(t *testing.T) {
 	defer os.Unsetenv("TS_AUTHKEY")
 	defer os.Unsetenv("TS_TIMEOUT")
 
-	_, err := loadConfig()
+	_, err := loadConfig(false)
 	if err == nil {
 		t.Fatal("expected error for invalid timeout format")
 	}

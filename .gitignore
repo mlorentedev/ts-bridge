@@ -15,6 +15,7 @@ ts-state/
 *.dylib
 *.test
 *.out
+*.bin
 bin/
 dist/
 vendor/

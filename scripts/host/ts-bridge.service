@@ -1,0 +1,43 @@
+[Unit]
+Description=Tailscale Bridge - TCP proxy over Tailscale mesh
+Documentation=https://github.com/mlorentedev/ts-bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ts-bridge
+Group=ts-bridge
+
+# Environment file with TS_AUTHKEY and TS_TARGET
+EnvironmentFile=/etc/ts-bridge/ts-bridge.env
+
+# Working directory for state
+WorkingDirectory=/var/lib/ts-bridge
+
+# Binary location
+ExecStart=/usr/local/bin/ts-bridge
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/ts-bridge
+
+# Resource limits
+LimitNOFILE=65535
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ts-bridge
+
+[Install]
+WantedBy=multi-user.target
