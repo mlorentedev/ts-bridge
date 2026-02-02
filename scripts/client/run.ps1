@@ -4,15 +4,15 @@
 .DESCRIPTION
     Launches the Go bridge to tunnel connections through Tailscale.
     Reads configuration from .env file in project root.
-    State is cleared by default on each run.
-.PARAMETER KeepState
-    Preserve previous session state instead of clearing it.
+    State is preserved by default to maintain Tailscale IP allocation.
+.PARAMETER Reset
+    Wipe previous session state to force new IP allocation.
 .NOTES
     Run: PowerShell -ExecutionPolicy Bypass -File .\run.ps1
 #>
 
 param(
-    [switch]$KeepState
+    [switch]$Reset
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,10 +54,17 @@ if (-not $env:TS_TARGET) {
     exit 1
 }
 
-# Clear state by default
-if (-not $KeepState -and (Test-Path $StateDir)) {
+# Handle state directory
+if ($Reset -and (Test-Path $StateDir)) {
     Remove-Item -Path $StateDir -Recurse -Force
-    Write-Host "  State cleared" -ForegroundColor Yellow
+    Write-Host "  State reset (new IP will be allocated)" -ForegroundColor Yellow
+}
+
+if (Test-Path $StateDir) {
+    Write-Host "  Reusing existing state" -ForegroundColor Green
+} else {
+    New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
+    Write-Host "  Created new state directory" -ForegroundColor Green
 }
 
 Write-Host "  Target: $env:TS_TARGET"

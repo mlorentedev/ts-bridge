@@ -1,9 +1,9 @@
 #!/bin/bash
 # Bridge Launcher (Linux/macOS Client)
 # Reads configuration from .env file in project root.
-# State is cleared by default on each run.
+# State is preserved by default to maintain Tailscale IP allocation.
 #
-# Usage: ./run.sh [--keep-state]
+# Usage: ./run.sh [--reset]
 
 set -euo pipefail
 
@@ -12,11 +12,11 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env"
 STATE_DIR="$PROJECT_ROOT/ts-state"
 
-# Parse args (default: reset state)
-KEEP_STATE=false
+# Parse args (default: preserve state)
+RESET_STATE=false
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -k|--keep-state) KEEP_STATE=true; shift ;;
+        -r|--reset) RESET_STATE=true; shift ;;
         *) shift ;;
     esac
 done
@@ -49,10 +49,17 @@ if [[ -z "${TS_TARGET:-}" ]]; then
     exit 1
 fi
 
-# Clear state by default
-if [[ "$KEEP_STATE" == "false" ]] && [[ -d "$STATE_DIR" ]]; then
+# Handle state directory
+if [[ "$RESET_STATE" == "true" ]] && [[ -d "$STATE_DIR" ]]; then
     rm -rf "$STATE_DIR"
-    echo "  State cleared"
+    echo "  State reset (new IP will be allocated)"
+fi
+
+if [[ -d "$STATE_DIR" ]]; then
+    echo "  Reusing existing state"
+else
+    mkdir -p "$STATE_DIR"
+    echo "  Created new state directory"
 fi
 
 echo "  Target: $TS_TARGET"
