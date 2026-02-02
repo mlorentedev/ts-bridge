@@ -28,6 +28,7 @@ fi
 
 # Load environment
 set -a
+# shellcheck source=/dev/null
 source .env
 set +a
 

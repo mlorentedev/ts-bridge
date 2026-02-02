@@ -19,6 +19,7 @@ ts-state/
 bin/
 dist/
 vendor/
+ts-bridge
 
 # IDE
 .idea/

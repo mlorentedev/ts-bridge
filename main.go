@@ -291,7 +291,7 @@ func startHealthServer(addr string) *http.Server {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
@@ -304,12 +304,13 @@ func startHealthServer(addr string) *http.Server {
 			TotalErrors:       atomic.LoadInt64(&metrics.TotalErrors),
 			RejectedConns:     atomic.LoadInt64(&metrics.RejectedConns),
 		}
-		json.NewEncoder(w).Encode(snapshot)
+		_ = json.NewEncoder(w).Encode(snapshot)
 	})
 
 	server := &http.Server{
-		Addr:    addr,
-		Handler: mux,
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {
@@ -361,7 +362,7 @@ func acceptLoop(listener net.Listener, server *tsnet.Server, cfg Config) error {
 				"current", current,
 				"max", cfg.MaxConnections,
 				"client", conn.RemoteAddr())
-			conn.Close()
+			_ = conn.Close()
 			continue
 		}
 
@@ -404,7 +405,7 @@ func handleConn(client net.Conn, server *tsnet.Server, cfg Config) {
 	if err != nil {
 		atomic.AddInt64(&metrics.TotalErrors, 1)
 		logger.Error("dial failed", "client", addr, "target", cfg.Target, "error", err)
-		client.Close()
+		_ = client.Close()
 		return
 	}
 
@@ -416,8 +417,8 @@ func handleConn(client net.Conn, server *tsnet.Server, cfg Config) {
 	var once sync.Once
 	closeAll := func() {
 		once.Do(func() {
-			client.Close()
-			remote.Close()
+			_ = client.Close()
+			_ = remote.Close()
 		})
 	}
 
