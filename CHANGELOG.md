@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/mlorentedev/ts-bridge/compare/v1.0.3...v1.1.0) (2026-02-02)
+
+
+### Features
+
+* preserve state by default in client, add reset flag ([582b7ee](https://github.com/mlorentedev/ts-bridge/commit/582b7ee8609b5161ac267851a59983e2d9d5f796))
+
 ## [1.0.3](https://github.com/mlorentedev/ts-bridge/compare/v1.0.2...v1.0.3) (2026-01-28)
 
 
