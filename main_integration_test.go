@@ -43,7 +43,7 @@ func TestProxyBidirectionalFlow(t *testing.T) {
 		remoteReceived = buf[:n]
 
 		// Send response
-		conn.Write([]byte("RESPONSE"))
+		_, _ = conn.Write([]byte("RESPONSE"))
 	}()
 
 	// Create local listener (simulating ts-bridge listener)
@@ -78,11 +78,11 @@ func TestProxyBidirectionalFlow(t *testing.T) {
 
 		go func() {
 			defer closeAll()
-			io.Copy(client, remote)
+			_, _ = io.Copy(client, remote)
 		}()
 		func() {
 			defer closeAll()
-			io.Copy(remote, client)
+			_, _ = io.Copy(remote, client)
 		}()
 	}()
 
@@ -102,7 +102,7 @@ func TestProxyBidirectionalFlow(t *testing.T) {
 
 	// Read response
 	response := make([]byte, 1024)
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	n, err := conn.Read(response)
 	if err != nil && !errors.Is(err, io.EOF) {
 		t.Fatalf("failed to read response: %v", err)
@@ -138,7 +138,7 @@ func TestConnectionClosePropagation(t *testing.T) {
 		}
 		// Wait for close
 		buf := make([]byte, 1)
-		conn.Read(buf) // Will return when connection closes
+		_, _ = conn.Read(buf) // Will return when connection closes
 		close(remoteClosed)
 		conn.Close()
 	}()
@@ -171,11 +171,11 @@ func TestConnectionClosePropagation(t *testing.T) {
 
 		go func() {
 			defer closeAll()
-			io.Copy(client, remote)
+			_, _ = io.Copy(client, remote)
 		}()
 		func() {
 			defer closeAll()
-			io.Copy(remote, client)
+			_, _ = io.Copy(remote, client)
 		}()
 	}()
 
@@ -215,7 +215,7 @@ func TestConcurrentConnections(t *testing.T) {
 				defer c.Close()
 				buf := make([]byte, 1024)
 				n, _ := c.Read(buf)
-				c.Write(buf[:n]) // Echo
+				_, _ = c.Write(buf[:n]) // Echo
 			}(conn)
 		}
 	}()
@@ -250,11 +250,11 @@ func TestConcurrentConnections(t *testing.T) {
 
 				go func() {
 					defer closeAll()
-					io.Copy(c, remote)
+					_, _ = io.Copy(c, remote)
 				}()
 				func() {
 					defer closeAll()
-					io.Copy(remote, c)
+					_, _ = io.Copy(remote, c)
 				}()
 			}(client)
 		}
@@ -278,10 +278,10 @@ func TestConcurrentConnections(t *testing.T) {
 			defer conn.Close()
 
 			testData := []byte("PING")
-			conn.Write(testData)
+			_, _ = conn.Write(testData)
 
 			response := make([]byte, 4)
-			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 			n, err := io.ReadFull(conn, response)
 			if err != nil {
 				t.Logf("connection %d read failed: %v", id, err)
@@ -433,7 +433,7 @@ func TestHealthEndpoints(t *testing.T) {
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		server.Shutdown(ctx)
+		_ = server.Shutdown(ctx)
 	}()
 
 	// Give server time to start
@@ -447,7 +447,7 @@ func TestHealthEndpoints(t *testing.T) {
 		}
 		defer resp.Close()
 
-		resp.Write([]byte("GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+		_, _ = resp.Write([]byte("GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n"))
 
 		buf := make([]byte, 1024)
 		n, _ := resp.Read(buf)
@@ -469,7 +469,7 @@ func TestHealthEndpoints(t *testing.T) {
 		}
 		defer resp.Close()
 
-		resp.Write([]byte("GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+		_, _ = resp.Write([]byte("GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n"))
 
 		buf := make([]byte, 1024)
 		n, _ := resp.Read(buf)
