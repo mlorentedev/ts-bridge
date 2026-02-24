@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -454,10 +455,10 @@ func TestHealthEndpoints(t *testing.T) {
 		n, _ := resp.Read(buf)
 		response := string(buf[:n])
 
-		if !contains(response, "200 OK") {
+		if !strings.Contains(response, "200 OK") {
 			t.Errorf("expected 200 OK, got: %s", response)
 		}
-		if !contains(response, `"status":"ok"`) {
+		if !strings.Contains(response, `"status":"ok"`) {
 			t.Errorf("expected status ok in body, got: %s", response)
 		}
 	})
@@ -476,10 +477,10 @@ func TestHealthEndpoints(t *testing.T) {
 		n, _ := resp.Read(buf)
 		response := string(buf[:n])
 
-		if !contains(response, "503") {
+		if !strings.Contains(response, "503") {
 			t.Errorf("expected 503, got: %s", response)
 		}
-		if !contains(response, `"status":"not_ready"`) {
+		if !strings.Contains(response, `"status":"not_ready"`) {
 			t.Errorf("expected not_ready in body, got: %s", response)
 		}
 	})
@@ -500,10 +501,10 @@ func TestHealthEndpoints(t *testing.T) {
 		n, _ := resp.Read(buf)
 		response := string(buf[:n])
 
-		if !contains(response, "200 OK") {
+		if !strings.Contains(response, "200 OK") {
 			t.Errorf("expected 200 OK, got: %s", response)
 		}
-		if !contains(response, `"status":"ok"`) {
+		if !strings.Contains(response, `"status":"ok"`) {
 			t.Errorf("expected status ok in body, got: %s", response)
 		}
 	})
@@ -522,26 +523,13 @@ func TestHealthEndpoints(t *testing.T) {
 		n, _ := resp.Read(buf)
 		response := string(buf[:n])
 
-		if !contains(response, "200 OK") {
+		if !strings.Contains(response, "200 OK") {
 			t.Errorf("expected 200 OK, got: %s", response)
 		}
-		if !contains(response, "active_connections") {
+		if !strings.Contains(response, "active_connections") {
 			t.Errorf("expected active_connections in body, got: %s", response)
 		}
 	})
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // TestMetricsAtomicity tests that metrics updates are thread-safe.

@@ -32,7 +32,7 @@ jobs:
           go-version: '1.25'
 
       - name: Run tests
-        run: go test -v ./...
+        run: go test -race -v ./...
 
       - name: Build and Package
         run: |
@@ -81,7 +81,7 @@ jobs:
           cd dist/artifacts && sha256sum * > ../checksums.txt
 
       - name: Upload Release Assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.5.0
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: |
