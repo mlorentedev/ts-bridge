@@ -129,29 +129,14 @@ func initLogger(cfg Config) {
 }
 
 func loadConfig(verboseFlag bool) (Config, error) {
-	target := os.Getenv("TS_TARGET")
-	if target == "" {
-		return Config{}, errors.New("TS_TARGET is required (format: HOST:PORT)")
-	}
-
-	host, portStr, err := net.SplitHostPort(target)
+	target, err := parseTarget()
 	if err != nil {
-		return Config{}, fmt.Errorf("TS_TARGET invalid format: %w", err)
-	}
-	if host == "" {
-		return Config{}, errors.New("TS_TARGET: host cannot be empty")
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil || port < 1 || port > 65535 {
-		return Config{}, fmt.Errorf("TS_TARGET: invalid port %q", portStr)
+		return Config{}, err
 	}
 
-	authKey := os.Getenv("TS_AUTHKEY")
-	if authKey == "" {
-		return Config{}, errors.New("TS_AUTHKEY is required")
-	}
-	if !strings.HasPrefix(authKey, "tskey-") {
-		return Config{}, errors.New("TS_AUTHKEY: invalid format (must start with tskey-)")
+	authKey, err := parseAuthKey()
+	if err != nil {
+		return Config{}, err
 	}
 
 	timeout := defaultTimeout
@@ -186,6 +171,37 @@ func loadConfig(verboseFlag bool) (Config, error) {
 		Verbose:        verbose,
 		LogFormat:      envOr("TS_LOG_FORMAT", "text"),
 	}, nil
+}
+
+func parseTarget() (string, error) {
+	target := os.Getenv("TS_TARGET")
+	if target == "" {
+		return "", errors.New("TS_TARGET is required (format: HOST:PORT)")
+	}
+
+	host, portStr, err := net.SplitHostPort(target)
+	if err != nil {
+		return "", fmt.Errorf("TS_TARGET invalid format: %w", err)
+	}
+	if host == "" {
+		return "", errors.New("TS_TARGET: host cannot be empty")
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return "", fmt.Errorf("TS_TARGET: invalid port %q", portStr)
+	}
+	return target, nil
+}
+
+func parseAuthKey() (string, error) {
+	authKey := os.Getenv("TS_AUTHKEY")
+	if authKey == "" {
+		return "", errors.New("TS_AUTHKEY is required")
+	}
+	if !strings.HasPrefix(authKey, "tskey-") {
+		return "", errors.New("TS_AUTHKEY: invalid format (must start with tskey-)")
+	}
+	return authKey, nil
 }
 
 func envOr(key, fallback string) string {
@@ -425,9 +441,22 @@ func handleConn(client net.Conn, server *tsnet.Server, cfg Config) {
 
 	logger.Debug("tunnel established", "client", addr, "target", cfg.Target)
 
-	// Note: We don't use defer Close() here because closeAll() with sync.Once
-	// ensures connections close exactly once when either direction completes.
-	// Using defer would cause double-close attempts.
+	bytesTx, bytesRx := proxyConnections(client, remote, addr)
+
+	atomic.AddInt64(&metrics.TotalBytesTx, bytesTx)
+	atomic.AddInt64(&metrics.TotalBytesRx, bytesRx)
+
+	duration := time.Since(connStart)
+	logger.Info("connection closed",
+		"client", addr,
+		"duration", duration,
+		"bytes_tx", bytesTx,
+		"bytes_rx", bytesRx)
+}
+
+// proxyConnections performs bidirectional copy between client and remote,
+// returning the bytes transferred in each direction.
+func proxyConnections(client, remote net.Conn, addr string) (tx, rx int64) {
 	var once sync.Once
 	closeAll := func() {
 		once.Do(func() {
@@ -436,16 +465,14 @@ func handleConn(client net.Conn, server *tsnet.Server, cfg Config) {
 		})
 	}
 
-	var bytesTx, bytesRx int64
-
-	copyConn := func(dst, src net.Conn, direction string, bytesCounter *int64) {
+	copyConn := func(dst, src net.Conn, direction string, counter *int64) {
 		defer closeAll()
 
 		bufPtr := bufferPool.Get().(*[]byte)
 		defer bufferPool.Put(bufPtr)
 
 		n, err := io.CopyBuffer(dst, src, *bufPtr)
-		atomic.AddInt64(bytesCounter, n)
+		atomic.AddInt64(counter, n)
 
 		if err != nil && !isExpectedCloseError(err) {
 			atomic.AddInt64(&metrics.TotalErrors, 1)
@@ -457,19 +484,10 @@ func handleConn(client net.Conn, server *tsnet.Server, cfg Config) {
 		}
 	}
 
-	go copyConn(client, remote, "rx", &bytesRx)
-	copyConn(remote, client, "tx", &bytesTx)
+	go copyConn(client, remote, "rx", &rx)
+	copyConn(remote, client, "tx", &tx)
 
-	// Update global metrics
-	atomic.AddInt64(&metrics.TotalBytesTx, bytesTx)
-	atomic.AddInt64(&metrics.TotalBytesRx, bytesRx)
-
-	duration := time.Since(connStart)
-	logger.Info("connection closed",
-		"client", addr,
-		"duration", duration,
-		"bytes_tx", bytesTx,
-		"bytes_rx", bytesRx)
+	return tx, rx
 }
 
 // isExpectedCloseError returns true for errors that occur during normal connection close.
