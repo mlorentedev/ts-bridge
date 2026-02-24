@@ -99,8 +99,9 @@ Create `.env` from `.env.example`:
 When `TS_HEALTH_ADDR` is set:
 
 ```bash
-curl http://127.0.0.1:8080/health   # {"status":"ok"}
-curl http://127.0.0.1:8080/metrics  # Connection stats
+curl http://127.0.0.1:8080/health/live   # {"status":"ok"} (liveness)
+curl http://127.0.0.1:8080/health/ready  # {"status":"ok"} (readiness: tsnet tunnel up)
+curl http://127.0.0.1:8080/metrics       # Connection stats
 ```
 
 ## How It Works

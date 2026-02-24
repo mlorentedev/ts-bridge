@@ -254,9 +254,10 @@ func run(cfg Config) error {
 	}
 
 	// Start health server if configured
+	var ready atomic.Bool
 	var healthServer *http.Server
 	if cfg.HealthAddr != "" {
-		healthServer = startHealthServer(cfg.HealthAddr)
+		healthServer = startHealthServer(cfg.HealthAddr, &ready)
 	}
 
 	printBanner(cfg)
@@ -267,6 +268,7 @@ func run(cfg Config) error {
 	go func() {
 		<-sigCtx.Done()
 		logger.Info("shutting down")
+		ready.Store(false)
 		if err := listener.Close(); err != nil {
 			logger.Error("error closing listener", "error", err)
 		}
@@ -282,14 +284,26 @@ func run(cfg Config) error {
 		}
 	}()
 
+	ready.Store(true)
 	return acceptLoop(listener, server, cfg)
 }
 
-func startHealthServer(addr string) *http.Server {
+func startHealthServer(addr string, ready *atomic.Bool) *http.Server {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+
+	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if !ready.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "not_ready"})
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})

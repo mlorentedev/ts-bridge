@@ -429,7 +429,8 @@ func TestHealthEndpoints(t *testing.T) {
 	addr := listener.Addr().String()
 	listener.Close()
 
-	server := startHealthServer(addr)
+	var ready atomic.Bool
+	server := startHealthServer(addr, &ready)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -439,15 +440,61 @@ func TestHealthEndpoints(t *testing.T) {
 	// Give server time to start
 	time.Sleep(50 * time.Millisecond)
 
-	// Test /health
-	t.Run("health endpoint", func(t *testing.T) {
+	// Test /health/live
+	t.Run("liveness endpoint", func(t *testing.T) {
 		resp, err := net.Dial("tcp", addr)
 		if err != nil {
 			t.Fatalf("failed to connect: %v", err)
 		}
 		defer resp.Close()
 
-		_, _ = resp.Write([]byte("GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+		_, _ = resp.Write([]byte("GET /health/live HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+
+		buf := make([]byte, 1024)
+		n, _ := resp.Read(buf)
+		response := string(buf[:n])
+
+		if !contains(response, "200 OK") {
+			t.Errorf("expected 200 OK, got: %s", response)
+		}
+		if !contains(response, `"status":"ok"`) {
+			t.Errorf("expected status ok in body, got: %s", response)
+		}
+	})
+
+	// Test /health/ready when not ready
+	t.Run("readiness not ready", func(t *testing.T) {
+		resp, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatalf("failed to connect: %v", err)
+		}
+		defer resp.Close()
+
+		_, _ = resp.Write([]byte("GET /health/ready HTTP/1.1\r\nHost: localhost\r\n\r\n"))
+
+		buf := make([]byte, 1024)
+		n, _ := resp.Read(buf)
+		response := string(buf[:n])
+
+		if !contains(response, "503") {
+			t.Errorf("expected 503, got: %s", response)
+		}
+		if !contains(response, `"status":"not_ready"`) {
+			t.Errorf("expected not_ready in body, got: %s", response)
+		}
+	})
+
+	// Set ready and test again
+	ready.Store(true)
+
+	t.Run("readiness ready", func(t *testing.T) {
+		resp, err := net.Dial("tcp", addr)
+		if err != nil {
+			t.Fatalf("failed to connect: %v", err)
+		}
+		defer resp.Close()
+
+		_, _ = resp.Write([]byte("GET /health/ready HTTP/1.1\r\nHost: localhost\r\n\r\n"))
 
 		buf := make([]byte, 1024)
 		n, _ := resp.Read(buf)
