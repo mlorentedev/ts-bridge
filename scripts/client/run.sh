@@ -1,9 +1,9 @@
 #!/bin/bash
 # Bridge Launcher (Linux/macOS Client)
 # Reads configuration from .env file in project root.
-# State is preserved by default to maintain Tailscale IP allocation.
+# Auto mode is enabled by default for minimal friction.
 #
-# Usage: ./run.sh [--reset]
+# Usage: ./run.sh [--reset] [--instance NAME]
 
 set -euo pipefail
 
@@ -14,9 +14,18 @@ STATE_DIR="$PROJECT_ROOT/ts-state"
 
 # Parse args (default: preserve state)
 RESET_STATE=false
+INSTANCE_NAME=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         -r|--reset) RESET_STATE=true; shift ;;
+        -i|--instance)
+            if [[ -z "${2:-}" ]]; then
+                echo "  ERROR: --instance requires a value"
+                exit 1
+            fi
+            INSTANCE_NAME="$2"
+            shift 2
+            ;;
         *) shift ;;
     esac
 done
@@ -49,17 +58,44 @@ if [[ -z "${TS_TARGET:-}" ]]; then
     exit 1
 fi
 
-# Handle state directory
-if [[ "$RESET_STATE" == "true" ]] && [[ -d "$STATE_DIR" ]]; then
-    rm -rf "$STATE_DIR"
-    echo "  State reset (new IP will be allocated)"
+# Optional instance alias override
+if [[ -n "$INSTANCE_NAME" ]]; then
+    export TS_INSTANCE_NAME="$INSTANCE_NAME"
 fi
 
-if [[ -d "$STATE_DIR" ]]; then
-    echo "  Reusing existing state"
+# Auto mode default: enabled unless explicitly disabled.
+AUTO_INSTANCE=true
+if [[ -n "${TS_AUTO_INSTANCE:-}" ]]; then
+    case "${TS_AUTO_INSTANCE}" in
+        1|true|TRUE|yes|YES|on|ON) AUTO_INSTANCE=true ;;
+        *) AUTO_INSTANCE=false ;;
+    esac
+fi
+case "${TS_MANUAL_MODE:-}" in
+    1|true|TRUE|yes|YES|on|ON) AUTO_INSTANCE=false ;;
+esac
+
+if [[ "$AUTO_INSTANCE" == "true" ]]; then
+    if [[ "$RESET_STATE" == "true" ]]; then
+        echo "  Reset ignored in auto mode (state is ephemeral)"
+    fi
+    echo "  Auto instance mode enabled"
+    if [[ -n "${TS_INSTANCE_NAME:-}" ]]; then
+        echo "  Instance: $TS_INSTANCE_NAME"
+    fi
 else
-    mkdir -p "$STATE_DIR"
-    echo "  Created new state directory"
+    # Handle persistent state directory
+    if [[ "$RESET_STATE" == "true" ]] && [[ -d "$STATE_DIR" ]]; then
+        rm -rf "$STATE_DIR"
+        echo "  State reset (new IP will be allocated)"
+    fi
+
+    if [[ -d "$STATE_DIR" ]]; then
+        echo "  Reusing existing state"
+    else
+        mkdir -p "$STATE_DIR"
+        echo "  Created new state directory"
+    fi
 fi
 
 echo "  Target: $TS_TARGET"

@@ -63,11 +63,13 @@ PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1
 ### Connect via RDP
 
 ```bash
+# Use the Local port shown in ts-bridge banner (auto mode picks it)
+# Example:
 # Linux
-xfreerdp /v:127.0.0.1:33389 /u:Username /cert:ignore
+xfreerdp /v:127.0.0.1:<LOCAL_PORT> /u:Username /cert:ignore
 
 # Windows
-mstsc /v:127.0.0.1:33389
+mstsc /v:127.0.0.1:<LOCAL_PORT>
 ```
 
 ### Command Line
@@ -85,14 +87,68 @@ Create `.env` from `.env.example`:
 |----------|----------|---------|-------------|
 | `TS_AUTHKEY` | Yes | - | Tailscale auth key ([generate](https://login.tailscale.com/admin/settings/keys)) |
 | `TS_TARGET` | Yes | - | Host IP:PORT (e.g., `100.x.x.x:3389`) |
-| `TS_LOCAL_ADDR` | No | `127.0.0.1:33389` | Local bind address |
-| `TS_HOSTNAME` | No | `ts-bridge` | Node name in Tailscale |
-| `TS_STATE_DIR` | No | `./ts-state` | State directory |
+| `TS_LOCAL_ADDR` | No | `127.0.0.1:33389` | Local bind address (auto-derived in auto mode when unset) |
+| `TS_HOSTNAME` | No | `ts-bridge` | Node name in Tailscale (auto-generated per run in auto mode when unset) |
+| `TS_STATE_DIR` | No | `./ts-state` | State directory (ephemeral temp dir in auto mode when unset) |
+| `TS_AUTO_INSTANCE` | No | `true` | Auto mode toggle (`false` disables auto behavior) |
+| `TS_MANUAL_MODE` | No | `false` | Force legacy persistent/manual behavior (`true` takes precedence) |
+| `TS_INSTANCE_NAME` | No | (empty) | Stable instance alias used for deterministic local port selection |
+| `TS_PORT_RANGE` | No | `33389-34388` | Port range used by auto mode (`START-END`) |
 | `TS_TIMEOUT` | No | `30s` | Connection timeout |
 | `TS_MAX_CONNECTIONS` | No | `1000` | Max concurrent connections |
 | `TS_HEALTH_ADDR` | No | (disabled) | Health endpoint (e.g., `127.0.0.1:8080`) |
 | `TS_VERBOSE` | No | `false` | Enable debug logging |
 | `TS_LOG_FORMAT` | No | `text` | Log format (`text` or `json`) |
+
+### Minimal `.env` (low friction)
+
+```env
+TS_AUTHKEY=tskey-auth-...
+TS_TARGET=100.x.x.x:3389
+TS_INSTANCE_NAME=office-laptop
+```
+
+### Bootstrap per OS (recommended)
+
+```bash
+# Linux/macOS
+./scripts/client/bootstrap.sh --authkey tskey-auth-... --target 100.x.x.x:3389 --instance office-laptop
+```
+
+```powershell
+# Windows
+PowerShell -ExecutionPolicy Bypass -File .\scripts\client\bootstrap.ps1 -AuthKey tskey-auth-... -Target 100.x.x.x:3389 -Instance office-laptop
+```
+
+### Auto Mode (default)
+
+Auto mode is enabled by default and is recommended for multi-device usage with minimal setup friction.
+
+```bash
+# .env
+TS_INSTANCE_NAME=office-laptop
+TS_PORT_RANGE=33389-34388
+```
+
+To force legacy persistent/manual behavior:
+
+```bash
+# .env
+TS_MANUAL_MODE=true
+```
+
+Optional alias override when launching:
+
+```bash
+# Linux/macOS
+./scripts/client/run.sh --instance office-laptop
+
+# Windows
+PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1 -Instance office-laptop
+```
+
+In auto mode (with related vars unset), ts-bridge derives a deterministic local port, generates a unique hostname per run, and uses an ephemeral state directory.
+On Windows shutdown, ephemeral cleanup is retried briefly to reduce transient "directory is not empty" races.
 
 ### Health Endpoint
 

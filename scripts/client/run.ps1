@@ -4,15 +4,18 @@
 .DESCRIPTION
     Launches the Go bridge to tunnel connections through Tailscale.
     Reads configuration from .env file in project root.
-    State is preserved by default to maintain Tailscale IP allocation.
+    Auto mode is enabled by default for minimal friction.
 .PARAMETER Reset
-    Wipe previous session state to force new IP allocation.
+    Wipe previous persistent state when running in manual mode.
+.PARAMETER Instance
+    Optional instance alias passed as TS_INSTANCE_NAME for auto-instance mode.
 .NOTES
-    Run: PowerShell -ExecutionPolicy Bypass -File .\run.ps1
+    Run: PowerShell -ExecutionPolicy Bypass -File .\run.ps1 [-Reset] [-Instance office-laptop]
 #>
 
 param(
-    [switch]$Reset
+    [switch]$Reset,
+    [string]$Instance
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,17 +57,43 @@ if (-not $env:TS_TARGET) {
     exit 1
 }
 
-# Handle state directory
-if ($Reset -and (Test-Path $StateDir)) {
-    Remove-Item -Path $StateDir -Recurse -Force
-    Write-Host "  State reset (new IP will be allocated)" -ForegroundColor Yellow
+# Optional instance alias override
+if ($Instance) {
+    [Environment]::SetEnvironmentVariable("TS_INSTANCE_NAME", $Instance, "Process")
 }
 
-if (Test-Path $StateDir) {
-    Write-Host "  Reusing existing state" -ForegroundColor Green
+# Auto mode default: enabled unless explicitly disabled.
+$AutoInstance = $true
+if ($env:TS_AUTO_INSTANCE) {
+    $AutoInstance = @("true", "1", "yes", "on") -contains $env:TS_AUTO_INSTANCE.ToLowerInvariant()
+}
+if ($env:TS_MANUAL_MODE) {
+    if ((@("true", "1", "yes", "on") -contains $env:TS_MANUAL_MODE.ToLowerInvariant())) {
+        $AutoInstance = $false
+    }
+}
+
+if ($AutoInstance) {
+    if ($Reset) {
+        Write-Host "  Reset ignored in auto mode (state is ephemeral)" -ForegroundColor Yellow
+    }
+    Write-Host "  Auto instance mode enabled" -ForegroundColor Green
+    if ($env:TS_INSTANCE_NAME) {
+        Write-Host "  Instance: $env:TS_INSTANCE_NAME"
+    }
 } else {
-    New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
-    Write-Host "  Created new state directory" -ForegroundColor Green
+    # Handle persistent state directory
+    if ($Reset -and (Test-Path $StateDir)) {
+        Remove-Item -Path $StateDir -Recurse -Force
+        Write-Host "  State reset (new IP will be allocated)" -ForegroundColor Yellow
+    }
+
+    if (Test-Path $StateDir) {
+        Write-Host "  Reusing existing state" -ForegroundColor Green
+    } else {
+        New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
+        Write-Host "  Created new state directory" -ForegroundColor Green
+    }
 }
 
 Write-Host "  Target: $env:TS_TARGET"
