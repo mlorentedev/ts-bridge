@@ -393,9 +393,13 @@ func parsePortRange(value string) (int, int, error) {
 
 func selectAvailablePort(seed string, start, end int) (int, error) {
 	span := end - start + 1
+	if span <= 0 {
+		return 0, fmt.Errorf("TS_PORT_RANGE has invalid span: %d", span)
+	}
+
 	hasher := fnv.New32a()
 	_, _ = hasher.Write([]byte(seed))
-	offset := int(hasher.Sum32() % uint32(span))
+	offset := int(int64(hasher.Sum32()) % int64(span))
 
 	for i := 0; i < span; i++ {
 		port := start + ((offset + i) % span)

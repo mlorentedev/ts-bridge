@@ -6,6 +6,13 @@ TCP bridge for tunneling connections through Tailscale's encrypted mesh network 
 
 Connect via RDP/SSH from a **non-admin machine** to an **admin machine** through restrictive firewalls using Tailscale's userspace networking.
 
+## Current Status (2026-02-24)
+
+- **Windows workflow validated**: auto mode default, alias-based launch, and bootstrap setup script.
+- **CI security checks passing target state**: gosec G115 overflow warning fixed in port-selection arithmetic.
+- **Runtime hardening in progress**: Windows cleanup/log-noise improvements implemented; field validation continues.
+- **Linux parity validation pending**: waiting for Linux client access to complete end-to-end checks.
+
 | Machine | Admin Rights | Tailscale | Role |
 |---------|--------------|-----------|------|
 | **Client** | No | Not installed (uses tsnet) | Initiates connection |
@@ -71,6 +78,8 @@ xfreerdp /v:127.0.0.1:<LOCAL_PORT> /u:Username /cert:ignore
 # Windows
 mstsc /v:127.0.0.1:<LOCAL_PORT>
 ```
+
+RDP concurrency is enforced by the target host OS/policy (for example, many Windows desktop editions allow only one interactive session at a time).
 
 ### Command Line
 
@@ -167,7 +176,7 @@ curl http://127.0.0.1:8080/metrics       # Connection stats
 │  CLIENT (Non-Admin)                                                 │
 │                                                                     │
 │   RDP Client ──▶ ts-bridge ──▶ tsnet (userspace WireGuard)         │
-│   127.0.0.1:33389              No admin required                    │
+│   127.0.0.1:<LOCAL_PORT>        No admin required                   │
 │                                                                     │
 │   ┌─────────────────────────────────────────────┐                   │
 │   │ Firewall: UDP blocked, HTTPS allowed        │◀── Tunnels via   │
@@ -198,6 +207,7 @@ curl http://127.0.0.1:8080/metrics       # Connection stats
 | DERP latency | +50-200ms when relayed | Acceptable for RDP |
 | Auth key expiry | Default 90 days | Use long-lived keys |
 | Single target | One host per instance | Run multiple instances |
+| RDP host policy | Concurrent sessions may be limited by OS edition | Use multiple hosts or RDS-enabled server setup |
 
 ## Security
 
@@ -206,6 +216,7 @@ curl http://127.0.0.1:8080/metrics       # Connection stats
 - **E2E encryption**: WireGuard encryption even through DERP
 - **Local only**: Binds to 127.0.0.1 by default
 - **Secure state**: Directory created with 0700 permissions
+- **CI security checks**: Port-selection arithmetic hardened to satisfy gosec overflow checks
 
 ## Documentation
 
