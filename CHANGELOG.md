@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1](https://github.com/mlorentedev/ts-bridge/compare/v1.3.0...v1.3.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* harden Windows runtime and reduce noisy close logs ([8ee6f13](https://github.com/mlorentedev/ts-bridge/commit/8ee6f13d66ca411982111073e9e7c19382ad5104))
+* harden Windows runtime behavior and refresh project documentation ([9026550](https://github.com/mlorentedev/ts-bridge/commit/9026550626a3d4552bbc33961f63f23f734e083a))
+
 ## [1.3.0](https://github.com/mlorentedev/ts-bridge/compare/v1.2.0...v1.3.0) (2026-02-24)
 
 
