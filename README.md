@@ -152,8 +152,6 @@ curl http://127.0.0.1:8080/metrics  # Connection stats
 
 ## Documentation
 
-- [Troubleshooting Guide](docs/TROUBLESHOOTING.md) - Common issues and solutions
-- [Operations Guide](docs/OPERATIONS.md) - Production deployment
 - [Contributing](CONTRIBUTING.md) - Development setup, testing, releases
 
 ## Support

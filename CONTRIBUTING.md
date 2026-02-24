@@ -70,16 +70,13 @@ golangci-lint run
 
 ```text
 ts-bridge/
-├── main.go                    # Core application (~490 lines)
+├── main.go                    # Core application
 ├── main_test.go               # Unit tests
 ├── main_integration_test.go   # Integration tests
 ├── scripts/
 │   ├── dev.sh                 # Development launcher
 │   ├── client/                # Client launchers (run.sh, run.ps1)
 │   └── host/                  # Host setup (setup.ps1, ts-bridge.service)
-├── docs/
-│   ├── OPERATIONS.md          # Production deployment guide
-│   └── TROUBLESHOOTING.md     # Troubleshooting guide
 ├── .github/workflows/
 │   ├── ci.yml                 # Build, test, lint, security
 │   └── release.yml            # Automatic releases
@@ -179,52 +176,9 @@ On every push/PR:
 | `shellcheck` | Validate bash scripts |
 | `build-matrix` | Cross-compile for linux/windows/darwin × amd64/arm64 |
 
-## Architecture Notes
-
-### Key Design Decisions
-
-- **Single binary**: Keep it simple, no plugins or config files
-- **Structured logging**: `slog` for JSON/text output
-- **Connection limits**: Prevent resource exhaustion (default: 1000)
-- **Exponential backoff**: On accept errors (100ms → 10s)
-- **Metrics**: Atomic counters exposed via `/metrics`
-- **State directory**: Created with 0700 permissions
-
-### Main Components
-
-```
-main()
-  └─> loadConfig()      # Parse env vars, validate
-  └─> initLogger()      # Setup slog (text/json)
-  └─> run()
-        └─> ensureStateDir()    # Create with 0700 perms
-        └─> tsnet.Server.Up()   # Initialize Tailscale
-        └─> startHealthServer() # Optional /health, /metrics
-        └─> acceptLoop()
-              └─> handleConn()  # Per-connection goroutine
-                    └─> io.CopyBuffer() bidirectional
-```
-
 ## Testing Guidelines
 
 - Unit tests for config parsing and error handling
 - Integration tests for proxy behavior (use loopback, no real Tailscale)
 - Table-driven tests for multiple cases
 - Test file naming: `*_test.go` for unit, `*_integration_test.go` for integration
-
-### Example Test
-
-```go
-func TestFeature(t *testing.T) {
-    // Arrange
-    input := "test"
-
-    // Act
-    result := processInput(input)
-
-    // Assert
-    if result != expected {
-        t.Errorf("got %v, want %v", result, expected)
-    }
-}
-```
