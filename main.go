@@ -60,7 +60,7 @@ const (
 type Config struct {
 	LocalAddr      string
 	Target         string
-	AuthKey        string
+	AuthKey        string // #nosec G117 -- internal struct, never serialized
 	Hostname       string
 	StateDir       string
 	ConnectTimeout time.Duration

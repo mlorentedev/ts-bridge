@@ -6,136 +6,146 @@ import (
 	"time"
 )
 
-func TestLoadConfig_Valid(t *testing.T) {
-	// Setup
-	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-test123")
-	defer os.Unsetenv("TS_TARGET")
-	defer os.Unsetenv("TS_AUTHKEY")
-
-	cfg, err := loadConfig(false)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	if cfg.Target != "100.64.0.1:3389" {
-		t.Errorf("expected target 100.64.0.1:3389, got %s", cfg.Target)
-	}
-	if cfg.LocalAddr != "127.0.0.1:33389" {
-		t.Errorf("expected default local addr, got %s", cfg.LocalAddr)
-	}
-	if cfg.ConnectTimeout != 30*time.Second {
-		t.Errorf("expected 30s timeout, got %v", cfg.ConnectTimeout)
-	}
-}
-
-func TestLoadConfig_MissingTarget(t *testing.T) {
-	os.Unsetenv("TS_TARGET")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-test123")
-	defer os.Unsetenv("TS_AUTHKEY")
-
-	_, err := loadConfig(false)
-	if err == nil {
-		t.Fatal("expected error for missing TS_TARGET")
-	}
-}
-
-func TestLoadConfig_MissingAuthKey(t *testing.T) {
-	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Unsetenv("TS_AUTHKEY")
-	defer os.Unsetenv("TS_TARGET")
-
-	_, err := loadConfig(false)
-	if err == nil {
-		t.Fatal("expected error for missing TS_AUTHKEY")
-	}
-}
-
-func TestLoadConfig_InvalidTargetFormat(t *testing.T) {
+func TestLoadConfig(t *testing.T) {
 	tests := []struct {
-		name   string
-		target string
+		name    string
+		env     map[string]string
+		verbose bool
+		wantErr bool
+		check   func(t *testing.T, cfg Config)
 	}{
-		{"no port", "100.64.0.1"},
-		{"empty host", ":3389"},
-		{"invalid port", "100.64.0.1:abc"},
-		{"port too high", "100.64.0.1:99999"},
-		{"port zero", "100.64.0.1:0"},
-		{"negative port", "100.64.0.1:-1"},
+		{
+			name:    "valid config with defaults",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Target != "100.64.0.1:3389" {
+					t.Errorf("expected target 100.64.0.1:3389, got %s", cfg.Target)
+				}
+				if cfg.LocalAddr != "127.0.0.1:33389" {
+					t.Errorf("expected default local addr, got %s", cfg.LocalAddr)
+				}
+				if cfg.ConnectTimeout != 30*time.Second {
+					t.Errorf("expected 30s timeout, got %v", cfg.ConnectTimeout)
+				}
+			},
+		},
+		{
+			name:    "custom timeout",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_TIMEOUT": "1m30s"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.ConnectTimeout != 90*time.Second {
+					t.Errorf("expected timeout 1m30s, got %v", cfg.ConnectTimeout)
+				}
+			},
+		},
+		{
+			name:    "missing target",
+			env:     map[string]string{"TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: true,
+		},
+		{
+			name:    "missing auth key",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389"},
+			wantErr: true,
+		},
+		{
+			name:    "invalid auth key format",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "invalid-key-format"},
+			wantErr: true,
+		},
+		{
+			name:    "invalid timeout",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_TIMEOUT": "invalid"},
+			wantErr: true,
+		},
+		{
+			name:    "target no port",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: true,
+		},
+		{
+			name:    "target empty host",
+			env:     map[string]string{"TS_TARGET": ":3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: true,
+		},
+		{
+			name:    "target invalid port",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:abc", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: true,
+		},
+		{
+			name:    "target port too high",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:99999", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: true,
+		},
+		{
+			name:    "target port zero",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:0", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: true,
+		},
+		{
+			name:    "target negative port",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:-1", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: true,
+		},
 	}
-
-	os.Setenv("TS_AUTHKEY", "tskey-auth-test123")
-	defer os.Unsetenv("TS_AUTHKEY")
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("TS_TARGET", tt.target)
-			defer os.Unsetenv("TS_TARGET")
+			// Clear all config env vars
+			for _, key := range []string{"TS_TARGET", "TS_AUTHKEY", "TS_TIMEOUT", "TS_VERBOSE",
+				"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_MAX_CONNECTIONS",
+				"TS_HEALTH_ADDR", "TS_LOG_FORMAT"} {
+				os.Unsetenv(key)
+			}
+			// Set test-specific env vars
+			for k, v := range tt.env {
+				os.Setenv(k, v)
+			}
 
-			_, err := loadConfig(false)
-			if err == nil {
-				t.Errorf("expected error for invalid target %q", tt.target)
+			cfg, err := loadConfig(tt.verbose)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.check != nil {
+				tt.check(t, cfg)
 			}
 		})
 	}
 }
 
-func TestLoadConfig_InvalidAuthKey(t *testing.T) {
-	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "invalid-key-format")
-	defer os.Unsetenv("TS_TARGET")
-	defer os.Unsetenv("TS_AUTHKEY")
-
-	_, err := loadConfig(false)
-	if err == nil {
-		t.Fatal("expected error for invalid auth key format")
-	}
-}
-
-func TestLoadConfig_CustomTimeout(t *testing.T) {
-	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-test123")
-	os.Setenv("TS_TIMEOUT", "1m30s")
-	defer os.Unsetenv("TS_TARGET")
-	defer os.Unsetenv("TS_AUTHKEY")
-	defer os.Unsetenv("TS_TIMEOUT")
-
-	cfg, err := loadConfig(false)
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	expected := 90 * time.Second
-	if cfg.ConnectTimeout != expected {
-		t.Errorf("expected timeout %v, got %v", expected, cfg.ConnectTimeout)
-	}
-}
-
-func TestLoadConfig_InvalidTimeout(t *testing.T) {
-	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-test123")
-	os.Setenv("TS_TIMEOUT", "invalid")
-	defer os.Unsetenv("TS_TARGET")
-	defer os.Unsetenv("TS_AUTHKEY")
-	defer os.Unsetenv("TS_TIMEOUT")
-
-	_, err := loadConfig(false)
-	if err == nil {
-		t.Fatal("expected error for invalid timeout format")
-	}
-}
-
 func TestEnvOr(t *testing.T) {
-	// Test fallback
-	os.Unsetenv("TEST_VAR_NOT_SET")
-	if got := envOr("TEST_VAR_NOT_SET", "default"); got != "default" {
-		t.Errorf("expected default, got %s", got)
+	tests := []struct {
+		name     string
+		key      string
+		envValue string
+		setEnv   bool
+		fallback string
+		want     string
+	}{
+		{"fallback when unset", "TEST_VAR_NOT_SET", "", false, "default", "default"},
+		{"env value when set", "TEST_VAR_SET", "custom", true, "default", "custom"},
 	}
 
-	// Test env value
-	os.Setenv("TEST_VAR_SET", "custom")
-	defer os.Unsetenv("TEST_VAR_SET")
-	if got := envOr("TEST_VAR_SET", "default"); got != "custom" {
-		t.Errorf("expected custom, got %s", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Unsetenv(tt.key)
+			if tt.setEnv {
+				os.Setenv(tt.key, tt.envValue)
+				defer os.Unsetenv(tt.key)
+			}
+			if got := envOr(tt.key, tt.fallback); got != tt.want {
+				t.Errorf("envOr(%q, %q) = %q, want %q", tt.key, tt.fallback, got, tt.want)
+			}
+		})
 	}
 }
