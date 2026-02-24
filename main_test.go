@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -118,6 +121,58 @@ func TestLoadConfig(t *testing.T) {
 			}
 			if tt.check != nil {
 				tt.check(t, cfg)
+			}
+		})
+	}
+}
+
+func TestInitLogger(t *testing.T) {
+	oldLogger := logger
+	defer func() { logger = oldLogger }()
+
+	tests := []struct {
+		name        string
+		cfg         Config
+		wantHandler string
+		wantLevel   slog.Level
+	}{
+		{
+			name:        "default text handler",
+			cfg:         Config{LogFormat: "text"},
+			wantHandler: "*slog.TextHandler",
+			wantLevel:   slog.LevelInfo,
+		},
+		{
+			name:        "json handler",
+			cfg:         Config{LogFormat: "json"},
+			wantHandler: "*slog.JSONHandler",
+			wantLevel:   slog.LevelInfo,
+		},
+		{
+			name:        "verbose enables debug level",
+			cfg:         Config{LogFormat: "text", Verbose: true},
+			wantHandler: "*slog.TextHandler",
+			wantLevel:   slog.LevelDebug,
+		},
+		{
+			name:        "unknown format falls back to text",
+			cfg:         Config{LogFormat: "yaml"},
+			wantHandler: "*slog.TextHandler",
+			wantLevel:   slog.LevelInfo,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initLogger(tt.cfg)
+
+			handlerType := fmt.Sprintf("%T", logger.Handler())
+			if handlerType != tt.wantHandler {
+				t.Errorf("handler type = %s, want %s", handlerType, tt.wantHandler)
+			}
+
+			if !logger.Handler().Enabled(context.Background(), tt.wantLevel) {
+				t.Errorf("expected level %v to be enabled", tt.wantLevel)
 			}
 		})
 	}
