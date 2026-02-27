@@ -44,6 +44,26 @@ func TestLoadConfig(t *testing.T) {
 			},
 		},
 		{
+			name:    "control URL unset defaults to empty",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.ControlURL != "" {
+					t.Errorf("expected empty ControlURL, got %q", cfg.ControlURL)
+				}
+			},
+		},
+		{
+			name:    "control URL set to headscale",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_CONTROL_URL": "https://vpn.example.com"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.ControlURL != "https://vpn.example.com" {
+					t.Errorf("expected https://vpn.example.com, got %q", cfg.ControlURL)
+				}
+			},
+		},
+		{
 			name:    "missing target",
 			env:     map[string]string{"TS_AUTHKEY": "tskey-auth-test123"},
 			wantErr: true,
@@ -99,8 +119,8 @@ func TestLoadConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear all config env vars
 			for _, key := range []string{"TS_TARGET", "TS_AUTHKEY", "TS_TIMEOUT", "TS_VERBOSE",
-				"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_MAX_CONNECTIONS",
-				"TS_HEALTH_ADDR", "TS_LOG_FORMAT"} {
+				"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
+				"TS_MAX_CONNECTIONS", "TS_HEALTH_ADDR", "TS_LOG_FORMAT"} {
 				os.Unsetenv(key)
 			}
 			// Set test-specific env vars

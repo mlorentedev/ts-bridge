@@ -63,6 +63,7 @@ type Config struct {
 	AuthKey        string // #nosec G117 -- internal struct, never serialized
 	Hostname       string
 	StateDir       string
+	ControlURL     string
 	ConnectTimeout time.Duration
 	MaxConnections int64
 	HealthAddr     string
@@ -165,6 +166,7 @@ func loadConfig(verboseFlag bool) (Config, error) {
 		AuthKey:        authKey,
 		Hostname:       envOr("TS_HOSTNAME", "ts-bridge"),
 		StateDir:       envOr("TS_STATE_DIR", "./ts-state"),
+		ControlURL:     os.Getenv("TS_CONTROL_URL"),
 		ConnectTimeout: timeout,
 		MaxConnections: maxConns,
 		HealthAddr:     os.Getenv("TS_HEALTH_ADDR"),
@@ -248,11 +250,12 @@ func run(cfg Config) error {
 	}
 
 	server := &tsnet.Server{
-		Hostname:  cfg.Hostname,
-		AuthKey:   cfg.AuthKey,
-		Dir:       cfg.StateDir,
-		Ephemeral: true,
-		Logf:      tsnetLogf,
+		Hostname:   cfg.Hostname,
+		AuthKey:    cfg.AuthKey,
+		Dir:        cfg.StateDir,
+		ControlURL: cfg.ControlURL,
+		Ephemeral:  true,
+		Logf:       tsnetLogf,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ConnectTimeout)
