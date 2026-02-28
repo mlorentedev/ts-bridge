@@ -21,6 +21,34 @@ Connect via RDP/SSH from a **non-admin machine** to an **admin machine** through
 | Leaves traces | Yes | No (ephemeral) |
 | Works on locked-down machines | No | **Yes** |
 
+## Control Plane Support
+
+ts-bridge works with both **Tailscale SaaS** (default) and **self-hosted [Headscale](https://github.com/juanfont/headscale)**.
+
+| | Tailscale SaaS | Headscale |
+|---|---|---|
+| **Setup** | Default, no extra config | Set `TS_CONTROL_URL` |
+| **Auth key prefix** | `tskey-auth-*` | `hskey-auth-*` |
+| **Ephemeral cleanup** | Automatic | Requires `--ephemeral` flag on the pre-auth key |
+| **Minimum version** | Any | Headscale v0.28.0+ requires tsnet >= v1.74 (ts-bridge v1.3.0+) |
+
+### Headscale Quick Setup
+
+```bash
+# .env
+TS_CONTROL_URL=https://vpn.example.com
+TS_AUTHKEY=hskey-auth-xxxxx
+TS_TARGET=100.64.0.5:3389
+```
+
+Generate the auth key on the Headscale server:
+```bash
+headscale preauthkeys create --user <ID> --reusable --ephemeral --expiration 8760h
+```
+
+> **Important:** The `--ephemeral` flag must be on the **pre-auth key**, not just in ts-bridge config.
+> Without it, nodes persist as offline entries after disconnect.
+
 ## Quick Start
 
 ### 1. Host Machine (Admin Rights Required)
@@ -33,7 +61,7 @@ cd scripts\host
 PowerShell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-Note the Tailscale IP shown (e.g., `100.82.151.104`). See [Host Setup Guide](#host-setup-guide) for manual steps and troubleshooting.
+Note the Tailscale IP shown (e.g., `100.82.151.104`). For Headscale, use `tailscale up --login-server=https://vpn.example.com`. See [Host Setup Guide](#host-setup-guide) for manual steps and troubleshooting.
 
 ### 2. Client Machine (No Admin Rights)
 
@@ -48,8 +76,8 @@ cp .env.example .env
 Edit `.env` — only two variables are required:
 
 ```bash
-TS_AUTHKEY=tskey-auth-kXXXXXXXXX   # From https://login.tailscale.com/admin/settings/keys
-TS_TARGET=100.82.151.104:3389       # Host's Tailscale IP + RDP port
+TS_AUTHKEY=tskey-auth-kXXXXXXXXX   # From Tailscale admin or Headscale (hskey-auth-*)
+TS_TARGET=100.82.151.104:3389       # Host's Tailscale/Headscale IP + RDP port
 ```
 
 ### 3. Run
@@ -157,8 +185,8 @@ Create `.env` from `.env.example`. Only `TS_AUTHKEY` and `TS_TARGET` are require
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TS_AUTHKEY` | Tailscale auth key ([generate](https://login.tailscale.com/admin/settings/keys)). Use ephemeral + reusable. | `tskey-auth-kXXXXXX` |
-| `TS_TARGET` | Host address on Tailscale network. Supports IP or MagicDNS hostname. | `100.82.151.104:3389` or `my-desktop:3389` |
+| `TS_AUTHKEY` | Auth key. Tailscale SaaS: [generate here](https://login.tailscale.com/admin/settings/keys). Headscale: `headscale preauthkeys create`. Prefix: `tskey-` or `hskey-`. | `tskey-auth-kXXXXXX` |
+| `TS_TARGET` | Host address on the mesh network. Supports IP or MagicDNS hostname. | `100.82.151.104:3389` or `my-desktop:3389` |
 
 ### Optional
 
@@ -215,11 +243,11 @@ curl http://127.0.0.1:8080/metrics       # Connection stats (JSON)
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-1. ts-bridge creates ephemeral Tailscale node via [tsnet](https://pkg.go.dev/tailscale.com/tsnet)
+1. ts-bridge creates ephemeral node via [tsnet](https://pkg.go.dev/tailscale.com/tsnet) on Tailscale SaaS or Headscale
 2. WireGuard runs in userspace (no kernel module, no admin)
 3. If UDP blocked, uses DERP relay over HTTPS
 4. All traffic end-to-end encrypted (WireGuard + RDP TLS)
-5. Node auto-deletes from Tailscale on exit
+5. Node auto-deletes on exit (Headscale: requires `--ephemeral` pre-auth key)
 
 ## Limitations
 
@@ -227,7 +255,7 @@ curl http://127.0.0.1:8080/metrics       # Connection stats (JSON)
 |------------|--------|------------|
 | TCP only | No UDP (VoIP, games) | Use for RDP, SSH, HTTP |
 | DERP latency | +50-200ms when relayed | Acceptable for RDP |
-| Auth key expiry | Default 90 days | Use long-lived keys or disable expiry on host |
+| Auth key expiry | Default 90 days (Tailscale), configurable (Headscale) | Use long-lived keys or `--expiration 8760h` on Headscale |
 | Single target | One host per instance | Run multiple instances with different `TS_TARGET` |
 | Windows Home | Cannot host RDP | Use Windows Pro/Enterprise on host |
 
