@@ -200,8 +200,8 @@ func parseAuthKey() (string, error) {
 	if authKey == "" {
 		return "", errors.New("TS_AUTHKEY is required")
 	}
-	if !strings.HasPrefix(authKey, "tskey-") {
-		return "", errors.New("TS_AUTHKEY: invalid format (must start with tskey-)")
+	if !strings.HasPrefix(authKey, "tskey-") && !strings.HasPrefix(authKey, "hskey-") {
+		return "", errors.New("TS_AUTHKEY: invalid format (must start with tskey- or hskey-)")
 	}
 	return authKey, nil
 }

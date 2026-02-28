@@ -79,6 +79,16 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "headscale auth key accepted",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "hskey-auth-test123"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.AuthKey != "hskey-auth-test123" {
+					t.Errorf("expected hskey-auth-test123, got %q", cfg.AuthKey)
+				}
+			},
+		},
+		{
 			name:    "invalid timeout",
 			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_TIMEOUT": "invalid"},
 			wantErr: true,
