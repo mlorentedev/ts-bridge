@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/mlorentedev/ts-bridge/compare/v1.3.1...v1.4.0) (2026-02-28)
+
+
+### Features
+
+* add TS_CONTROL_URL for custom control plane support ([1150e69](https://github.com/mlorentedev/ts-bridge/commit/1150e6945f9756ab340e0411ed5873d95cc41e50))
+* upgrade tsnet v1.60.0 to v1.80.0 ([8da247b](https://github.com/mlorentedev/ts-bridge/commit/8da247b1abaa3150f8a269f817d07eb9fc934c3a))
+
+
+### Bug Fixes
+
+* accept hskey- auth key prefix for Headscale compatibility ([2135da3](https://github.com/mlorentedev/ts-bridge/commit/2135da3f2a44a69587696e4fc7e89a1b5ba1ff01))
+
 ## [1.3.1](https://github.com/mlorentedev/ts-bridge/compare/v1.3.0...v1.3.1) (2026-02-24)
 
 
