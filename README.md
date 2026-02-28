@@ -6,6 +6,13 @@ TCP bridge for tunneling connections through Tailscale's encrypted mesh network 
 
 Connect via RDP/SSH from a **non-admin machine** to an **admin machine** through restrictive firewalls using Tailscale's userspace networking.
 
+## Current Status (2026-02-24)
+
+- **Windows workflow validated**: auto mode default, alias-based launch, and bootstrap setup script.
+- **CI security checks passing target state**: gosec G115 overflow warning fixed in port-selection arithmetic.
+- **Runtime hardening in progress**: Windows cleanup/log-noise improvements implemented; field validation continues.
+- **Linux parity validation pending**: waiting for Linux client access to complete end-to-end checks.
+
 | Machine | Admin Rights | Tailscale | Role |
 |---------|--------------|-----------|------|
 | **Client** | No | Not installed (uses tsnet) | Initiates connection |
@@ -93,15 +100,18 @@ PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1
 ### 4. Connect
 
 ```bash
-# Linux (xfreerdp)
-xfreerdp /v:127.0.0.1:33389 /u:Username /cert:ignore
+# Use the local port shown in ts-bridge banner (auto mode picks it)
+# Linux
+xfreerdp /v:127.0.0.1:<LOCAL_PORT> /u:Username /cert:ignore
 
-# Windows (mstsc)
-mstsc /v:127.0.0.1:33389
+# Windows
+mstsc /v:127.0.0.1:<LOCAL_PORT>
 
 # macOS (Microsoft Remote Desktop)
-# Add PC → 127.0.0.1:33389
+# Add PC → 127.0.0.1:<LOCAL_PORT>
 ```
+
+RDP concurrency is enforced by the target host OS/policy (for example, many Windows desktop editions allow only one interactive session at a time).
 
 ## Host Setup Guide
 
@@ -192,15 +202,69 @@ Create `.env` from `.env.example`. Only `TS_AUTHKEY` and `TS_TARGET` are require
 
 | Variable | Default | Description | Example |
 |----------|---------|-------------|---------|
-| `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local address to bind the bridge listener. Change if the default port conflicts. | `127.0.0.1:43389` |
+| `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local address to bind the bridge listener. Auto-derived in auto mode when unset. | `127.0.0.1:43389` |
 | `TS_CONTROL_URL` | _(Tailscale default)_ | Custom control plane URL. Set this to use a self-hosted [Headscale](https://github.com/juanfont/headscale) server. | `https://vpn.example.com` |
-| `TS_HOSTNAME` | `ts-bridge` | Node name shown in the Tailscale admin console. | `bridge-workpc` |
-| `TS_STATE_DIR` | `./ts-state` | Directory for Tailscale node state. Auto-created with `0700` permissions. | `/tmp/ts-bridge-state` |
+| `TS_HOSTNAME` | `ts-bridge` | Node name in the admin console. Auto-generated per run in auto mode when unset. | `bridge-workpc` |
+| `TS_STATE_DIR` | `./ts-state` | Directory for node state. Auto-created with `0700` permissions. Ephemeral temp dir in auto mode when unset. | `/tmp/ts-bridge-state` |
+| `TS_AUTO_INSTANCE` | `true` | Auto mode toggle (`false` disables auto behavior). | `false` |
+| `TS_MANUAL_MODE` | `false` | Force legacy persistent/manual behavior (`true` takes precedence over `TS_AUTO_INSTANCE`). | `true` |
+| `TS_INSTANCE_NAME` | _(empty)_ | Stable instance alias used for deterministic local port selection. | `office-laptop` |
+| `TS_PORT_RANGE` | `33389-34388` | Port range used by auto mode (`START-END`). | `61000-61100` |
 | `TS_TIMEOUT` | `30s` | Timeout for Tailscale initialization and dial. Go duration format. | `1m`, `45s` |
 | `TS_MAX_CONNECTIONS` | `1000` | Maximum concurrent connections before rejecting new ones. | `50` |
 | `TS_HEALTH_ADDR` | _(disabled)_ | Address for health/metrics HTTP server. | `127.0.0.1:8080` |
 | `TS_VERBOSE` | `false` | Enable debug logging. Also available as `-v` flag. | `true` |
 | `TS_LOG_FORMAT` | `text` | Log output format. | `text` or `json` |
+
+### Minimal `.env` (low friction)
+
+```env
+TS_AUTHKEY=tskey-auth-...
+TS_TARGET=100.x.x.x:3389
+TS_INSTANCE_NAME=office-laptop
+```
+
+### Bootstrap per OS (recommended)
+
+```bash
+# Linux/macOS
+./scripts/client/bootstrap.sh --authkey tskey-auth-... --target 100.x.x.x:3389 --instance office-laptop
+```
+
+```powershell
+# Windows
+PowerShell -ExecutionPolicy Bypass -File .\scripts\client\bootstrap.ps1 -AuthKey tskey-auth-... -Target 100.x.x.x:3389 -Instance office-laptop
+```
+
+### Auto Mode (default)
+
+Auto mode is enabled by default and is recommended for multi-device usage with minimal setup friction.
+
+```bash
+# .env
+TS_INSTANCE_NAME=office-laptop
+TS_PORT_RANGE=33389-34388
+```
+
+To force legacy persistent/manual behavior:
+
+```bash
+# .env
+TS_MANUAL_MODE=true
+```
+
+Optional alias override when launching:
+
+```bash
+# Linux/macOS
+./scripts/client/run.sh --instance office-laptop
+
+# Windows
+PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1 -Instance office-laptop
+```
+
+In auto mode (with related vars unset), ts-bridge derives a deterministic local port, generates a unique hostname per run, and uses an ephemeral state directory.
+On Windows shutdown, ephemeral cleanup is retried briefly to reduce transient "directory is not empty" races.
 
 ### Health Endpoint
 
@@ -226,7 +290,7 @@ curl http://127.0.0.1:8080/metrics       # Connection stats (JSON)
 │  CLIENT (Non-Admin)                                                 │
 │                                                                     │
 │   RDP Client ──▶ ts-bridge ──▶ tsnet (userspace WireGuard)         │
-│   127.0.0.1:33389              No admin required                    │
+│   127.0.0.1:<LOCAL_PORT>        No admin required                   │
 │                                                                     │
 │   ┌─────────────────────────────────────────────────┐               │
 │   │ Firewall: UDP blocked, HTTPS allowed            │◀── Tunnels   │
@@ -258,14 +322,16 @@ curl http://127.0.0.1:8080/metrics       # Connection stats (JSON)
 | Auth key expiry | Default 90 days (Tailscale), configurable (Headscale) | Use long-lived keys or `--expiration 8760h` on Headscale |
 | Single target | One host per instance | Run multiple instances with different `TS_TARGET` |
 | Windows Home | Cannot host RDP | Use Windows Pro/Enterprise on host |
+| RDP host policy | Concurrent sessions may be limited by OS edition | Use multiple hosts or RDS-enabled server setup |
 
 ## Security
 
 - **No admin footprint**: Runs entirely in userspace
-- **Ephemeral nodes**: Auto-delete from Tailscale on exit
+- **Ephemeral nodes**: Auto-delete on exit (Headscale: requires `--ephemeral` pre-auth key)
 - **E2E encryption**: WireGuard encryption even through DERP relay
 - **Local only**: Binds to `127.0.0.1` by default
 - **Secure state**: Directory created with `0700` permissions
+- **CI security checks**: Port-selection arithmetic hardened to satisfy gosec overflow checks
 
 ## Documentation
 

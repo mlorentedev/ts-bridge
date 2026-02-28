@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -348,6 +349,7 @@ func TestIsExpectedCloseError(t *testing.T) {
 		{"random error", errors.New("random error"), false},
 		{"closed network", errors.New("use of closed network connection"), true},
 		{"connection reset", errors.New("connection reset by peer"), true},
+		{"windows wsarecv forced close", errors.New("wsarecv: An existing connection was forcibly closed by the remote host"), true},
 	}
 
 	for _, tt := range tests {
@@ -405,8 +407,8 @@ func TestEnsureStateDir(t *testing.T) {
 		t.Error("expected directory")
 	}
 
-	// Verify permissions (Unix only)
-	if info.Mode().Perm() != stateDirPerms {
+	// Verify permissions (Unix only).
+	if runtime.GOOS != "windows" && info.Mode().Perm() != stateDirPerms {
 		t.Errorf("permissions = %o, expected %o", info.Mode().Perm(), stateDirPerms)
 	}
 

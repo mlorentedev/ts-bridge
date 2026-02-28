@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.1](https://github.com/mlorentedev/ts-bridge/compare/v1.3.0...v1.3.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* harden Windows runtime and reduce noisy close logs ([8ee6f13](https://github.com/mlorentedev/ts-bridge/commit/8ee6f13d66ca411982111073e9e7c19382ad5104))
+* harden Windows runtime behavior and refresh project documentation ([9026550](https://github.com/mlorentedev/ts-bridge/commit/9026550626a3d4552bbc33961f63f23f734e083a))
+
+## [1.3.0](https://github.com/mlorentedev/ts-bridge/compare/v1.2.0...v1.3.0) (2026-02-24)
+
+
+### Features
+
+* add liveness/readiness health probes and pin CI actions ([10bc389](https://github.com/mlorentedev/ts-bridge/commit/10bc3897a20a6a2083341d6dbfff3fb37f64fd16))
+
+
+### Bug Fixes
+
+* add race detector to release tests and pin CI actions ([51e291e](https://github.com/mlorentedev/ts-bridge/commit/51e291ed56713c4b0557f87b476a3bbbc7468826))
+* suppress gosec G117 false positive on Config.AuthKey ([af0ed6e](https://github.com/mlorentedev/ts-bridge/commit/af0ed6e192a2cb14f370ce7f0eea6091b70ada8a))
+
 ## [1.2.0](https://github.com/mlorentedev/ts-bridge/compare/v1.1.0...v1.2.0) (2026-02-02)
 
 

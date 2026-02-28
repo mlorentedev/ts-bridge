@@ -9,12 +9,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,6 +51,14 @@ const (
 	// defaultMaxConnections prevents resource exhaustion.
 	defaultMaxConnections = 1000
 
+	// Default runtime values.
+	defaultLocalAddr     = "127.0.0.1:33389"
+	defaultHostname      = "ts-bridge"
+	defaultStateDir      = "./ts-state"
+	defaultAutoPortRange = "33389-34388"
+	cleanupMaxAttempts   = 5
+	cleanupRetryDelay    = 150 * time.Millisecond
+
 	// backoffMin/Max for accept loop error recovery.
 	backoffMin = 100 * time.Millisecond
 	backoffMax = 10 * time.Second
@@ -69,6 +80,8 @@ type Config struct {
 	HealthAddr     string
 	Verbose        bool
 	LogFormat      string
+	AutoInstance   bool
+	EphemeralState bool
 }
 
 // Metrics tracks operational statistics.
@@ -160,19 +173,35 @@ func loadConfig(verboseFlag bool) (Config, error) {
 
 	verbose := verboseFlag || os.Getenv("TS_VERBOSE") == "true" || os.Getenv("TS_VERBOSE") == "1"
 
-	return Config{
-		LocalAddr:      envOr("TS_LOCAL_ADDR", "127.0.0.1:33389"),
+	cfg := Config{
+		LocalAddr:      os.Getenv("TS_LOCAL_ADDR"),
 		Target:         target,
 		AuthKey:        authKey,
-		Hostname:       envOr("TS_HOSTNAME", "ts-bridge"),
-		StateDir:       envOr("TS_STATE_DIR", "./ts-state"),
+		Hostname:       os.Getenv("TS_HOSTNAME"),
+		StateDir:       os.Getenv("TS_STATE_DIR"),
 		ControlURL:     os.Getenv("TS_CONTROL_URL"),
 		ConnectTimeout: timeout,
 		MaxConnections: maxConns,
 		HealthAddr:     os.Getenv("TS_HEALTH_ADDR"),
 		Verbose:        verbose,
 		LogFormat:      envOr("TS_LOG_FORMAT", "text"),
-	}, nil
+	}
+
+	if err := applyAutoInstanceConfig(&cfg); err != nil {
+		return Config{}, err
+	}
+
+	if cfg.LocalAddr == "" {
+		cfg.LocalAddr = defaultLocalAddr
+	}
+	if cfg.Hostname == "" {
+		cfg.Hostname = defaultHostname
+	}
+	if cfg.StateDir == "" {
+		cfg.StateDir = defaultStateDir
+	}
+
+	return cfg, nil
 }
 
 func parseTarget() (string, error) {
@@ -213,6 +242,182 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+func applyAutoInstanceConfig(cfg *Config) error {
+	cfg.AutoInstance = shouldEnableAutoInstance()
+	if !cfg.AutoInstance {
+		return nil
+	}
+
+	instanceName := os.Getenv("TS_INSTANCE_NAME")
+	portRange := envOr("TS_PORT_RANGE", defaultAutoPortRange)
+
+	if cfg.LocalAddr == "" {
+		localAddr, err := deriveAutoLocalAddr(cfg.Target, instanceName, portRange)
+		if err != nil {
+			return err
+		}
+		cfg.LocalAddr = localAddr
+	}
+
+	if cfg.Hostname == "" {
+		cfg.Hostname = deriveAutoHostname(cfg.Target, instanceName)
+	}
+
+	if cfg.StateDir == "" {
+		cfg.StateDir = filepath.Join(os.TempDir(), "ts-bridge", cfg.Hostname)
+		cfg.EphemeralState = true
+	}
+
+	return nil
+}
+
+func shouldEnableAutoInstance() bool {
+	if parseBoolEnv(os.Getenv("TS_MANUAL_MODE")) {
+		return false
+	}
+
+	rawAutoMode := strings.TrimSpace(os.Getenv("TS_AUTO_INSTANCE"))
+	if rawAutoMode == "" {
+		return true
+	}
+
+	return parseBoolEnv(rawAutoMode)
+}
+
+func parseBoolEnv(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func deriveAutoLocalAddr(target, instanceName, portRange string) (string, error) {
+	start, end, err := parsePortRange(portRange)
+	if err != nil {
+		return "", err
+	}
+
+	hostName, err := os.Hostname()
+	if err != nil || hostName == "" {
+		hostName = "unknown-host"
+	}
+
+	seed := fmt.Sprintf("%s|%s|%s", hostName, target, instanceName)
+	port, err := selectAvailablePort(seed, start, end)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("127.0.0.1:%d", port), nil
+}
+
+func deriveAutoHostname(target, instanceName string) string {
+	hostName, err := os.Hostname()
+	if err != nil || hostName == "" {
+		hostName = "unknown-host"
+	}
+
+	machine := sanitizeHostnameLabel(hostName)
+	instance := sanitizeHostnameLabel(instanceName)
+	if instance == "" {
+		instance = machine
+	}
+	if instance == "" {
+		instance = "bridge"
+	}
+
+	base := "tsb-" + instance
+	if len(base) > 30 {
+		base = strings.Trim(base[:30], "-")
+	}
+	if base == "" {
+		base = "tsb-bridge"
+	}
+
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(machine + "|" + target + "|" + instanceName))
+	hash := fmt.Sprintf("%06x", hasher.Sum32()&0xffffff)
+
+	hostname := fmt.Sprintf("%s-%s-%d", base, hash, os.Getpid())
+	if len(hostname) > 63 {
+		hostname = strings.Trim(hostname[:63], "-")
+	}
+	if hostname == "" {
+		return defaultHostname
+	}
+	return hostname
+}
+
+func sanitizeHostnameLabel(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	previousDash := false
+
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			previousDash = false
+			continue
+		}
+		if !previousDash {
+			b.WriteByte('-')
+			previousDash = true
+		}
+	}
+
+	return strings.Trim(b.String(), "-")
+}
+
+func parsePortRange(value string) (int, int, error) {
+	parts := strings.Split(value, "-")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("TS_PORT_RANGE invalid format %q (expected START-END)", value)
+	}
+
+	start, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil {
+		return 0, 0, fmt.Errorf("TS_PORT_RANGE invalid start port: %w", err)
+	}
+
+	end, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil {
+		return 0, 0, fmt.Errorf("TS_PORT_RANGE invalid end port: %w", err)
+	}
+
+	if start < 1 || end > 65535 || start > end {
+		return 0, 0, fmt.Errorf("TS_PORT_RANGE out of bounds: %d-%d", start, end)
+	}
+
+	return start, end, nil
+}
+
+func selectAvailablePort(seed string, start, end int) (int, error) {
+	span := end - start + 1
+	if span <= 0 {
+		return 0, fmt.Errorf("TS_PORT_RANGE has invalid span: %d", span)
+	}
+
+	hasher := fnv.New32a()
+	_, _ = hasher.Write([]byte(seed))
+	offset := int(int64(hasher.Sum32()) % int64(span))
+
+	for i := 0; i < span; i++ {
+		port := start + ((offset + i) % span)
+		listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err != nil {
+			continue
+		}
+		if err := listener.Close(); err != nil {
+			continue
+		}
+		return port, nil
+	}
+
+	return 0, fmt.Errorf("TS_PORT_RANGE has no free ports in %d-%d", start, end)
+}
+
 func ensureStateDir(dir string) error {
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
@@ -228,16 +433,65 @@ func ensureStateDir(dir string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("state path exists but is not a directory: %s", dir)
 	}
-	// Warn if permissions are too open (only on Unix)
-	if info.Mode().Perm()&0077 != 0 {
+	// Warn if permissions are too open (Unix-style perms are not reliable on Windows).
+	if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
 		logger.Warn("state directory has loose permissions", "path", dir, "perms", fmt.Sprintf("%o", info.Mode().Perm()))
 	}
 	return nil
 }
 
+func cleanupEphemeralStateDir(dir string) {
+	for attempt := 1; attempt <= cleanupMaxAttempts; attempt++ {
+		err := os.RemoveAll(dir)
+		if err == nil || os.IsNotExist(err) {
+			if logger != nil {
+				logger.Debug("cleaned up ephemeral state directory", "path", dir, "attempt", attempt)
+			}
+			return
+		}
+
+		if !isRetryableCleanupError(err) || attempt == cleanupMaxAttempts {
+			if logger != nil {
+				logger.Warn("failed to cleanup ephemeral state directory",
+					"path", dir,
+					"error", err,
+					"attempts", attempt)
+			}
+			return
+		}
+
+		time.Sleep(time.Duration(attempt) * cleanupRetryDelay)
+	}
+}
+
+func isRetryableCleanupError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "directory is not empty") ||
+		strings.Contains(errStr, "access is denied") ||
+		strings.Contains(errStr, "being used by another process") ||
+		strings.Contains(errStr, "resource busy") ||
+		strings.Contains(errStr, "device or resource busy")
+}
+
 func run(cfg Config) error {
 	if err := ensureStateDir(cfg.StateDir); err != nil {
 		return err
+	}
+
+	if cfg.EphemeralState {
+		defer cleanupEphemeralStateDir(cfg.StateDir)
+	}
+
+	if cfg.AutoInstance {
+		logger.Info("auto-instance mode enabled",
+			"local_addr", cfg.LocalAddr,
+			"hostname", cfg.Hostname,
+			"state_dir", cfg.StateDir,
+			"ephemeral_state", cfg.EphemeralState)
 	}
 
 	var tsnetLogf func(string, ...any)
@@ -361,6 +615,7 @@ func printBanner(cfg Config) {
 	fmt.Println("  +---------------------------------------+")
 	fmt.Printf("  |      TAILSCALE BRIDGE %-14s  |\n", version)
 	fmt.Println("  +---------------------------------------+")
+	fmt.Printf("  |  Host:   %-26s  |\n", cfg.Hostname)
 	fmt.Printf("  |  Local:  %-26s  |\n", cfg.LocalAddr)
 	fmt.Printf("  |  Target: %-26s  |\n", cfg.Target)
 	fmt.Println("  +---------------------------------------+")
@@ -515,11 +770,14 @@ func isExpectedCloseError(err error) bool {
 		return true
 	}
 	// Fallback for error messages (cross-platform compatibility)
-	errStr := err.Error()
+	errStr := strings.ToLower(err.Error())
 	if strings.Contains(errStr, "use of closed network connection") {
 		return true
 	}
 	if strings.Contains(errStr, "connection reset by peer") {
+		return true
+	}
+	if strings.Contains(errStr, "forcibly closed by the remote host") {
 		return true
 	}
 	return false

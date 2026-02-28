@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -25,11 +27,66 @@ func TestLoadConfig(t *testing.T) {
 				if cfg.Target != "100.64.0.1:3389" {
 					t.Errorf("expected target 100.64.0.1:3389, got %s", cfg.Target)
 				}
-				if cfg.LocalAddr != "127.0.0.1:33389" {
-					t.Errorf("expected default local addr, got %s", cfg.LocalAddr)
+				if !cfg.AutoInstance {
+					t.Error("expected auto instance mode enabled by default")
+				}
+				if !strings.HasPrefix(cfg.LocalAddr, "127.0.0.1:") {
+					t.Errorf("expected auto local loopback addr, got %s", cfg.LocalAddr)
+				}
+				if !strings.HasPrefix(cfg.Hostname, "tsb-") {
+					t.Errorf("expected auto hostname with tsb- prefix, got %s", cfg.Hostname)
+				}
+				if !cfg.EphemeralState {
+					t.Error("expected default mode to use ephemeral state")
+				}
+				if !strings.Contains(cfg.StateDir, "ts-bridge") {
+					t.Errorf("expected auto state dir under ts-bridge path, got %s", cfg.StateDir)
 				}
 				if cfg.ConnectTimeout != 30*time.Second {
 					t.Errorf("expected 30s timeout, got %v", cfg.ConnectTimeout)
+				}
+			},
+		},
+		{
+			name: "manual mode restores legacy defaults",
+			env: map[string]string{
+				"TS_TARGET":      "100.64.0.1:3389",
+				"TS_AUTHKEY":     "tskey-auth-test123",
+				"TS_MANUAL_MODE": "true",
+			},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.AutoInstance {
+					t.Error("expected manual mode to disable auto mode")
+				}
+				if cfg.LocalAddr != "127.0.0.1:33389" {
+					t.Errorf("expected legacy local addr, got %s", cfg.LocalAddr)
+				}
+				if cfg.Hostname != "ts-bridge" {
+					t.Errorf("expected legacy hostname, got %s", cfg.Hostname)
+				}
+				if cfg.StateDir != "./ts-state" {
+					t.Errorf("expected legacy state dir, got %s", cfg.StateDir)
+				}
+				if cfg.EphemeralState {
+					t.Error("expected legacy mode to keep persistent state")
+				}
+			},
+		},
+		{
+			name: "explicit auto flag false restores legacy defaults",
+			env: map[string]string{
+				"TS_TARGET":        "100.64.0.1:3389",
+				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTO_INSTANCE": "false",
+			},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.AutoInstance {
+					t.Error("expected explicit false auto flag to disable auto mode")
+				}
+				if cfg.LocalAddr != "127.0.0.1:33389" {
+					t.Errorf("expected legacy local addr, got %s", cfg.LocalAddr)
 				}
 			},
 		},
@@ -60,6 +117,88 @@ func TestLoadConfig(t *testing.T) {
 			check: func(t *testing.T, cfg Config) {
 				if cfg.ControlURL != "https://vpn.example.com" {
 					t.Errorf("expected https://vpn.example.com, got %q", cfg.ControlURL)
+				}
+			},
+		},
+		{
+			name: "auto instance mode derives runtime values",
+			env: map[string]string{
+				"TS_TARGET":        "100.64.0.1:3389",
+				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTO_INSTANCE": "true",
+				"TS_INSTANCE_NAME": "office-laptop",
+				"TS_PORT_RANGE":    "61000-61100",
+			},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if !cfg.AutoInstance {
+					t.Error("expected auto instance mode to be enabled")
+				}
+				if !strings.HasPrefix(cfg.LocalAddr, "127.0.0.1:") {
+					t.Errorf("expected loopback local addr, got %s", cfg.LocalAddr)
+				}
+				if !strings.HasPrefix(cfg.Hostname, "tsb-") {
+					t.Errorf("expected generated hostname with tsb- prefix, got %s", cfg.Hostname)
+				}
+				if !cfg.EphemeralState {
+					t.Error("expected generated state directory to be ephemeral")
+				}
+				if !strings.Contains(cfg.StateDir, "ts-bridge") {
+					t.Errorf("expected state dir to include ts-bridge, got %s", cfg.StateDir)
+				}
+			},
+		},
+		{
+			name: "auto instance mode keeps explicit values",
+			env: map[string]string{
+				"TS_TARGET":        "100.64.0.1:3389",
+				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTO_INSTANCE": "1",
+				"TS_LOCAL_ADDR":    "127.0.0.1:40001",
+				"TS_HOSTNAME":      "manual-host",
+				"TS_STATE_DIR":     "./custom-state",
+			},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.LocalAddr != "127.0.0.1:40001" {
+					t.Errorf("expected explicit local addr, got %s", cfg.LocalAddr)
+				}
+				if cfg.Hostname != "manual-host" {
+					t.Errorf("expected explicit hostname, got %s", cfg.Hostname)
+				}
+				if cfg.StateDir != "./custom-state" {
+					t.Errorf("expected explicit state dir, got %s", cfg.StateDir)
+				}
+				if cfg.EphemeralState {
+					t.Error("expected explicit state dir to disable ephemeral cleanup")
+				}
+			},
+		},
+		{
+			name: "auto instance mode invalid port range",
+			env: map[string]string{
+				"TS_TARGET":        "100.64.0.1:3389",
+				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTO_INSTANCE": "true",
+				"TS_PORT_RANGE":    "bad-range",
+			},
+			wantErr: true,
+		},
+		{
+			name: "manual mode overrides explicit auto mode flag",
+			env: map[string]string{
+				"TS_TARGET":        "100.64.0.1:3389",
+				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTO_INSTANCE": "true",
+				"TS_MANUAL_MODE":   "true",
+			},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.AutoInstance {
+					t.Error("expected manual mode to take precedence over auto flag")
+				}
+				if cfg.LocalAddr != "127.0.0.1:33389" {
+					t.Errorf("expected legacy local addr, got %s", cfg.LocalAddr)
 				}
 			},
 		},
@@ -130,7 +269,8 @@ func TestLoadConfig(t *testing.T) {
 			// Clear all config env vars
 			for _, key := range []string{"TS_TARGET", "TS_AUTHKEY", "TS_TIMEOUT", "TS_VERBOSE",
 				"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
-				"TS_MAX_CONNECTIONS", "TS_HEALTH_ADDR", "TS_LOG_FORMAT"} {
+				"TS_MAX_CONNECTIONS", "TS_HEALTH_ADDR", "TS_LOG_FORMAT",
+				"TS_AUTO_INSTANCE", "TS_INSTANCE_NAME", "TS_PORT_RANGE", "TS_MANUAL_MODE"} {
 				os.Unsetenv(key)
 			}
 			// Set test-specific env vars
@@ -230,6 +370,29 @@ func TestEnvOr(t *testing.T) {
 			}
 			if got := envOr(tt.key, tt.fallback); got != tt.want {
 				t.Errorf("envOr(%q, %q) = %q, want %q", tt.key, tt.fallback, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsRetryableCleanupError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil error", err: nil, want: false},
+		{name: "directory not empty", err: errors.New("The directory is not empty."), want: true},
+		{name: "access denied", err: errors.New("Access is denied."), want: true},
+		{name: "resource busy", err: errors.New("device or resource busy"), want: true},
+		{name: "non retryable", err: errors.New("invalid argument"), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isRetryableCleanupError(tt.err)
+			if got != tt.want {
+				t.Errorf("isRetryableCleanupError(%v) = %v, want %v", tt.err, got, tt.want)
 			}
 		})
 	}
