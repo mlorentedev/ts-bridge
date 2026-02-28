@@ -1,5 +1,36 @@
 # Contributing to ts-bridge
 
+## Branching Strategy
+
+This project follows **GitHub Flow**: `master` is the protected default branch. All changes go through short-lived feature branches and pull requests.
+
+### Branch naming
+
+| Prefix | Use |
+|--------|-----|
+| `feat/` | New features |
+| `fix/` | Bug fixes |
+| `docs/` | Documentation changes |
+| `refactor/` | Code restructuring |
+| `test/` | Test additions or changes |
+
+### Workflow
+
+1. Create a branch from `master`:
+   ```bash
+   git checkout -b feat/my-feature master
+   ```
+2. Commit using [Conventional Commits](#commit-messages)
+3. Push and open a Pull Request against `master`
+4. CI must pass (`test`, `lint`, `security`) before merge
+5. Merge via GitHub (squash or merge commit)
+
+### Rules
+
+- **Never push directly to `master`** — branch protection enforces this
+- **Branch must be up to date** with `master` before merge
+- `release-please` manages versioning on `master` — do not manually edit `CHANGELOG.md` or version tags
+
 ## Development Setup
 
 ### Prerequisites
@@ -33,13 +64,13 @@ go build -o ts-bridge .
 go build -o ts-bridge .
 
 # Build with version info
-VERSION=v1.2.0
+VERSION=v1.3.1
 COMMIT=$(git rev-parse --short HEAD)
 go build -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" -o ts-bridge .
 
 # Verify
 ./ts-bridge -version
-# Output: ts-bridge v1.2.0 (abc1234)
+# Output: ts-bridge v1.3.1 (abc1234)
 ```
 
 ### Testing
