@@ -1,0 +1,71 @@
+---
+title: ts-bridge
+description: TCP bridge through Tailscale's encrypted mesh. No admin rights, no driver install, no traces.
+template: splash
+hero:
+  tagline: RDP and SSH through corporate firewalls. No admin rights, no driver install, no traces. One binary.
+  actions:
+    - text: Get Started
+      link: /ts-bridge/getting-started/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/mlorentedev/ts-bridge
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Why ts-bridge?
+
+Corporate firewalls block VPN clients that need admin privileges and kernel-level drivers. ts-bridge uses Tailscale's userspace networking (tsnet) — pure Go, pure userspace. It runs on locked-down Windows machines where you cannot install software, request elevated privileges, or load kernel modules.
+
+The binary creates an ephemeral Tailscale node that auto-deletes on exit. No state left behind. No entries in Add/Remove Programs. No system services registered.
+
+| Requirement | Native Tailscale | ts-bridge |
+|-------------|------------------|-----------|
+| Admin rights on client | **Yes** | **No** |
+| Kernel module / TUN driver | Yes | No (userspace WireGuard) |
+| Software installation | Required | Portable single binary |
+| Leaves traces on machine | Yes | No (ephemeral) |
+| Works on locked-down machines | No | **Yes** |
+
+## Features
+
+<CardGrid>
+  <Card title="Zero Admin" icon="approve-check">
+    No admin rights, no kernel module, no installation. Single portable binary built with Go for Linux, Windows, and macOS (amd64 + arm64).
+  </Card>
+  <Card title="Auto Mode" icon="rocket">
+    Ephemeral nodes, deterministic ports from instance alias, auto-cleanup on exit. Each run gets a unique hostname and temp state directory. No state left behind.
+  </Card>
+  <Card title="Headscale Support" icon="network">
+    Works with Tailscale SaaS and self-hosted Headscale v0.28.0+. Set `TS_CONTROL_URL` to point at your own control plane. Accepts both `tskey-` and `hskey-` auth key prefixes.
+  </Card>
+  <Card title="Firewall Bypass" icon="setting">
+    When UDP is blocked, traffic tunnels through DERP relay over HTTPS. End-to-end WireGuard encryption is preserved regardless of transport. Works behind even the most restrictive corporate proxies.
+  </Card>
+</CardGrid>
+
+## Quick Start
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/mlorentedev/ts-bridge/releases), extract, and configure:
+
+```bash
+# Extract
+tar -xzf ts-bridge-linux-amd64.tar.gz
+cd ts-bridge-linux-amd64
+
+# Configure (only two variables required)
+cat > .env << 'EOF'
+TS_AUTHKEY=tskey-auth-kXXXXXXXXX
+TS_TARGET=100.82.151.104:3389
+EOF
+
+# Run
+./scripts/client/run.sh
+```
+
+The banner prints the local port. Connect your RDP client to `127.0.0.1:<LOCAL_PORT>`.
+
+See the [Getting Started](/ts-bridge/getting-started/) guide for platform-specific instructions and the full configuration reference.
