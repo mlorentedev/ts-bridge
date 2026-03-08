@@ -177,35 +177,30 @@ func IsExpectedCloseError(err error) bool {
 	if err == nil {
 		return true
 	}
-	if errors.Is(err, net.ErrClosed) {
+
+	if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
 		return true
 	}
-	if errors.Is(err, io.EOF) {
-		return true
-	}
+
 	// Check for common syscall errors during close
-	if errors.Is(err, syscall.ECONNRESET) {
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ENOTCONN) {
 		return true
 	}
-	if errors.Is(err, syscall.EPIPE) {
-		return true
-	}
-	if errors.Is(err, syscall.ENOTCONN) {
-		return true
-	}
+
 	// Fallback for error messages (cross-platform compatibility)
 	errStr := strings.ToLower(err.Error())
-	if strings.Contains(errStr, "use of closed network connection") {
-		return true
+	expectedMsgs := []string{
+		"use of closed network connection",
+		"connection reset by peer",
+		"forcibly closed by the remote host",
+		"closed pipe",
 	}
-	if strings.Contains(errStr, "connection reset by peer") {
-		return true
+
+	for _, msg := range expectedMsgs {
+		if strings.Contains(errStr, msg) {
+			return true
+		}
 	}
-	if strings.Contains(errStr, "forcibly closed by the remote host") {
-		return true
-	}
-	if strings.Contains(errStr, "closed pipe") {
-		return true
-	}
+
 	return false
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
@@ -190,8 +191,7 @@ func run(cfg config.Config) error {
 
 	// Start health server if configured
 	var ready atomic.Bool
-	// var healthServer *http.Server - need to type it as any for empty check or import net/http
-	var healthServer interface{ Shutdown(context.Context) error }
+	var healthServer *http.Server
 
 	if cfg.HealthAddr != "" {
 		healthServer = health.StartServer(cfg.HealthAddr, &ready, logger)

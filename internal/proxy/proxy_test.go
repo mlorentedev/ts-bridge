@@ -205,3 +205,27 @@ func TestIsExpectedCloseError(t *testing.T) {
 		})
 	}
 }
+
+func TestAcceptLoopBackoff(t *testing.T) {
+	backoff := backoffMin
+
+	// Simulate 5 consecutive failures
+	for i := 0; i < 5; i++ {
+		backoff = min(backoff*2, backoffMax)
+	}
+
+	// After 5 doublings: 100ms -> 200ms -> 400ms -> 800ms -> 1600ms -> 3200ms
+	expected := 3200 * time.Millisecond
+	if backoff != expected {
+		t.Errorf("backoff after 5 failures = %v, expected %v", backoff, expected)
+	}
+
+	// Verify max cap
+	for i := 0; i < 10; i++ {
+		backoff = min(backoff*2, backoffMax)
+	}
+	if backoff != backoffMax {
+		t.Errorf("backoff should cap at %v, got %v", backoffMax, backoff)
+	}
+}
+

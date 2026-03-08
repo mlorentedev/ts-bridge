@@ -53,34 +53,20 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		return Config{}, err
 	}
 
-	timeout := defaultTimeout
-	if t := os.Getenv("TS_TIMEOUT"); t != "" {
-		d, err := time.ParseDuration(t)
-		if err != nil {
-			return Config{}, fmt.Errorf("TS_TIMEOUT invalid: %w", err)
-		}
-		timeout = d
+	timeout, err := parseDurationEnv("TS_TIMEOUT", defaultTimeout)
+	if err != nil {
+		return Config{}, err
 	}
 
-	drainTimeout := defaultDrainTimeout
-	if t := os.Getenv("TS_DRAIN_TIMEOUT"); t != "" {
-		d, err := time.ParseDuration(t)
-		if err != nil {
-			return Config{}, fmt.Errorf("TS_DRAIN_TIMEOUT invalid: %w", err)
-		}
-		drainTimeout = d
+	drainTimeout, err := parseDurationEnv("TS_DRAIN_TIMEOUT", defaultDrainTimeout)
+	if err != nil {
+		return Config{}, err
 	}
 
-	maxConns := int64(defaultMaxConnections)
-	if m := os.Getenv("TS_MAX_CONNECTIONS"); m != "" {
-		n, err := strconv.ParseInt(m, 10, 64)
-		if err != nil || n < 1 {
-			return Config{}, fmt.Errorf("TS_MAX_CONNECTIONS invalid: %w", err)
-		}
-		maxConns = n
+	maxConns, err := parseInt64Env("TS_MAX_CONNECTIONS", defaultMaxConnections)
+	if err != nil {
+		return Config{}, err
 	}
-
-	verbose := verboseFlag || os.Getenv("TS_VERBOSE") == "true" || os.Getenv("TS_VERBOSE") == "1"
 
 	cfg := Config{
 		LocalAddr:      os.Getenv("TS_LOCAL_ADDR"),
@@ -93,7 +79,7 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		DrainTimeout:   drainTimeout,
 		MaxConnections: maxConns,
 		HealthAddr:     os.Getenv("TS_HEALTH_ADDR"),
-		Verbose:        verbose,
+		Verbose:        verboseFlag || parseBoolEnv(os.Getenv("TS_VERBOSE")),
 		LogFormat:      EnvOr("TS_LOG_FORMAT", "text"),
 	}
 
@@ -113,6 +99,32 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 
 	return cfg, nil
 }
+
+func parseDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, fmt.Errorf("%s invalid: %w", key, err)
+	}
+	return d, nil
+}
+
+func parseInt64Env(key string, fallback int64) (int64, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback, nil
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("%s invalid: %w", key, err)
+	}
+	return n, nil
+}
+
+
 
 func parseTarget() (string, error) {
 	target := os.Getenv("TS_TARGET")
