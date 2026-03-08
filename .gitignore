@@ -50,3 +50,5 @@ AGENTS.md
 # Testing
 coverage.out
 coverage.html
+site/.astro/
+site/node_modules/

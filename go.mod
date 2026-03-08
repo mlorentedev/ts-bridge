@@ -1,8 +1,8 @@
 module ts-bridge
 
-go 1.25
+go 1.24
 
-toolchain go1.25.0
+toolchain go1.24.0
 
 require tailscale.com v1.80.0
 

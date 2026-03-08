@@ -61,6 +61,7 @@ TS_CONTROL_URL=https://vpn.example.com
 | `TS_INSTANCE_NAME` | _(empty)_ | Stable instance alias for deterministic local port selection. |
 | `TS_PORT_RANGE` | `33389-34388` | Port range for auto mode (`START-END`). |
 | `TS_TIMEOUT` | `30s` | Timeout for Tailscale initialization and dial. Go duration format. |
+| `TS_DRAIN_TIMEOUT` | `15s` | Timeout for graceful drain of active connections on shutdown. Go duration format. |
 | `TS_MAX_CONNECTIONS` | `1000` | Maximum concurrent connections before rejecting new ones. |
 | `TS_HEALTH_ADDR` | _(disabled)_ | Address for health/metrics HTTP server. |
 | `TS_VERBOSE` | `false` | Enable debug logging. Also available as `-v` flag. |
