@@ -1,66 +1,42 @@
+[![CI](https://github.com/mlorentedev/ts-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/mlorentedev/ts-bridge/actions/workflows/ci.yml)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/mlorentedev/ts-bridge)](https://go.dev/)
+[![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://mlorentedev.github.io/ts-bridge/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 # ts-bridge
 
-TCP bridge for tunneling connections through Tailscale's encrypted mesh network without requiring administrator privileges on the client machine.
+On-demand Tailscale TCP bridge for non-admin machines. Connect to remote resources securely from locked-down environments.
 
-## Overview
+## The Problem
 
-Connect via RDP/SSH from a **non-admin machine** to an **admin machine** through restrictive firewalls using Tailscale's userspace networking.
+Working with secure networks often requires VPNs like Tailscale. However, native Tailscale clients require administrator privileges to install and create persistent network interfaces. In many enterprise, corporate, or locked-down environments, users do not have admin rights on their client machines, completely blocking access to critical remote resources via Tailscale.
 
-## Current Status (2026-02-24)
+## The Solution
 
-- **Windows workflow validated**: auto mode default, alias-based launch, and bootstrap setup script.
-- **CI security checks passing target state**: gosec G115 overflow warning fixed in port-selection arithmetic.
-- **Runtime hardening in progress**: Windows cleanup/log-noise improvements implemented; field validation continues.
-- **Linux parity validation pending**: waiting for Linux client access to complete end-to-end checks.
+ts-bridge runs a full, standalone Tailscale node purely in userspace using `tsnet`. It acts as a local proxy, forwarding TCP traffic (like RDP, SSH, or HTTP) through the encrypted mesh network.
 
-| Machine | Admin Rights | Tailscale | Role |
-|---------|--------------|-----------|------|
-| **Client** | No | Not installed (uses tsnet) | Initiates connection |
-| **Host** | Yes | Installed natively | Receives connection |
-
-## Why ts-bridge?
-
-| Requirement | Native Tailscale | ts-bridge |
-|-------------|------------------|-----------|
-| Admin rights on client | **Yes** | **No** |
-| Kernel module | Yes | No (userspace) |
-| Software installation | Required | Portable binary |
-| Leaves traces | Yes | No (ephemeral) |
-| Works on locked-down machines | No | **Yes** |
-
-## Control Plane Support
-
-ts-bridge works with both **Tailscale SaaS** (default) and **self-hosted [Headscale](https://github.com/juanfont/headscale)**.
-
-| | Tailscale SaaS | Headscale |
+| | Native Tailscale | ts-bridge |
 |---|---|---|
-| **Setup** | Default, no extra config | Set `TS_CONTROL_URL` |
-| **Auth key prefix** | `tskey-auth-*` | `hskey-auth-*` |
-| **Ephemeral cleanup** | Automatic | Requires `--ephemeral` flag on the pre-auth key |
-| **Minimum version** | Any | Headscale v0.28.0+ requires tsnet >= v1.74 (ts-bridge v1.3.0+) |
+| **Admin rights on client** | Required | **None needed** |
+| **Kernel footprint** | persistent TUN/TAP | **Zero** (userspace) |
+| **Installation** | System package | **Portable binary** |
+| **Node persistence** | Remains on tailnet | **Ephemeral** (auto-deletes) |
 
-### Headscale Quick Setup
+## Quick Install
 
-```bash
-# .env
-TS_CONTROL_URL=https://vpn.example.com
-TS_AUTHKEY=hskey-auth-xxxxx
-TS_TARGET=100.64.0.5:3389
+### 1. Client Machine (No Admin)
+
+Download the binary from [Releases](https://github.com/mlorentedev/ts-bridge/releases) and create a `.env` file:
+
+```env
+TS_AUTHKEY=tskey-auth-kXXXXXXXXX   # From Tailscale admin panel
+TS_TARGET=100.82.151.104:3389       # Host's Tailscale IP + RDP port
+TS_INSTANCE_NAME=office-laptop
 ```
 
-Generate the auth key on the Headscale server:
-```bash
-headscale preauthkeys create --user <ID> --reusable --ephemeral --expiration 8760h
-```
+### 2. Host Setup (Admin)
 
-> **Important:** The `--ephemeral` flag must be on the **pre-auth key**, not just in ts-bridge config.
-> Without it, nodes persist as offline entries after disconnect.
-
-## Quick Start
-
-### 1. Host Machine (Admin Rights Required)
-
-Install [Tailscale](https://tailscale.com/download) normally, then run the setup script:
+Ensure Tailscale is running on the target machine and RDP is enabled. The repository includes an automated PowerShell script:
 
 ```powershell
 # Run as Administrator
@@ -68,279 +44,71 @@ cd scripts\host
 PowerShell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-Note the Tailscale IP shown (e.g., `100.82.151.104`). For Headscale, use `tailscale up --login-server=https://vpn.example.com`. See [Host Setup Guide](#host-setup-guide) for manual steps and troubleshooting.
+## What You Get
 
-### 2. Client Machine (No Admin Rights)
+| Feature | Description |
+|---|---|
+| **Zero-Admin VPN** | Connect from heavily restricted laptops without filing an IT ticket. |
+| **Headscale Support** | Compatible with open-source control planes (via `TS_CONTROL_URL`). |
+| **Multi-Instance** | Run multiple bridges concurrently to connect to different machines. |
+| **Ephemeral by Default** | Leaves no trace. The node is automatically removed from the network when the bridge closes. |
 
-Download from [Releases](https://github.com/mlorentedev/ts-bridge/releases), extract, and configure:
+## Before/After (The Workflow)
 
+### Before (Native Tailscale on locked-down PC)
 ```bash
-tar -xzf ts-bridge-linux-amd64.tar.gz
-cd ts-bridge-linux-amd64
-cp .env.example .env
+> tailscale up
+Error: Administrator privilege is required to install or start the Tailscale service.
 ```
 
-Edit `.env` — only two variables are required:
-
+### After (ts-bridge)
 ```bash
-TS_AUTHKEY=tskey-auth-kXXXXXXXXX   # From Tailscale admin or Headscale (hskey-auth-*)
-TS_TARGET=100.82.151.104:3389       # Host's Tailscale/Headscale IP + RDP port
+> ./ts-bridge
+  +---------------------------------------+
+  |      TAILSCALE BRIDGE v1.3.0          |
+  +---------------------------------------+
+  |  Host:   tsb-office-laptop-a1b2c3     |
+  |  Local:  127.0.0.1:33389              |
+  |  Target: 100.82.151.104:3389          |
+  +---------------------------------------+
+  Waiting for connections...
 ```
+Now, connect locally: `mstsc /v:127.0.0.1:33389`
 
-### 3. Run
+## Configuration
 
-```bash
-# Linux/macOS
-./scripts/client/run.sh
+| Variable | Default | Description |
+|---|---|---|
+| `TS_AUTHKEY` | — | **Required**. Tailscale/Headscale auth key. |
+| `TS_TARGET` | — | **Required**. Target IP/hostname and port (e.g., `100.x.x.x:3389`). |
+| `TS_INSTANCE_NAME` | — | Optional alias to derive a stable local port. |
+| `TS_LOCAL_ADDR` | Auto | Force a specific local address (e.g., `127.0.0.1:4000`). |
+| `TS_CONTROL_URL` | — | Set to your Headscale server URL if not using Tailscale SaaS. |
 
-# Windows
-PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1
-```
+For advanced configuration (timeouts, limits, legacy modes), see the [Full Documentation](https://mlorentedev.github.io/ts-bridge/).
 
-### 4. Connect
-
-```bash
-# Use the local port shown in ts-bridge banner (auto mode picks it)
-# Linux
-xfreerdp /v:127.0.0.1:<LOCAL_PORT> /u:Username /cert:ignore
-
-# Windows
-mstsc /v:127.0.0.1:<LOCAL_PORT>
-
-# macOS (Microsoft Remote Desktop)
-# Add PC → 127.0.0.1:<LOCAL_PORT>
-```
-
-RDP concurrency is enforced by the target host OS/policy (for example, many Windows desktop editions allow only one interactive session at a time).
-
-## Host Setup Guide
-
-The host machine (the one you connect **to**) needs specific configuration to accept RDP connections over Tailscale.
-
-### Requirements
-
-| Requirement | Details |
-|-------------|---------|
-| **Windows Edition** | Pro, Enterprise, Education, or Server. **Home edition cannot host RDP.** |
-| **Tailscale** | Installed and connected to the tailnet |
-| **Admin rights** | Needed for initial setup only |
-
-### Step 1: Enable Remote Desktop
-
-Settings > System > Remote Desktop > Toggle **On**.
-
-Or via PowerShell (Admin):
-```powershell
-Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-    -Name "fDenyTSConnections" -Value 0
-```
-
-### Step 2: Configure Authentication
-
-**Network Level Authentication (NLA)** is enabled by default — keep it on.
-
-The account you connect with **must have a traditional password set**. The following do NOT work for RDP:
-
-| Auth Method | Works? | Fix |
-|-------------|--------|-----|
-| Local account + password | Yes | — |
-| Microsoft account + password | Yes | Username: `MicrosoftAccount\user@outlook.com` |
-| Microsoft account (passwordless) | **No** | Set a password at account.microsoft.com > Security |
-| Windows Hello PIN | **No** | Use password instead |
-| Blank/empty password | **No** | Set a password on the account |
-
-### Step 3: Configure Firewall
-
-The automated `setup.ps1` handles this. For manual setup:
-
-```powershell
-# Enable built-in RDP rules
-Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-# Restrict RDP to Tailscale subnet only (recommended)
-New-NetFirewallRule -DisplayName "Allow RDP over Tailscale" `
-    -Direction Inbound -Protocol TCP -LocalPort 3389 `
-    -RemoteAddress 100.64.0.0/10 -Action Allow -Profile Private
-```
-
-### Step 4: Tailscale Configuration
-
-```powershell
-# Enable unattended mode (stays connected without user logged in)
-tailscale up --unattended
-
-# Verify Tailscale IP
-tailscale ip -4
-```
-
-**Recommended:** Disable key expiry for the host machine in the [Tailscale admin console](https://login.tailscale.com/admin/machines) so it doesn't silently drop off the tailnet.
-
-### Common Host Issues
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| "Your Home edition doesn't support Remote Desktop" | Windows Home | Upgrade to Pro or use a different host |
-| RDP connection refused | Firewall blocking Tailscale subnet | Create explicit rule for `100.64.0.0/10` on TCP 3389 |
-| "CredSSP encryption oracle" error | Mismatched Windows Update levels | Patch both client and host to latest |
-| Connection drops after host reboot | Tailscale not running as service | Verify Tailscale service: `Get-Service Tailscale` |
-| "The credentials did not work" | Passwordless Microsoft account | Set a traditional password |
-| Works locally but not over Tailscale | Tailscale ACLs restricting access | Check [ACL rules](https://login.tailscale.com/admin/acls) allow TCP 3389 |
-| Third-party antivirus blocking | AV conflicts with Tailscale WFP rules | Add Tailscale exception in AV settings |
-
-## Configuration Reference
-
-Create `.env` from `.env.example`. Only `TS_AUTHKEY` and `TS_TARGET` are required — everything else has sensible defaults.
-
-### Required
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `TS_AUTHKEY` | Auth key. Tailscale SaaS: [generate here](https://login.tailscale.com/admin/settings/keys). Headscale: `headscale preauthkeys create`. Prefix: `tskey-` or `hskey-`. | `tskey-auth-kXXXXXX` |
-| `TS_TARGET` | Host address on the mesh network. Supports IP or MagicDNS hostname. | `100.82.151.104:3389` or `my-desktop:3389` |
-
-### Optional
-
-| Variable | Default | Description | Example |
-|----------|---------|-------------|---------|
-| `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local address to bind the bridge listener. Auto-derived in auto mode when unset. | `127.0.0.1:43389` |
-| `TS_CONTROL_URL` | _(Tailscale default)_ | Custom control plane URL. Set this to use a self-hosted [Headscale](https://github.com/juanfont/headscale) server. | `https://vpn.example.com` |
-| `TS_HOSTNAME` | `ts-bridge` | Node name in the admin console. Auto-generated per run in auto mode when unset. | `bridge-workpc` |
-| `TS_STATE_DIR` | `./ts-state` | Directory for node state. Auto-created with `0700` permissions. Ephemeral temp dir in auto mode when unset. | `/tmp/ts-bridge-state` |
-| `TS_AUTO_INSTANCE` | `true` | Auto mode toggle (`false` disables auto behavior). | `false` |
-| `TS_MANUAL_MODE` | `false` | Force legacy persistent/manual behavior (`true` takes precedence over `TS_AUTO_INSTANCE`). | `true` |
-| `TS_INSTANCE_NAME` | _(empty)_ | Stable instance alias used for deterministic local port selection. | `office-laptop` |
-| `TS_PORT_RANGE` | `33389-34388` | Port range used by auto mode (`START-END`). | `61000-61100` |
-| `TS_TIMEOUT` | `30s` | Timeout for Tailscale initialization and dial. Go duration format. | `1m`, `45s` |
-| `TS_MAX_CONNECTIONS` | `1000` | Maximum concurrent connections before rejecting new ones. | `50` |
-| `TS_HEALTH_ADDR` | _(disabled)_ | Address for health/metrics HTTP server. | `127.0.0.1:8080` |
-| `TS_VERBOSE` | `false` | Enable debug logging. Also available as `-v` flag. | `true` |
-| `TS_LOG_FORMAT` | `text` | Log output format. | `text` or `json` |
-
-### Minimal `.env` (low friction)
-
-```env
-TS_AUTHKEY=tskey-auth-...
-TS_TARGET=100.x.x.x:3389
-TS_INSTANCE_NAME=office-laptop
-```
-
-### Bootstrap per OS (recommended)
-
-```bash
-# Linux/macOS
-./scripts/client/bootstrap.sh --authkey tskey-auth-... --target 100.x.x.x:3389 --instance office-laptop
-```
-
-```powershell
-# Windows
-PowerShell -ExecutionPolicy Bypass -File .\scripts\client\bootstrap.ps1 -AuthKey tskey-auth-... -Target 100.x.x.x:3389 -Instance office-laptop
-```
-
-### Auto Mode (default)
-
-Auto mode is enabled by default and is recommended for multi-device usage with minimal setup friction.
-
-```bash
-# .env
-TS_INSTANCE_NAME=office-laptop
-TS_PORT_RANGE=33389-34388
-```
-
-To force legacy persistent/manual behavior:
-
-```bash
-# .env
-TS_MANUAL_MODE=true
-```
-
-Optional alias override when launching:
-
-```bash
-# Linux/macOS
-./scripts/client/run.sh --instance office-laptop
-
-# Windows
-PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1 -Instance office-laptop
-```
-
-In auto mode (with related vars unset), ts-bridge derives a deterministic local port, generates a unique hostname per run, and uses an ephemeral state directory.
-On Windows shutdown, ephemeral cleanup is retried briefly to reduce transient "directory is not empty" races.
-
-### Health Endpoint
-
-When `TS_HEALTH_ADDR` is set:
-
-```bash
-curl http://127.0.0.1:8080/health/live   # {"status":"ok"} — process alive
-curl http://127.0.0.1:8080/health/ready  # {"status":"ok"} — tsnet tunnel up
-curl http://127.0.0.1:8080/metrics       # Connection stats (JSON)
-```
-
-### Command Line
-
-```bash
-./ts-bridge -version    # Show version
-./ts-bridge -v          # Verbose logging (same as TS_VERBOSE=true)
-```
-
-## How It Works
+## Architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  CLIENT (Non-Admin)                                                 │
-│                                                                     │
-│   RDP Client ──▶ ts-bridge ──▶ tsnet (userspace WireGuard)         │
-│   127.0.0.1:<LOCAL_PORT>        No admin required                   │
-│                                                                     │
-│   ┌─────────────────────────────────────────────────┐               │
-│   │ Firewall: UDP blocked, HTTPS allowed            │◀── Tunnels   │
-│   └─────────────────────────────────────────────────┘    via DERP   │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              │ Tailscale Network (WireGuard encrypted)
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  HOST (Admin)                                                       │
-│                                                                     │
-│   Tailscale (Native) ──▶ RDP Server :3389                          │
-│   100.x.x.x                                                         │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────┐
+│ CLIENT (Non-Admin)      │
+│ RDP/SSH → :33389        │
+│    ↓                    │
+│ ts-bridge (userspace)   │
+└────┬────────────────────┘
+     │ encrypted via WireGuard (DERP/STUN)
+┌────▼────────────────────┐
+│ HOST (Admin)            │
+│ Tailscale (native)      │
+│    ↓                    │
+│ RDP/SSH Server          │
+└─────────────────────────┘
 ```
 
-1. ts-bridge creates ephemeral node via [tsnet](https://pkg.go.dev/tailscale.com/tsnet) on Tailscale SaaS or Headscale
-2. WireGuard runs in userspace (no kernel module, no admin)
-3. If UDP blocked, uses DERP relay over HTTPS
-4. All traffic end-to-end encrypted (WireGuard + RDP TLS)
-5. Node auto-deletes on exit (Headscale: requires `--ephemeral` pre-auth key)
+## Contributing
 
-## Limitations
-
-| Limitation | Impact | Mitigation |
-|------------|--------|------------|
-| TCP only | No UDP (VoIP, games) | Use for RDP, SSH, HTTP |
-| DERP latency | +50-200ms when relayed | Acceptable for RDP |
-| Auth key expiry | Default 90 days (Tailscale), configurable (Headscale) | Use long-lived keys or `--expiration 8760h` on Headscale |
-| Single target | One host per instance | Run multiple instances with different `TS_TARGET` |
-| Windows Home | Cannot host RDP | Use Windows Pro/Enterprise on host |
-| RDP host policy | Concurrent sessions may be limited by OS edition | Use multiple hosts or RDS-enabled server setup |
-
-## Security
-
-- **No admin footprint**: Runs entirely in userspace
-- **Ephemeral nodes**: Auto-delete on exit (Headscale: requires `--ephemeral` pre-auth key)
-- **E2E encryption**: WireGuard encryption even through DERP relay
-- **Local only**: Binds to `127.0.0.1` by default
-- **Secure state**: Directory created with `0700` permissions
-- **CI security checks**: Port-selection arithmetic hardened to satisfy gosec overflow checks
-
-## Documentation
-
-- [Contributing](CONTRIBUTING.md) - Development setup, testing, releases
-
-## Support
-
-For questions, bugs, or feature requests, please [open an issue](https://github.com/mlorentedev/ts-bridge/issues).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and PR guidelines.
 
 ## License
 
-[MIT](LICENSE)
+MIT — see [LICENSE](LICENSE).

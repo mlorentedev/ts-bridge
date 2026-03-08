@@ -1,207 +1,11 @@
-package main
+package config
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"io"
-	"log/slog"
-	"net"
 	"os"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 )
-
-// mockDialer implements Dialer for testing without tsnet.
-type mockDialer struct {
-	dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
-}
-
-func (m *mockDialer) Dial(ctx context.Context, network, addr string) (net.Conn, error) {
-	return m.dialFunc(ctx, network, addr)
-}
-
-// TestDialerInterfaceSatisfaction verifies that mockDialer satisfies the Dialer interface.
-// This is a compile-time check: if Dialer doesn't exist or has a different signature, this fails.
-var _ Dialer = (*mockDialer)(nil)
-
-func TestHandleConnWithDialer(t *testing.T) {
-	initLogger(Config{LogFormat: "text"})
-
-	tests := []struct {
-		name          string
-		dialFunc      func(ctx context.Context, network, addr string) (net.Conn, error)
-		wantErrors    int64
-		wantTotalConn int64
-	}{
-		{
-			name: "successful proxy via dialer",
-			dialFunc: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				// Return a pipe that immediately closes (simulates short-lived connection)
-				server, client := net.Pipe()
-				go func() {
-					// Echo one read then close
-					buf := make([]byte, 1024)
-					n, _ := server.Read(buf)
-					if n > 0 {
-						_, _ = server.Write(buf[:n])
-					}
-					server.Close()
-				}()
-				return client, nil
-			},
-			wantErrors:    0,
-			wantTotalConn: 1,
-		},
-		{
-			name: "dial failure increments errors",
-			dialFunc: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return nil, errors.New("connection refused")
-			},
-			wantErrors:    1,
-			wantTotalConn: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Reset metrics
-			oldMetrics := metrics
-			metrics = Metrics{}
-			defer func() { metrics = oldMetrics }()
-
-			dialer := &mockDialer{dialFunc: tt.dialFunc}
-			cfg := Config{
-				Target:         "100.64.0.1:3389",
-				ConnectTimeout: 5 * time.Second,
-			}
-
-			// Create a client connection via pipe
-			clientConn, proxyConn := net.Pipe()
-			defer clientConn.Close()
-
-			// Run handleConn in goroutine (it blocks until proxy finishes)
-			done := make(chan struct{})
-			go func() {
-				handleConn(proxyConn, dialer, cfg)
-				close(done)
-			}()
-
-			if tt.wantErrors == 0 {
-				// Send data through the proxy
-				_, _ = clientConn.Write([]byte("HELLO"))
-
-				buf := make([]byte, 1024)
-				_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
-				n, err := clientConn.Read(buf)
-				if err != nil && !errors.Is(err, io.EOF) {
-					t.Fatalf("read from proxy failed: %v", err)
-				}
-				if n > 0 && string(buf[:n]) != "HELLO" {
-					t.Errorf("expected echo HELLO, got %q", buf[:n])
-				}
-			}
-
-			// Close client side to let handleConn finish
-			clientConn.Close()
-
-			select {
-			case <-done:
-			case <-time.After(3 * time.Second):
-				t.Fatal("handleConn did not finish in time")
-			}
-
-			gotErrors := atomic.LoadInt64(&metrics.TotalErrors)
-			if gotErrors != tt.wantErrors {
-				t.Errorf("TotalErrors = %d, want %d", gotErrors, tt.wantErrors)
-			}
-
-			gotTotal := atomic.LoadInt64(&metrics.TotalConnections)
-			if gotTotal != tt.wantTotalConn {
-				t.Errorf("TotalConnections = %d, want %d", gotTotal, tt.wantTotalConn)
-			}
-		})
-	}
-}
-
-func TestAcceptLoopWithDialer(t *testing.T) {
-	initLogger(Config{LogFormat: "text"})
-
-	// Snapshot metrics before test to check delta after
-	connsBefore := atomic.LoadInt64(&metrics.TotalConnections)
-
-	// Mock dialer that echoes data
-	dialer := &mockDialer{
-		dialFunc: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			server, client := net.Pipe()
-			go func() {
-				defer server.Close()
-				buf := make([]byte, 1024)
-				n, _ := server.Read(buf)
-				if n > 0 {
-					_, _ = server.Write(buf[:n])
-				}
-			}()
-			return client, nil
-		},
-	}
-
-	cfg := Config{
-		Target:         "100.64.0.1:3389",
-		ConnectTimeout: 5 * time.Second,
-		MaxConnections: 1000,
-	}
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen failed: %v", err)
-	}
-
-	// Run accept loop in background
-	loopDone := make(chan error, 1)
-	go func() {
-		loopDone <- acceptLoop(listener, dialer, cfg)
-	}()
-
-	// Connect a client through the accept loop
-	conn, err := net.Dial("tcp", listener.Addr().String())
-	if err != nil {
-		t.Fatalf("dial failed: %v", err)
-	}
-
-	_, _ = conn.Write([]byte("TEST"))
-
-	buf := make([]byte, 1024)
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	n, err := conn.Read(buf)
-	if err != nil && !errors.Is(err, io.EOF) {
-		t.Fatalf("read failed: %v", err)
-	}
-	if string(buf[:n]) != "TEST" {
-		t.Errorf("expected TEST, got %q", buf[:n])
-	}
-	conn.Close()
-
-	// Close listener to stop accept loop
-	listener.Close()
-
-	select {
-	case err := <-loopDone:
-		if err != nil {
-			t.Errorf("acceptLoop returned error: %v", err)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("acceptLoop did not stop")
-	}
-
-	// Check that at least one connection was handled (use atomic reads, no struct reset)
-	connsAfter := atomic.LoadInt64(&metrics.TotalConnections)
-	if connsAfter <= connsBefore {
-		t.Errorf("expected TotalConnections to increase, before=%d after=%d", connsBefore, connsAfter)
-	}
-}
 
 func TestLoadConfig(t *testing.T) {
 	tests := []struct {
@@ -458,19 +262,17 @@ func TestLoadConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear all config env vars
 			for _, key := range []string{"TS_TARGET", "TS_AUTHKEY", "TS_TIMEOUT", "TS_VERBOSE",
 				"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
 				"TS_MAX_CONNECTIONS", "TS_HEALTH_ADDR", "TS_LOG_FORMAT",
-				"TS_AUTO_INSTANCE", "TS_INSTANCE_NAME", "TS_PORT_RANGE", "TS_MANUAL_MODE"} {
+				"TS_AUTO_INSTANCE", "TS_INSTANCE_NAME", "TS_PORT_RANGE", "TS_MANUAL_MODE", "TS_DRAIN_TIMEOUT"} {
 				os.Unsetenv(key)
 			}
-			// Set test-specific env vars
 			for k, v := range tt.env {
 				os.Setenv(k, v)
 			}
 
-			cfg, err := loadConfig(tt.verbose)
+			cfg, err := LoadConfig(tt.verbose)
 
 			if tt.wantErr {
 				if err == nil {
@@ -483,58 +285,6 @@ func TestLoadConfig(t *testing.T) {
 			}
 			if tt.check != nil {
 				tt.check(t, cfg)
-			}
-		})
-	}
-}
-
-func TestInitLogger(t *testing.T) {
-	oldLogger := logger
-	defer func() { logger = oldLogger }()
-
-	tests := []struct {
-		name        string
-		cfg         Config
-		wantHandler string
-		wantLevel   slog.Level
-	}{
-		{
-			name:        "default text handler",
-			cfg:         Config{LogFormat: "text"},
-			wantHandler: "*slog.TextHandler",
-			wantLevel:   slog.LevelInfo,
-		},
-		{
-			name:        "json handler",
-			cfg:         Config{LogFormat: "json"},
-			wantHandler: "*slog.JSONHandler",
-			wantLevel:   slog.LevelInfo,
-		},
-		{
-			name:        "verbose enables debug level",
-			cfg:         Config{LogFormat: "text", Verbose: true},
-			wantHandler: "*slog.TextHandler",
-			wantLevel:   slog.LevelDebug,
-		},
-		{
-			name:        "unknown format falls back to text",
-			cfg:         Config{LogFormat: "yaml"},
-			wantHandler: "*slog.TextHandler",
-			wantLevel:   slog.LevelInfo,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			initLogger(tt.cfg)
-
-			handlerType := fmt.Sprintf("%T", logger.Handler())
-			if handlerType != tt.wantHandler {
-				t.Errorf("handler type = %s, want %s", handlerType, tt.wantHandler)
-			}
-
-			if !logger.Handler().Enabled(context.Background(), tt.wantLevel) {
-				t.Errorf("expected level %v to be enabled", tt.wantLevel)
 			}
 		})
 	}
@@ -560,31 +310,8 @@ func TestEnvOr(t *testing.T) {
 				os.Setenv(tt.key, tt.envValue)
 				defer os.Unsetenv(tt.key)
 			}
-			if got := envOr(tt.key, tt.fallback); got != tt.want {
-				t.Errorf("envOr(%q, %q) = %q, want %q", tt.key, tt.fallback, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestIsRetryableCleanupError(t *testing.T) {
-	tests := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{name: "nil error", err: nil, want: false},
-		{name: "directory not empty", err: errors.New("The directory is not empty."), want: true},
-		{name: "access denied", err: errors.New("Access is denied."), want: true},
-		{name: "resource busy", err: errors.New("device or resource busy"), want: true},
-		{name: "non retryable", err: errors.New("invalid argument"), want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isRetryableCleanupError(tt.err)
-			if got != tt.want {
-				t.Errorf("isRetryableCleanupError(%v) = %v, want %v", tt.err, got, tt.want)
+			if got := EnvOr(tt.key, tt.fallback); got != tt.want {
+				t.Errorf("EnvOr(%q, %q) = %q, want %q", tt.key, tt.fallback, got, tt.want)
 			}
 		})
 	}

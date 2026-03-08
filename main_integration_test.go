@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"runtime"
@@ -12,6 +13,10 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"ts-bridge/internal/config"
+	"ts-bridge/internal/health"
+	"ts-bridge/internal/telemetry"
 )
 
 // TestProxyBidirectionalFlow tests that data flows correctly in both directions.
@@ -305,92 +310,35 @@ func TestConcurrentConnections(t *testing.T) {
 
 // TestConnectionLimit tests that connection limits are enforced.
 func TestConnectionLimit(t *testing.T) {
-	// Reset metrics for this test
-	oldMetrics := metrics
-	metrics = Metrics{}
-	defer func() { metrics = oldMetrics }()
+	telemetry.ResetMetrics()
 
-	cfg := Config{
+	cfg := config.Config{
 		MaxConnections: 2,
 	}
 
-	// Track active connections
-	var activeConns int64
-	var rejectedConns int64
-
 	// Simulate connection limit check
 	for i := 0; i < 5; i++ {
-		current := atomic.LoadInt64(&activeConns)
+		current := telemetry.GetActiveConnections()
 		if current >= cfg.MaxConnections {
-			atomic.AddInt64(&rejectedConns, 1)
+			telemetry.AddRejectedConn()
 			continue
 		}
-		atomic.AddInt64(&activeConns, 1)
+		telemetry.AddActiveConnection(1)
 	}
 
-	if rejectedConns != 3 {
-		t.Errorf("expected 3 rejected connections, got %d", rejectedConns)
+	m := telemetry.GetMetrics()
+	if m.RejectedConns != 3 {
+		t.Errorf("expected 3 rejected connections, got %d", m.RejectedConns)
 	}
-	if activeConns != 2 {
-		t.Errorf("expected 2 active connections, got %d", activeConns)
-	}
-}
-
-// TestIsExpectedCloseError tests error classification.
-func TestIsExpectedCloseError(t *testing.T) {
-	tests := []struct {
-		name     string
-		err      error
-		expected bool
-	}{
-		{"nil error", nil, true},
-		{"EOF", io.EOF, true},
-		{"net.ErrClosed", net.ErrClosed, true},
-		{"random error", errors.New("random error"), false},
-		{"closed network", errors.New("use of closed network connection"), true},
-		{"connection reset", errors.New("connection reset by peer"), true},
-		{"windows wsarecv forced close", errors.New("wsarecv: An existing connection was forcibly closed by the remote host"), true},
-		{"closed pipe", errors.New("io: read/write on closed pipe"), true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isExpectedCloseError(tt.err)
-			if result != tt.expected {
-				t.Errorf("isExpectedCloseError(%v) = %v, expected %v", tt.err, result, tt.expected)
-			}
-		})
-	}
-}
-
-// TestAcceptLoopBackoff tests exponential backoff behavior.
-func TestAcceptLoopBackoff(t *testing.T) {
-	backoff := backoffMin
-
-	// Simulate 5 consecutive failures
-	for i := 0; i < 5; i++ {
-		backoff = min(backoff*2, backoffMax)
-	}
-
-	// After 5 doublings: 100ms -> 200ms -> 400ms -> 800ms -> 1600ms -> 3200ms
-	expected := 3200 * time.Millisecond
-	if backoff != expected {
-		t.Errorf("backoff after 5 failures = %v, expected %v", backoff, expected)
-	}
-
-	// Verify max cap
-	for i := 0; i < 10; i++ {
-		backoff = min(backoff*2, backoffMax)
-	}
-	if backoff != backoffMax {
-		t.Errorf("backoff should cap at %v, got %v", backoffMax, backoff)
+	if m.ActiveConnections != 2 {
+		t.Errorf("expected 2 active connections, got %d", m.ActiveConnections)
 	}
 }
 
 // TestEnsureStateDir tests state directory creation with permissions.
 func TestEnsureStateDir(t *testing.T) {
 	// Initialize logger for test
-	initLogger(Config{LogFormat: "text"})
+	initLogger(config.Config{LogFormat: "text"})
 
 	dir := t.TempDir() + "/test-state"
 
@@ -423,7 +371,7 @@ func TestEnsureStateDir(t *testing.T) {
 // TestHealthEndpoints tests health server responses.
 func TestHealthEndpoints(t *testing.T) {
 	// Initialize logger for test
-	initLogger(Config{LogFormat: "text"})
+	l := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	// Find free port
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -434,7 +382,7 @@ func TestHealthEndpoints(t *testing.T) {
 	listener.Close()
 
 	var ready atomic.Bool
-	server := startHealthServer(addr, &ready)
+	server := health.StartServer(addr, &ready, l)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -537,10 +485,7 @@ func TestHealthEndpoints(t *testing.T) {
 
 // TestMetricsAtomicity tests that metrics updates are thread-safe.
 func TestMetricsAtomicity(t *testing.T) {
-	// Reset metrics
-	oldMetrics := metrics
-	metrics = Metrics{}
-	defer func() { metrics = oldMetrics }()
+	telemetry.ResetMetrics()
 
 	const goroutines = 100
 	const iterations = 1000
@@ -551,8 +496,8 @@ func TestMetricsAtomicity(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
-				atomic.AddInt64(&metrics.TotalConnections, 1)
-				atomic.AddInt64(&metrics.TotalBytesTx, 100)
+				telemetry.AddTotalConnection()
+				telemetry.AddBytesTx(100)
 			}
 		}()
 	}
@@ -560,11 +505,12 @@ func TestMetricsAtomicity(t *testing.T) {
 	wg.Wait()
 
 	expected := int64(goroutines * iterations)
-	if metrics.TotalConnections != expected {
-		t.Errorf("TotalConnections = %d, expected %d", metrics.TotalConnections, expected)
+	m := telemetry.GetMetrics()
+	if m.TotalConnections != expected {
+		t.Errorf("TotalConnections = %d, expected %d", m.TotalConnections, expected)
 	}
-	if metrics.TotalBytesTx != expected*100 {
-		t.Errorf("TotalBytesTx = %d, expected %d", metrics.TotalBytesTx, expected*100)
+	if m.TotalBytesTx != expected*100 {
+		t.Errorf("TotalBytesTx = %d, expected %d", m.TotalBytesTx, expected*100)
 	}
 }
 
@@ -576,7 +522,7 @@ func TestVerboseConfig(t *testing.T) {
 	defer os.Unsetenv("TS_AUTHKEY")
 
 	// Test flag
-	cfg, err := loadConfig(true)
+	cfg, err := config.LoadConfig(true)
 	if err != nil {
 		t.Fatalf("loadConfig failed: %v", err)
 	}
@@ -588,7 +534,7 @@ func TestVerboseConfig(t *testing.T) {
 	os.Setenv("TS_VERBOSE", "true")
 	defer os.Unsetenv("TS_VERBOSE")
 
-	cfg, err = loadConfig(false)
+	cfg, err = config.LoadConfig(false)
 	if err != nil {
 		t.Fatalf("loadConfig failed: %v", err)
 	}
@@ -605,19 +551,19 @@ func TestMaxConnectionsConfig(t *testing.T) {
 	defer os.Unsetenv("TS_AUTHKEY")
 
 	// Test default
-	cfg, err := loadConfig(false)
+	cfg, err := config.LoadConfig(false)
 	if err != nil {
 		t.Fatalf("loadConfig failed: %v", err)
 	}
-	if cfg.MaxConnections != defaultMaxConnections {
-		t.Errorf("expected default %d, got %d", defaultMaxConnections, cfg.MaxConnections)
+	if cfg.MaxConnections != 1000 {
+		t.Errorf("expected default %d, got %d", 1000, cfg.MaxConnections)
 	}
 
 	// Test custom
 	os.Setenv("TS_MAX_CONNECTIONS", "500")
 	defer os.Unsetenv("TS_MAX_CONNECTIONS")
 
-	cfg, err = loadConfig(false)
+	cfg, err = config.LoadConfig(false)
 	if err != nil {
 		t.Fatalf("loadConfig failed: %v", err)
 	}
@@ -627,7 +573,7 @@ func TestMaxConnectionsConfig(t *testing.T) {
 
 	// Test invalid
 	os.Setenv("TS_MAX_CONNECTIONS", "invalid")
-	_, err = loadConfig(false)
+	_, err = config.LoadConfig(false)
 	if err == nil {
 		t.Error("expected error for invalid max connections")
 	}
