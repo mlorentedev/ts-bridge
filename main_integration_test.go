@@ -350,6 +350,7 @@ func TestIsExpectedCloseError(t *testing.T) {
 		{"closed network", errors.New("use of closed network connection"), true},
 		{"connection reset", errors.New("connection reset by peer"), true},
 		{"windows wsarecv forced close", errors.New("wsarecv: An existing connection was forcibly closed by the remote host"), true},
+		{"closed pipe", errors.New("io: read/write on closed pipe"), true},
 	}
 
 	for _, tt := range tests {
