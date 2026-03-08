@@ -67,6 +67,12 @@ const (
 	stateDirPerms = 0700
 )
 
+// Dialer abstracts the remote connection mechanism.
+// tsnet.Server satisfies this interface without an adapter.
+type Dialer interface {
+	Dial(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
 // Config holds the bridge configuration.
 type Config struct {
 	LocalAddr      string
@@ -623,7 +629,7 @@ func printBanner(cfg Config) {
 	fmt.Println()
 }
 
-func acceptLoop(listener net.Listener, server *tsnet.Server, cfg Config) error {
+func acceptLoop(listener net.Listener, dialer Dialer, cfg Config) error {
 	backoff := backoffMin
 
 	for {
@@ -654,7 +660,7 @@ func acceptLoop(listener net.Listener, server *tsnet.Server, cfg Config) error {
 			continue
 		}
 
-		go handleConn(conn, server, cfg)
+		go handleConn(conn, dialer, cfg)
 	}
 }
 
@@ -666,7 +672,7 @@ var bufferPool = sync.Pool{
 	},
 }
 
-func handleConn(client net.Conn, server *tsnet.Server, cfg Config) {
+func handleConn(client net.Conn, dialer Dialer, cfg Config) {
 	// Track metrics
 	atomic.AddInt64(&metrics.ActiveConnections, 1)
 	atomic.AddInt64(&metrics.TotalConnections, 1)
@@ -689,7 +695,7 @@ func handleConn(client net.Conn, server *tsnet.Server, cfg Config) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ConnectTimeout)
 	defer cancel()
 
-	remote, err := server.Dial(ctx, "tcp", cfg.Target)
+	remote, err := dialer.Dial(ctx, "tcp", cfg.Target)
 	if err != nil {
 		atomic.AddInt64(&metrics.TotalErrors, 1)
 		logger.Error("dial failed", "client", addr, "target", cfg.Target, "error", err)
@@ -742,8 +748,14 @@ func proxyConnections(client, remote net.Conn, addr string) (tx, rx int64) {
 		}
 	}
 
-	go copyConn(client, remote, "rx", &rx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		copyConn(client, remote, "rx", &rx)
+	}()
 	copyConn(remote, client, "tx", &tx)
+	wg.Wait()
 
 	return tx, rx
 }
@@ -778,6 +790,9 @@ func isExpectedCloseError(err error) bool {
 		return true
 	}
 	if strings.Contains(errStr, "forcibly closed by the remote host") {
+		return true
+	}
+	if strings.Contains(errStr, "closed pipe") {
 		return true
 	}
 	return false
