@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/mlorentedev/ts-bridge/compare/v1.4.0...v1.5.0) (2026-03-08)
+
+
+### Features
+
+* graceful drain and multi-package refactoring ([#14](https://github.com/mlorentedev/ts-bridge/issues/14)) ([14355b7](https://github.com/mlorentedev/ts-bridge/commit/14355b7ba7824fcca79e10c7d120ebe649734f51))
+
 ## [1.4.0](https://github.com/mlorentedev/ts-bridge/compare/v1.3.1...v1.4.0) (2026-02-28)
 
 
