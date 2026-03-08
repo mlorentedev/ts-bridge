@@ -43,7 +43,6 @@ logs/
 # AI assistants
 .claude/
 .cursor/
-CLAUDE.md
 GEMINI.md
 AGENTS.md
 .aider*

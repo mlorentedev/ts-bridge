@@ -1,0 +1,62 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ts-bridge Version
+      description: "Output of `ts-bridge -version`"
+      placeholder: "v1.3.1 (abc1234)"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+  - type: dropdown
+    id: control-plane
+    attributes:
+      label: Control Plane
+      options:
+        - Tailscale (SaaS)
+        - Headscale (self-hosted)
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "Run with `-v` flag and paste relevant output"
+      render: text

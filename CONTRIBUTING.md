@@ -35,7 +35,7 @@ This project follows **GitHub Flow**: `master` is the protected default branch. 
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.25+
 - A Tailscale account (for integration testing)
 
 ### Quick Start
