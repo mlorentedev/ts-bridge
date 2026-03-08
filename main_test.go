@@ -251,7 +251,7 @@ func TestLoadConfig(t *testing.T) {
 				if cfg.AutoInstance {
 					t.Error("expected manual mode to disable auto mode")
 				}
-				if cfg.LocalAddr != "127.0.0.1:33389" {
+				if cfg.LocalAddr != defaultLocalAddr {
 					t.Errorf("expected legacy local addr, got %s", cfg.LocalAddr)
 				}
 				if cfg.Hostname != "ts-bridge" {
@@ -277,7 +277,7 @@ func TestLoadConfig(t *testing.T) {
 				if cfg.AutoInstance {
 					t.Error("expected explicit false auto flag to disable auto mode")
 				}
-				if cfg.LocalAddr != "127.0.0.1:33389" {
+				if cfg.LocalAddr != defaultLocalAddr {
 					t.Errorf("expected legacy local addr, got %s", cfg.LocalAddr)
 				}
 			},
@@ -389,7 +389,7 @@ func TestLoadConfig(t *testing.T) {
 				if cfg.AutoInstance {
 					t.Error("expected manual mode to take precedence over auto flag")
 				}
-				if cfg.LocalAddr != "127.0.0.1:33389" {
+				if cfg.LocalAddr != defaultLocalAddr {
 					t.Errorf("expected legacy local addr, got %s", cfg.LocalAddr)
 				}
 			},
