@@ -31,5 +31,12 @@ linters-settings:
 issues:
   exclude-dirs:
     - site
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocyclo
+    - linters:
+        - unparam
+      text: "acceptLoop.*result 0.*is always nil"
   max-issues-per-linter: 50
   max-same-issues: 5
