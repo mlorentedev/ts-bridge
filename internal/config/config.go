@@ -33,6 +33,7 @@ type Config struct {
 	ControlURL     string
 	ConnectTimeout time.Duration
 	DrainTimeout   time.Duration
+	IdleTimeout    time.Duration
 	MaxConnections int64
 	HealthAddr     string
 	Verbose        bool
@@ -63,6 +64,14 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		return Config{}, err
 	}
 
+	idleTimeout, err := parseDurationEnv("TS_IDLE_TIMEOUT", 0)
+	if err != nil {
+		return Config{}, err
+	}
+	if idleTimeout < 0 {
+		return Config{}, fmt.Errorf("TS_IDLE_TIMEOUT must be >= 0, got %v", idleTimeout)
+	}
+
 	maxConns, err := parseInt64Env("TS_MAX_CONNECTIONS", defaultMaxConnections)
 	if err != nil {
 		return Config{}, err
@@ -77,6 +86,7 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		ControlURL:     os.Getenv("TS_CONTROL_URL"),
 		ConnectTimeout: timeout,
 		DrainTimeout:   drainTimeout,
+		IdleTimeout:    idleTimeout,
 		MaxConnections: maxConns,
 		HealthAddr:     os.Getenv("TS_HEALTH_ADDR"),
 		Verbose:        verboseFlag || parseBoolEnv(os.Getenv("TS_VERBOSE")),

@@ -36,6 +36,46 @@ type Dialer interface {
 	Dial(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
+// idleConn wraps a net.Conn and enforces a per-Read deadline. Each call to
+// Read resets the read deadline to now + idle. If no bytes arrive within
+// idle, the underlying Read returns a timeout error which propagates out of
+// io.CopyBuffer, letting the proxy classify and close the bridge cleanly.
+//
+// Per-direction semantics: an idle conn on the rx side does not signal idle
+// on the tx side. Either direction reaching its deadline closes the pair.
+type idleConn struct {
+	net.Conn
+	idle time.Duration
+}
+
+func (c *idleConn) Read(b []byte) (int, error) {
+	if c.idle > 0 {
+		_ = c.Conn.SetReadDeadline(time.Now().Add(c.idle))
+	}
+	return c.Conn.Read(b)
+}
+
+// withIdleTimeout returns c wrapped with a Read deadline of idle on every
+// read. When idle is 0 or negative, returns c unchanged so callers in the
+// disabled path pay no overhead.
+func withIdleTimeout(c net.Conn, idle time.Duration) net.Conn {
+	if idle <= 0 {
+		return c
+	}
+	return &idleConn{Conn: c, idle: idle}
+}
+
+// isIdleTimeoutErr reports whether err is a deadline-exceeded error from a
+// net.Conn Read. Used to classify idle closures distinctly from transport
+// errors so they are logged at info level and not counted in error metrics.
+func isIdleTimeoutErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
 // AcceptLoop accepts incoming connections and routes them to the dialer.
 func AcceptLoop(listener net.Listener, dialer Dialer, cfg config.Config, wg *sync.WaitGroup, logger *slog.Logger) error {
 	backoff := backoffMin
@@ -117,6 +157,9 @@ func handleConn(client net.Conn, dialer Dialer, cfg config.Config, logger *slog.
 
 	logger.Debug("tunnel established", "client", addr, "target", cfg.Target)
 
+	client = withIdleTimeout(client, cfg.IdleTimeout)
+	remote = withIdleTimeout(remote, cfg.IdleTimeout)
+
 	bytesTx, bytesRx := proxyConnections(client, remote, addr, logger)
 
 	telemetry.AddBytesTx(bytesTx)
@@ -150,7 +193,17 @@ func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger)
 		n, err := io.CopyBuffer(dst, src, *bufPtr)
 		*counter = n
 
-		if err != nil && !IsExpectedCloseError(err) {
+		switch {
+		case err == nil, IsExpectedCloseError(err):
+			// Normal close — nothing to log here.
+		case isIdleTimeoutErr(err):
+			// Idle timeout is an operator-configured policy, not a transport
+			// fault. Log once at info; do not count as error.
+			logger.Info("connection closed (idle timeout)",
+				"client", addr,
+				"direction", direction,
+				"bytes", n)
+		default:
 			telemetry.AddError()
 			logger.Warn("copy error",
 				"client", addr,
