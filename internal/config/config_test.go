@@ -229,6 +229,36 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "idle timeout defaults to disabled",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.IdleTimeout != 0 {
+					t.Errorf("expected IdleTimeout disabled (0), got %v", cfg.IdleTimeout)
+				}
+			},
+		},
+		{
+			name:    "idle timeout parsed",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_IDLE_TIMEOUT": "5m"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.IdleTimeout != 5*time.Minute {
+					t.Errorf("expected IdleTimeout 5m, got %v", cfg.IdleTimeout)
+				}
+			},
+		},
+		{
+			name:    "idle timeout invalid",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_IDLE_TIMEOUT": "garbage"},
+			wantErr: true,
+		},
+		{
+			name:    "idle timeout negative rejected",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_IDLE_TIMEOUT": "-1m"},
+			wantErr: true,
+		},
+		{
 			name:    "target no port",
 			env:     map[string]string{"TS_TARGET": "100.64.0.1", "TS_AUTHKEY": "tskey-auth-test123"},
 			wantErr: true,
@@ -265,7 +295,8 @@ func TestLoadConfig(t *testing.T) {
 			for _, key := range []string{"TS_TARGET", "TS_AUTHKEY", "TS_TIMEOUT", "TS_VERBOSE",
 				"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
 				"TS_MAX_CONNECTIONS", "TS_HEALTH_ADDR", "TS_LOG_FORMAT",
-				"TS_AUTO_INSTANCE", "TS_INSTANCE_NAME", "TS_PORT_RANGE", "TS_MANUAL_MODE", "TS_DRAIN_TIMEOUT"} {
+				"TS_AUTO_INSTANCE", "TS_INSTANCE_NAME", "TS_PORT_RANGE", "TS_MANUAL_MODE",
+				"TS_DRAIN_TIMEOUT", "TS_IDLE_TIMEOUT"} {
 				os.Unsetenv(key)
 			}
 			for k, v := range tt.env {
