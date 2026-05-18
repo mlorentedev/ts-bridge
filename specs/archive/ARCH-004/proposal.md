@@ -1,8 +1,12 @@
 ---
 id: "ARCH-004"
 type: spec
-status: implementing
+status: archived
 created: "2026-05-18"
+archived: "2026-05-18"
+merged_pr: 24
+released_in: v1.7.0
+subsumes: [ARCH-005]
 tags: [spec, proposal, reliability, reconnect, dialer]
 template_version: "1.0"
 ---
