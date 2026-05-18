@@ -1,8 +1,11 @@
 ---
 id: "REL-003"
 type: spec
-status: implementing
+status: archived
 created: "2026-05-18"
+archived: "2026-05-18"
+merged_pr: 21
+released_in: v1.6.0
 tags: [spec, proposal, idle-timeout, reliability]
 template_version: "1.0"
 ---
