@@ -259,6 +259,79 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "dial retries defaults",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.DialRetries != 3 {
+					t.Errorf("expected DialRetries default 3, got %d", cfg.DialRetries)
+				}
+				if cfg.DialBackoffBase != time.Second {
+					t.Errorf("expected DialBackoffBase default 1s, got %v", cfg.DialBackoffBase)
+				}
+				if cfg.DialBackoffMax != 30*time.Second {
+					t.Errorf("expected DialBackoffMax default 30s, got %v", cfg.DialBackoffMax)
+				}
+			},
+		},
+		{
+			name: "dial retries parsed",
+			env: map[string]string{
+				"TS_TARGET":            "100.64.0.1:3389",
+				"TS_AUTHKEY":           "tskey-auth-test123",
+				"TS_DIAL_RETRIES":      "5",
+				"TS_DIAL_BACKOFF_BASE": "500ms",
+				"TS_DIAL_BACKOFF_MAX":  "10s",
+			},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.DialRetries != 5 {
+					t.Errorf("expected DialRetries 5, got %d", cfg.DialRetries)
+				}
+				if cfg.DialBackoffBase != 500*time.Millisecond {
+					t.Errorf("expected DialBackoffBase 500ms, got %v", cfg.DialBackoffBase)
+				}
+				if cfg.DialBackoffMax != 10*time.Second {
+					t.Errorf("expected DialBackoffMax 10s, got %v", cfg.DialBackoffMax)
+				}
+			},
+		},
+		{
+			name:    "dial retries zero disables retry",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_RETRIES": "0"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.DialRetries != 0 {
+					t.Errorf("expected DialRetries 0, got %d", cfg.DialRetries)
+				}
+			},
+		},
+		{
+			name:    "dial retries negative rejected",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_RETRIES": "-1"},
+			wantErr: true,
+		},
+		{
+			name:    "dial retries invalid rejected",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_RETRIES": "abc"},
+			wantErr: true,
+		},
+		{
+			name:    "dial backoff base negative rejected",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_BACKOFF_BASE": "-1s"},
+			wantErr: true,
+		},
+		{
+			name:    "dial backoff max negative rejected",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_BACKOFF_MAX": "-1s"},
+			wantErr: true,
+		},
+		{
+			name:    "dial backoff max less than base rejected",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_BACKOFF_BASE": "10s", "TS_DIAL_BACKOFF_MAX": "1s"},
+			wantErr: true,
+		},
+		{
 			name:    "target no port",
 			env:     map[string]string{"TS_TARGET": "100.64.0.1", "TS_AUTHKEY": "tskey-auth-test123"},
 			wantErr: true,
@@ -296,7 +369,8 @@ func TestLoadConfig(t *testing.T) {
 				"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
 				"TS_MAX_CONNECTIONS", "TS_HEALTH_ADDR", "TS_LOG_FORMAT",
 				"TS_AUTO_INSTANCE", "TS_INSTANCE_NAME", "TS_PORT_RANGE", "TS_MANUAL_MODE",
-				"TS_DRAIN_TIMEOUT", "TS_IDLE_TIMEOUT"} {
+				"TS_DRAIN_TIMEOUT", "TS_IDLE_TIMEOUT",
+				"TS_DIAL_RETRIES", "TS_DIAL_BACKOFF_BASE", "TS_DIAL_BACKOFF_MAX"} {
 				os.Unsetenv(key)
 			}
 			for k, v := range tt.env {
