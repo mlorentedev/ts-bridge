@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/mlorentedev/ts-bridge/compare/v1.6.0...v1.7.0) (2026-05-18)
+
+
+### Features
+
+* ReconnectDialer with exponential backoff for transient dial failures ([#24](https://github.com/mlorentedev/ts-bridge/issues/24)) ([d56ff7e](https://github.com/mlorentedev/ts-bridge/commit/d56ff7eb74690d56a171d0664a1e64be3e059547))
+
 ## [1.6.0](https://github.com/mlorentedev/ts-bridge/compare/v1.5.1...v1.6.0) (2026-05-18)
 
 
