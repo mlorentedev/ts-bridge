@@ -8,7 +8,6 @@ import (
 	"math/rand/v2"
 	"net"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -26,9 +25,6 @@ type ReconnectDialer struct {
 	BaseBackoff time.Duration
 	MaxBackoff  time.Duration
 	Logger      *slog.Logger
-
-	rngOnce sync.Once
-	rng     *rand.Rand
 }
 
 var _ Dialer = (*ReconnectDialer)(nil)
@@ -102,7 +98,7 @@ func computeBackoff(attempt int, base, maxBackoff time.Duration) time.Duration {
 	if jitterMax <= 0 {
 		return d
 	}
-	//nolint:gosec // math/rand/v2 is acceptable here — jitter is not security-sensitive
+	// #nosec G404 -- jitter is not security-sensitive; math/rand/v2 is fine here
 	jitter := time.Duration(rand.Int64N(jitterMax))
 	return d + jitter
 }

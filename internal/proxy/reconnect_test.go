@@ -24,7 +24,7 @@ type recordingDialer struct {
 
 func (r *recordingDialer) Dial(_ context.Context, _, _ string) (net.Conn, error) {
 	n := r.attempts.Add(1)
-	if int32(n) <= r.failuresBefore {
+	if n <= r.failuresBefore {
 		return nil, r.errFail
 	}
 	a, b := net.Pipe()

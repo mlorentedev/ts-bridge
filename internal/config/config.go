@@ -78,28 +78,9 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		return Config{}, fmt.Errorf("TS_IDLE_TIMEOUT must be >= 0, got %v", idleTimeout)
 	}
 
-	dialRetries, err := parseDialRetries()
+	dialRetries, dialBackoffBase, dialBackoffMax, err := parseDialConfig()
 	if err != nil {
 		return Config{}, err
-	}
-
-	dialBackoffBase, err := parseDurationEnv("TS_DIAL_BACKOFF_BASE", defaultDialBackoffBase)
-	if err != nil {
-		return Config{}, err
-	}
-	if dialBackoffBase < 0 {
-		return Config{}, fmt.Errorf("TS_DIAL_BACKOFF_BASE must be >= 0, got %v", dialBackoffBase)
-	}
-
-	dialBackoffMax, err := parseDurationEnv("TS_DIAL_BACKOFF_MAX", defaultDialBackoffMax)
-	if err != nil {
-		return Config{}, err
-	}
-	if dialBackoffMax < 0 {
-		return Config{}, fmt.Errorf("TS_DIAL_BACKOFF_MAX must be >= 0, got %v", dialBackoffMax)
-	}
-	if dialBackoffMax < dialBackoffBase {
-		return Config{}, fmt.Errorf("TS_DIAL_BACKOFF_MAX (%v) must be >= TS_DIAL_BACKOFF_BASE (%v)", dialBackoffMax, dialBackoffBase)
 	}
 
 	maxConns, err := parseInt64Env("TS_MAX_CONNECTIONS", defaultMaxConnections)
@@ -182,6 +163,36 @@ func parseDialRetries() (int, error) {
 		return 0, fmt.Errorf("TS_DIAL_RETRIES must be >= 0, got %d", n)
 	}
 	return n, nil
+}
+
+// parseDialConfig collects the three ReconnectDialer parameters together so
+// LoadConfig stays under the cyclomatic-complexity threshold.
+func parseDialConfig() (retries int, base, maxBackoff time.Duration, err error) {
+	retries, err = parseDialRetries()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	base, err = parseDurationEnv("TS_DIAL_BACKOFF_BASE", defaultDialBackoffBase)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	if base < 0 {
+		return 0, 0, 0, fmt.Errorf("TS_DIAL_BACKOFF_BASE must be >= 0, got %v", base)
+	}
+
+	maxBackoff, err = parseDurationEnv("TS_DIAL_BACKOFF_MAX", defaultDialBackoffMax)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	if maxBackoff < 0 {
+		return 0, 0, 0, fmt.Errorf("TS_DIAL_BACKOFF_MAX must be >= 0, got %v", maxBackoff)
+	}
+	if maxBackoff < base {
+		return 0, 0, 0, fmt.Errorf("TS_DIAL_BACKOFF_MAX (%v) must be >= TS_DIAL_BACKOFF_BASE (%v)", maxBackoff, base)
+	}
+
+	return retries, base, maxBackoff, nil
 }
 
 
