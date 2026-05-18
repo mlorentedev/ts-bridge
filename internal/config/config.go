@@ -72,20 +72,9 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		return Config{}, err
 	}
 
-	idleTimeout, err := parseDurationEnv("TS_IDLE_TIMEOUT", 0)
+	idleTimeout, dialTimeout, err := parseTimeoutEnvs()
 	if err != nil {
 		return Config{}, err
-	}
-	if idleTimeout < 0 {
-		return Config{}, fmt.Errorf("TS_IDLE_TIMEOUT must be >= 0, got %v", idleTimeout)
-	}
-
-	dialTimeout, err := parseDurationEnv("TS_DIAL_TIMEOUT", defaultDialTimeout)
-	if err != nil {
-		return Config{}, err
-	}
-	if dialTimeout <= 0 {
-		return Config{}, fmt.Errorf("TS_DIAL_TIMEOUT must be > 0, got %v", dialTimeout)
 	}
 
 	dialRetries, dialBackoffBase, dialBackoffMax, err := parseDialConfig()
@@ -174,6 +163,29 @@ func parseDialRetries() (int, error) {
 		return 0, fmt.Errorf("TS_DIAL_RETRIES must be >= 0, got %d", n)
 	}
 	return n, nil
+}
+
+// parseTimeoutEnvs collects the two per-connection timeouts (idle + dial) so
+// LoadConfig stays under the cyclomatic-complexity threshold. Idle accepts
+// 0 (disabled); dial must be strictly positive.
+func parseTimeoutEnvs() (idle, dial time.Duration, err error) {
+	idle, err = parseDurationEnv("TS_IDLE_TIMEOUT", 0)
+	if err != nil {
+		return 0, 0, err
+	}
+	if idle < 0 {
+		return 0, 0, fmt.Errorf("TS_IDLE_TIMEOUT must be >= 0, got %v", idle)
+	}
+
+	dial, err = parseDurationEnv("TS_DIAL_TIMEOUT", defaultDialTimeout)
+	if err != nil {
+		return 0, 0, err
+	}
+	if dial <= 0 {
+		return 0, 0, fmt.Errorf("TS_DIAL_TIMEOUT must be > 0, got %v", dial)
+	}
+
+	return idle, dial, nil
 }
 
 // parseDialConfig collects the three ReconnectDialer parameters together so
