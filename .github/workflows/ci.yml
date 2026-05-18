@@ -83,7 +83,9 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
-          version: latest
+          # Pinned so local `golangci-lint run` and CI report identical findings.
+          # Bump deliberately when the project upgrades; do not silently track latest.
+          version: v1.62.2
           install-mode: goinstall
 
   security:
