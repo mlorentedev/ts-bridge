@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/mlorentedev/ts-bridge/compare/v1.5.1...v1.6.0) (2026-05-18)
+
+
+### Features
+
+* TS_IDLE_TIMEOUT to close abandoned connections ([#21](https://github.com/mlorentedev/ts-bridge/issues/21)) ([e7a595e](https://github.com/mlorentedev/ts-bridge/commit/e7a595e5ce10b525b2edfca447ff92929c2ec462))
+
 ## [1.5.1](https://github.com/mlorentedev/ts-bridge/compare/v1.5.0...v1.5.1) (2026-05-18)
 
 
