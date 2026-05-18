@@ -21,6 +21,9 @@ const (
 	defaultTimeout       = 30 * time.Second
 	defaultDrainTimeout  = 15 * time.Second
 	defaultMaxConnections = 1000
+	defaultDialRetries     = 3
+	defaultDialBackoffBase = 1 * time.Second
+	defaultDialBackoffMax  = 30 * time.Second
 )
 
 // Config holds the bridge configuration.
@@ -31,10 +34,13 @@ type Config struct {
 	Hostname       string
 	StateDir       string
 	ControlURL     string
-	ConnectTimeout time.Duration
-	DrainTimeout   time.Duration
-	IdleTimeout    time.Duration
-	MaxConnections int64
+	ConnectTimeout  time.Duration
+	DrainTimeout    time.Duration
+	IdleTimeout     time.Duration
+	DialRetries     int
+	DialBackoffBase time.Duration
+	DialBackoffMax  time.Duration
+	MaxConnections  int64
 	HealthAddr     string
 	Verbose        bool
 	LogFormat      string
@@ -72,6 +78,30 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		return Config{}, fmt.Errorf("TS_IDLE_TIMEOUT must be >= 0, got %v", idleTimeout)
 	}
 
+	dialRetries, err := parseDialRetries()
+	if err != nil {
+		return Config{}, err
+	}
+
+	dialBackoffBase, err := parseDurationEnv("TS_DIAL_BACKOFF_BASE", defaultDialBackoffBase)
+	if err != nil {
+		return Config{}, err
+	}
+	if dialBackoffBase < 0 {
+		return Config{}, fmt.Errorf("TS_DIAL_BACKOFF_BASE must be >= 0, got %v", dialBackoffBase)
+	}
+
+	dialBackoffMax, err := parseDurationEnv("TS_DIAL_BACKOFF_MAX", defaultDialBackoffMax)
+	if err != nil {
+		return Config{}, err
+	}
+	if dialBackoffMax < 0 {
+		return Config{}, fmt.Errorf("TS_DIAL_BACKOFF_MAX must be >= 0, got %v", dialBackoffMax)
+	}
+	if dialBackoffMax < dialBackoffBase {
+		return Config{}, fmt.Errorf("TS_DIAL_BACKOFF_MAX (%v) must be >= TS_DIAL_BACKOFF_BASE (%v)", dialBackoffMax, dialBackoffBase)
+	}
+
 	maxConns, err := parseInt64Env("TS_MAX_CONNECTIONS", defaultMaxConnections)
 	if err != nil {
 		return Config{}, err
@@ -84,10 +114,13 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		Hostname:       os.Getenv("TS_HOSTNAME"),
 		StateDir:       os.Getenv("TS_STATE_DIR"),
 		ControlURL:     os.Getenv("TS_CONTROL_URL"),
-		ConnectTimeout: timeout,
-		DrainTimeout:   drainTimeout,
-		IdleTimeout:    idleTimeout,
-		MaxConnections: maxConns,
+		ConnectTimeout:  timeout,
+		DrainTimeout:    drainTimeout,
+		IdleTimeout:     idleTimeout,
+		DialRetries:     dialRetries,
+		DialBackoffBase: dialBackoffBase,
+		DialBackoffMax:  dialBackoffMax,
+		MaxConnections:  maxConns,
 		HealthAddr:     os.Getenv("TS_HEALTH_ADDR"),
 		Verbose:        verboseFlag || parseBoolEnv(os.Getenv("TS_VERBOSE")),
 		LogFormat:      EnvOr("TS_LOG_FORMAT", "text"),
@@ -130,6 +163,23 @@ func parseInt64Env(key string, fallback int64) (int64, error) {
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil || n < 1 {
 		return 0, fmt.Errorf("%s invalid: %w", key, err)
+	}
+	return n, nil
+}
+
+// parseDialRetries is separate from parseInt64Env because retries may legitimately
+// be zero (disables retry) while connection limits etc. require >= 1.
+func parseDialRetries() (int, error) {
+	v := os.Getenv("TS_DIAL_RETRIES")
+	if v == "" {
+		return defaultDialRetries, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("TS_DIAL_RETRIES invalid: %w", err)
+	}
+	if n < 0 {
+		return 0, fmt.Errorf("TS_DIAL_RETRIES must be >= 0, got %d", n)
 	}
 	return n, nil
 }

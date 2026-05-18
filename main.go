@@ -175,7 +175,14 @@ func run(cfg config.Config) error {
 
 	ready.Store(true)
 	var activeConns sync.WaitGroup
-	errAccept := proxy.AcceptLoop(listener, server, cfg, &activeConns, logger)
+	dialer := &proxy.ReconnectDialer{
+		Inner:       server,
+		MaxRetries:  cfg.DialRetries,
+		BaseBackoff: cfg.DialBackoffBase,
+		MaxBackoff:  cfg.DialBackoffMax,
+		Logger:      logger,
+	}
+	errAccept := proxy.AcceptLoop(listener, dialer, cfg, &activeConns, logger)
 
 	drainActiveConnections(cfg, &activeConns)
 
