@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.2](https://github.com/mlorentedev/ts-bridge/compare/v1.7.1...v1.7.2) (2026-05-18)
+
+
+### Bug Fixes
+
+* harden proxy under load — TOCTOU, dial timeout, half-close ([#34](https://github.com/mlorentedev/ts-bridge/issues/34)) ([c769153](https://github.com/mlorentedev/ts-bridge/commit/c7691538a8901160d769660a3291de76e1a99a8d))
+
 ## [1.7.1](https://github.com/mlorentedev/ts-bridge/compare/v1.7.0...v1.7.1) (2026-05-18)
 
 
