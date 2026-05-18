@@ -60,7 +60,8 @@ TS_CONTROL_URL=https://vpn.example.com
 | `TS_MANUAL_MODE` | `false` | Force legacy persistent mode. Takes precedence over `TS_AUTO_INSTANCE`. |
 | `TS_INSTANCE_NAME` | _(empty)_ | Stable instance alias for deterministic local port selection. |
 | `TS_PORT_RANGE` | `33389-34388` | Port range for auto mode (`START-END`). |
-| `TS_TIMEOUT` | `30s` | Timeout for Tailscale initialization and dial. Go duration format. |
+| `TS_TIMEOUT` | `30s` | Timeout for tsnet initialization (control-plane handshake). Go duration format. |
+| `TS_DIAL_TIMEOUT` | `5s` | Per-connection target dial timeout, distinct from `TS_TIMEOUT`. Keeps stuck dials from holding a slot across retries. Go duration format. _(v1.8.0+)_ |
 | `TS_DRAIN_TIMEOUT` | `15s` | Timeout for graceful drain of active connections on shutdown. Go duration format. |
 | `TS_MAX_CONNECTIONS` | `1000` | Maximum concurrent connections before rejecting new ones. |
 | `TS_IDLE_TIMEOUT` | _(disabled)_ | Close connections after this period of no traffic in either direction. Go duration format (e.g. `30m`). Default `0` disables. Useful for reclaiming slots from abandoned RDP sessions. _(v1.6.0+)_ |

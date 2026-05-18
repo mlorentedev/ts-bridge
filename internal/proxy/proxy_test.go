@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -69,6 +70,7 @@ func TestHandleConnWithDialer(t *testing.T) {
 			cfg := config.Config{
 				Target:         "100.64.0.1:3389",
 				ConnectTimeout: 5 * time.Second,
+				DialTimeout:    5 * time.Second,
 			}
 
 			clientConn, proxyConn := net.Pipe()
@@ -136,6 +138,7 @@ func TestAcceptLoopWithDialer(t *testing.T) {
 	cfg := config.Config{
 		Target:         "100.64.0.1:3389",
 		ConnectTimeout: 5 * time.Second,
+		DialTimeout:    5 * time.Second,
 		MaxConnections: 1000,
 	}
 
@@ -338,6 +341,90 @@ func TestAcceptLoopBackoff(t *testing.T) {
 	}
 	if backoff != backoffMax {
 		t.Errorf("backoff should cap at %v, got %v", backoffMax, backoff)
+	}
+}
+
+// halfCloseConn wraps a net.Pipe end and records whether CloseWrite was
+// invoked. Used to verify proxyConnections half-closes on graceful EOF.
+type halfCloseConn struct {
+	net.Conn
+	closeWriteCalled atomic.Bool
+}
+
+func (h *halfCloseConn) CloseWrite() error {
+	h.closeWriteCalled.Store(true)
+	// Mirror real TCPConn semantics: after CloseWrite the peer sees EOF
+	// on its read. With net.Pipe we approximate by fully closing this end
+	// — the opposite-direction copy will then see EOF on its own Read.
+	return h.Conn.Close()
+}
+
+func TestHalfCloseWrite_UnwrapsIdleConn(t *testing.T) {
+	a, b := net.Pipe()
+	defer a.Close()
+	defer b.Close()
+
+	hc := &halfCloseConn{Conn: a}
+	wrapped := withIdleTimeout(hc, 100*time.Millisecond)
+
+	if !halfCloseWrite(wrapped) {
+		t.Fatal("halfCloseWrite should reach the inner halfCloser through idleConn")
+	}
+	if !hc.closeWriteCalled.Load() {
+		t.Fatal("CloseWrite was not invoked on the underlying conn")
+	}
+}
+
+func TestHalfCloseWrite_ReturnsFalseForNonHalfCloser(t *testing.T) {
+	// net.Pipe ends do NOT implement halfCloser. Verify the fallback path.
+	a, b := net.Pipe()
+	defer a.Close()
+	defer b.Close()
+	if halfCloseWrite(a) {
+		t.Fatal("halfCloseWrite should return false for non-halfCloser conns")
+	}
+}
+
+func TestProxyConnections_HalfClosesOnEOF(t *testing.T) {
+	// Server pair: what the proxy sees as "client" (a) and what tests
+	// drive (aPeer). Same for remote.
+	a, aPeer := net.Pipe()
+	r, rPeer := net.Pipe()
+	defer aPeer.Close()
+	defer rPeer.Close()
+
+	clientHC := &halfCloseConn{Conn: a}
+	remoteHC := &halfCloseConn{Conn: r}
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = proxyConnections(clientHC, remoteHC, "test", logger)
+		close(done)
+	}()
+
+	// Send one byte from the remote side, then EOF that direction.
+	go func() {
+		_, _ = rPeer.Write([]byte("X"))
+		_ = rPeer.Close()
+	}()
+
+	// Drain whatever arrives on the client peer; once the EOF propagates
+	// via half-close, the read returns and we let the other direction wind down.
+	buf := make([]byte, 16)
+	_ = aPeer.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, _ = aPeer.Read(buf)
+	_ = aPeer.Close()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("proxyConnections did not return after both directions ended")
+	}
+
+	if !clientHC.closeWriteCalled.Load() && !remoteHC.closeWriteCalled.Load() {
+		t.Error("expected at least one CloseWrite invocation on graceful EOF; none recorded")
 	}
 }
 

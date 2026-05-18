@@ -259,6 +259,41 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "dial timeout defaults to 5s",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.DialTimeout != 5*time.Second {
+					t.Errorf("expected DialTimeout default 5s, got %v", cfg.DialTimeout)
+				}
+			},
+		},
+		{
+			name:    "dial timeout parsed",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_TIMEOUT": "10s"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.DialTimeout != 10*time.Second {
+					t.Errorf("expected DialTimeout 10s, got %v", cfg.DialTimeout)
+				}
+			},
+		},
+		{
+			name:    "dial timeout zero rejected",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_TIMEOUT": "0"},
+			wantErr: true,
+		},
+		{
+			name:    "dial timeout negative rejected",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_TIMEOUT": "-1s"},
+			wantErr: true,
+		},
+		{
+			name:    "dial timeout invalid rejected",
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_TIMEOUT": "garbage"},
+			wantErr: true,
+		},
+		{
 			name:    "dial retries defaults",
 			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
 			wantErr: false,
@@ -369,7 +404,7 @@ func TestLoadConfig(t *testing.T) {
 				"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
 				"TS_MAX_CONNECTIONS", "TS_HEALTH_ADDR", "TS_LOG_FORMAT",
 				"TS_AUTO_INSTANCE", "TS_INSTANCE_NAME", "TS_PORT_RANGE", "TS_MANUAL_MODE",
-				"TS_DRAIN_TIMEOUT", "TS_IDLE_TIMEOUT",
+				"TS_DRAIN_TIMEOUT", "TS_IDLE_TIMEOUT", "TS_DIAL_TIMEOUT",
 				"TS_DIAL_RETRIES", "TS_DIAL_BACKOFF_BASE", "TS_DIAL_BACKOFF_MAX"} {
 				os.Unsetenv(key)
 			}

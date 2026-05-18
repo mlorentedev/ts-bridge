@@ -36,6 +36,26 @@ func GetActiveConnections() int64 {
 	return atomic.LoadInt64(&globalMetrics.ActiveConnections)
 }
 
+// TryClaimConnection atomically increments ActiveConnections only if the
+// resulting value would not exceed maxConns. Returns true on successful
+// claim. Callers MUST call AddActiveConnection(-1) when the work tied to
+// the claim finishes, even on error paths.
+//
+// Uses a CAS loop to close the check-then-act race that exists when the
+// limit check and increment happen in two separate atomic ops.
+func TryClaimConnection(maxConns int64) bool {
+	for {
+		cur := atomic.LoadInt64(&globalMetrics.ActiveConnections)
+		if cur >= maxConns {
+			return false
+		}
+		if atomic.CompareAndSwapInt64(&globalMetrics.ActiveConnections, cur, cur+1) {
+			return true
+		}
+		// CAS lost — another goroutine moved the counter, retry.
+	}
+}
+
 // AddTotalConnection increments the total connection count.
 func AddTotalConnection() {
 	atomic.AddInt64(&globalMetrics.TotalConnections, 1)

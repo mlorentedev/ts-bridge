@@ -24,6 +24,7 @@ const (
 	defaultDialRetries     = 3
 	defaultDialBackoffBase = 1 * time.Second
 	defaultDialBackoffMax  = 30 * time.Second
+	defaultDialTimeout     = 5 * time.Second
 )
 
 // Config holds the bridge configuration.
@@ -35,6 +36,7 @@ type Config struct {
 	StateDir       string
 	ControlURL     string
 	ConnectTimeout  time.Duration
+	DialTimeout     time.Duration
 	DrainTimeout    time.Duration
 	IdleTimeout     time.Duration
 	DialRetries     int
@@ -78,6 +80,14 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		return Config{}, fmt.Errorf("TS_IDLE_TIMEOUT must be >= 0, got %v", idleTimeout)
 	}
 
+	dialTimeout, err := parseDurationEnv("TS_DIAL_TIMEOUT", defaultDialTimeout)
+	if err != nil {
+		return Config{}, err
+	}
+	if dialTimeout <= 0 {
+		return Config{}, fmt.Errorf("TS_DIAL_TIMEOUT must be > 0, got %v", dialTimeout)
+	}
+
 	dialRetries, dialBackoffBase, dialBackoffMax, err := parseDialConfig()
 	if err != nil {
 		return Config{}, err
@@ -96,6 +106,7 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		StateDir:       os.Getenv("TS_STATE_DIR"),
 		ControlURL:     os.Getenv("TS_CONTROL_URL"),
 		ConnectTimeout:  timeout,
+		DialTimeout:     dialTimeout,
 		DrainTimeout:    drainTimeout,
 		IdleTimeout:     idleTimeout,
 		DialRetries:     dialRetries,
