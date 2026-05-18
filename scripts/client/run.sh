@@ -64,15 +64,20 @@ if [[ -n "$INSTANCE_NAME" ]]; then
 fi
 
 # Auto mode default: enabled unless explicitly disabled.
+# Case-insensitive truthy parsing keeps parity with run.ps1's
+# .ToLowerInvariant() behavior — e.g. TS_AUTO_INSTANCE=True must
+# be honored identically across Windows and Linux/macOS.
+lc() { printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'; }
+
 AUTO_INSTANCE=true
 if [[ -n "${TS_AUTO_INSTANCE:-}" ]]; then
-    case "${TS_AUTO_INSTANCE}" in
-        1|true|TRUE|yes|YES|on|ON) AUTO_INSTANCE=true ;;
+    case "$(lc "$TS_AUTO_INSTANCE")" in
+        1|true|yes|on) AUTO_INSTANCE=true ;;
         *) AUTO_INSTANCE=false ;;
     esac
 fi
-case "${TS_MANUAL_MODE:-}" in
-    1|true|TRUE|yes|YES|on|ON) AUTO_INSTANCE=false ;;
+case "$(lc "${TS_MANUAL_MODE:-}")" in
+    1|true|yes|on) AUTO_INSTANCE=false ;;
 esac
 
 if [[ "$AUTO_INSTANCE" == "true" ]]; then
