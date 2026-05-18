@@ -49,6 +49,23 @@ gosec ./...
 - **ADR-004:** Atomic metrics, no mutexes
 - Full ADR index in vault: `knowledge/10_projects/ts-bridge/30-architecture/`
 
+## Workflow Rules (read before first tool call)
+
+This repo opts in to the global behaviour rules in `~/Projects/dotfiles/AGENTS.md`.
+Read it once at session start and apply its §Spec-Driven Development +
+§Standing Orders + §Operational Rules. Specifically:
+
+- **SDD by default** — every PR-sized change (~50-300 lines, public-contract
+  touch, new dep, or multi-PR sequence) gets a transient `specs/<feature-id>/`
+  with `proposal.md` + `tasks.md` + `verification.md`. Templates in vault at
+  `00_meta/templates/spec-{proposal,tasks,verification}.md`. Archived to
+  `specs/archive/<feature-id>/` on merge.
+  Skip SDD only for: typos, comment-only edits, mechanical refactors,
+  bug fixes <20 lines with obvious cause, doc-only changes.
+- **TDD inside the spec** — failing test first, then implementation. Already
+  the project standard; SDD wraps it, does not replace it.
+- **Atomic PRs** — one logical change per PR, ~300 line hard cap (tests, lockfiles, generated files excluded).
+
 ## Conventions
 
 - Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`)
