@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.1](https://github.com/mlorentedev/ts-bridge/compare/v1.7.0...v1.7.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* case-insensitive truthy parsing in run.sh for Linux/Windows parity ([#29](https://github.com/mlorentedev/ts-bridge/issues/29)) ([ad0c090](https://github.com/mlorentedev/ts-bridge/commit/ad0c090df665b9a4f41b5a583e99aff3d951bf45))
+
 ## [1.7.0](https://github.com/mlorentedev/ts-bridge/compare/v1.6.0...v1.7.0) (2026-05-18)
 
 
