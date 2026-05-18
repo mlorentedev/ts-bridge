@@ -34,7 +34,8 @@ Write-Host "  ---------------------------------------"
 # Check .env
 if (-not (Test-Path $EnvFile)) {
     Write-Host "  ERROR: .env not found" -ForegroundColor Red
-    Write-Host "  Run: cp .env.example .env" -ForegroundColor Gray
+    Write-Host "  Run: Copy-Item .env.example .env" -ForegroundColor Gray
+    Write-Host "  Then edit .env to set TS_AUTHKEY and TS_TARGET." -ForegroundColor Gray
     exit 1
 }
 

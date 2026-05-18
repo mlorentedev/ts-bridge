@@ -38,6 +38,7 @@ echo "  ---------------------------------------"
 if [[ ! -f "$ENV_FILE" ]]; then
     echo "  ERROR: .env not found"
     echo "  Run: cp .env.example .env"
+    echo "  Then edit .env to set TS_AUTHKEY and TS_TARGET."
     exit 1
 fi
 

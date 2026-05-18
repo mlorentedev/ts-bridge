@@ -74,7 +74,14 @@ Error: Administrator privilege is required to install or start the Tailscale ser
   +---------------------------------------+
   Waiting for connections...
 ```
-Now, connect locally: `mstsc /v:127.0.0.1:33389`
+Connect using the address from the banner's `Local:` line. In auto mode the port is hash-derived from the `33389-34388` range, so it differs per machine/instance:
+
+```bash
+# Read the actual port from the banner above (example shows :33389)
+mstsc /v:127.0.0.1:33389          # Windows RDP
+xfreerdp /v:127.0.0.1:33389       # Linux RDP
+ssh -p 33389 user@127.0.0.1       # SSH targets
+```
 
 ## Configuration
 
