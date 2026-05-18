@@ -1,0 +1,23 @@
+coverage:
+  status:
+    project:
+      default:
+        # Don't fail PR if coverage drops by <1% — small numerical noise.
+        threshold: 1%
+    patch:
+      default:
+        # New code in a PR should be >=70% covered on average.
+        target: 70%
+        threshold: 5%
+
+# Exclude integration tests and generated/aux files from coverage signal.
+ignore:
+  - "site/**"
+  - "scripts/**"
+  - "specs/**"
+  - "**/*_integration_test.go"
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true

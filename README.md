@@ -1,4 +1,5 @@
 [![CI](https://github.com/mlorentedev/ts-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/mlorentedev/ts-bridge/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/mlorentedev/ts-bridge/branch/master/graph/badge.svg)](https://codecov.io/gh/mlorentedev/ts-bridge)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/mlorentedev/ts-bridge)](https://go.dev/)
 [![Docs](https://img.shields.io/badge/docs-live-brightgreen)](https://mlorentedev.github.io/ts-bridge/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
