@@ -210,10 +210,46 @@ func initTailscale(cfg config.Config) (*tsnet.Server, error) {
 
 	status, err := server.Up(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("tailscale init failed: %w", err)
+		if hint, remediation := diagnoseTailscaleInitError(err); hint != "" && logger != nil {
+			logger.Warn(hint, "remediation", remediation)
+		}
+		// Release background goroutines and open file handles (tailscaled.log*)
+		// before ephemeral cleanup runs — Windows cannot unlink files held by
+		// the still-running tsnet workers.
+		_ = server.Close()
+		return nil, fmt.Errorf("tailscale init failed (control=%s): %w", controlURLForError(cfg.ControlURL), err)
 	}
 	logger.Info("tailscale ready", "ip", status.Self.TailscaleIPs[0])
 	return server, nil
+}
+
+func controlURLForError(controlURL string) string {
+	if controlURL == "" {
+		return "https://controlplane.tailscale.com (default)"
+	}
+	return controlURL
+}
+
+// diagnoseTailscaleInitError inspects a tsnet.Up failure and returns an
+// actionable hint when the error matches a known pattern. Returns empty
+// strings for unrecognized errors so callers stay silent on noise.
+func diagnoseTailscaleInitError(err error) (hint, remediation string) {
+	if err == nil {
+		return "", ""
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "api key does not exist"),
+		strings.Contains(msg, "invalid key"),
+		strings.Contains(msg, "key expired"):
+		return "auth key rejected by control plane (likely expired, revoked, or single-use already consumed)",
+			"regenerate a reusable+ephemeral auth key in your control plane admin and update TS_AUTHKEY on every client"
+	case strings.Contains(msg, "context deadline exceeded"),
+		strings.Contains(msg, "i/o timeout"):
+		return "control plane unreachable within TS_TIMEOUT",
+			"check network access to the control URL; raise TS_TIMEOUT if the link is slow"
+	}
+	return "", ""
 }
 
 func handleShutdown(ctx context.Context, ready *atomic.Bool, listener net.Listener, healthServer *http.Server) {
