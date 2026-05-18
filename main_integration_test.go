@@ -308,7 +308,9 @@ func TestConcurrentConnections(t *testing.T) {
 	}
 }
 
-// TestConnectionLimit tests that connection limits are enforced.
+// TestConnectionLimit tests that connection limits are enforced via the
+// atomic TryClaimConnection helper. Replaced the old check-then-act
+// simulation after PR introducing the CAS-based claim path.
 func TestConnectionLimit(t *testing.T) {
 	telemetry.ResetMetrics()
 
@@ -316,14 +318,12 @@ func TestConnectionLimit(t *testing.T) {
 		MaxConnections: 2,
 	}
 
-	// Simulate connection limit check
-	for i := 0; i < 5; i++ {
-		current := telemetry.GetActiveConnections()
-		if current >= cfg.MaxConnections {
+	// Try 5 claims; the helper should admit exactly MaxConnections of them
+	// and reject the rest, atomically.
+	for range 5 {
+		if !telemetry.TryClaimConnection(cfg.MaxConnections) {
 			telemetry.AddRejectedConn()
-			continue
 		}
-		telemetry.AddActiveConnection(1)
 	}
 
 	m := telemetry.GetMetrics()

@@ -96,12 +96,12 @@ func AcceptLoop(listener net.Listener, dialer Dialer, cfg config.Config, wg *syn
 		// Reset backoff on successful accept
 		backoff = backoffMin
 
-		// Check connection limit
-		current := telemetry.GetActiveConnections()
-		if current >= cfg.MaxConnections {
+		// Atomically claim a connection slot. The CAS loop in TryClaimConnection
+		// closes the check-then-act race where a burst of accepts could each
+		// observe (cur < cap) and all proceed past the limit.
+		if !telemetry.TryClaimConnection(cfg.MaxConnections) {
 			telemetry.AddRejectedConn()
 			logger.Warn("connection rejected: limit reached",
-				"current", current,
 				"max", cfg.MaxConnections,
 				"client", conn.RemoteAddr())
 			_ = conn.Close()
@@ -111,6 +111,9 @@ func AcceptLoop(listener net.Listener, dialer Dialer, cfg config.Config, wg *syn
 		wg.Add(1)
 		go func(c net.Conn) {
 			defer wg.Done()
+			// Release the claimed slot once the per-conn work returns,
+			// regardless of how it terminates (success, dial fail, panic-free abort).
+			defer telemetry.AddActiveConnection(-1)
 			handleConn(c, dialer, cfg, logger)
 		}(conn)
 	}
@@ -125,10 +128,11 @@ var bufferPool = sync.Pool{
 }
 
 func handleConn(client net.Conn, dialer Dialer, cfg config.Config, logger *slog.Logger) {
-	// Track metrics
-	telemetry.AddActiveConnection(1)
+	// Active-connection slot management lives in AcceptLoop (atomic claim +
+	// release via defer in the spawned goroutine). We only count the total
+	// here so direct callers (unit tests that bypass AcceptLoop) still see
+	// the per-call increment.
 	telemetry.AddTotalConnection()
-	defer telemetry.AddActiveConnection(-1)
 
 	addr := client.RemoteAddr().String()
 	connStart := time.Now()
@@ -144,7 +148,12 @@ func handleConn(client net.Conn, dialer Dialer, cfg config.Config, logger *slog.
 
 	logger.Info("connection opened", "client", addr)
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.ConnectTimeout)
+	// DialTimeout is intentionally smaller than ConnectTimeout: ConnectTimeout
+	// covers the one-time tsnet init (control plane handshake, can be slow),
+	// DialTimeout covers each per-connection target dial. With ReconnectDialer
+	// retrying, a large ConnectTimeout would let one stuck client hog a slot
+	// for many minutes; DialTimeout=5s keeps the worst case bounded.
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.DialTimeout)
 	defer cancel()
 
 	remote, err := dialer.Dial(ctx, "tcp", cfg.Target)
@@ -173,20 +182,37 @@ func handleConn(client net.Conn, dialer Dialer, cfg config.Config, logger *slog.
 		"bytes_rx", bytesRx)
 }
 
-// proxyConnections performs bidirectional copy between client and remote,
-// returning the bytes transferred in each direction.
-func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger) (tx, rx int64) {
-	var once sync.Once
-	closeAll := func() {
-		once.Do(func() {
-			_ = client.Close()
-			_ = remote.Close()
-		})
+// halfCloser is satisfied by net.Conn implementations that support a
+// uni-directional write shutdown. *net.TCPConn and tsnet/gonet conns
+// both implement this. net.Pipe does not.
+type halfCloser interface {
+	CloseWrite() error
+}
+
+// halfCloseWrite tries to half-close the write side of dst so the peer
+// sees EOF on its read while the opposite-direction copy keeps draining.
+// Unwraps idleConn to reach the underlying conn before the type assert,
+// since idleConn embeds net.Conn and does not promote CloseWrite.
+// Returns true if a half-close was actually performed.
+func halfCloseWrite(c net.Conn) bool {
+	if ic, ok := c.(*idleConn); ok {
+		c = ic.Conn
 	}
+	if cw, ok := c.(halfCloser); ok {
+		_ = cw.CloseWrite()
+		return true
+	}
+	return false
+}
 
+// proxyConnections performs bidirectional copy between client and remote,
+// returning the bytes transferred in each direction. Each direction runs
+// in its own goroutine; when one direction's source EOFs, the destination's
+// write half is closed so the peer sees end-of-stream without tearing down
+// the opposite (still-active) direction. Both ends are fully closed only
+// after both directions complete.
+func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger) (tx, rx int64) {
 	copyConn := func(dst, src net.Conn, direction string, counter *int64) {
-		defer closeAll()
-
 		bufPtr := bufferPool.Get().(*[]byte)
 		defer bufferPool.Put(bufPtr)
 
@@ -195,14 +221,23 @@ func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger)
 
 		switch {
 		case err == nil, IsExpectedCloseError(err):
-			// Normal close — nothing to log here.
+			// Graceful end of this direction. Signal EOF to the peer by
+			// half-closing the write side; the opposite direction keeps
+			// draining any in-flight bytes. Falls back to full Close()
+			// when the underlying conn cannot half-close (e.g. net.Pipe).
+			if !halfCloseWrite(dst) {
+				_ = dst.Close()
+			}
 		case isIdleTimeoutErr(err):
-			// Idle timeout is an operator-configured policy, not a transport
-			// fault. Log once at info; do not count as error.
+			// Idle timeout is an operator-configured policy. Log once at
+			// info; do not count as transport error. Full-close to release
+			// the slot promptly.
 			logger.Info("connection closed (idle timeout)",
 				"client", addr,
 				"direction", direction,
 				"bytes", n)
+			_ = dst.Close()
+			_ = src.Close()
 		default:
 			telemetry.AddError()
 			logger.Warn("copy error",
@@ -210,17 +245,27 @@ func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger)
 				"direction", direction,
 				"bytes", n,
 				"error", err)
+			_ = dst.Close()
+			_ = src.Close()
 		}
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		copyConn(client, remote, "rx", &rx)
 	}()
-	copyConn(remote, client, "tx", &tx)
+	go func() {
+		defer wg.Done()
+		copyConn(remote, client, "tx", &tx)
+	}()
 	wg.Wait()
+
+	// Idempotent full close after both directions completed — guarantees
+	// the conns are released even if a half-close path ran.
+	_ = client.Close()
+	_ = remote.Close()
 
 	return tx, rx
 }
