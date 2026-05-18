@@ -63,6 +63,10 @@ TS_CONTROL_URL=https://vpn.example.com
 | `TS_TIMEOUT` | `30s` | Timeout for Tailscale initialization and dial. Go duration format. |
 | `TS_DRAIN_TIMEOUT` | `15s` | Timeout for graceful drain of active connections on shutdown. Go duration format. |
 | `TS_MAX_CONNECTIONS` | `1000` | Maximum concurrent connections before rejecting new ones. |
+| `TS_IDLE_TIMEOUT` | _(disabled)_ | Close connections after this period of no traffic in either direction. Go duration format (e.g. `30m`). Default `0` disables. Useful for reclaiming slots from abandoned RDP sessions. _(v1.6.0+)_ |
+| `TS_DIAL_RETRIES` | `3` | Maximum retries for transient target dial failures. `0` disables retry. _(v1.7.0+)_ |
+| `TS_DIAL_BACKOFF_BASE` | `1s` | Base backoff for dial retries (multiplied by `2^attempt`, plus jitter). Go duration format. _(v1.7.0+)_ |
+| `TS_DIAL_BACKOFF_MAX` | `30s` | Cap on backoff per retry attempt. Must be ≥ `TS_DIAL_BACKOFF_BASE`. _(v1.7.0+)_ |
 | `TS_HEALTH_ADDR` | _(disabled)_ | Address for health/metrics HTTP server. |
 | `TS_VERBOSE` | `false` | Enable debug logging. Also available as `-v` flag. |
 | `TS_LOG_FORMAT` | `text` | Log output format (`text` or `json`). |
