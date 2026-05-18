@@ -19,6 +19,15 @@ jobs:
         id: release
         with:
           release-type: go
+          # Use a PAT instead of the default GITHUB_TOKEN so PRs created by
+          # release-please trigger the standard `pull_request` workflows
+          # (required status checks: test, lint, security). PRs opened by
+          # GITHUB_TOKEN are deliberately suppressed by GitHub to prevent
+          # workflow recursion, which would otherwise leave the release PR
+          # in BLOCKED state under branch protection.
+          # Falls back to GITHUB_TOKEN if the secret is not yet configured,
+          # so this workflow keeps working during the rollout.
+          token: ${{ secrets.RELEASE_PLEASE_PAT || secrets.GITHUB_TOKEN }}
 
   build-release:
     needs: release-please
