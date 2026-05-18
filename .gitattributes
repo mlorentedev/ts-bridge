@@ -5,3 +5,10 @@
 release-please-config.json export-ignore
 main_test.go export-ignore
 .gitattributes export-ignore
+specs export-ignore
+
+# Shell scripts MUST use LF line endings even when checked out on Windows —
+# CRLF breaks bash/bats interpretation of shebangs and case statements.
+*.sh text eol=lf
+*.bash text eol=lf
+*.bats text eol=lf
