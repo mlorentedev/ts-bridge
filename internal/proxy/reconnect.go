@@ -121,13 +121,8 @@ func isPermanentDialError(err error) bool {
 		return true
 	}
 
-	msg := err.Error()
 	// tsnet emits this string when the backend is in a terminal state
 	// (Stopped, NeedsMachineAuth). Source: tsnet.Server.awaitRunning at
 	// tailscale.com/tsnet@v1.80.0/tsnet.go:203.
-	if strings.HasPrefix(msg, "tsnet: backend in state ") {
-		return true
-	}
-
-	return false
+	return strings.HasPrefix(err.Error(), "tsnet: backend in state ")
 }
