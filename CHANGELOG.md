@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/mlorentedev/ts-bridge/compare/v1.5.0...v1.5.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* clean up tsnet server on init failure and surface auth hints ([#18](https://github.com/mlorentedev/ts-bridge/issues/18)) ([769fc9f](https://github.com/mlorentedev/ts-bridge/commit/769fc9f7ecf09cf193998e2025fc9b75e6f54340))
+
 ## [1.5.0](https://github.com/mlorentedev/ts-bridge/compare/v1.4.0...v1.5.0) (2026-03-08)
 
 
