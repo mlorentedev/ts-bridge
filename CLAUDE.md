@@ -56,7 +56,18 @@ gosec ./...
 - **ADR-004:** Atomic metrics, no mutexes
 - **ADR-006:** `Dialer` interface for testability
 - **ADR-007:** Multi-package split under `internal/` (this is the current layout — see Key Paths)
-- Full ADR index in vault: `knowledge/10_projects/ts-bridge/30-architecture/`
+- Full ADR index: [`docs/adr/`](docs/adr/) (project-bound knowledge, docs-as-code)
+
+## Documentation
+
+Project-bound knowledge lives in this repo under [`docs/`](docs/) (docs-as-code):
+
+- [`docs/adr/`](docs/adr/) — Architecture Decision Records (the *why* behind decisions)
+- [`docs/runbooks/`](docs/runbooks/) — operational procedures (deploy, RDP host setup, multi-device ops)
+- [`docs/troubleshooting/`](docs/troubleshooting/) — known errors, security audit, release issues
+- [`docs/lessons.md`](docs/lessons.md) — accumulated gotchas and post-mortems
+
+Strategic context, roadmap, and session memory live in the maintainer's cross-project knowledge store and are intentionally not committed here.
 
 ## Workflow Rules (read before first tool call)
 
@@ -66,8 +77,8 @@ Read it once at session start and apply its §Spec-Driven Development +
 
 - **SDD by default** — every PR-sized change (~50-300 lines, public-contract
   touch, new dep, or multi-PR sequence) gets a transient `specs/<feature-id>/`
-  with `proposal.md` + `tasks.md` + `verification.md`. Templates in vault at
-  `00_meta/templates/spec-{proposal,tasks,verification}.md`. Archived to
+  with `proposal.md` + `tasks.md` + `verification.md`. Spec templates live in
+  the maintainer's cross-project knowledge store (not committed here). Archived to
   `specs/archive/<feature-id>/` on merge.
   Skip SDD only for: typos, comment-only edits, mechanical refactors,
   bug fixes <20 lines with obvious cause, doc-only changes.
