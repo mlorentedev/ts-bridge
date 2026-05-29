@@ -113,6 +113,15 @@ For advanced configuration (timeouts, limits, legacy modes), see the [Full Docum
 └─────────────────────────┘
 ```
 
+## Documentation
+
+Project-bound knowledge lives in [`docs/`](docs/) (docs-as-code):
+
+- [`docs/adr/`](docs/adr/) — Architecture Decision Records
+- [`docs/runbooks/`](docs/runbooks/) — operational procedures (deploy, RDP host setup, multi-device ops)
+- [`docs/troubleshooting/`](docs/troubleshooting/) — known errors, security audit, release issues
+- [`docs/lessons.md`](docs/lessons.md) — accumulated gotchas and post-mortems
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and PR guidelines.
