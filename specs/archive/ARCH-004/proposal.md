@@ -13,12 +13,12 @@ template_version: "1.0"
 
 # ARCH-004: Auto-retry dial with exponential backoff
 
-> Companion spec to the vault design doc [[task-arch-004-reconnect]] (canonical).
+> Companion spec to [the design doc](./design.md) (canonical).
 > This file captures the proposal-shaped subset and the in-flight decisions.
 
 ## Why
 
-Today, when `tsnet.Server.Dial(target)` fails for a transient reason (DERP relay flap, target host briefly unreachable, brief target-side socket exhaustion), the client connection is closed immediately and the error is counted as a transport fault. The user sees the bridge drop their RDP session over what is effectively network noise. Vault backlog [[11-tasks]] **ARCH-004** (P1) tracks this; **ARCH-005** (P2) was the sibling for target-dial retries, expected to collapse — confirmed below.
+Today, when `tsnet.Server.Dial(target)` fails for a transient reason (DERP relay flap, target host briefly unreachable, brief target-side socket exhaustion), the client connection is closed immediately and the error is counted as a transport fault. The user sees the bridge drop their RDP session over what is effectively network noise. Backlog **ARCH-004** (P1) tracks this; **ARCH-005** (P2) was the sibling for target-dial retries, expected to collapse — confirmed below.
 
 ## What
 
@@ -38,7 +38,7 @@ Existing behavior preserved when `TS_DIAL_RETRIES=0`.
 
 ## Design questions resolved
 
-Per the canonical vault doc's "Open design questions" section, validated by reading `tailscale.com/tsnet@v1.80.0/tsnet.go`:
+Per the design doc's "Open design questions" section, validated by reading `tailscale.com/tsnet@v1.80.0/tsnet.go`:
 
 - **Q1: Does tsnet self-heal?** Mostly yes. `Dial` calls `awaitRunning`, which watches `ipn.Notify` state changes and blocks until backend is `Running`. DERP/magicsock layer has independent reconnect logic. → No supervisor needed for transients.
 - **Q2: What errors come from `Dial`?** Three classes: `ctx.Err()` during context cancellation, `"tsnet: backend in state %v"` on terminal states (permanent — no retry), and stdlib `net.OpError` from `UserDial` (transient — retry).
@@ -64,7 +64,7 @@ Per the canonical vault doc's "Open design questions" section, validated by read
 
 ## References
 
-- Canonical design: vault `10_projects/ts-bridge/30-architecture/task-arch-004-reconnect.md`
+- Canonical design: `./design.md` (migrated from the vault, RFD-001)
 - Vault backlog: `11-tasks.md` ARCH-004 (P1), ARCH-005 (P2 — collapses here)
-- Related ADR: vault `30-architecture/adr-006-dialer-interface-extraction.md` (the `Dialer` interface this builds on)
+- Related ADR: `docs/adr/adr-006-dialer-interface-extraction.md` (the `Dialer` interface this builds on)
 - Source-of-truth on tsnet: `tailscale.com/tsnet@v1.80.0/tsnet.go` lines 168-206 (`Dial`/`awaitRunning`)
