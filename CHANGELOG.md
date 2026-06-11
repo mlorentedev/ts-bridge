@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/mlorentedev/ts-bridge/compare/v1.11.1...v1.12.0) (2026-06-11)
+
+
+### Features
+
+* add 'ts-bridge host' subcommand for RDP host configuration ([73fbef8](https://github.com/mlorentedev/ts-bridge/commit/73fbef83785f6804ebb39851609b66ead8fc1396))
+
 ## [1.11.1](https://github.com/mlorentedev/ts-bridge/compare/v1.11.0...v1.11.1) (2026-06-11)
 
 
