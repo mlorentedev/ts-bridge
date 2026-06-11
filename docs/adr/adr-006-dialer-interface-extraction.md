@@ -1,7 +1,7 @@
 ---
 id: "adr-006"
 type: adr
-status: proposed
+status: accepted
 created: "2026-03-07"
 tags: [architecture, testability, refactor]
 owner: manu
