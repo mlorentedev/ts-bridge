@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/mlorentedev/ts-bridge/compare/v1.8.0...v1.9.0) (2026-06-11)
+
+
+### Features
+
+* **cli:** add ts-bridge connect subcommand with YAML config support ([#62](https://github.com/mlorentedev/ts-bridge/issues/62)) ([650d252](https://github.com/mlorentedev/ts-bridge/commit/650d2528ecded9e822ee337f53d84c2695930fd1))
+
 ## [1.8.0](https://github.com/mlorentedev/ts-bridge/compare/v1.7.2...v1.8.0) (2026-06-11)
 
 
