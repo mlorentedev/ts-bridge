@@ -1,8 +1,6 @@
 module ts-bridge
 
-go 1.25
-
-toolchain go1.25.0
+go 1.25.0
 
 require (
 	github.com/spf13/cobra v1.8.1
@@ -82,8 +80,8 @@ require (
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.29.1-0.20250107080300-1c14dcadc3ab // indirect
-	golang.org/x/term v0.28.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
