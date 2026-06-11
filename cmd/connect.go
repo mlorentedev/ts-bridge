@@ -178,6 +178,7 @@ func readAuthKeyFile(path string) (string, error) {
 			info.Mode().Perm(), absPath)
 	}
 
+	// #nosec G304 -- absPath is resolved via filepath.Abs and permissions are checked before read.
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return "", fmt.Errorf("read auth key file: %w", err)

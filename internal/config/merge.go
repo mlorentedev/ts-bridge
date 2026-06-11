@@ -19,7 +19,7 @@ type PartialConfig struct {
 	StateDir        string        `yaml:"state_dir"`
 	HealthAddr      string        `yaml:"health_addr"`
 	LogFormat       string        `yaml:"log_format"`
-	AuthKey         string        `yaml:"auth_key"`
+	AuthKey         string        `yaml:"auth_key"` // #nosec G117 -- internal struct, never serialized, explicitly rejected in YAML
 	Timeout         time.Duration `yaml:"timeout"`
 	DialTimeout     time.Duration `yaml:"dial_timeout"`
 	DrainTimeout    time.Duration `yaml:"drain_timeout"`
@@ -34,7 +34,7 @@ type PartialConfig struct {
 // FlagSet holds values provided via CLI flags.
 type FlagSet struct {
 	Target          string
-	AuthKey         string
+	AuthKey         string // #nosec G117 -- internal struct, never serialized
 	AuthKeyFile     string
 	Instance        string
 	LocalAddr       string
@@ -339,6 +339,7 @@ func LoadYAMLConfig(path string) (PartialConfig, error) {
 		return PartialConfig{}, nil
 	}
 
+	// #nosec G304 -- path is from --config flag (user-controlled) and validated non-empty above.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
