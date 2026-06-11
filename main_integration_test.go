@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"errors"
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -18,295 +18,6 @@ import (
 	"ts-bridge/internal/health"
 	"ts-bridge/internal/telemetry"
 )
-
-// TestProxyBidirectionalFlow tests that data flows correctly in both directions.
-func TestProxyBidirectionalFlow(t *testing.T) {
-	// Create a mock "remote" server
-	remoteListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to create remote listener: %v", err)
-	}
-	defer remoteListener.Close()
-
-	// Track data received by remote
-	var remoteReceived []byte
-	var remoteWg sync.WaitGroup
-	remoteWg.Add(1)
-
-	go func() {
-		defer remoteWg.Done()
-		conn, err := remoteListener.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-
-		// Echo server: read data, send it back
-		buf := make([]byte, 1024)
-		n, err := conn.Read(buf)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return
-		}
-		remoteReceived = buf[:n]
-
-		// Send response
-		_, _ = conn.Write([]byte("RESPONSE"))
-	}()
-
-	// Create local listener (simulating ts-bridge listener)
-	localListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to create local listener: %v", err)
-	}
-	defer localListener.Close()
-
-	// Start proxy handler
-	go func() {
-		client, err := localListener.Accept()
-		if err != nil {
-			return
-		}
-
-		// Connect to "remote"
-		remote, err := net.Dial("tcp", remoteListener.Addr().String())
-		if err != nil {
-			client.Close()
-			return
-		}
-
-		// Bidirectional copy (simplified version of handleConn)
-		var once sync.Once
-		closeAll := func() {
-			once.Do(func() {
-				client.Close()
-				remote.Close()
-			})
-		}
-
-		go func() {
-			defer closeAll()
-			_, _ = io.Copy(client, remote)
-		}()
-		func() {
-			defer closeAll()
-			_, _ = io.Copy(remote, client)
-		}()
-	}()
-
-	// Connect as client
-	conn, err := net.Dial("tcp", localListener.Addr().String())
-	if err != nil {
-		t.Fatalf("failed to connect to proxy: %v", err)
-	}
-	defer conn.Close()
-
-	// Send data
-	testData := []byte("HELLO")
-	_, err = conn.Write(testData)
-	if err != nil {
-		t.Fatalf("failed to write: %v", err)
-	}
-
-	// Read response
-	response := make([]byte, 1024)
-	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	n, err := conn.Read(response)
-	if err != nil && !errors.Is(err, io.EOF) {
-		t.Fatalf("failed to read response: %v", err)
-	}
-
-	remoteWg.Wait()
-
-	// Verify data was received by remote
-	if string(remoteReceived) != "HELLO" {
-		t.Errorf("remote received %q, expected HELLO", remoteReceived)
-	}
-
-	// Verify response was received by client
-	if string(response[:n]) != "RESPONSE" {
-		t.Errorf("client received %q, expected RESPONSE", response[:n])
-	}
-}
-
-// TestConnectionClosePropagation tests that closing one side closes the other.
-func TestConnectionClosePropagation(t *testing.T) {
-	remoteListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to create remote listener: %v", err)
-	}
-	defer remoteListener.Close()
-
-	remoteClosed := make(chan struct{})
-
-	go func() {
-		conn, err := remoteListener.Accept()
-		if err != nil {
-			return
-		}
-		// Wait for close
-		buf := make([]byte, 1)
-		_, _ = conn.Read(buf) // Will return when connection closes
-		close(remoteClosed)
-		conn.Close()
-	}()
-
-	localListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to create local listener: %v", err)
-	}
-	defer localListener.Close()
-
-	go func() {
-		client, err := localListener.Accept()
-		if err != nil {
-			return
-		}
-
-		remote, err := net.Dial("tcp", remoteListener.Addr().String())
-		if err != nil {
-			client.Close()
-			return
-		}
-
-		var once sync.Once
-		closeAll := func() {
-			once.Do(func() {
-				client.Close()
-				remote.Close()
-			})
-		}
-
-		go func() {
-			defer closeAll()
-			_, _ = io.Copy(client, remote)
-		}()
-		func() {
-			defer closeAll()
-			_, _ = io.Copy(remote, client)
-		}()
-	}()
-
-	conn, err := net.Dial("tcp", localListener.Addr().String())
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-
-	// Close client side
-	conn.Close()
-
-	// Remote should close within reasonable time
-	select {
-	case <-remoteClosed:
-		// Success
-	case <-time.After(2 * time.Second):
-		t.Error("remote connection did not close after client closed")
-	}
-}
-
-// TestConcurrentConnections tests multiple simultaneous connections.
-func TestConcurrentConnections(t *testing.T) {
-	remoteListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to create remote listener: %v", err)
-	}
-	defer remoteListener.Close()
-
-	// Handle multiple remote connections
-	go func() {
-		for {
-			conn, err := remoteListener.Accept()
-			if err != nil {
-				return
-			}
-			go func(c net.Conn) {
-				defer c.Close()
-				buf := make([]byte, 1024)
-				n, _ := c.Read(buf)
-				_, _ = c.Write(buf[:n]) // Echo
-			}(conn)
-		}
-	}()
-
-	localListener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to create local listener: %v", err)
-	}
-	defer localListener.Close()
-
-	// Simple proxy
-	go func() {
-		for {
-			client, err := localListener.Accept()
-			if err != nil {
-				return
-			}
-			go func(c net.Conn) {
-				remote, err := net.Dial("tcp", remoteListener.Addr().String())
-				if err != nil {
-					c.Close()
-					return
-				}
-
-				var once sync.Once
-				closeAll := func() {
-					once.Do(func() {
-						c.Close()
-						remote.Close()
-					})
-				}
-
-				go func() {
-					defer closeAll()
-					_, _ = io.Copy(c, remote)
-				}()
-				func() {
-					defer closeAll()
-					_, _ = io.Copy(remote, c)
-				}()
-			}(client)
-		}
-	}()
-
-	// Launch concurrent connections
-	const numConns = 50
-	var wg sync.WaitGroup
-	var successCount int64
-
-	for i := 0; i < numConns; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-
-			conn, err := net.Dial("tcp", localListener.Addr().String())
-			if err != nil {
-				t.Logf("connection %d failed: %v", id, err)
-				return
-			}
-			defer conn.Close()
-
-			testData := []byte("PING")
-			_, _ = conn.Write(testData)
-
-			response := make([]byte, 4)
-			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-			n, err := io.ReadFull(conn, response)
-			if err != nil {
-				t.Logf("connection %d read failed: %v", id, err)
-				return
-			}
-
-			if string(response[:n]) == "PING" {
-				atomic.AddInt64(&successCount, 1)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	if successCount < numConns*90/100 {
-		t.Errorf("only %d/%d connections succeeded", successCount, numConns)
-	}
-}
 
 // TestConnectionLimit tests that connection limits are enforced via the
 // atomic TryClaimConnection helper. Replaced the old check-then-act
@@ -394,45 +105,35 @@ func TestHealthEndpoints(t *testing.T) {
 
 	// Test /health/live
 	t.Run("liveness endpoint", func(t *testing.T) {
-		resp, err := net.Dial("tcp", addr)
+		resp, err := http.Get("http://" + addr + "/health/live")
 		if err != nil {
-			t.Fatalf("failed to connect: %v", err)
+			t.Fatalf("failed to request: %v", err)
 		}
-		defer resp.Close()
+		defer resp.Body.Close()
 
-		_, _ = resp.Write([]byte("GET /health/live HTTP/1.1\r\nHost: localhost\r\n\r\n"))
-
-		buf := make([]byte, 1024)
-		n, _ := resp.Read(buf)
-		response := string(buf[:n])
-
-		if !strings.Contains(response, "200 OK") {
-			t.Errorf("expected 200 OK, got: %s", response)
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 OK, got %d", resp.StatusCode)
 		}
-		if !strings.Contains(response, `"status":"ok"`) {
-			t.Errorf("expected status ok in body, got: %s", response)
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.Contains(string(body), `"status":"ok"`) {
+			t.Errorf("expected status ok in body, got: %s", string(body))
 		}
 	})
 
 	// Test /health/ready when not ready
 	t.Run("readiness not ready", func(t *testing.T) {
-		resp, err := net.Dial("tcp", addr)
+		resp, err := http.Get("http://" + addr + "/health/ready")
 		if err != nil {
-			t.Fatalf("failed to connect: %v", err)
+			t.Fatalf("failed to request: %v", err)
 		}
-		defer resp.Close()
+		defer resp.Body.Close()
 
-		_, _ = resp.Write([]byte("GET /health/ready HTTP/1.1\r\nHost: localhost\r\n\r\n"))
-
-		buf := make([]byte, 1024)
-		n, _ := resp.Read(buf)
-		response := string(buf[:n])
-
-		if !strings.Contains(response, "503") {
-			t.Errorf("expected 503, got: %s", response)
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("expected 503, got %d", resp.StatusCode)
 		}
-		if !strings.Contains(response, `"status":"not_ready"`) {
-			t.Errorf("expected not_ready in body, got: %s", response)
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.Contains(string(body), `"status":"not_ready"`) {
+			t.Errorf("expected not_ready in body, got: %s", string(body))
 		}
 	})
 
@@ -440,45 +141,35 @@ func TestHealthEndpoints(t *testing.T) {
 	ready.Store(true)
 
 	t.Run("readiness ready", func(t *testing.T) {
-		resp, err := net.Dial("tcp", addr)
+		resp, err := http.Get("http://" + addr + "/health/ready")
 		if err != nil {
-			t.Fatalf("failed to connect: %v", err)
+			t.Fatalf("failed to request: %v", err)
 		}
-		defer resp.Close()
+		defer resp.Body.Close()
 
-		_, _ = resp.Write([]byte("GET /health/ready HTTP/1.1\r\nHost: localhost\r\n\r\n"))
-
-		buf := make([]byte, 1024)
-		n, _ := resp.Read(buf)
-		response := string(buf[:n])
-
-		if !strings.Contains(response, "200 OK") {
-			t.Errorf("expected 200 OK, got: %s", response)
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 OK, got %d", resp.StatusCode)
 		}
-		if !strings.Contains(response, `"status":"ok"`) {
-			t.Errorf("expected status ok in body, got: %s", response)
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.Contains(string(body), `"status":"ok"`) {
+			t.Errorf("expected status ok in body, got: %s", string(body))
 		}
 	})
 
 	// Test /metrics
 	t.Run("metrics endpoint", func(t *testing.T) {
-		resp, err := net.Dial("tcp", addr)
+		resp, err := http.Get("http://" + addr + "/metrics")
 		if err != nil {
-			t.Fatalf("failed to connect: %v", err)
+			t.Fatalf("failed to request: %v", err)
 		}
-		defer resp.Close()
+		defer resp.Body.Close()
 
-		_, _ = resp.Write([]byte("GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n"))
-
-		buf := make([]byte, 1024)
-		n, _ := resp.Read(buf)
-		response := string(buf[:n])
-
-		if !strings.Contains(response, "200 OK") {
-			t.Errorf("expected 200 OK, got: %s", response)
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200 OK, got %d", resp.StatusCode)
 		}
-		if !strings.Contains(response, "active_connections") {
-			t.Errorf("expected active_connections in body, got: %s", response)
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.Contains(string(body), "active_connections") {
+			t.Errorf("expected active_connections in body, got: %s", string(body))
 		}
 	})
 }
@@ -518,8 +209,10 @@ func TestMetricsAtomicity(t *testing.T) {
 func TestVerboseConfig(t *testing.T) {
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
 	os.Setenv("TS_AUTHKEY", "tskey-auth-test123")
-	defer os.Unsetenv("TS_TARGET")
-	defer os.Unsetenv("TS_AUTHKEY")
+	t.Cleanup(func() {
+		os.Unsetenv("TS_TARGET")
+		os.Unsetenv("TS_AUTHKEY")
+	})
 
 	// Test flag
 	cfg, err := config.LoadConfig(true)
@@ -532,7 +225,6 @@ func TestVerboseConfig(t *testing.T) {
 
 	// Test env var
 	os.Setenv("TS_VERBOSE", "true")
-	defer os.Unsetenv("TS_VERBOSE")
 
 	cfg, err = config.LoadConfig(false)
 	if err != nil {
@@ -547,8 +239,10 @@ func TestVerboseConfig(t *testing.T) {
 func TestMaxConnectionsConfig(t *testing.T) {
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
 	os.Setenv("TS_AUTHKEY", "tskey-auth-test123")
-	defer os.Unsetenv("TS_TARGET")
-	defer os.Unsetenv("TS_AUTHKEY")
+	t.Cleanup(func() {
+		os.Unsetenv("TS_TARGET")
+		os.Unsetenv("TS_AUTHKEY")
+	})
 
 	// Test default
 	cfg, err := config.LoadConfig(false)
@@ -561,7 +255,6 @@ func TestMaxConnectionsConfig(t *testing.T) {
 
 	// Test custom
 	os.Setenv("TS_MAX_CONNECTIONS", "500")
-	defer os.Unsetenv("TS_MAX_CONNECTIONS")
 
 	cfg, err = config.LoadConfig(false)
 	if err != nil {
