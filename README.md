@@ -35,6 +35,12 @@ TS_TARGET=100.82.151.104:3389       # Host's Tailscale IP + RDP port
 TS_INSTANCE_NAME=office-laptop
 ```
 
+Then run the CLI directly:
+
+```bash
+./ts-bridge
+```
+
 ### 2. Host Setup (Admin)
 
 Ensure Tailscale is running on the target machine and RDP is enabled. The repository includes an automated PowerShell script:
@@ -44,6 +50,8 @@ Ensure Tailscale is running on the target machine and RDP is enabled. The reposi
 cd scripts\host
 PowerShell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
+
+> **Note:** The old `scripts/client/` launchers (`run.sh`, `run.ps1`, `bootstrap.{sh,ps1}`) have been removed. Use the CLI binary directly — it reads `.env` automatically.
 
 ## What You Get
 

@@ -27,7 +27,6 @@ bats scripts/tests/
 
 | File | Coverage |
 |---|---|
-| `run.bats` | Exit-1 on missing `.env` / required vars; happy path with mock binary; arg parsing (`--instance`, `-i`); auto vs manual mode banners |
 | `dev.bats` | Exit-1 with proper error when no `.env`/`.env.example`; bootstrap path; build+run with mock `go` |
 
 ## Mock strategy
@@ -42,8 +41,6 @@ deterministic.
 
 ## What is NOT tested
 
-- `bootstrap.sh` — setup helper, lower-risk surface.
 - `host/setup.ps1` — Windows-only; out of scope for bash tests.
-- Cross-platform behavior on Windows — `run.ps1` is exercised manually by
-  the operator; static parity audit lives at
+- Cross-platform behavior on Windows — static parity audit lives at
   `~/Projects/knowledge/10_projects/ts-bridge/40-runbooks/guide-launcher-parity.md`.

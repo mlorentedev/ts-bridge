@@ -74,42 +74,7 @@ TS_CONTROL_URL=https://vpn.example.com
 
 ## Run
 
-### Linux / macOS
-
 ```bash
-./scripts/client/run.sh
-```
-
-Or with a bootstrap script that generates `.env` for you:
-
-```bash
-./scripts/client/bootstrap.sh \
-  --authkey tskey-auth-kXXXXXX \
-  --target 100.82.151.104:3389 \
-  --instance office-laptop
-```
-
-### Windows
-
-```powershell
-PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1
-```
-
-Or bootstrap:
-
-```powershell
-PowerShell -ExecutionPolicy Bypass -File .\scripts\client\bootstrap.ps1 `
-  -AuthKey tskey-auth-kXXXXXX `
-  -Target 100.82.151.104:3389 `
-  -Instance office-laptop
-```
-
-### Direct binary
-
-```bash
-# Build from source
-go build -o ts-bridge .
-
 # Run with verbose logging
 ./ts-bridge -v
 ```
