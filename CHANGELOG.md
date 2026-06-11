@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.1](https://github.com/mlorentedev/ts-bridge/compare/v1.11.0...v1.11.1) (2026-06-11)
+
+
+### Bug Fixes
+
+* remove stale proxy tests and harden integration tests ([#68](https://github.com/mlorentedev/ts-bridge/issues/68)) ([bb6553e](https://github.com/mlorentedev/ts-bridge/commit/bb6553ea67348bc3ebac2d72a23f258dca292990))
+
 ## [1.11.0](https://github.com/mlorentedev/ts-bridge/compare/v1.10.0...v1.11.0) (2026-06-11)
 
 
