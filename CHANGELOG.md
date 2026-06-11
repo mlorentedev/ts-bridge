@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/mlorentedev/ts-bridge/compare/v1.7.2...v1.8.0) (2026-06-11)
+
+
+### Features
+
+* **cli:** scaffold Cobra CLI structure with version subcommand ([#59](https://github.com/mlorentedev/ts-bridge/issues/59)) ([d20c28a](https://github.com/mlorentedev/ts-bridge/commit/d20c28a9e5b748221d8f62dcba9c0990074676d9))
+
 ## [1.7.2](https://github.com/mlorentedev/ts-bridge/compare/v1.7.1...v1.7.2) (2026-05-18)
 
 
