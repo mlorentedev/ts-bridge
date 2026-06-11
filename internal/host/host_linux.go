@@ -83,17 +83,21 @@ func configureFirewall(ruleName string, port int) error {
 }
 
 func runUFW(port int) error {
+	// #nosec G204 -- ufw is a hardcoded system binary, args are controlled port numbers.
 	return exec.Command("ufw", "route", "allow", "in", "to", "any", "port", fmt.Sprintf("%d", port), "proto", "tcp").Run()
 }
 
 func runIPTables(port int) error {
+	// #nosec G204 -- iptables is a hardcoded system binary, args are controlled port numbers.
 	return exec.Command("iptables", "-A", "INPUT", "-p", "tcp", "--dport", fmt.Sprintf("%d", port), "-j", "ACCEPT").Run()
 }
 
 func checkFirewallRule() bool {
+	// #nosec G204 -- ufw/iptables are hardcoded system binaries.
 	if out, err := exec.Command("ufw", "status").Output(); err == nil && strings.Contains(string(out), "3389") {
 		return true
 	}
+	// #nosec G204 -- iptables is a hardcoded system binary.
 	if out, err := exec.Command("iptables", "-L", "INPUT", "-n").Output(); err == nil && strings.Contains(string(out), "3389") {
 		return true
 	}
