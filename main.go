@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log/slog"
 	"net"
@@ -18,6 +17,7 @@ import (
 
 	"tailscale.com/tsnet"
 
+	"ts-bridge/cmd"
 	"ts-bridge/internal/config"
 	"ts-bridge/internal/health"
 	"ts-bridge/internal/proxy"
@@ -39,27 +39,32 @@ const (
 var logger *slog.Logger
 
 func main() {
-	showVersion := flag.Bool("version", false, "Show version and exit")
-	verbose := flag.Bool("v", false, "Enable verbose logging")
-	flag.BoolVar(verbose, "verbose", false, "Enable verbose logging")
-	flag.Parse()
-
-	if *showVersion {
-		fmt.Printf("ts-bridge %s (%s)\n", version, commit)
-		os.Exit(0)
+	// Backward compat: handle deprecated -version and -v flags.
+	// These are the old flag-based entry points.
+	// Cobra's version subcommand and --verbose flag are the new canonical ways.
+	for i, arg := range os.Args[1:] {
+		if arg == "-version" || arg == "--version" {
+			fmt.Printf("ts-bridge %s (commit %s)\n", version, commit)
+			os.Exit(0)
+		}
+		if arg == "-v" {
+			// Replace -v with --verbose in-place.
+			newArgs := make([]string, 0, len(os.Args))
+			newArgs = append(newArgs, os.Args[:i+1]...)
+			newArgs[i] = "--verbose"
+			newArgs = append(newArgs, os.Args[i+2:]...)
+			os.Args = newArgs
+			break
+		}
 	}
 
-	cfg, err := config.LoadConfig(*verbose)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Config error: %v\n", err)
-		os.Exit(1)
-	}
+	// Wire build-time variables into the cmd package.
+	cmd.BuildVersion = version
+	cmd.BuildCommit = commit
 
-	initLogger(cfg)
-	logger.Info("ts-bridge starting", "version", version, "commit", commit)
-
-	if err := run(cfg); err != nil {
-		logger.Error("fatal error", "error", err)
+	// Let Cobra handle all flag parsing and command dispatch.
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -103,6 +108,7 @@ func ensureStateDir(dir string) error {
 	return nil
 }
 
+//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
 func cleanupEphemeralStateDir(dir string) {
 	for attempt := 1; attempt <= cleanupMaxAttempts; attempt++ {
 		err := os.RemoveAll(dir)
@@ -127,6 +133,7 @@ func cleanupEphemeralStateDir(dir string) {
 	}
 }
 
+//nolint:unused // helper for cleanupEphemeralStateDir
 func isRetryableCleanupError(err error) bool {
 	if err == nil {
 		return false
@@ -140,6 +147,7 @@ func isRetryableCleanupError(err error) bool {
 		strings.Contains(errStr, "device or resource busy")
 }
 
+//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
 func run(cfg config.Config) error {
 	if err := ensureStateDir(cfg.StateDir); err != nil {
 		return err
@@ -193,6 +201,7 @@ func run(cfg config.Config) error {
 	return errAccept
 }
 
+//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
 func initTailscale(cfg config.Config) (*tsnet.Server, error) {
 	var tsnetLogf func(string, ...any)
 	if cfg.Verbose {
@@ -259,6 +268,7 @@ func diagnoseTailscaleInitError(err error) (hint, remediation string) {
 	return "", ""
 }
 
+//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
 func handleShutdown(ctx context.Context, ready *atomic.Bool, listener net.Listener, healthServer *http.Server) {
 	<-ctx.Done()
 	logger.Info("shutting down")
@@ -275,6 +285,7 @@ func handleShutdown(ctx context.Context, ready *atomic.Bool, listener net.Listen
 	}
 }
 
+//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
 func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 	if cfg.DrainTimeout <= 0 {
 		return
@@ -299,6 +310,7 @@ func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 }
 
 
+//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
 func printBanner(cfg config.Config) {
 	fmt.Println()
 	fmt.Println("  +---------------------------------------+")
