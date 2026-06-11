@@ -62,7 +62,7 @@ func init() {
 
 // initFlags holds values parsed from CLI flags for the init command.
 type initFlags struct {
-	AuthKey   string
+	AuthKey   string // #nosec G117 -- CLI flag value, not a secret in source code
 	Target    string
 	Instance  string
 	PortRange string
@@ -247,7 +247,7 @@ func runInitNonInteractive(f initFlags) error {
 func readMaskedInput(prompt string) (string, error) {
 	fmt.Print(prompt)
 
-	// #nosec G104 -- user-provided prompt, not a credential.
+	// #nosec G104,G115 -- user-provided prompt, not a credential; os.Stdin.Fd() is always valid.
 	password, err := term.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
 		return "", err

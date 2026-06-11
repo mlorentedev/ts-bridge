@@ -128,6 +128,7 @@ func tailscaleIPImpl() string {
 // ─── Windows helpers ─────────────────────────────────────────────
 
 func runCmd(name string, args ...string) error {
+	// #nosec G204 -- name is a hardcoded binary path, args are controlled values.
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil

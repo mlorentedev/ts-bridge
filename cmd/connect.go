@@ -11,6 +11,8 @@ import (
 	"ts-bridge/internal/config"
 )
 
+const windowsOS = "windows"
+
 // connectCmd is the "ts-bridge connect" subcommand.
 var connectCmd = &cobra.Command{
 	Use:   "connect [flags]",
@@ -173,7 +175,7 @@ func readAuthKeyFile(path string) (string, error) {
 	}
 
 	// Warn on world-readable permissions (Unix only).
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
+	if runtime.GOOS != windowsOS && info.Mode().Perm()&0077 != 0 {
 		fmt.Fprintf(os.Stderr, "WARNING: auth key file has loose permissions (%04o); consider chmod 600 %s\n",
 			info.Mode().Perm(), absPath)
 	}
