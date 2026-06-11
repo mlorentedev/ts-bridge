@@ -62,6 +62,10 @@ func main() {
 	cmd.BuildVersion = version
 	cmd.BuildCommit = commit
 
+	// Wire the bridge runner and logger into cmd package.
+	cmd.Runner = run
+	cmd.LoggerInit = initLogger
+
 	// Let Cobra handle all flag parsing and command dispatch.
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

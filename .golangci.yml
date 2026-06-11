@@ -35,6 +35,7 @@ issues:
     - path: _test\.go
       linters:
         - gocyclo
+        - goconst
     - linters:
         - unparam
       text: "acceptLoop.*result 0.*is always nil"
