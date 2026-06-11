@@ -106,8 +106,8 @@ ts-bridge/
 ├── main_integration_test.go   # Integration tests
 ├── scripts/
 │   ├── dev.sh                 # Development launcher
-│   ├── client/                # Client launchers (run.sh, run.ps1)
-│   └── host/                  # Host setup (setup.ps1, ts-bridge.service)
+│   ├── host/                  # Host setup (setup.ps1, ts-bridge.service)
+│   └── tests/                 # BATS tests (dev.sh, etc.)
 ├── .github/workflows/
 │   ├── ci.yml                 # Build, test, lint, security
 │   └── release.yml            # Automatic releases

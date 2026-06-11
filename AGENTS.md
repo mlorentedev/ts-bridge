@@ -24,9 +24,8 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `internal/telemetry/` | Atomic counters + read accessors |
 | `specs/` (and `specs/archive/`) | Per-feature SDD folders (proposal + tasks + verification) — see §Workflow Rules |
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
-| `scripts/client/` | Client launchers (`run.sh`, `run.ps1`, `bootstrap.{sh,ps1}`) |
 | `scripts/host/` | Host setup (`setup.ps1`, `ts-bridge.service`) |
-| `scripts/tests/` | BATS tests for the launchers |
+| `scripts/tests/` | BATS tests for dev.sh and other retained scripts |
 | `.github/workflows/ci.yml` | CI: test, lint, security (gosec), shellcheck, bats, build-matrix |
 | `.github/workflows/release.yml` | Automated releases via release-please (PAT-driven) |
 

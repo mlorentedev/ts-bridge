@@ -30,7 +30,7 @@ In ts-bridge v1.5.1+ a structured WARN with `remediation` is emitted alongside t
 1. Confirm at https://login.tailscale.com/admin/settings/keys — check the key's status (Expired / Revoked / Active) and the *Reusable* + *Ephemeral* flags.
 2. If expired/revoked/missing → generate a replacement: **Reusable** ✅, **Ephemeral** ✅, expires in 90 days (max).
 3. Update `TS_AUTHKEY` in `.env` on **every client machine** running ts-bridge — see operational note below.
-4. Re-run `run.ps1` / `run.sh`.
+4. Re-run `./ts-bridge`.
 
 ## Operational note: rotation cadence
 
