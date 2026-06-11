@@ -301,6 +301,11 @@ func shouldEnableAutoInstance() bool {
 	return parseBoolEnv(rawAutoMode)
 }
 
+// parseBoolEnv parses a boolean from an environment variable.
+// Accepted truthy values: "1", "true", "yes", "on" (case-insensitive).
+// While Go's stdlib strconv.ParseBool only accepts "1", "t", "T", "true", "TRUE",
+// "True", "0", "f", "F", "false", "FALSE", "False", we also accept "yes" and "on"
+// because they match common shell/env-variable conventions and user expectations.
 func parseBoolEnv(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "1", "true", "yes", "on":
