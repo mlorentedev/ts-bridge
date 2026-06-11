@@ -11,7 +11,6 @@ setup_fake_project_root() {
     mkdir -p "$FAKE_ROOT/scripts/client"
 
     # Copy the launchers we want to exercise.
-    cp "$REPO_ROOT/scripts/client/run.sh" "$FAKE_ROOT/scripts/client/run.sh"
     cp "$REPO_ROOT/scripts/dev.sh" "$FAKE_ROOT/scripts/dev.sh"
     cp "$REPO_ROOT/.env.example" "$FAKE_ROOT/.env.example"
 
