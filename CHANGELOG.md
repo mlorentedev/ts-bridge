@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/mlorentedev/ts-bridge/compare/v1.10.0...v1.11.0) (2026-06-11)
+
+
+### Features
+
+* implement ts-bridge init interactive setup wizard ([#66](https://github.com/mlorentedev/ts-bridge/issues/66)) ([f3de260](https://github.com/mlorentedev/ts-bridge/commit/f3de260863aede2c155acff25c4368d972fe8c6b))
+
 ## [1.10.0](https://github.com/mlorentedev/ts-bridge/compare/v1.9.0...v1.10.0) (2026-06-11)
 
 
