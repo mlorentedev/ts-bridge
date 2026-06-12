@@ -105,7 +105,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	// Admin check.
 	if !host.IsElevated() {
 		printElevationError()
-		os.Exit(1)
+		return fmt.Errorf("host setup requires elevated privileges")
 	}
 
 	fmt.Println()
@@ -176,7 +176,7 @@ func printWarn(msg string) {
 
 func printElevationError() {
 	switch runtime.GOOS {
-	case "windows":
+	case windowsOS:
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "ERROR: This operation requires Administrator privileges.")
 		fmt.Fprintln(os.Stderr, "")

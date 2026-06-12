@@ -56,6 +56,7 @@ func init() {
 	initCmd.Flags().String("port-range", "", "Port range for auto mode (e.g. 33389-34388)")
 	initCmd.Flags().String("format", "env", "Output format: yaml or env (default: env)")
 	initCmd.Flags().String("config", "", "Output config file path (default: ./ts-bridge.yaml for yaml, ./.env for env)")
+	initCmd.Flags().Bool("force", false, "Overwrite existing config files without prompting")
 
 	rootCmd.AddCommand(initCmd)
 }
@@ -68,6 +69,7 @@ type initFlags struct {
 	PortRange string
 	Format    string
 	Config    string
+	Force     bool
 }
 
 const (
@@ -89,7 +91,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if isInteractive {
 		return runInitInteractive(cmd, f)
 	}
-	return runInitNonInteractive(f)
+	return runInitNonInteractive(cmd, f)
 }
 
 // parseInitFlags reads all init-specific flags into a struct.
@@ -102,6 +104,7 @@ func parseInitFlags(cmd *cobra.Command) (initFlags, error) {
 	f.PortRange, _ = cmd.Flags().GetString("port-range")
 	f.Format, _ = cmd.Flags().GetString("format")
 	f.Config, _ = cmd.Flags().GetString("config")
+	f.Force, _ = cmd.Flags().GetBool("force")
 
 	// Validate format.
 	switch strings.ToLower(f.Format) {
@@ -111,39 +114,31 @@ func parseInitFlags(cmd *cobra.Command) (initFlags, error) {
 		return f, fmt.Errorf("invalid format %q: must be yaml or env", f.Format)
 	}
 
-	// Resolve default config path.
-	if f.Config == "" {
-		if f.Format == formatYAML {
-			f.Config = "ts-bridge.yaml"
-		} else {
-			f.Config = ".env"
-		}
-	}
-
 	return f, nil
 }
 
 // runInitInteractive prompts the user for all required values.
-func runInitInteractive(_ *cobra.Command, f initFlags) error {
-	reader := bufio.NewReader(os.Stdin)
+func runInitInteractive(cmd *cobra.Command, f initFlags) error {
+	in := cmd.InOrStdin()
+	reader := bufio.NewReader(in)
 
 	// Collect all inputs.
 	if err := collectInteractiveInputs(reader, &f); err != nil {
 		return err
 	}
 
-	// Resolve config path based on chosen format.
+	// Resolve config path based on chosen format (only if not explicitly set).
 	if f.Config == "" {
 		f.Config = defaultConfigPath(f.Format)
 	}
 
 	// Write config.
 	if f.Format == formatYAML {
-		if err := writeYAMLConfig(f); err != nil {
+		if err := writeYAMLConfig(cmd, f); err != nil {
 			return err
 		}
 	} else {
-		if err := writeEnvConfig(f); err != nil {
+		if err := writeEnvConfig(cmd, f); err != nil {
 			return err
 		}
 	}
@@ -206,7 +201,12 @@ func collectInteractiveInputs(reader *bufio.Reader, f *initFlags) error {
 }
 
 // runInitNonInteractive writes config silently from flags.
-func runInitNonInteractive(f initFlags) error {
+func runInitNonInteractive(cmd *cobra.Command, f initFlags) error {
+	// Resolve config path based on chosen format (only if not explicitly set).
+	if f.Config == "" {
+		f.Config = defaultConfigPath(f.Format)
+	}
+
 	// Validate inputs.
 	if err := validateAuthKey(f.AuthKey); err != nil {
 		return err
@@ -226,11 +226,11 @@ func runInitNonInteractive(f initFlags) error {
 
 	// Write config.
 	if f.Format == formatYAML {
-		if err := writeYAMLConfig(f); err != nil {
+		if err := writeYAMLConfig(cmd, f); err != nil {
 			return err
 		}
 	} else {
-		if err := writeEnvConfig(f); err != nil {
+		if err := writeEnvConfig(cmd, f); err != nil {
 			return err
 		}
 	}
@@ -359,9 +359,32 @@ func validatePortRange(pr string) error {
 
 // writeYAMLConfig writes non-sensitive settings to a YAML file and
 // the auth key to a .env file (never to YAML).
-func writeYAMLConfig(f initFlags) error {
+func writeYAMLConfig(cmd *cobra.Command, f initFlags) error {
 	yamlPath := f.Config
 	envPath := filepath.Join(filepath.Dir(yamlPath), ".env")
+
+	// Check if YAML file exists - respect --force and interactive prompt.
+	if _, err := os.Stat(yamlPath); err == nil {
+		if !f.Force && !isNonInteractive(cmd) {
+			if !confirmOverwrite(yamlPath, cmd) {
+				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", yamlPath)
+			}
+		} else if !f.Force {
+			return fmt.Errorf("%s already exists (use --force to overwrite)", yamlPath)
+		}
+	}
+
+	// Also guard the sidecar .env file — without this, YAML mode can silently
+	// overwrite TS_AUTHKEY even when --force is false.
+	if _, err := os.Stat(envPath); err == nil {
+		if !f.Force && !isNonInteractive(cmd) {
+			if !confirmOverwrite(envPath, cmd) {
+				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", envPath)
+			}
+		} else if !f.Force {
+			return fmt.Errorf("%s already exists (use --force to overwrite)", envPath)
+		}
+	}
 
 	// Build YAML content.
 	var sb strings.Builder
@@ -400,8 +423,19 @@ func writeYAMLConfig(f initFlags) error {
 }
 
 // writeEnvConfig writes all settings including auth key to a .env file.
-func writeEnvConfig(f initFlags) error {
+func writeEnvConfig(cmd *cobra.Command, f initFlags) error {
 	envPath := f.Config
+
+	// Check if .env file exists - respect --force and interactive prompt.
+	if _, err := os.Stat(envPath); err == nil {
+		if !f.Force && !isNonInteractive(cmd) {
+			if !confirmOverwrite(envPath, cmd) {
+				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", envPath)
+			}
+		} else if !f.Force {
+			return fmt.Errorf("%s already exists (use --force to overwrite)", envPath)
+		}
+	}
 
 	var sb strings.Builder
 	sb.WriteString("# ── Required ─────────────────────────────────────────────────\n")
@@ -500,6 +534,15 @@ func buildEnvContent(authKey, envPath string) string {
 	}
 
 	return sb.String()
+}
+
+// isNonInteractive returns true if stdin is not a terminal (piped input, CI, etc.).
+func isNonInteractive(cmd *cobra.Command) bool {
+	in := cmd.InOrStdin()
+	if f, ok := in.(*os.File); ok {
+		return !term.IsTerminal(int(f.Fd()))
+	}
+	return true
 }
 
 // defaultConfigPath returns the default config filename for the given format.

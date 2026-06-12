@@ -37,22 +37,18 @@ func setupImpl(flags SetupFlags) (SetupResult, error) {
 	}
 
 	// 3. UPnP services.
-	steps = append(steps, SetupStep{Name: "UPnP services"})
-	upnpOk := true
 	for _, svc := range []struct{ name, desc string }{
 		{"SSDPSRV", "SSDP Discovery"},
 		{"upnphost", "UPnP Device Host"},
 	} {
+		steps = append(steps, SetupStep{Name: svc.desc})
 		if err := startService(svc.name); err != nil {
-			steps[len(steps)-1].Message = fmt.Sprintf("%s failed to start", svc.desc)
-			upnpOk = false
+			steps[len(steps)-1].Success = false
+			steps[len(steps)-1].Message = fmt.Sprintf("Failed to start: %v", err)
+		} else {
+			steps[len(steps)-1].Success = true
+			steps[len(steps)-1].Message = "Running"
 		}
-	}
-	if upnpOk {
-		steps[len(steps)-1].Success = true
-		steps[len(steps)-1].Message = "UPnP services active"
-	} else {
-		steps[len(steps)-1].Success = false
 	}
 
 	// 4. Network profile.
