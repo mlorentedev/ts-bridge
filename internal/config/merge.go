@@ -88,6 +88,23 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 		return Config{}, err
 	}
 
+	// Validate flag-level inputs before applying.
+	if flags.DialRetries < 0 {
+		return Config{}, fmt.Errorf("dial retries must be non-negative (0 disables retries), got: %d", flags.DialRetries)
+	}
+
+	// Validate env-level inputs before applying.
+	if v := os.Getenv("TS_DIAL_RETRIES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n < 0 {
+			return Config{}, fmt.Errorf("dial retries must be non-negative (0 disables retries), got: %d", n)
+		}
+	}
+
+	// Validate dial retries is non-negative after all sources are merged.
+	if cfg.DialRetries < 0 {
+		return Config{}, fmt.Errorf("dial retries must be non-negative (0 disables retries), got: %d", cfg.DialRetries)
+	}
+
 	// Apply auto-instance mode.
 	if !flags.ManualMode {
 		applyAutoInstance(&cfg, flags)

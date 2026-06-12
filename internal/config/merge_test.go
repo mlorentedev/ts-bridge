@@ -274,6 +274,73 @@ func TestFlagSetEmptyByDefault(t *testing.T) {
 	}
 }
 
+// --- BUG-006: dial-retries validation tests ---
+
+func TestMergeNegativeDialRetriesFlagRejected(t *testing.T) {
+	os.Setenv("TS_TARGET", "100.64.0.1:3389")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	defer os.Unsetenv("TS_TARGET")
+	defer os.Unsetenv("TS_AUTHKEY")
+
+	_, err := Merge(PartialConfig{}, FlagSet{DialRetries: -1})
+	if err == nil {
+		t.Fatal("expected error for dial-retries -1")
+	}
+	if !strings.Contains(err.Error(), "dial retries") {
+		t.Errorf("error should mention 'dial retries', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "non-negative") {
+		t.Errorf("error should mention 'non-negative', got: %v", err)
+	}
+}
+
+func TestMergeDialRetriesZeroAccepted(t *testing.T) {
+	os.Setenv("TS_TARGET", "100.64.0.1:3389")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	defer os.Unsetenv("TS_TARGET")
+	defer os.Unsetenv("TS_AUTHKEY")
+
+	cfg, err := Merge(PartialConfig{}, FlagSet{DialRetries: 0})
+	if err != nil {
+		t.Fatalf("unexpected error for dial-retries 0: %v", err)
+	}
+	if cfg.DialRetries != 0 {
+		t.Errorf("expected DialRetries 0, got %d", cfg.DialRetries)
+	}
+}
+
+func TestMergeNegativeDialRetriesEnvRejected(t *testing.T) {
+	os.Setenv("TS_TARGET", "100.64.0.1:3389")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	os.Setenv("TS_DIAL_RETRIES", "-1")
+	defer os.Unsetenv("TS_TARGET")
+	defer os.Unsetenv("TS_AUTHKEY")
+	defer os.Unsetenv("TS_DIAL_RETRIES")
+
+	_, err := Merge(PartialConfig{}, FlagSet{})
+	if err == nil {
+		t.Fatal("expected error for TS_DIAL_RETRIES=-1")
+	}
+	if !strings.Contains(err.Error(), "dial retries") {
+		t.Errorf("error should mention 'dial retries', got: %v", err)
+	}
+}
+
+func TestMergeDialRetriesPositiveFlagAccepted(t *testing.T) {
+	os.Setenv("TS_TARGET", "100.64.0.1:3389")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	defer os.Unsetenv("TS_TARGET")
+	defer os.Unsetenv("TS_AUTHKEY")
+
+	cfg, err := Merge(PartialConfig{}, FlagSet{DialRetries: 5})
+	if err != nil {
+		t.Fatalf("unexpected error for dial-retries 5: %v", err)
+	}
+	if cfg.DialRetries != 5 {
+		t.Errorf("expected DialRetries 5, got %d", cfg.DialRetries)
+	}
+}
+
 // --- Helper ---
 
 func mustParseDuration(s string) time.Duration {
