@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -116,8 +115,8 @@ func runWatch(addr string, interval time.Duration, jsonOut bool, cmd *cobra.Comm
 }
 
 func displayOnce(addr string, jsonOut bool, w io.Writer) error {
-	// Clear screen for watch mode — platform-aware (Windows VT check).
-	if !jsonOut && supportsClearScreen(w) {
+	// Clear screen for watch mode — platform-aware (see status_windows.go / status_unix.go).
+	if !jsonOut {
 		fmt.Fprint(w, "\033[2J\033[H")
 	}
 
@@ -223,19 +222,4 @@ func formatBytes(n int64) string {
 // formatDuration formats a duration for display.
 func formatDuration(d time.Duration) string {
 	return d.String()
-}
-
-// supportsClearScreen returns true if the writer supports ANSI escape
-// sequences for screen clearing. On Windows without VT processing,
-// ANSI codes produce garbage output — we skip the clear there.
-func supportsClearScreen(w io.Writer) bool {
-	// Only check os.Stdout (the common case for Cobra commands).
-	// Other writers (bytes.Buffer in tests, io.Discard, etc.) are safe.
-	if w != os.Stdout {
-		return true
-	}
-	// On Windows, VT processing must be enabled for ANSI codes to work.
-	// Checking VT mode requires syscall.GetConsoleMode (Windows-only),
-	// so we conservatively skip the clear on Windows to avoid breaking UX.
-	return runtime.GOOS != "windows"
 }
