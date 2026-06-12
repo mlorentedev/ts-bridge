@@ -6,7 +6,7 @@ created: "2026-06-10"
 tags: [spec, cli, status, health]
 issue: 53
 merged: bb6553e
-pr: 68
+pr: 64
 ---
 
 # CLI-006: Implement ts-bridge status subcommand

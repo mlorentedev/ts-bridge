@@ -19,6 +19,6 @@ created: "2026-06-10"
 
 ## Archive checklist
 
-- [ ] proposal.md frontmatter set to status: archived
-- [ ] Folder moved: specs/CLI-003/ -> specs/archive/CLI-003/
-- [ ] Issue #50 closed with PR link
+- [x] proposal.md frontmatter set to status: archived
+- [x] Folder moved: specs/CLI-003/ -> specs/archive/CLI-003/
+- [x] Issue #50 closed with PR link #66

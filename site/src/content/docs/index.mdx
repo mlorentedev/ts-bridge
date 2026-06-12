@@ -36,6 +36,9 @@ The binary creates an ephemeral Tailscale node that auto-deletes on exit. No sta
   <Card title="Zero Admin" icon="approve-check">
     No admin rights, no kernel module, no installation. Single portable binary built with Go for Linux, Windows, and macOS (amd64 + arm64).
   </Card>
+  <Card title="Professional CLI" icon="terminal">
+    Cobra-based subcommands: `connect`, `init`, `status`, `host`. Full `--help`, autocomplete, consistent UX across platforms.
+  </Card>
   <Card title="Auto Mode" icon="rocket">
     Ephemeral nodes, deterministic ports from instance alias, auto-cleanup on exit. Each run gets a unique hostname and temp state directory. No state left behind.
   </Card>
@@ -44,6 +47,9 @@ The binary creates an ephemeral Tailscale node that auto-deletes on exit. No sta
   </Card>
   <Card title="Firewall Bypass" icon="setting">
     When UDP is blocked, traffic tunnels through DERP relay over HTTPS. End-to-end WireGuard encryption is preserved regardless of transport. Works behind even the most restrictive corporate proxies.
+  </Card>
+  <Card title="Health & Metrics" icon="chart-line">
+    Built-in HTTP health endpoints (`/health/live`, `/health/ready`, `/metrics`) plus `ts-bridge status` for human-readable summaries and continuous watch mode.
   </Card>
 </CardGrid>
 
@@ -63,9 +69,9 @@ TS_TARGET=100.82.151.104:3389
 EOF
 
 # Run
-./scripts/client/run.sh
+./ts-bridge connect
 ```
 
-The banner prints the local port. Connect your RDP client to `127.0.0.1:<LOCAL_PORT>`.
+The binary prints the local port. Connect your RDP client to `127.0.0.1:<LOCAL_PORT>`.
 
 See the [Getting Started](/ts-bridge/getting-started/) guide for platform-specific instructions and the full configuration reference.

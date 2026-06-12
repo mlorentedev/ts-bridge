@@ -67,4 +67,4 @@ Summary:
 
 - [x] proposal.md frontmatter set to status: archived
 - [x] Folder moved: specs/CLI-006/ -> specs/archive/CLI-006/
-- [x] Issue #53 closed with PR link
+- [x] Issue #53 closed with PR link #64
