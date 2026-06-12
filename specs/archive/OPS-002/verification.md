@@ -23,6 +23,6 @@ https://github.com/mlorentedev/ts-bridge/pull/73
 
 ## Archive checklist
 
-- [ ] proposal.md frontmatter set to status: archived
-- [ ] Folder moved: specs/OPS-002/ -> specs/archive/OPS-002/
-- [ ] Issue #55 closed with PR link
+- [x] proposal.md frontmatter set to status: archived
+- [x] Folder moved: specs/OPS-002/ -> specs/archive/OPS-002/
+- [x] Issue #55 closed with PR link #73

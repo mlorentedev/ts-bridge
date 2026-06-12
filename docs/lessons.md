@@ -11,6 +11,10 @@ owner: manu
 
 > Append new lessons in reverse-chronological order. Use a `## YYYY-MM-DD` heading per session, then one bullet per fact — lead with a **bold rule** when the fact generalizes.
 
+## 2026-06-12
+
+- **PR body must include "Closes #N" for auto-close on merge**: When creating a PR that resolves issues, include `Closes #N` (one per line) in the PR body. GitHub auto-closes those issues when the PR merges. Without this, issues stay open even after the fix is merged and must be closed manually. Multiple issues: `Closes #1, Closes #2, Closes #3`. This is standard GitHub convention and should be in every agent's PR creation checklist.
+
 ## 2026-03-13
 
 - **Corporate TLS inspection breaks Headscale TCP passthrough**: `tailscale up --login-server=https://vpn.kubelab.live` hangs with `wsarecv: connection forcibly closed`. Corporate network has transparent TLS inspection (no proxy configured, invisible). Firewall MITMs all TLS, decrypts, validates content is HTTP. Headscale serves Noise protocol (binary, not HTTP) → firewall kills connection. Same VPS IP with standard HTTPS (mlorente.dev via Traefik HTTP routing) works fine. SSH works (not TLS). Alternate ports (8443) also fail. **Diagnostic fingerprint**: same IP, HTTPS site works, VPN fails, no proxy in `netsh winhttp show proxy`, SSH works. **Rule**: Before migrating a device to Headscale, verify the network allows direct TLS without inspection. Corporate DPI blocks Noise protocol. Use Tailscale SaaS from corporate networks (CDN relay IPs are trusted by firewalls).

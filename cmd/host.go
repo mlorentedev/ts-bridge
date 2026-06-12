@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -224,19 +225,29 @@ func printCheckText(r host.CheckResult) {
 }
 
 func printCheckJSON(r host.CheckResult) error {
-	fmt.Println("{")
-	fmt.Printf(`  "tailscale_ip": %q,`, r.TailscaleIP)
-	fmt.Println()
-	fmt.Printf(`  "rdp_port": %d,`, r.RDPPort)
-	fmt.Println()
-	fmt.Printf(`  "rdp_enabled": %t,`, r.RDPEnabled)
-	fmt.Println()
-	fmt.Printf(`  "firewall_ok": %t,`, r.FirewallOK)
-	fmt.Println()
-	fmt.Printf(`  "tailscale_up": %t,`, r.TailscaleUp)
-	fmt.Println()
-	fmt.Printf(`  "platform": %q`, runtime.GOOS)
-	fmt.Println("}")
+	type jsonOutput struct {
+		TailscaleIP string `json:"tailscale_ip"`
+		RDPPort     int    `json:"rdp_port"`
+		RDPEnabled  bool   `json:"rdp_enabled"`
+		FirewallOK  bool   `json:"firewall_ok"`
+		TailscaleUp bool   `json:"tailscale_up"`
+		Platform    string `json:"platform"`
+	}
+
+	out := jsonOutput{
+		TailscaleIP: r.TailscaleIP,
+		RDPPort:     r.RDPPort,
+		RDPEnabled:  r.RDPEnabled,
+		FirewallOK:  r.FirewallOK,
+		TailscaleUp: r.TailscaleUp,
+		Platform:    runtime.GOOS,
+	}
+
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal check result: %w", err)
+	}
+	fmt.Println(string(data))
 	return nil
 }
 

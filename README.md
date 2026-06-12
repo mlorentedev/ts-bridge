@@ -32,23 +32,31 @@ Download the binary from [Releases](https://github.com/mlorentedev/ts-bridge/rel
 ```env
 TS_AUTHKEY=tskey-auth-kXXXXXXXXX   # From Tailscale admin panel
 TS_TARGET=100.82.151.104:3389       # Host's Tailscale IP + RDP port
-TS_INSTANCE_NAME=office-laptop
 ```
 
-Then run the CLI directly:
+Then run the CLI:
 
 ```bash
-./ts-bridge
+# Run with .env config
+ts-bridge connect
+
+# Or run with inline flags (overrides .env)
+ts-bridge connect --target 100.82.151.104:3389 --auth-key tskey-auth-xxxxx
+
+# Interactive setup wizard
+ts-bridge init
 ```
 
 ### 2. Host Setup (Admin)
 
-Ensure Tailscale is running on the target machine and RDP is enabled. The repository includes an automated PowerShell script:
+Ensure Tailscale is running on the target machine and RDP is enabled:
 
 ```powershell
-# Run as Administrator
-cd scripts\host
-PowerShell -ExecutionPolicy Bypass -File .\setup.ps1
+# Configure host for RDP (Windows, requires admin)
+ts-bridge host setup
+
+# Verify host readiness (read-only)
+ts-bridge host check
 ```
 
 > **Note:** The old `scripts/client/` launchers (`run.sh`, `run.ps1`, `bootstrap.{sh,ps1}`) have been removed. Use the CLI binary directly — it reads `.env` automatically.
@@ -58,9 +66,11 @@ PowerShell -ExecutionPolicy Bypass -File .\setup.ps1
 | Feature | Description |
 |---|---|
 | **Zero-Admin VPN** | Connect from heavily restricted laptops without filing an IT ticket. |
+| **Professional CLI** | Cobra-based subcommands: `connect`, `init`, `status`, `host`. Full `--help` and autocomplete. |
 | **Headscale Support** | Compatible with open-source control planes (via `TS_CONTROL_URL`). |
 | **Multi-Instance** | Run multiple bridges concurrently to connect to different machines. |
 | **Ephemeral by Default** | Leaves no trace. The node is automatically removed from the network when the bridge closes. |
+| **Health & Metrics** | Built-in HTTP health endpoints plus `ts-bridge status` for human-readable summaries. |
 
 ## Before/After (The Workflow)
 
@@ -72,9 +82,9 @@ Error: Administrator privilege is required to install or start the Tailscale ser
 
 ### After (ts-bridge)
 ```bash
-> ./ts-bridge
+> ts-bridge connect
   +---------------------------------------+
-  |      TAILSCALE BRIDGE v1.3.0          |
+  |      TAILSCALE BRIDGE                   |
   +---------------------------------------+
   |  Host:   tsb-office-laptop-a1b2c3     |
   |  Local:  127.0.0.1:33389              |
@@ -95,13 +105,17 @@ ssh -p 33389 user@127.0.0.1       # SSH targets
 
 | Variable | Default | Description |
 |---|---|---|
-| `TS_AUTHKEY` | — | **Required**. Tailscale/Headscale auth key. |
+| `TS_AUTHKEY` | — | **Required**. Tailscale/Headscale auth key (`tskey-*` or `hskey-*`). |
 | `TS_TARGET` | — | **Required**. Target IP/hostname and port (e.g., `100.x.x.x:3389`). |
-| `TS_INSTANCE_NAME` | — | Optional alias to derive a stable local port. |
-| `TS_LOCAL_ADDR` | Auto | Force a specific local address (e.g., `127.0.0.1:4000`). |
-| `TS_CONTROL_URL` | — | Set to your Headscale server URL if not using Tailscale SaaS. |
+| `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local bind address. |
+| `TS_CONTROL_URL` | — | Custom control plane URL for Headscale. |
+| `TS_INSTANCE_NAME` | — | Stable alias for deterministic port selection. |
+| `TS_PORT_RANGE` | `33389-34388` | Port range for auto mode. |
+| `TS_HEALTH_ADDR` | — | Enable health/metrics HTTP server. |
+| `TS_VERBOSE` | `false` | Debug logging. |
+| `TS_LOG_FORMAT` | `text` | `text` or `json`. |
 
-For advanced configuration (timeouts, limits, legacy modes), see the [Full Documentation](https://mlorentedev.github.io/ts-bridge/).
+For the full configuration reference (all env vars, YAML config, CLI flags), see the [Configuration](https://mlorentedev.github.io/ts-bridge/configuration/) and [CLI Reference](https://mlorentedev.github.io/ts-bridge/cli-reference/) pages.
 
 ## Architecture
 

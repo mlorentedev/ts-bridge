@@ -124,10 +124,6 @@ func displayOnce(addr string, jsonOut bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	_ = live
-	_ = ready
-	_ = metrics
-
 	if jsonOut {
 		data, _ := json.MarshalIndent(metrics, "", "  ")
 		fmt.Fprintln(w, string(data))

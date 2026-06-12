@@ -3,28 +3,111 @@ title: Getting Started
 description: Download, configure, and run ts-bridge on Linux, Windows, or macOS.
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 ## Download
 
-Grab the latest release from [GitHub Releases](https://github.com/mlorentedev/ts-bridge/releases). Builds are available for six platforms:
+Grab the latest release from [GitHub Releases](https://github.com/mlorentedev/ts-bridge/releases). Builds are available for six platform/architecture combinations.
 
-| OS | Architecture | Archive |
-|----|-------------|---------|
-| Linux | amd64 | `ts-bridge-<version>-linux-amd64.tar.gz` |
-| Linux | arm64 | `ts-bridge-<version>-linux-arm64.tar.gz` |
-| Windows | amd64 | `ts-bridge-<version>-windows-amd64.zip` |
-| Windows | arm64 | `ts-bridge-<version>-windows-arm64.zip` |
-| macOS | amd64 | `ts-bridge-<version>-darwin-amd64.tar.gz` |
-| macOS | arm64 | `ts-bridge-<version>-darwin-arm64.tar.gz` |
+<Tabs>
+  <TabItem label="Linux (amd64)">
 
-Each archive includes the binary, `.env.example`, launch scripts, and the README.
+```bash
+# Download
+curl -LO https://github.com/mlorentedev/ts-bridge/releases/latest/download/ts-bridge-linux-amd64.tar.gz
+
+# Extract
+tar -xzf ts-bridge-linux-amd64.tar.gz
+cd ts-bridge-linux-amd64
+
+# (Optional) Install to PATH
+sudo mv ts-bridge /usr/local/bin/
+```
+
+  </TabItem>
+  <TabItem label="Linux (arm64)">
+
+```bash
+# Download
+curl -LO https://github.com/mlorentedev/ts-bridge/releases/latest/download/ts-bridge-linux-arm64.tar.gz
+
+# Extract
+tar -xzf ts-bridge-linux-arm64.tar.gz
+cd ts-bridge-linux-arm64
+
+# (Optional) Install to PATH
+sudo mv ts-bridge /usr/local/bin/
+```
+
+  </TabItem>
+  <TabItem label="Windows (amd64)">
+
+```powershell
+# Download and extract manually from GitHub Releases
+# OR use PowerShell:
+Invoke-WebRequest -Uri "https://github.com/mlorentedev/ts-bridge/releases/latest/download/ts-bridge-windows-amd64.zip" -OutFile "ts-bridge.zip"
+Expand-Archive -Path "ts-bridge.zip" -DestinationPath "ts-bridge"
+cd ts-bridge
+
+# (Optional) Add to PATH
+$env:Path += ";$pwd"
+```
+
+  </TabItem>
+  <TabItem label="macOS (amd64)">
+
+```bash
+# Download
+curl -LO https://github.com/mlorentedev/ts-bridge/releases/latest/download/ts-bridge-darwin-amd64.tar.gz
+
+# Extract
+tar -xzf ts-bridge-darwin-amd64.tar.gz
+cd ts-bridge-darwin-amd64
+
+# (Optional) Install to PATH
+sudo mv ts-bridge /usr/local/bin/
+```
+
+  </TabItem>
+  <TabItem label="macOS (arm64)">
+
+```bash
+# Download
+curl -LO https://github.com/mlorentedev/ts-bridge/releases/latest/download/ts-bridge-darwin-arm64.tar.gz
+
+# Extract
+tar -xzf ts-bridge-darwin-arm64.tar.gz
+cd ts-bridge-darwin-arm64
+
+# (Optional) Install to PATH
+sudo mv ts-bridge /usr/local/bin/
+```
+
+  </TabItem>
+</Tabs>
 
 ## Configure
 
 Copy `.env.example` to `.env` and set the two required variables:
 
+<Tabs syncKey="os">
+  <TabItem label="Linux / macOS">
+
 ```bash
 cp .env.example .env
 ```
+
+  </TabItem>
+  <TabItem label="Windows">
+
+```powershell
+copy .env.example .env
+```
+
+  </TabItem>
+</Tabs>
+
+Edit the `.env` file with your auth key and target:
 
 ```bash
 # .env
@@ -74,40 +157,94 @@ TS_CONTROL_URL=https://vpn.example.com
 
 ## Run
 
+<Tabs syncKey="os">
+  <TabItem label="Linux / macOS">
+
 ```bash
+# Run with .env config
+./ts-bridge connect
+
 # Run with verbose logging
-./ts-bridge -v
+./ts-bridge connect -v
+
+# Run with all flags inline (overrides .env)
+./ts-bridge connect --target 100.82.151.104:3389 --auth-key tskey-auth-kXXXXXXXXX
+
+# Interactive setup wizard
+./ts-bridge init
 ```
+
+  </TabItem>
+  <TabItem label="Windows">
+
+```powershell
+# Run with .env config
+.\ts-bridge.exe connect
+
+# Run with verbose logging
+.\ts-bridge.exe connect -v
+
+# Run with all flags inline (overrides .env)
+.\ts-bridge.exe connect --target 100.82.151.104:3389 --auth-key tskey-auth-kXXXXXXXXX
+
+# Interactive setup wizard
+.\ts-bridge.exe init
+```
+
+  </TabItem>
+</Tabs>
+
+### Config precedence
+
+1. CLI flags (highest)
+2. Environment variables (`TS_*`)
+3. YAML config file (`--config`)
+4. Built-in defaults (lowest)
 
 ## Connect
 
-Once ts-bridge is running, it prints a banner with the local port:
+Once ts-bridge is running, it prints the local port. Connect your RDP client:
 
-```text
-  +---------------------------------------+
-  |      TAILSCALE BRIDGE v1.4.0          |
-  +---------------------------------------+
-  |  Host:   tsb-office-laptop-a1b2c3-... |
-  |  Local:  127.0.0.1:33412              |
-  |  Target: 100.82.151.104:3389          |
-  +---------------------------------------+
-  Waiting for connections...
-```
-
-Point your RDP client at the local address:
+<Tabs syncKey="os">
+  <TabItem label="Linux">
 
 ```bash
-# Linux (FreeRDP)
-xfreerdp /v:127.0.0.1:33412 /u:Username /cert:ignore
+# FreeRDP
+xfreerdp /v:127.0.0.1:<LOCAL_PORT> /u:Username /cert:ignore
 
-# Windows (built-in)
-mstsc /v:127.0.0.1:33412
+# Remmina
+remmina --new-protocol RDP --server 127.0.0.1:<LOCAL_PORT>
 
-# macOS (Microsoft Remote Desktop)
-# Add PC -> 127.0.0.1:33412
+# SSH
+ssh -p <LOCAL_PORT> user@127.0.0.1
 ```
 
-For SSH targets, use any SSH client:
+  </TabItem>
+  <TabItem label="Windows">
+
+```batch
+:: Built-in Remote Desktop Connection
+mstsc /v:127.0.0.1:<LOCAL_PORT>
+
+:: PowerShell
+Start-Process mstsc -ArgumentList "/v:127.0.0.1:<LOCAL_PORT>"
+```
+
+  </TabItem>
+  <TabItem label="macOS">
+
+```bash
+# Microsoft Remote Desktop
+# Open app → Add PC → 127.0.0.1:<LOCAL_PORT>
+
+# SSH
+ssh -p <LOCAL_PORT> user@127.0.0.1
+```
+
+  </TabItem>
+</Tabs>
+
+For SSH targets, use any SSH client on any platform:
 
 ```bash
 ssh -p <LOCAL_PORT> user@127.0.0.1
@@ -118,21 +255,114 @@ ssh -p <LOCAL_PORT> user@127.0.0.1
 Set `TS_HEALTH_ADDR` to enable the HTTP health and metrics server:
 
 ```bash
-TS_HEALTH_ADDR=127.0.0.1:8080
+TS_HEALTH_ADDR=127.0.0.1:9090
 ```
 
 ```bash
-curl http://127.0.0.1:8080/health/live   # {"status":"ok"} -- process alive
-curl http://127.0.0.1:8080/health/ready  # {"status":"ok"} -- tsnet tunnel up
-curl http://127.0.0.1:8080/metrics       # Connection stats (JSON)
+curl http://127.0.0.1:9090/health/live   # {"status":"ok"} -- process alive
+curl http://127.0.0.1:9090/health/ready  # {"status":"ok"} -- tsnet tunnel up
+curl http://127.0.0.1:9090/metrics       # Connection stats (JSON)
+```
+
+Or use the `status` subcommand for a human-readable summary:
+
+```bash
+# One-shot summary
+ts-bridge status
+
+# Continuous watch
+ts-bridge status --watch --interval 2s
+
+# Raw JSON metrics
+ts-bridge status --json
 ```
 
 ## Host setup
 
-The machine you connect **to** (the host) needs Tailscale installed natively with admin rights. The host requires:
+The machine you connect **to** (the host) needs Tailscale installed natively with admin rights.
 
+<Tabs syncKey="os">
+  <TabItem label="Windows">
+
+### Requirements
 - Windows Pro, Enterprise, Education, or Server (Home edition cannot host RDP)
-- Remote Desktop enabled in Settings > System > Remote Desktop
-- Firewall rule allowing TCP 3389 from the Tailscale subnet (`100.64.0.0/10`)
+- Remote Desktop enabled in Settings → System → Remote Desktop
+- Administrator privileges
 
-The included `scripts/host/setup.ps1` automates this on Windows. Run it as Administrator.
+### Automated setup
+
+```powershell
+# Run as Administrator
+ts-bridge host setup
+```
+
+This configures:
+1. Tailscale unattended mode (`tailscale up --unattended`)
+2. Tailscale service to auto-start
+3. UPnP services (SSDP, UPnP Device Host)
+4. Tailscale network profile set to Private
+5. RDP enabled via registry
+6. Windows Firewall rule for RDP on TCP 3389
+7. (Optional) Power settings — sleep disabled
+
+### Verify
+
+```powershell
+# Read-only check
+ts-bridge host check
+
+# JSON output for automation
+ts-bridge host check --json
+```
+
+### Custom firewall rule
+
+```powershell
+ts-bridge host setup --firewall-rule "MyCustomRDPRule"
+```
+
+  </TabItem>
+  <TabItem label="Linux">
+
+### Requirements
+- `xrdp` installed (`sudo apt install xrdp`)
+- `ufw` or `iptables` for firewall
+- Root/sudo privileges
+
+### Automated setup
+
+```bash
+sudo ts-bridge host setup
+```
+
+This configures:
+1. Detects `xrdp` installation
+2. Opens firewall for RDP port (3389) via `ufw` or `iptables`
+3. Prints the Tailscale IP for client configuration
+
+### Verify
+
+```bash
+# Read-only check
+ts-bridge host check
+
+# JSON output for automation
+ts-bridge host check --json
+```
+
+  </TabItem>
+  <TabItem label="macOS">
+
+Host setup is **not applicable** on macOS. macOS machines act as clients only — use `ts-bridge connect` to connect to a remote Windows or Linux host.
+
+  </TabItem>
+</Tabs>
+
+### Manual host setup (Windows)
+
+For hosts that cannot run the binary, use the PowerShell setup script:
+
+```powershell
+# Run as Administrator
+.\scripts\host\setup.ps1
+```
