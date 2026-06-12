@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 )
 
-// TestRunHostSetupReturnsErrorNotExit verifies that the elevation check
+// TestRunHostSetupElevationErrorReturnsNotExits verifies that the elevation check
 // in runHostSetup returns an error instead of calling os.Exit(1).
 // This is critical because os.Exit(1) inside a RunE handler bypasses
 // Cobra's deferred cleanup, leaving goroutines and file handles leaked.
@@ -59,19 +60,5 @@ func TestRunHostSetupElevationErrorReturnsNotExits(t *testing.T) {
 // errNotElevated simulates the "not elevated" error path.
 // It mirrors what runHostSetup returns when host.IsElevated() is false.
 func errNotElevated() error {
-	return errElevation
-}
-
-var errElevation = &elevationError{}
-
-// elevationError is a sentinel error for the elevation check.
-// It provides a clear, user-facing message.
-type elevationError struct{}
-
-func (e *elevationError) Error() string {
-	return "host setup requires elevated privileges"
-}
-
-func (e *elevationError) Unwrap() error {
-	return nil
+	return fmt.Errorf("host setup requires elevated privileges")
 }
