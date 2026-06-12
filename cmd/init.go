@@ -89,9 +89,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	isInteractive := f.AuthKey == "" || f.Target == ""
 
 	if isInteractive {
-		return runInitInteractive(f)
+		return runInitInteractive(cmd, f)
 	}
-	return runInitNonInteractive(f)
+	return runInitNonInteractive(cmd, f)
 }
 
 // parseInitFlags reads all init-specific flags into a struct.
@@ -114,39 +114,31 @@ func parseInitFlags(cmd *cobra.Command) (initFlags, error) {
 		return f, fmt.Errorf("invalid format %q: must be yaml or env", f.Format)
 	}
 
-	// Resolve default config path.
-	if f.Config == "" {
-		if f.Format == formatYAML {
-			f.Config = "ts-bridge.yaml"
-		} else {
-			f.Config = ".env"
-		}
-	}
-
 	return f, nil
 }
 
 // runInitInteractive prompts the user for all required values.
-func runInitInteractive(f initFlags) error {
-	reader := bufio.NewReader(os.Stdin)
+func runInitInteractive(cmd *cobra.Command, f initFlags) error {
+	in := cmd.InOrStdin()
+	reader := bufio.NewReader(in)
 
 	// Collect all inputs.
 	if err := collectInteractiveInputs(reader, &f); err != nil {
 		return err
 	}
 
-	// Resolve config path based on chosen format.
+	// Resolve config path based on chosen format (only if not explicitly set).
 	if f.Config == "" {
 		f.Config = defaultConfigPath(f.Format)
 	}
 
 	// Write config.
 	if f.Format == formatYAML {
-		if err := writeYAMLConfig(f); err != nil {
+		if err := writeYAMLConfig(cmd, f); err != nil {
 			return err
 		}
 	} else {
-		if err := writeEnvConfig(f); err != nil {
+		if err := writeEnvConfig(cmd, f); err != nil {
 			return err
 		}
 	}
@@ -209,7 +201,12 @@ func collectInteractiveInputs(reader *bufio.Reader, f *initFlags) error {
 }
 
 // runInitNonInteractive writes config silently from flags.
-func runInitNonInteractive(f initFlags) error {
+func runInitNonInteractive(cmd *cobra.Command, f initFlags) error {
+	// Resolve config path based on chosen format (only if not explicitly set).
+	if f.Config == "" {
+		f.Config = defaultConfigPath(f.Format)
+	}
+
 	// Validate inputs.
 	if err := validateAuthKey(f.AuthKey); err != nil {
 		return err
@@ -229,11 +226,11 @@ func runInitNonInteractive(f initFlags) error {
 
 	// Write config.
 	if f.Format == formatYAML {
-		if err := writeYAMLConfig(f); err != nil {
+		if err := writeYAMLConfig(cmd, f); err != nil {
 			return err
 		}
 	} else {
-		if err := writeEnvConfig(f); err != nil {
+		if err := writeEnvConfig(cmd, f); err != nil {
 			return err
 		}
 	}
@@ -362,14 +359,14 @@ func validatePortRange(pr string) error {
 
 // writeYAMLConfig writes non-sensitive settings to a YAML file and
 // the auth key to a .env file (never to YAML).
-func writeYAMLConfig(f initFlags) error {
+func writeYAMLConfig(cmd *cobra.Command, f initFlags) error {
 	yamlPath := f.Config
 	envPath := filepath.Join(filepath.Dir(yamlPath), ".env")
 
 	// Check if YAML file exists - respect --force and interactive prompt.
 	if _, err := os.Stat(yamlPath); err == nil {
-		if !f.Force && !isNonInteractive() {
-			if !confirmOverwrite(yamlPath) {
+		if !f.Force && !isNonInteractive(cmd) {
+			if !confirmOverwrite(yamlPath, cmd) {
 				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", yamlPath)
 			}
 		} else if !f.Force {
@@ -414,13 +411,13 @@ func writeYAMLConfig(f initFlags) error {
 }
 
 // writeEnvConfig writes all settings including auth key to a .env file.
-func writeEnvConfig(f initFlags) error {
+func writeEnvConfig(cmd *cobra.Command, f initFlags) error {
 	envPath := f.Config
 
 	// Check if .env file exists - respect --force and interactive prompt.
 	if _, err := os.Stat(envPath); err == nil {
-		if !f.Force && !isNonInteractive() {
-			if !confirmOverwrite(envPath) {
+		if !f.Force && !isNonInteractive(cmd) {
+			if !confirmOverwrite(envPath, cmd) {
 				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", envPath)
 			}
 		} else if !f.Force {
@@ -528,8 +525,12 @@ func buildEnvContent(authKey, envPath string) string {
 }
 
 // isNonInteractive returns true if stdin is not a terminal (piped input, CI, etc.).
-func isNonInteractive() bool {
-	return !term.IsTerminal(int(os.Stdin.Fd()))
+func isNonInteractive(cmd *cobra.Command) bool {
+	in := cmd.InOrStdin()
+	if f, ok := in.(*os.File); ok {
+		return !term.IsTerminal(int(f.Fd()))
+	}
+	return true
 }
 
 // defaultConfigPath returns the default config filename for the given format.
