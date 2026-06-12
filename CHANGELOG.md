@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.3](https://github.com/mlorentedev/ts-bridge/compare/v1.12.2...v1.12.3) (2026-06-12)
+
+
+### Bug Fixes
+
+* batch bug fixes — BUG-011 through BUG-019 ([#122](https://github.com/mlorentedev/ts-bridge/issues/122)) ([932805d](https://github.com/mlorentedev/ts-bridge/commit/932805d3daa5d3f5f4160c92db984af142887d32))
+
 ## [1.12.2](https://github.com/mlorentedev/ts-bridge/compare/v1.12.1...v1.12.2) (2026-06-12)
 
 
