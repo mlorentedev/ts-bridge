@@ -105,7 +105,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	// Admin check.
 	if !host.IsElevated() {
 		printElevationError()
-		os.Exit(1)
+		return fmt.Errorf("host setup requires elevated privileges")
 	}
 
 	fmt.Println()
