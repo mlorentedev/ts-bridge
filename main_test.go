@@ -105,7 +105,7 @@ func TestHandleShutdown_ClosesListenerAndHealthServer(t *testing.T) {
 	healthLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	healthServer := health.StartServer(listener.Addr().String(), &ready, healthLogger)
 
-	// Create an already-cancelled context to trigger shutdown immediately.
+	// Create an already-canceled context to trigger shutdown immediately.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -333,6 +333,7 @@ func TestCleanupEphemeralStateDir_RemovesDir(t *testing.T) {
 }
 
 func TestCleanupEphemeralStateDir_NonexistentDirNoError(t *testing.T) {
+	t.Helper()
 	initLogger(config.Config{LogFormat: "text"})
 
 	// Should not panic or error on nonexistent dir.

@@ -89,6 +89,7 @@ Read it once at session start and apply its §Spec-Driven Development +
 
 - Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`)
 - GitHub Flow — all work via feature branches + PRs against `master`
+- **PR body must include `Closes #N`** for each issue the PR resolves. One per line: `Closes #1, Closes #2`. Without this, issues don't auto-close on merge.
 - TDD — write failing tests first
 - Table-driven tests with `t.Run` subtests
 - Functions < 40 lines, cyclomatic complexity < 10
