@@ -76,35 +76,38 @@ TS_CONTROL_URL=https://vpn.example.com
 
 ```bash
 # Run with verbose logging
-./ts-bridge -v
+ts-bridge connect -v
+
+# Run with all flags inline (overrides .env)
+ts-bridge connect --target 100.82.151.104:3389 --auth-key tskey-auth-kXXXXXXXXX
+
+# Run with YAML config file
+ts-bridge connect --config ts-bridge.yaml
+
+# Run with auth key from file (secure, not visible in process list)
+ts-bridge connect --auth-key-file /run/secrets/authkey
 ```
+
+### Config precedence
+
+1. CLI flags (highest)
+2. Environment variables (`TS_*`)
+3. YAML config file (`--config`)
+4. Built-in defaults (lowest)
 
 ## Connect
 
-Once ts-bridge is running, it prints a banner with the local port:
-
-```text
-  +---------------------------------------+
-  |      TAILSCALE BRIDGE v1.4.0          |
-  +---------------------------------------+
-  |  Host:   tsb-office-laptop-a1b2c3-... |
-  |  Local:  127.0.0.1:33412              |
-  |  Target: 100.82.151.104:3389          |
-  +---------------------------------------+
-  Waiting for connections...
-```
-
-Point your RDP client at the local address:
+Once ts-bridge is running, it prints the local port. Connect your RDP client:
 
 ```bash
 # Linux (FreeRDP)
-xfreerdp /v:127.0.0.1:33412 /u:Username /cert:ignore
+xfreerdp /v:127.0.0.1:<LOCAL_PORT> /u:Username /cert:ignore
 
 # Windows (built-in)
-mstsc /v:127.0.0.1:33412
+mstsc /v:127.0.0.1:<LOCAL_PORT>
 
 # macOS (Microsoft Remote Desktop)
-# Add PC -> 127.0.0.1:33412
+# Add PC -> 127.0.0.1:<LOCAL_PORT>
 ```
 
 For SSH targets, use any SSH client:
@@ -118,13 +121,26 @@ ssh -p <LOCAL_PORT> user@127.0.0.1
 Set `TS_HEALTH_ADDR` to enable the HTTP health and metrics server:
 
 ```bash
-TS_HEALTH_ADDR=127.0.0.1:8080
+TS_HEALTH_ADDR=127.0.0.1:9090
 ```
 
 ```bash
-curl http://127.0.0.1:8080/health/live   # {"status":"ok"} -- process alive
-curl http://127.0.0.1:8080/health/ready  # {"status":"ok"} -- tsnet tunnel up
-curl http://127.0.0.1:8080/metrics       # Connection stats (JSON)
+curl http://127.0.0.1:9090/health/live   # {"status":"ok"} -- process alive
+curl http://127.0.0.1:9090/health/ready  # {"status":"ok"} -- tsnet tunnel up
+curl http://127.0.0.1:9090/metrics       # Connection stats (JSON)
+```
+
+Or use the `status` subcommand for a human-readable summary:
+
+```bash
+# One-shot summary
+ts-bridge status
+
+# Continuous watch
+ts-bridge status --watch --interval 2s
+
+# Raw JSON metrics
+ts-bridge status --json
 ```
 
 ## Host setup
@@ -135,4 +151,17 @@ The machine you connect **to** (the host) needs Tailscale installed natively wit
 - Remote Desktop enabled in Settings > System > Remote Desktop
 - Firewall rule allowing TCP 3389 from the Tailscale subnet (`100.64.0.0/10`)
 
-The included `scripts/host/setup.ps1` automates this on Windows. Run it as Administrator.
+Use the `host setup` subcommand to automate configuration:
+
+```bash
+# Configure host for RDP (Windows, requires admin)
+ts-bridge host setup
+
+# Verify host readiness (read-only check)
+ts-bridge host check
+
+# JSON output for scripts
+ts-bridge host check --json
+```
+
+For manual setup on Windows, run `scripts/host/setup.ps1` as Administrator.
