@@ -274,6 +274,87 @@ func TestFlagSetEmptyByDefault(t *testing.T) {
 	}
 }
 
+// --- BUG-006: dial-retries validation tests ---
+
+func TestMergeDialRetriesValidation(t *testing.T) {
+	tests := []struct {
+		name            string
+		envDialRetries  string
+		flagDialRetries int
+		wantErr         bool
+		wantRetries     int
+		errContains     string
+	}{
+		{
+			name:            "negative flag rejected",
+			flagDialRetries: -1,
+			wantErr:         true,
+			errContains:     "dial retries must be non-negative",
+		},
+		{
+			name:            "zero flag accepted",
+			flagDialRetries: 0,
+			wantErr:         false,
+			wantRetries:     0,
+		},
+		{
+			name:            "positive flag accepted",
+			flagDialRetries: 5,
+			wantErr:         false,
+			wantRetries:     5,
+		},
+		{
+			name:           "negative env rejected",
+			envDialRetries: "-1",
+			wantErr:        true,
+			errContains:    "dial retries must be non-negative",
+		},
+		{
+			name:           "negative env with flag 0 rejected",
+			envDialRetries: "-5",
+			flagDialRetries: 0,
+			wantErr:        true,
+			errContains:    "dial retries must be non-negative",
+		},
+		{
+			name:            "flag overrides env (flag 3, env 10)",
+			envDialRetries:  "10",
+			flagDialRetries: 3,
+			wantErr:         false,
+			wantRetries:     3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Setenv("TS_TARGET", "100.64.0.1:3389")
+			os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+			defer os.Unsetenv("TS_TARGET")
+			defer os.Unsetenv("TS_AUTHKEY")
+
+			if tt.envDialRetries != "" {
+				os.Setenv("TS_DIAL_RETRIES", tt.envDialRetries)
+				defer os.Unsetenv("TS_DIAL_RETRIES")
+			}
+
+			cfg, err := Merge(PartialConfig{}, FlagSet{DialRetries: tt.flagDialRetries})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Merge() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error should contain %q, got: %v", tt.errContains, err)
+				}
+				return
+			}
+			if err == nil && cfg.DialRetries != tt.wantRetries {
+				t.Errorf("expected DialRetries %d, got %d", tt.wantRetries, cfg.DialRetries)
+			}
+		})
+	}
+}
+
 // --- Helper ---
 
 func mustParseDuration(s string) time.Duration {

@@ -60,40 +60,68 @@ type FlagSet struct {
 // Merge applies the precedence chain: flags > env > yaml > defaults.
 // Returns a fully-populated Config.
 func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
-	// Reject auth key in YAML — it must come from env or --auth-key-file.
-	if yamlCfg.AuthKey != "" {
-		return Config{}, fmt.Errorf("auth key in YAML config is not allowed; use TS_AUTHKEY env var or --auth-key-file flag")
+	if err := validateYAMLAuthKey(yamlCfg); err != nil {
+		return Config{}, err
 	}
 
-	// Build config from lowest precedence to highest:
-	// defaults → YAML → env → flags
 	cfg := defaults()
 	applyYAML(&cfg, yamlCfg)
 	applyEnv(&cfg)
 	applyFlags(&cfg, flags)
 
-	// Validate required fields.
-	if cfg.Target == "" {
-		return Config{}, fmt.Errorf("target is required (provide --target flag, TS_TARGET env var, or YAML config)")
+	if err := validateRequiredFields(cfg); err != nil {
+		return Config{}, err
 	}
-	if cfg.AuthKey == "" {
-		return Config{}, fmt.Errorf("auth key is required (provide TS_AUTHKEY env var or --auth-key-file flag)")
-	}
-	if !strings.HasPrefix(cfg.AuthKey, "tskey-") && !strings.HasPrefix(cfg.AuthKey, "hskey-") {
-		return Config{}, fmt.Errorf("auth key invalid format (must start with tskey- or hskey-)")
-	}
-
-	// Validate target format.
 	if err := validateTarget(cfg.Target); err != nil {
 		return Config{}, err
 	}
+	if err := validateDialRetries(flags, cfg); err != nil {
+		return Config{}, err
+	}
 
-	// Apply auto-instance mode.
 	if !flags.ManualMode {
 		applyAutoInstance(&cfg, flags)
 	}
 
 	return cfg, nil
+}
+
+// validateYAMLAuthKey rejects auth key in YAML config.
+func validateYAMLAuthKey(yamlCfg PartialConfig) error {
+	if yamlCfg.AuthKey != "" {
+		return fmt.Errorf("auth key in YAML config is not allowed; use TS_AUTHKEY env var or --auth-key-file flag")
+	}
+	return nil
+}
+
+// validateRequiredFields checks that required config fields are present and valid.
+func validateRequiredFields(cfg Config) error {
+	if cfg.Target == "" {
+		return fmt.Errorf("target is required (provide --target flag, TS_TARGET env var, or YAML config)")
+	}
+	if cfg.AuthKey == "" {
+		return fmt.Errorf("auth key is required (provide TS_AUTHKEY env var or --auth-key-file flag)")
+	}
+	if !strings.HasPrefix(cfg.AuthKey, "tskey-") && !strings.HasPrefix(cfg.AuthKey, "hskey-") {
+		return fmt.Errorf("auth key invalid format (must start with tskey- or hskey-)")
+	}
+	return nil
+}
+
+// validateDialRetries checks dial retries across all input sources.
+func validateDialRetries(flags FlagSet, cfg Config) error {
+	if flags.DialRetries < 0 {
+		return fmt.Errorf("dial retries must be non-negative (0 disables retries), got: %d", flags.DialRetries)
+	}
+	if v := os.Getenv("TS_DIAL_RETRIES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n < 0 {
+			return fmt.Errorf("dial retries must be non-negative (0 disables retries), got: %d", n)
+		}
+	}
+	if cfg.DialRetries < 0 {
+		return fmt.Errorf("dial retries must be non-negative (0 disables retries), got: %d", cfg.DialRetries)
+	}
+	return nil
 }
 
 // defaults returns a Config with built-in defaults.
