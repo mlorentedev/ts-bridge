@@ -85,6 +85,25 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	// Collect CLI flag values.
 	flags := collectFlags(cmd)
 
+	// Detect if --auth-key was explicitly provided (before we potentially overwrite it).
+	authKeyFlagProvided := cmd.Flags().Changed("auth-key")
+
+	// Resolve auth key source before Merge validation.
+	// --auth-key-file takes precedence over --auth-key.
+	if flags.AuthKeyFile != "" {
+		key, err := readAuthKeyFile(flags.AuthKeyFile)
+		if err != nil {
+			return fmt.Errorf("read auth key file: %w", err)
+		}
+		flags.AuthKey = key
+	}
+
+	// Warn about --auth-key visibility if it was explicitly provided
+	// (even when --auth-key-file also provided and takes precedence).
+	if authKeyFlagProvided {
+		fmt.Fprintln(os.Stderr, "WARNING: --auth-key is visible in the process list; use --auth-key-file instead")
+	}
+
 	// Load YAML config (optional, not an error if missing).
 	yamlCfg, err := config.LoadYAMLConfig(flags.Config)
 	if err != nil {
@@ -95,20 +114,6 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Merge(yamlCfg, flags)
 	if err != nil {
 		return err
-	}
-
-	// Handle --auth-key-file: read key from file.
-	if flags.AuthKeyFile != "" {
-		key, err := readAuthKeyFile(flags.AuthKeyFile)
-		if err != nil {
-			return fmt.Errorf("read auth key file: %w", err)
-		}
-		cfg.AuthKey = key
-	}
-
-	// Handle --auth-key: log warning about process list visibility.
-	if flags.AuthKey != "" {
-		fmt.Fprintln(os.Stderr, "WARNING: --auth-key is visible in the process list; use --auth-key-file instead")
 	}
 
 	// --reset is no-op in auto mode (ephemeral state by design).
