@@ -4,7 +4,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 
 ## Tech Stack
 
-- **Language:** Go 1.25+
+- **Language:** Go 1.26+
 - **Key dependency:** `tailscale.com/tsnet` v1.80.0
 - **Architecture:** Single binary, multi-package — `main.go` (~270 lines orchestrator) + four `internal/` packages (see ADR-007).
 - **Config:** Environment variables only (no config files) — see `.env.example`

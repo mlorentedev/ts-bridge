@@ -4,6 +4,7 @@ type: runbook
 status: active
 tags: [operations, rdp, windows, host, tailscale]
 created: "2026-02-26"
+updated: "2026-06-12"
 owner: manu
 ---
 
@@ -19,11 +20,36 @@ owner: manu
 | Tailscale | Installed and connected to the tailnet |
 | Admin rights | For initial setup only |
 
-## Automated Setup
+## Automated Setup (Recommended)
 
-Run `scripts/host/setup.ps1` as Administrator. It handles steps 1–5 automatically.
+The ts-bridge CLI automates all steps. Run as Administrator:
+
+```powershell
+# Configure everything: RDP, firewall, Tailscale, power settings
+ts-bridge host setup
+# Verify readiness (read-only)
+ts-bridge host check
+```
+
+The `setup` subcommand handles:
+1. Tailscale unattended mode (`tailscale up --unattended`)
+2. Tailscale service auto-start
+3. UPnP services (SSDP, UPnP Device Host)
+4. Network profile set to Private
+5. RDP enabled via registry
+6. Firewall rule for RDP on TCP port
+7. (Optional) Sleep disabled
+
+For manual setup or hosts that cannot run the binary, use the PowerShell script:
+
+```powershell
+# Run as Administrator
+.\scripts\host\setup.ps1
+```
 
 ## Manual Steps
+
+If you prefer to configure each component individually:
 
 ### 1. Enable Remote Desktop
 
