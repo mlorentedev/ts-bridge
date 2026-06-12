@@ -85,6 +85,9 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	// Collect CLI flag values.
 	flags := collectFlags(cmd)
 
+	// Detect if --auth-key was explicitly provided (before we potentially overwrite it).
+	authKeyFlagProvided := cmd.Flags().Changed("auth-key")
+
 	// Resolve auth key source before Merge validation.
 	// --auth-key-file takes precedence over --auth-key.
 	if flags.AuthKeyFile != "" {
@@ -93,8 +96,11 @@ func runConnect(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("read auth key file: %w", err)
 		}
 		flags.AuthKey = key
-	} else if flags.AuthKey != "" {
-		// Log warning about process list visibility for --auth-key.
+	}
+
+	// Warn about --auth-key visibility if it was explicitly provided
+	// (even when --auth-key-file also provided and takes precedence).
+	if authKeyFlagProvided {
 		fmt.Fprintln(os.Stderr, "WARNING: --auth-key is visible in the process list; use --auth-key-file instead")
 	}
 
