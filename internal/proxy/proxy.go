@@ -213,7 +213,14 @@ func halfCloseWrite(c net.Conn) bool {
 // after both directions complete.
 func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger) (tx, rx int64) {
 	copyConn := func(dst, src net.Conn, direction string, counter *int64) {
-		bufPtr := bufferPool.Get().(*[]byte)
+		bufPtrRaw := bufferPool.Get()
+		bufPtr, ok := bufPtrRaw.(*[]byte)
+		if !ok {
+			// Should never happen — bufferPool.New always returns *[]byte.
+			// Fallback: allocate a fresh buffer to avoid panicking.
+			b := make([]byte, bufferSize)
+			bufPtr = &b
+		}
 		defer bufferPool.Put(bufPtr)
 
 		n, err := io.CopyBuffer(dst, src, *bufPtr)

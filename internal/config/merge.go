@@ -206,30 +206,36 @@ func applyEnvString(dst *string, key string) {
 
 func applyEnvDuration(dst *time.Duration, key string, validate func(time.Duration) bool) {
 	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			if validate == nil || validate(d) {
-				*dst = d
-			}
+		if d, err := time.ParseDuration(v); err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: %s=%q is not a valid duration: %v\n", key, v, err)
+		} else if validate != nil && !validate(d) {
+			fmt.Fprintf(os.Stderr, "WARNING: %s=%v failed validation\n", key, d)
+		} else {
+			*dst = d
 		}
 	}
 }
 
 func applyEnvInt(dst *int, key string, validate func(int) bool) {
 	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			if validate == nil || validate(n) {
-				*dst = n
-			}
+		if n, err := strconv.Atoi(v); err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: %s=%q is not a valid integer: %v\n", key, v, err)
+		} else if validate != nil && !validate(n) {
+			fmt.Fprintf(os.Stderr, "WARNING: %s=%d failed validation\n", key, n)
+		} else {
+			*dst = n
 		}
 	}
 }
 
 func applyEnvInt64(dst *int64, key string, validate func(int64) bool) {
 	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-			if validate == nil || validate(n) {
-				*dst = n
-			}
+		if n, err := strconv.ParseInt(v, 10, 64); err != nil {
+			fmt.Fprintf(os.Stderr, "WARNING: %s=%q is not a valid integer: %v\n", key, v, err)
+		} else if validate != nil && !validate(n) {
+			fmt.Fprintf(os.Stderr, "WARNING: %s=%d failed validation\n", key, n)
+		} else {
+			*dst = n
 		}
 	}
 }
