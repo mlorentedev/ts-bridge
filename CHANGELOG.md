@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.1](https://github.com/mlorentedev/ts-bridge/compare/v1.12.0...v1.12.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* HTTP body leak in fetchHealth + .env merge in writeYAMLConfig ([1983122](https://github.com/mlorentedev/ts-bridge/commit/1983122d3e3bdb651ed824359681d68cf4458d92))
+
 ## [1.12.0](https://github.com/mlorentedev/ts-bridge/compare/v1.11.1...v1.12.0) (2026-06-11)
 
 
