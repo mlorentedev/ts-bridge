@@ -28,5 +28,5 @@ created: "2026-06-10"
 
 ## Closing
 
-- [ ] PR < 250 lines diff (excluding tests)
-- [ ] PR references issue #50
+- [x] PR #66 merged (diff < 250 lines)
+- [x] PR references issue #50

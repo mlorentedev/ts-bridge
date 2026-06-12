@@ -1,7 +1,7 @@
 ---
 id: "OPS-002"
 type: spec
-status: proposed
+status: archived
 created: "2026-06-10"
 tags: [spec, ops, cleanup, scripts]
 issue: 55

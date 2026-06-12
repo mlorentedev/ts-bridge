@@ -26,5 +26,5 @@ created: "2026-06-10"
 
 ## Closing
 
-- [ ] PR < 150 lines diff (excluding tests)
-- [ ] PR references issue #53
+- [x] PR #64 merged (diff 222 lines production code)
+- [x] PR references issue #53
