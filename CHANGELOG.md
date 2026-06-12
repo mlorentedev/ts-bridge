@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.4](https://github.com/mlorentedev/ts-bridge/compare/v1.12.3...v1.12.4) (2026-06-12)
+
+
+### Bug Fixes
+
+* read --auth-key-file before Merge validation ([#128](https://github.com/mlorentedev/ts-bridge/issues/128)) ([0a5b9b2](https://github.com/mlorentedev/ts-bridge/commit/0a5b9b2b11758516b398f647117c3fdf34e1d84e))
+
 ## [1.12.3](https://github.com/mlorentedev/ts-bridge/compare/v1.12.2...v1.12.3) (2026-06-12)
 
 
