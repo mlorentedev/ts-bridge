@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -115,8 +116,11 @@ func runWatch(addr string, interval time.Duration, jsonOut bool, cmd *cobra.Comm
 }
 
 func displayOnce(addr string, jsonOut bool, w io.Writer) error {
-	// Clear screen for watch mode — platform-aware (see status_windows.go / status_unix.go).
-	if !jsonOut {
+	// Clear screen for watch mode — skip on Windows without VT.
+	// We conservatively skip ANSI clear on Windows to avoid garbage output
+	// when VT processing is not enabled (which requires syscall.GetConsoleMode).
+	// On Unix, ANSI codes work reliably.
+	if !jsonOut && supportsClearScreen() {
 		fmt.Fprint(w, "\033[2J\033[H")
 	}
 
@@ -222,4 +226,18 @@ func formatBytes(n int64) string {
 // formatDuration formats a duration for display.
 func formatDuration(d time.Duration) string {
 	return d.String()
+}
+
+// supportsClearScreen returns true if ANSI escape codes should be emitted.
+// On Windows, VT processing must be enabled for ANSI codes to work correctly.
+// Without VT, escape sequences produce garbage output. We conservatively skip
+// the clear on Windows (checking VT mode requires syscall.GetConsoleMode,
+// which is Windows-only). On Unix, ANSI codes work reliably.
+//
+// Note: runtime.GOOS is a compile-time constant, so golangci-lint may flag
+// this as "always true/false" on non-Windows runners. The //nolint comment
+// below suppresses that false-positive lint warning.
+//nolint:unparam // runtime.GOOS is platform-dependent, not always true
+func supportsClearScreen() bool {
+	return runtime.GOOS != "windows"
 }
