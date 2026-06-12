@@ -135,29 +135,36 @@ func displayOnce(addr string, jsonOut bool, w io.Writer) error {
 }
 
 func fetchHealth(addr string) (live, ready bool, metrics metricsResponse, err error) {
-
 	client := &http.Client{Timeout: 3 * time.Second}
 
 	// Check liveness.
-	resp, err := client.Get(fmt.Sprintf("http://%s/health/live", addr))
-	if err != nil {
+	if err := func() error {
+		resp, err := client.Get(fmt.Sprintf("http://%s/health/live", addr))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		live = resp.StatusCode == http.StatusOK
+		return nil
+	}(); err != nil {
 		return false, false, metrics, err
 	}
-	// #nosec G104 — Body.Close() errors are benign in request cleanup.
-	resp.Body.Close()
-	live = resp.StatusCode == http.StatusOK
 
 	// Check readiness.
-	resp, err = client.Get(fmt.Sprintf("http://%s/health/ready", addr))
-	if err != nil {
+	if err := func() error {
+		resp, err := client.Get(fmt.Sprintf("http://%s/health/ready", addr))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		ready = resp.StatusCode == http.StatusOK
+		return nil
+	}(); err != nil {
 		return live, false, metrics, err
 	}
-	ready = resp.StatusCode == http.StatusOK
-	// #nosec G104 — Body.Close() errors are benign in request cleanup.
-	resp.Body.Close()
 
 	// Fetch metrics.
-	resp, err = client.Get(fmt.Sprintf("http://%s/metrics", addr))
+	resp, err := client.Get(fmt.Sprintf("http://%s/metrics", addr))
 	if err != nil {
 		return live, ready, metrics, err
 	}
