@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.5](https://github.com/mlorentedev/ts-bridge/compare/v1.12.4...v1.12.5) (2026-06-12)
+
+
+### Bug Fixes
+
+* validate dial-retries rejects negative values (BUG-006) ([#130](https://github.com/mlorentedev/ts-bridge/issues/130)) ([d1f2104](https://github.com/mlorentedev/ts-bridge/commit/d1f21045e928a38343751a0f08cb174c35864241))
+
 ## [1.12.4](https://github.com/mlorentedev/ts-bridge/compare/v1.12.3...v1.12.4) (2026-06-12)
 
 
