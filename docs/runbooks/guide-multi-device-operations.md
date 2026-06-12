@@ -4,6 +4,7 @@ type: runbook
 status: active
 tags: [operations, multi-device, windows, linux, aliases]
 created: "2026-02-24"
+updated: "2026-06-12"
 owner: manu
 ---
 
@@ -43,37 +44,50 @@ Do not set `TS_LOCAL_ADDR`, `TS_HOSTNAME`, or `TS_STATE_DIR` unless you intentio
 
 ## Bootstrap Commands
 
-### Windows
-
-```powershell
-PowerShell -ExecutionPolicy Bypass -File .\scripts\client\bootstrap.ps1 -AuthKey tskey-auth-... -Target 100.x.x.x:45000 -Instance office-laptop
-```
-
-### Linux/macOS
+### Interactive setup
 
 ```bash
-./scripts/client/bootstrap.sh --authkey tskey-auth-... --target 100.x.x.x:45000 --instance office-laptop
+# Linux / macOS
+./ts-bridge init
+
+# Windows
+.\ts-bridge.exe init
+```
+
+### Non-interactive (quick setup)
+
+```bash
+# Linux / macOS
+./ts-bridge init \
+  --auth-key tskey-auth-... \
+  --target 100.x.x.x:45000 \
+  --instance office-laptop
+
+# Windows
+.\ts-bridge.exe init ^
+  --auth-key tskey-auth-... ^
+  --target 100.x.x.x:45000 ^
+  --instance office-laptop
 ```
 
 ## Launch Commands
 
-### Windows
-
-```powershell
-PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1 -Instance office-laptop
-```
-
-### Linux/macOS
-
 ```bash
-./scripts/client/run.sh --instance office-laptop
+# All platforms — reads .env with TS_INSTANCE_NAME automatically
+./ts-bridge connect
+
+# With explicit instance override
+./ts-bridge connect --instance office-laptop
+
+# With verbose logging
+./ts-bridge connect -v
 ```
 
 ## Validation Workflow
 
-1. Start alias once and note `Local:` from banner.
-2. Restart with the same alias and verify the same `Local:` port (if still free).
-3. Start a second alias in parallel and verify a different `Local:` port.
+1. Start once and note `Local:` from banner.
+2. Restart and verify the same `Local:` port (if still free).
+3. Start a second instance in parallel (different `.env` or `--instance`) and verify a different `Local:` port.
 4. Update `Last Verified` in the inventory table.
 
 ## Windows Runtime Notes
@@ -85,12 +99,12 @@ PowerShell -ExecutionPolicy Bypass -File .\scripts\client\run.ps1 -Instance offi
 ## Hostname Strategy
 
 - Auto mode generates a unique hostname each run for collision safety.
-- Use alias as your stable operational identity in Vault.
+- Use alias (TS_INSTANCE_NAME) as your stable operational identity in Vault.
 - If you need a stable hostname for admin visibility, set `TS_HOSTNAME` explicitly and treat it as managed configuration.
 
 ## Linux Parity Checklist
 
-- [ ] `run.sh --instance <alias>` works with `.env` auto mode settings.
+- [ ] `./ts-bridge connect --instance <alias>` works with `.env` auto mode settings.
 - [ ] Reboot test keeps deterministic local port for same alias.
-- [ ] Concurrent aliases produce distinct local ports.
+- [ ] Concurrent instances produce distinct local ports.
 - [ ] RDP/SSH client can connect to `127.0.0.1:<local-port>`.

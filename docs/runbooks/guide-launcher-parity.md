@@ -1,7 +1,7 @@
 ---
 id: "ts-bridge-launcher-parity"
 type: runbook
-status: active
+status: done
 tags: [parity, scripts, linux, windows, audit]
 created: "2026-05-18"
 owner: manu

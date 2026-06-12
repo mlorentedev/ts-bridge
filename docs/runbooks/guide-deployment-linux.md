@@ -4,6 +4,7 @@ type: runbook
 status: active
 tags: [deployment, linux, systemd, production]
 created: "2026-02-23"
+updated: "2026-06-12"
 owner: manu
 ---
 
@@ -44,11 +45,14 @@ TS_AUTHKEY=tskey-auth-...
 TS_TARGET=your-host:3389
 TS_LOCAL_ADDR=127.0.0.1:33389
 TS_HEALTH_ADDR=127.0.0.1:8080
+TS_MANUAL_MODE=true
 TS_STATE_DIR=/var/lib/ts-bridge
 EOF
 sudo chmod 600 /etc/ts-bridge/ts-bridge.env
 ```
 
+> **Note:** `TS_MANUAL_MODE=true` is set because this is a persistent service. By default, ts-bridge runs in auto mode (ephemeral), which uses a temp state directory and generates a unique hostname each run. For a systemd service you want persistent state — manual mode keeps the same Tailscale node across restarts.
+>
 > **Security:** Use a secrets manager in production (env file with perms 600, or HashiCorp Vault / AWS SSM).
 
 ### 5. Install systemd Service
@@ -197,6 +201,9 @@ sudo ufw allow from 127.0.0.1 to any port 33389
 ### Version Verification
 
 ```bash
-ts-bridge -version
+ts-bridge version
 # Output: ts-bridge v1.2.0 (abc1234)
+
+ts-bridge version --short
+# Output: 1.2.0
 ```
