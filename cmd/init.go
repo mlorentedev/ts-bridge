@@ -374,6 +374,18 @@ func writeYAMLConfig(cmd *cobra.Command, f initFlags) error {
 		}
 	}
 
+	// Also guard the sidecar .env file — without this, YAML mode can silently
+	// overwrite TS_AUTHKEY even when --force is false.
+	if _, err := os.Stat(envPath); err == nil {
+		if !f.Force && !isNonInteractive(cmd) {
+			if !confirmOverwrite(envPath, cmd) {
+				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", envPath)
+			}
+		} else if !f.Force {
+			return fmt.Errorf("%s already exists (use --force to overwrite)", envPath)
+		}
+	}
+
 	// Build YAML content.
 	var sb strings.Builder
 	sb.WriteString("# ts-bridge YAML configuration\n")

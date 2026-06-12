@@ -176,7 +176,7 @@ func printWarn(msg string) {
 
 func printElevationError() {
 	switch runtime.GOOS {
-	case "windows":
+	case windowsOS:
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "ERROR: This operation requires Administrator privileges.")
 		fmt.Fprintln(os.Stderr, "")
