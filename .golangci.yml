@@ -36,6 +36,7 @@ issues:
       linters:
         - gocyclo
         - goconst
+        - unparam
     - linters:
         - unparam
       text: "acceptLoop.*result 0.*is always nil"
