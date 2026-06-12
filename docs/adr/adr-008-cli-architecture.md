@@ -1,7 +1,7 @@
 ---
 id: "adr-008"
 type: adr
-status: proposed
+status: accepted
 date: "2026-06-10"
 tags: [architecture, decision, cli, configuration]
 owner: manu
