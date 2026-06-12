@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.12.2](https://github.com/mlorentedev/ts-bridge/compare/v1.12.1...v1.12.2) (2026-06-12)
+
+
+### Bug Fixes
+
+* sanitize firewall rule name to prevent PowerShell injection (BUG-012) ([#120](https://github.com/mlorentedev/ts-bridge/issues/120)) ([29549ba](https://github.com/mlorentedev/ts-bridge/commit/29549ba1e22351c85465093c665dbd8861828c4d))
+
+## [1.12.1](https://github.com/mlorentedev/ts-bridge/compare/v1.12.0...v1.12.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* HTTP body leak in fetchHealth + .env merge in writeYAMLConfig ([1983122](https://github.com/mlorentedev/ts-bridge/commit/1983122d3e3bdb651ed824359681d68cf4458d92))
+
 ## [1.12.0](https://github.com/mlorentedev/ts-bridge/compare/v1.11.1...v1.12.0) (2026-06-11)
 
 

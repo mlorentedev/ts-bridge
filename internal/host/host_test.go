@@ -122,3 +122,112 @@ func TestTailscaleIP_DoesNotPanic(t *testing.T) {
 	// May be empty if tailscale isn't installed — that's fine.
 	_ = ip
 }
+
+// ─── Firewall rule sanitization ──────────────────────────────────
+
+func TestSanitizeFirewallRule_ValidNames(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{"Tailscale-RDP-Ingress", false},
+		{"MyRule", false},
+		{"rule_123", false},
+		{"a", false},
+		{"A-B-C_D1", false},
+		{"ts-bridge-firewall", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := sanitizeFirewallRule(tt.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("sanitizeFirewallRule(%q) error = %v, wantErr %v", tt.name, err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && got != tt.name {
+				t.Errorf("sanitizeFirewallRule(%q) = %q, want %q", tt.name, got, tt.name)
+			}
+		})
+	}
+}
+
+func TestSanitizeFirewallRule_RejectsInjection(t *testing.T) {
+	injections := []string{
+		`rule; Remove-Item C:\ -Recurse`,
+		`rule` + "`" + `nWrite-Host pwned`,
+		`rule | Out-Null`,
+		`rule && echo pwned`,
+		`rule"; Remove-Item C:\ -Recurse`,
+		"rule' OR '1'='1",
+		`rule$(whoami)`,
+		`rule/../../../etc/passwd`,
+		`../escape`,
+		"rule with spaces",
+	}
+	for _, injection := range injections {
+		t.Run(injection, func(t *testing.T) {
+			_, err := sanitizeFirewallRule(injection)
+			if err == nil {
+				t.Errorf("sanitizeFirewallRule(%q) should reject injection but returned nil", injection)
+			}
+		})
+	}
+}
+
+func TestSanitizeFirewallRule_Empty(t *testing.T) {
+	_, err := sanitizeFirewallRule("")
+	if err == nil {
+		t.Error("sanitizeFirewallRule(\"\") should reject empty string")
+	}
+}
+
+func TestSanitizeFirewallRule_MaxLength(t *testing.T) {
+	long := "a"
+	for i := 0; i < 63; i++ {
+		long += "a"
+	}
+	// 64 chars — should pass
+	got, err := sanitizeFirewallRule(long)
+	if err != nil {
+		t.Errorf("sanitizeFirewallRule(64 chars) should accept, got error: %v", err)
+	}
+	if len(got) != 64 {
+		t.Errorf("sanitizeFirewallRule(64 chars) = %d, want 64", len(got))
+	}
+
+	// 65 chars — should fail
+	long65 := long + "a"
+	_, err = sanitizeFirewallRule(long65)
+	if err == nil {
+		t.Error("sanitizeFirewallRule(65 chars) should reject, got nil")
+	}
+}
+
+func TestSanitizeFirewallRule_SpecialChars(t *testing.T) {
+	specials := []string{
+		"rule@domain",
+		"rule#hash",
+		"rule$dollar",
+		"rule%percent",
+		"rule&and",
+		"rule*star",
+		"rule+plus",
+		"rule=equals",
+		"rule<lt>",
+		"rule?question",
+		"rule[bracket]",
+		"rule{brace}",
+		"rule\backslash",
+		"rule/forward",
+		"rule:new",
+		"rule,comma",
+	}
+	for _, s := range specials {
+		t.Run(s, func(t *testing.T) {
+			_, err := sanitizeFirewallRule(s)
+			if err == nil {
+				t.Errorf("sanitizeFirewallRule(%q) should reject special char", s)
+			}
+		})
+	}
+}

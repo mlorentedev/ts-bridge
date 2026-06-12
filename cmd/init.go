@@ -474,6 +474,7 @@ func buildEnvContent(authKey, envPath string) string {
 
 	// Read existing .env and preserve known vars.
 	existingVars := make(map[string]string)
+	// #nosec G304 -- envPath is derived from yamlPath directory, not user-controlled.
 	if data, err := os.ReadFile(envPath); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
 			line = strings.TrimSpace(line)
