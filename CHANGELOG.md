@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.12.6](https://github.com/mlorentedev/ts-bridge/compare/v1.12.5...v1.12.6) (2026-06-15)
+
+
+### Bug Fixes
+
+* batch init/connect bug fixes (BUG-003, BUG-017) ([#134](https://github.com/mlorentedev/ts-bridge/issues/134)) ([cfb2460](https://github.com/mlorentedev/ts-bridge/commit/cfb24605b52588469fe9adc17f2a26fdfdfd3d2e))
+* default hostname fallback + banner order (BUG-009, BUG-010) ([#139](https://github.com/mlorentedev/ts-bridge/issues/139)) ([d8186df](https://github.com/mlorentedev/ts-bridge/commit/d8186df9e1f6c41b0cd9dab475343c8c1b1a51d4))
+* validate target format before auth key in Merge() ([#137](https://github.com/mlorentedev/ts-bridge/issues/137)) ([284647f](https://github.com/mlorentedev/ts-bridge/commit/284647f042279d7b84cf623020f4a4119dc12958))
+
 ## [1.12.5](https://github.com/mlorentedev/ts-bridge/compare/v1.12.4...v1.12.5) (2026-06-12)
 
 
