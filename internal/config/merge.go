@@ -69,10 +69,10 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	applyEnv(&cfg)
 	applyFlags(&cfg, flags)
 
-	if err := validateRequiredFields(cfg); err != nil {
+	if err := validateTarget(cfg.Target); err != nil {
 		return Config{}, err
 	}
-	if err := validateTarget(cfg.Target); err != nil {
+	if err := validateRequiredFields(cfg); err != nil {
 		return Config{}, err
 	}
 	if err := validateDialRetries(flags, cfg); err != nil {
