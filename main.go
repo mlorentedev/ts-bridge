@@ -116,7 +116,7 @@ func ensureStateDir(dir string) error {
 	return nil
 }
 
-//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
+//nolint:unused // wired into cmd.Runner = run
 func cleanupEphemeralStateDir(dir string) {
 	for attempt := 1; attempt <= cleanupMaxAttempts; attempt++ {
 		err := os.RemoveAll(dir)
@@ -141,7 +141,7 @@ func cleanupEphemeralStateDir(dir string) {
 	}
 }
 
-//nolint:unused // helper for cleanupEphemeralStateDir
+//nolint:unused // helper for cleanupEphemeralStateDir (called via cmd.Runner)
 func isRetryableCleanupError(err error) bool {
 	if err == nil {
 		return false
@@ -155,7 +155,7 @@ func isRetryableCleanupError(err error) bool {
 		strings.Contains(errStr, "device or resource busy")
 }
 
-//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
+//nolint:unused // wired into cmd.Runner = run
 func run(cfg config.Config) error {
 	if err := ensureStateDir(cfg.StateDir); err != nil {
 		return err
@@ -213,7 +213,7 @@ func run(cfg config.Config) error {
 	return errAccept
 }
 
-//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
+//nolint:unused // wired into cmd.Runner = run
 func initTailscale(cfg config.Config) (*tsnet.Server, error) {
 	var tsnetLogf func(string, ...any)
 	if cfg.Verbose {
@@ -280,7 +280,7 @@ func diagnoseTailscaleInitError(err error) (hint, remediation string) {
 	return "", ""
 }
 
-//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
+//nolint:unused // wired into cmd.Runner = run
 func handleShutdown(ctx context.Context, ready *atomic.Bool, listener net.Listener, healthServer *http.Server) {
 	<-ctx.Done()
 	logger.Info("shutting down")
@@ -297,7 +297,7 @@ func handleShutdown(ctx context.Context, ready *atomic.Bool, listener net.Listen
 	}
 }
 
-//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
+//nolint:unused // wired into cmd.Runner = run
 func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 	if cfg.DrainTimeout <= 0 {
 		return
@@ -329,7 +329,7 @@ func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 // are truncated with "..." so the border never breaks.
 const bannerWidth = 22
 
-//nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
+//nolint:unused // wired into cmd.Runner = run
 func printBanner(cfg config.Config) {
 	fmt.Println()
 	fmt.Println("  +---------------------------------------+")

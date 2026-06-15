@@ -384,8 +384,8 @@ func deriveAutoHostname(target, instanceName string) string {
 		hostName = "unknown-host"
 	}
 
-	machine := sanitizeHostnameLabel(hostName)
-	instance := sanitizeHostnameLabel(instanceName)
+	machine := SanitizeHostnameLabel(hostName)
+	instance := SanitizeHostnameLabel(instanceName)
 	if instance == "" {
 		instance = machine
 	}
@@ -415,7 +415,9 @@ func deriveAutoHostname(target, instanceName string) string {
 	return hostname
 }
 
-func sanitizeHostnameLabel(value string) string {
+// SanitizeHostnameLabel returns a valid Tailscale hostname label:
+// lowercase alphanumeric and hyphens only, no leading/trailing dashes.
+func SanitizeHostnameLabel(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	var b strings.Builder
 	previousDash := false

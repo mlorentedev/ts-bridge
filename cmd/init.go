@@ -14,6 +14,8 @@ import (
 	"golang.org/x/term"
 
 	"github.com/spf13/cobra"
+
+	"ts-bridge/internal/config"
 )
 
 // initCmd is the "ts-bridge init" subcommand — interactive setup wizard.
@@ -424,7 +426,7 @@ func buildYAMLContent(f initFlags) string {
 	sb.WriteString("version: 1\n")
 	sb.WriteString(fmt.Sprintf("target: %s\n", f.Target))
 	if f.Instance != "" {
-		sb.WriteString(fmt.Sprintf("hostname: tsb-%s\n", sanitizeHostnameLabel(f.Instance)))
+		sb.WriteString(fmt.Sprintf("hostname: tsb-%s\n", config.SanitizeHostnameLabel(f.Instance)))
 	}
 	if f.PortRange != "" {
 		sb.WriteString(fmt.Sprintf("port_range: %s\n", f.PortRange))
@@ -587,21 +589,7 @@ func printNextSteps(f initFlags) {
 	fmt.Println()
 }
 
-// sanitizeHostnameLabel mirrors the logic in internal/config/config.go.
-func sanitizeHostnameLabel(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	var b strings.Builder
-	previousDash := false
-	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-			previousDash = false
-			continue
-		}
-		if !previousDash {
-			b.WriteByte('-')
-			previousDash = true
-		}
-	}
-	return strings.Trim(b.String(), "-")
+// SanitizeHostnameLabel delegates to config.SanitizeHostnameLabel.
+func SanitizeHostnameLabel(value string) string {
+	return config.SanitizeHostnameLabel(value)
 }
