@@ -251,6 +251,44 @@ func TestPrintBanner_ContainsExpectedFields(t *testing.T) {
 	}
 }
 
+// BUG-010: banner should not contain interleaved log lines.
+// printBanner() uses fmt.Println() which writes to stdout. If a concurrent
+// goroutine (e.g. health server logger) also writes to stdout, the banner
+// gets corrupted. This test verifies the banner output is a clean block.
+func TestPrintBanner_CleanOutput(t *testing.T) {
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	cfg := config.Config{
+		Hostname:  "test-host",
+		LocalAddr: "127.0.0.1:33389",
+		Target:    "100.64.0.1:3389",
+	}
+	printBanner(cfg)
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+	output := buf.String()
+
+	// Banner should NOT contain any log-level keywords that would indicate
+	// interleaved slog output.
+	for _, bad := range []string{"level=", "msg=", "time=", "INFO", "ERROR", "WARN"} {
+		if strings.Contains(output, bad) {
+			t.Errorf("banner output contains log artifact %q:\n%s", bad, output)
+		}
+	}
+
+	// Verify banner lines are contiguous (no blank lines between border rows).
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 7 {
+		t.Errorf("expected at least 7 banner lines, got %d:\n%s", len(lines), output)
+	}
+}
+
 func TestInitLogger_TextFormat(t *testing.T) {
 	cfg := config.Config{LogFormat: "text", Verbose: false}
 	initLogger(cfg)

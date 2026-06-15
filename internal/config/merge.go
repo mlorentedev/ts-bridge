@@ -69,10 +69,12 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	applyEnv(&cfg)
 	applyFlags(&cfg, flags)
 
-	if err := validateRequiredFields(cfg); err != nil {
+	// Validate target format first so a malformed target doesn't get
+	// masked by a later auth-key error (BUG-005).
+	if err := validateTarget(cfg.Target); err != nil {
 		return Config{}, err
 	}
-	if err := validateTarget(cfg.Target); err != nil {
+	if err := validateRequiredFields(cfg); err != nil {
 		return Config{}, err
 	}
 	if err := validateDialRetries(flags, cfg); err != nil {
@@ -81,6 +83,13 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 
 	if !flags.ManualMode {
 		applyAutoInstance(&cfg, flags)
+	}
+
+	// Apply default hostname as a final fallback — after auto-instance
+	// derivation so that deriveAutoHostname can still fire when
+	// cfg.Hostname is empty (BUG-009).
+	if cfg.Hostname == "" {
+		cfg.Hostname = defaultHostname
 	}
 
 	return cfg, nil
