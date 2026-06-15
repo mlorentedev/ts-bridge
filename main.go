@@ -88,10 +88,6 @@ func initLogger(cfg config.Config) {
 		handler = slog.NewTextHandler(os.Stdout, opts)
 	}
 	logger = slog.New(handler)
-
-	// Also set the package-level logger in config so that YAML
-	// warnings use structured logging (BUG-016).
-	config.SetLogger(logger)
 }
 
 func ensureStateDir(dir string) error {

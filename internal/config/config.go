@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -12,37 +11,6 @@ import (
 	"strings"
 	"time"
 )
-
-// logger is the package-level logger set by LoggerInit in main.go.
-// When nil, warnings fall back to fmt.Fprintf(os.Stderr, ...).
-var logger *slog.Logger
-
-// SetLogger configures the package-level logger for structured warnings.
-func SetLogger(l *slog.Logger) {
-	logger = l
-}
-
-// warnUnknownField logs an unknown YAML field warning via the package logger,
-// falling back to stderr if the logger is not yet initialized.
-func warnUnknownField(field string) {
-	if logger != nil {
-		logger.Warn("unknown YAML field", "field", field)
-	} else {
-		fmt.Fprintf(os.Stderr, "WARNING: unknown YAML field %q — ignoring\n", field)
-	}
-}
-
-// warnPermission logs a permission warning via the package logger,
-// falling back to stderr if the logger is not yet initialized.
-func warnPermission(path string, perm uint32) {
-	if logger != nil {
-		logger.Warn("config file has loose permissions",
-			"path", path, "perms", fmt.Sprintf("%o", perm))
-	} else {
-		fmt.Fprintf(os.Stderr, "WARNING: %s has loose permissions (%04o); consider chmod 600 %s\n",
-			path, perm, path)
-	}
-}
 
 const (
 	// Default runtime values.
