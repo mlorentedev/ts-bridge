@@ -16,86 +16,94 @@ func isElevatedImpl() bool {
 func setupImpl(flags SetupFlags) (SetupResult, error) {
 	var steps []SetupStep
 
-	// 1. Tailscale unattended mode.
-	steps = append(steps, SetupStep{Name: "Tailscale unattended mode"})
+	steps = append(steps, stepTailscaleUnattended())
+	steps = append(steps, stepTailscaleService())
+	steps = append(steps, stepUPnPServices()...)
+	steps = append(steps, stepNetworkProfile())
+
+	rdpPort, stepRDP := stepRDPConfig()
+	steps = append(steps, stepRDP)
+
+	steps = append(steps, stepFirewall(flags.FirewallRule, rdpPort))
+
+	if !flags.NoSleep {
+		steps = append(steps, stepPowerSettings())
+	}
+
+	return SetupResult{RDPPort: rdpPort, Steps: steps}, nil
+}
+
+// stepTailscaleUnattended enables Tailscale unattended mode.
+func stepTailscaleUnattended() SetupStep {
+	name := "Tailscale unattended mode"
 	if err := runCmd("tailscale", "up", "--unattended"); err != nil {
-		steps[len(steps)-1].Success = false
-		steps[len(steps)-1].Message = "Could not enable via CLI — check Tailscale GUI"
-	} else {
-		steps[len(steps)-1].Success = true
-		steps[len(steps)-1].Message = "Unattended mode enabled"
+		return SetupStep{Name: name, Success: false, Message: "Could not enable via CLI — check Tailscale GUI"}
 	}
+	return SetupStep{Name: name, Success: true, Message: "Unattended mode enabled"}
+}
 
-	// 2. Tailscale service.
-	steps = append(steps, SetupStep{Name: "Tailscale service"})
+// stepTailscaleService starts the Tailscale service.
+func stepTailscaleService() SetupStep {
+	name := "Tailscale service"
 	if err := startService("Tailscale"); err != nil {
-		steps[len(steps)-1].Success = false
-		steps[len(steps)-1].Message = "Tailscale service not found — is Tailscale installed?"
-	} else {
-		steps[len(steps)-1].Success = true
-		steps[len(steps)-1].Message = "Service running"
+		return SetupStep{Name: name, Success: false, Message: "Tailscale service not found — is Tailscale installed?"}
 	}
+	return SetupStep{Name: name, Success: true, Message: "Service running"}
+}
 
-	// 3. UPnP services.
+// stepUPnPServices starts UPnP-related services (SSDPSRV, upnphost).
+func stepUPnPServices() []SetupStep {
+	var steps []SetupStep
 	for _, svc := range []struct{ name, desc string }{
 		{"SSDPSRV", "SSDP Discovery"},
 		{"upnphost", "UPnP Device Host"},
 	} {
-		steps = append(steps, SetupStep{Name: svc.desc})
+		name := svc.desc
 		if err := startService(svc.name); err != nil {
-			steps[len(steps)-1].Success = false
-			steps[len(steps)-1].Message = fmt.Sprintf("Failed to start: %v", err)
+			steps = append(steps, SetupStep{Name: name, Success: false, Message: fmt.Sprintf("Failed to start: %v", err)})
 		} else {
-			steps[len(steps)-1].Success = true
-			steps[len(steps)-1].Message = "Running"
+			steps = append(steps, SetupStep{Name: name, Success: true, Message: "Running"})
 		}
 	}
+	return steps
+}
 
-	// 4. Network profile.
-	steps = append(steps, SetupStep{Name: "Network profile"})
+// stepNetworkProfile sets the Tailscale network profile to Private.
+func stepNetworkProfile() SetupStep {
+	name := "Network profile"
 	if err := setNetworkProfilePrivate(); err != nil {
-		steps[len(steps)-1].Success = false
-		steps[len(steps)-1].Message = "Could not set network profile to Private"
-	} else {
-		steps[len(steps)-1].Success = true
-		steps[len(steps)-1].Message = "Set to Private"
+		return SetupStep{Name: name, Success: false, Message: "Could not set network profile to Private"}
 	}
+	return SetupStep{Name: name, Success: true, Message: "Set to Private"}
+}
 
-	// 5. RDP configuration.
-	steps = append(steps, SetupStep{Name: "RDP configuration"})
+// stepRDPConfig enables RDP and returns the port and a SetupStep.
+func stepRDPConfig() (int, SetupStep) {
+	name := "RDP configuration"
 	rdpPort, err := enableRDP()
 	if err != nil {
 		rdpPort = 3389
-		steps[len(steps)-1].Success = false
-		steps[len(steps)-1].Message = "Could not verify RDP settings, assuming port 3389"
-	} else {
-		steps[len(steps)-1].Success = true
-		steps[len(steps)-1].Message = fmt.Sprintf("RDP enabled on port %d", rdpPort)
+		return rdpPort, SetupStep{Name: name, Success: false, Message: "Could not verify RDP settings, assuming port 3389"}
 	}
+	return rdpPort, SetupStep{Name: name, Success: true, Message: fmt.Sprintf("RDP enabled on port %d", rdpPort)}
+}
 
-	// 6. Firewall rule.
-	steps = append(steps, SetupStep{Name: "Firewall rule"})
-	if err := configureFirewall(flags.FirewallRule, rdpPort); err != nil {
-		steps[len(steps)-1].Success = false
-		steps[len(steps)-1].Message = fmt.Sprintf("Failed to configure firewall: %v", err)
-	} else {
-		steps[len(steps)-1].Success = true
-		steps[len(steps)-1].Message = fmt.Sprintf("Rule '%s' active (port %d)", flags.FirewallRule, rdpPort)
+// stepFirewall configures the firewall rule for RDP.
+func stepFirewall(ruleName string, port int) SetupStep {
+	name := "Firewall rule"
+	if err := configureFirewall(ruleName, port); err != nil {
+		return SetupStep{Name: name, Success: false, Message: fmt.Sprintf("Failed to configure firewall: %v", err)}
 	}
+	return SetupStep{Name: name, Success: true, Message: fmt.Sprintf("Rule '%s' active (port %d)", ruleName, port)}
+}
 
-	// 7. Sleep settings (optional).
-	if !flags.NoSleep {
-		steps = append(steps, SetupStep{Name: "Power settings"})
-		if err := disableSleep(); err != nil {
-			steps[len(steps)-1].Success = false
-			steps[len(steps)-1].Message = "Could not modify power settings"
-		} else {
-			steps[len(steps)-1].Success = true
-			steps[len(steps)-1].Message = "Sleep disabled (AC power)"
-		}
+// stepPowerSettings disables sleep on AC power.
+func stepPowerSettings() SetupStep {
+	name := "Power settings"
+	if err := disableSleep(); err != nil {
+		return SetupStep{Name: name, Success: false, Message: "Could not modify power settings"}
 	}
-
-	return SetupResult{RDPPort: rdpPort, Steps: steps}, nil
+	return SetupStep{Name: name, Success: true, Message: "Sleep disabled (AC power)"}
 }
 
 func checkImpl() (CheckResult, error) {

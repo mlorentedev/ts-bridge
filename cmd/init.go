@@ -363,30 +363,59 @@ func writeYAMLConfig(cmd *cobra.Command, f initFlags) error {
 	yamlPath := f.Config
 	envPath := filepath.Join(filepath.Dir(yamlPath), ".env")
 
-	// Check if YAML file exists - respect --force and interactive prompt.
-	if _, err := os.Stat(yamlPath); err == nil {
-		if !f.Force && !isNonInteractive(cmd) {
-			if !confirmOverwrite(yamlPath, cmd) {
-				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", yamlPath)
-			}
-		} else if !f.Force {
-			return fmt.Errorf("%s already exists (use --force to overwrite)", yamlPath)
-		}
+	if err := ensureWritable(yamlPath, f.Force, isNonInteractive(cmd), cmd); err != nil {
+		return err
+	}
+	if err := ensureWritable(envPath, f.Force, isNonInteractive(cmd), cmd); err != nil {
+		return err
 	}
 
-	// Also guard the sidecar .env file — without this, YAML mode can silently
-	// overwrite TS_AUTHKEY even when --force is false.
-	if _, err := os.Stat(envPath); err == nil {
-		if !f.Force && !isNonInteractive(cmd) {
-			if !confirmOverwrite(envPath, cmd) {
-				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", envPath)
-			}
-		} else if !f.Force {
-			return fmt.Errorf("%s already exists (use --force to overwrite)", envPath)
-		}
+	yamlContent := buildYAMLContent(f)
+	if err := writeFileWithPerms(yamlPath, []byte(yamlContent)); err != nil {
+		return fmt.Errorf("write YAML config: %w", err)
 	}
 
-	// Build YAML content.
+	envContent := buildEnvContent(f.AuthKey, envPath)
+	if err := writeFileWithPerms(envPath, []byte(envContent)); err != nil {
+		return fmt.Errorf("write .env file: %w", err)
+	}
+
+	return nil
+}
+
+// writeEnvConfig writes all settings including auth key to a .env file.
+func writeEnvConfig(cmd *cobra.Command, f initFlags) error {
+	envPath := f.Config
+
+	if err := ensureWritable(envPath, f.Force, isNonInteractive(cmd), cmd); err != nil {
+		return err
+	}
+
+	envContent := buildEnvConfigContent(f)
+	if err := writeFileWithPerms(envPath, []byte(envContent)); err != nil {
+		return fmt.Errorf("write .env file: %w", err)
+	}
+
+	return nil
+}
+
+// ensureWritable checks if a file exists and enforces overwrite protection.
+// Returns an error if the file exists and overwrite is not allowed.
+func ensureWritable(path string, force bool, nonInteractive bool, cmd *cobra.Command) error {
+	if _, err := os.Stat(path); err == nil {
+		if !force && !nonInteractive {
+			if !confirmOverwrite(path, cmd) {
+				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", path)
+			}
+		} else if !force {
+			return fmt.Errorf("%s already exists (use --force to overwrite)", path)
+		}
+	}
+	return nil
+}
+
+// buildYAMLContent builds the YAML configuration file content.
+func buildYAMLContent(f initFlags) string {
 	var sb strings.Builder
 	sb.WriteString("# ts-bridge YAML configuration\n")
 	sb.WriteString("# Non-sensitive settings only — auth key is stored in .env\n")
@@ -400,43 +429,11 @@ func writeYAMLConfig(cmd *cobra.Command, f initFlags) error {
 	if f.PortRange != "" {
 		sb.WriteString(fmt.Sprintf("port_range: %s\n", f.PortRange))
 	}
-
-	// Write YAML file.
-	// #nosec G306 -- yamlPath is user-controlled via --config flag.
-	if err := os.WriteFile(yamlPath, []byte(sb.String()), 0600); err != nil {
-		return fmt.Errorf("write YAML config: %w", err)
-	}
-	checkPermissions(yamlPath)
-
-	// Write .env with auth key, preserving existing vars (TS_TARGET, etc.).
-	// When switching from .env → YAML mode the user already has a working .env;
-	// we only inject TS_AUTHKEY and leave everything else untouched.
-	envContent := buildEnvContent(f.AuthKey, envPath)
-
-	// #nosec G306 -- envPath is derived from yamlPath.
-	if err := os.WriteFile(envPath, []byte(envContent), 0600); err != nil {
-		return fmt.Errorf("write .env file: %w", err)
-	}
-	checkPermissions(envPath)
-
-	return nil
+	return sb.String()
 }
 
-// writeEnvConfig writes all settings including auth key to a .env file.
-func writeEnvConfig(cmd *cobra.Command, f initFlags) error {
-	envPath := f.Config
-
-	// Check if .env file exists - respect --force and interactive prompt.
-	if _, err := os.Stat(envPath); err == nil {
-		if !f.Force && !isNonInteractive(cmd) {
-			if !confirmOverwrite(envPath, cmd) {
-				return fmt.Errorf("aborted: %s already exists (use --force to overwrite)", envPath)
-			}
-		} else if !f.Force {
-			return fmt.Errorf("%s already exists (use --force to overwrite)", envPath)
-		}
-	}
-
+// buildEnvConfigContent builds the .env file content for the env format.
+func buildEnvConfigContent(f initFlags) string {
 	var sb strings.Builder
 	sb.WriteString("# ── Required ─────────────────────────────────────────────────\n")
 	sb.WriteString("#\n")
@@ -463,13 +460,16 @@ func writeEnvConfig(cmd *cobra.Command, f initFlags) error {
 	sb.WriteString("# TS_DIAL_RETRIES=3                # Max retries for transient dial failures\n")
 	sb.WriteString("# TS_DIAL_BACKOFF_BASE=1s          # Base backoff for retries\n")
 	sb.WriteString("# TS_DIAL_BACKOFF_MAX=30s          # Cap on backoff duration per retry\n")
+	return sb.String()
+}
 
-	// #nosec G306 -- envPath is user-controlled via --config flag.
-	if err := os.WriteFile(envPath, []byte(sb.String()), 0600); err != nil {
-		return fmt.Errorf("write .env file: %w", err)
+// writeFileWithPerms writes content to a file with 0600 permissions and checks permissions.
+func writeFileWithPerms(path string, content []byte) error {
+	// #nosec G306 -- path is user-controlled via --config flag.
+	if err := os.WriteFile(path, content, 0600); err != nil {
+		return err
 	}
-	checkPermissions(envPath)
-
+	checkPermissions(path)
 	return nil
 }
 
