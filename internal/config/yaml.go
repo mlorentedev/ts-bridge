@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -40,7 +39,7 @@ func decodeYAML(data []byte, cfg *PartialConfig) error {
 	for key := range raw {
 		lowerKey := strings.ToLower(key)
 		if !knownFields[lowerKey] {
-			fmt.Fprintf(os.Stderr, "WARNING: unknown YAML field %q — ignoring\n", key)
+			warnUnknownField(key)
 		}
 	}
 
