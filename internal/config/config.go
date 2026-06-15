@@ -44,6 +44,17 @@ func warnPermission(path string, perm uint32) {
 	}
 }
 
+// warnEnvVar logs an environment variable parsing/validation warning via the
+// package logger, falling back to stderr if the logger is not yet initialized.
+func warnEnvVar(key, value, reason string) {
+	if logger != nil {
+		logger.Warn("env var invalid",
+			"key", key, "value", value, "reason", reason)
+	} else {
+		fmt.Fprintf(os.Stderr, "WARNING: %s=%q is not valid: %s\n", key, value, reason)
+	}
+}
+
 const (
 	// Default runtime values.
 	defaultLocalAddr     = "127.0.0.1:33389"
