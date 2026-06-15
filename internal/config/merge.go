@@ -395,8 +395,7 @@ func LoadYAMLConfig(path string) (PartialConfig, error) {
 	if runtime.GOOS != "windows" {
 		info, err := os.Stat(path)
 		if err == nil && info.Mode().Perm()&0077 != 0 {
-			fmt.Fprintf(os.Stderr, "WARNING: YAML config file has loose permissions (%04o); consider chmod 600 %s\n",
-				info.Mode().Perm(), path)
+			warnPermission(path, uint32(info.Mode().Perm()))
 		}
 	}
 
