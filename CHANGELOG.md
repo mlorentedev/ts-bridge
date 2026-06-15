@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.8](https://github.com/mlorentedev/ts-bridge/compare/v1.12.7...v1.12.8) (2026-06-15)
+
+
+### Bug Fixes
+
+* TECH-009 (nolint comments) + TECH-006 (sanitizeHostnameLabel dedup) ([#145](https://github.com/mlorentedev/ts-bridge/issues/145)) ([97e813f](https://github.com/mlorentedev/ts-bridge/commit/97e813f197874e6f34d23a06eef8172f01cd5ee0))
+
 ## [1.12.7](https://github.com/mlorentedev/ts-bridge/compare/v1.12.6...v1.12.7) (2026-06-15)
 
 
