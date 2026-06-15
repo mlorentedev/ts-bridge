@@ -274,6 +274,115 @@ func TestFlagSetEmptyByDefault(t *testing.T) {
 	}
 }
 
+// --- BUG-005: validation order tests ---
+
+func TestMergeValidationOrder_TargetFormatBeforeAuthKey(t *testing.T) {
+	// When both target is invalid AND auth key is missing,
+	// target format error should surface first (not auth key error).
+	os.Unsetenv("TS_AUTHKEY")
+	os.Unsetenv("TS_TARGET")
+
+	flags := FlagSet{Target: "invalid-no-port"}
+
+	_, err := Merge(PartialConfig{}, flags)
+	if err == nil {
+		t.Fatal("expected error for invalid target")
+	}
+	if !strings.Contains(err.Error(), "target") {
+		t.Errorf("expected error to mention 'target', got: %v", err)
+	}
+	if strings.Contains(err.Error(), "auth") {
+		t.Errorf("auth key error should not mask target error, got: %v", err)
+	}
+}
+
+func TestMergeValidationOrder_InvalidTargetWithMissingAuthKey(t *testing.T) {
+	os.Unsetenv("TS_AUTHKEY")
+	os.Unsetenv("TS_TARGET")
+
+	flags := FlagSet{Target: "no-port-here"}
+
+	_, err := Merge(PartialConfig{}, flags)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	errStr := err.Error()
+	// First error should be about target format, not auth key
+	if !strings.Contains(errStr, "target invalid") {
+		t.Errorf("first error should be 'target invalid', got: %v", err)
+	}
+}
+
+func TestMergeValidationOrder_InvalidTargetWithMissingAuthKeyEnv(t *testing.T) {
+	os.Unsetenv("TS_AUTHKEY")
+	os.Unsetenv("TS_TARGET")
+
+	flags := FlagSet{Target: "100.64.0.1"} // missing port
+
+	_, err := Merge(PartialConfig{}, flags)
+	if err == nil {
+		t.Fatal("expected error for target missing port")
+	}
+	errStr := err.Error()
+	if !strings.Contains(errStr, "target") {
+		t.Errorf("expected target error, got: %v", err)
+	}
+	if strings.Contains(errStr, "auth") {
+		t.Errorf("auth key error should not appear when target is invalid, got: %v", err)
+	}
+}
+
+func TestMergeValidationOrder_ValidTargetMissingAuthKey(t *testing.T) {
+	os.Unsetenv("TS_AUTHKEY")
+	os.Unsetenv("TS_TARGET")
+
+	flags := FlagSet{Target: "100.64.0.1:3389"}
+
+	_, err := Merge(PartialConfig{}, flags)
+	if err == nil {
+		t.Fatal("expected error for missing auth key")
+	}
+	errStr := err.Error()
+	// Target is valid, so auth key error should appear
+	if !strings.Contains(errStr, "auth") {
+		t.Errorf("expected auth key error when target is valid, got: %v", err)
+	}
+}
+
+func TestMergeValidationOrder_MissingTargetMissingAuthKey(t *testing.T) {
+	os.Unsetenv("TS_AUTHKEY")
+	os.Unsetenv("TS_TARGET")
+
+	_, err := Merge(PartialConfig{}, FlagSet{})
+	if err == nil {
+		t.Fatal("expected error for missing required fields")
+	}
+	errStr := err.Error()
+	// Target required should fire before auth key required
+	if !strings.Contains(errStr, "target") {
+		t.Errorf("expected target error first, got: %v", err)
+	}
+}
+
+func TestMergeValidationOrder_InvalidAuthKeyFormat(t *testing.T) {
+	os.Unsetenv("TS_AUTHKEY")
+	os.Unsetenv("TS_TARGET")
+
+	flags := FlagSet{
+		Target:  "100.64.0.1:3389",
+		AuthKey: "invalid-key-format",
+	}
+
+	_, err := Merge(PartialConfig{}, flags)
+	if err == nil {
+		t.Fatal("expected error for invalid auth key format")
+	}
+	errStr := err.Error()
+	if !strings.Contains(errStr, "auth key invalid format") {
+		t.Errorf("expected auth key format error, got: %v", err)
+	}
+}
+
 // --- BUG-006: dial-retries validation tests ---
 
 func TestMergeDialRetriesValidation(t *testing.T) {
