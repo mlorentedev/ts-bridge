@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.12.7](https://github.com/mlorentedev/ts-bridge/compare/v1.12.6...v1.12.7) (2026-06-15)
+
+
+### Bug Fixes
+
+* use structured logger for YAML warnings (BUG-016) ([2493093](https://github.com/mlorentedev/ts-bridge/commit/24930932f827bfebc14c370393f9ea58dfc4e7a3))
+* use structured slog logger for YAML warnings (BUG-016) ([#141](https://github.com/mlorentedev/ts-bridge/issues/141)) ([cdf6959](https://github.com/mlorentedev/ts-bridge/commit/cdf6959d4f25b483ca46d8be63d09eecc9fd407c))
+
 ## [1.12.6](https://github.com/mlorentedev/ts-bridge/compare/v1.12.5...v1.12.6) (2026-06-15)
 
 
