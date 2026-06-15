@@ -212,60 +212,15 @@ func halfCloseWrite(c net.Conn) bool {
 // the opposite (still-active) direction. Both ends are fully closed only
 // after both directions complete.
 func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger) (tx, rx int64) {
-	copyConn := func(dst, src net.Conn, direction string, counter *int64) {
-		bufPtrRaw := bufferPool.Get()
-		bufPtr, ok := bufPtrRaw.(*[]byte)
-		if !ok {
-			// Should never happen — bufferPool.New always returns *[]byte.
-			// Fallback: allocate a fresh buffer to avoid panicking.
-			b := make([]byte, bufferSize)
-			bufPtr = &b
-		}
-		defer bufferPool.Put(bufPtr)
-
-		n, err := io.CopyBuffer(dst, src, *bufPtr)
-		*counter = n
-
-		switch {
-		case err == nil, IsExpectedCloseError(err):
-			// Graceful end of this direction. Signal EOF to the peer by
-			// half-closing the write side; the opposite direction keeps
-			// draining any in-flight bytes. Falls back to full Close()
-			// when the underlying conn cannot half-close (e.g. net.Pipe).
-			if !halfCloseWrite(dst) {
-				_ = dst.Close()
-			}
-		case isIdleTimeoutErr(err):
-			// Idle timeout is an operator-configured policy. Log once at
-			// info; do not count as transport error. Full-close to release
-			// the slot promptly.
-			logger.Info("connection closed (idle timeout)",
-				"client", addr,
-				"direction", direction,
-				"bytes", n)
-			_ = dst.Close()
-			_ = src.Close()
-		default:
-			telemetry.AddError()
-			logger.Warn("copy error",
-				"client", addr,
-				"direction", direction,
-				"bytes", n,
-				"error", err)
-			_ = dst.Close()
-			_ = src.Close()
-		}
-	}
-
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		copyConn(client, remote, "rx", &rx)
+		copyDirection(remote, client, "rx", &rx, addr, logger)
 	}()
 	go func() {
 		defer wg.Done()
-		copyConn(remote, client, "tx", &tx)
+		copyDirection(client, remote, "tx", &tx, addr, logger)
 	}()
 	wg.Wait()
 
@@ -275,6 +230,61 @@ func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger)
 	_ = remote.Close()
 
 	return tx, rx
+}
+
+// copyDirection copies data from src to dst in one direction, managing the
+// buffer pool, error classification, and connection cleanup.
+func copyDirection(dst, src net.Conn, direction string, counter *int64, addr string, logger *slog.Logger) {
+	bufPtrRaw := bufferPool.Get()
+	bufPtr, ok := bufPtrRaw.(*[]byte)
+	if !ok {
+		// Should never happen — bufferPool.New always returns *[]byte.
+		// Fallback: allocate a fresh buffer to avoid panicking.
+		b := make([]byte, bufferSize)
+		bufPtr = &b
+	}
+	defer bufferPool.Put(bufPtr)
+
+	n, err := io.CopyBuffer(dst, src, *bufPtr)
+	*counter = n
+
+	if err == nil || IsExpectedCloseError(err) {
+		finishGraceful(dst)
+	} else if isIdleTimeoutErr(err) {
+		closeWithIdleLog(dst, src, addr, direction, n, logger)
+	} else {
+		closeWithError(dst, src, addr, direction, n, err, logger)
+	}
+}
+
+// finishGraceful half-closes dst (or full-closes if half-close unsupported).
+func finishGraceful(dst net.Conn) {
+	if !halfCloseWrite(dst) {
+		_ = dst.Close()
+	}
+}
+
+// closeWithIdleLog closes both ends after an idle timeout, logging at info level.
+func closeWithIdleLog(dst, src net.Conn, addr, direction string, n int64, logger *slog.Logger) {
+	logger.Info("connection closed (idle timeout)",
+		"client", addr,
+		"direction", direction,
+		"bytes", n)
+	_ = dst.Close()
+	_ = src.Close()
+}
+
+// closeWithError closes both ends after a copy error, logging at warn level
+// and incrementing the error counter.
+func closeWithError(dst, src net.Conn, addr, direction string, n int64, err error, logger *slog.Logger) {
+	telemetry.AddError()
+	logger.Warn("copy error",
+		"client", addr,
+		"direction", direction,
+		"bytes", n,
+		"error", err)
+	_ = dst.Close()
+	_ = src.Close()
 }
 
 // IsExpectedCloseError returns true for errors that occur during normal connection close.
