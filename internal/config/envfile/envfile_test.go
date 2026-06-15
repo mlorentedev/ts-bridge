@@ -16,7 +16,7 @@ func TestLoad_nonExistent(t *testing.T) {
 
 func TestLoad_emptyFile(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), ".env")
-	os.WriteFile(tmp, []byte(""), 0600)
+	_ = os.WriteFile(tmp, []byte(""), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -26,7 +26,7 @@ func TestLoad_emptyFile(t *testing.T) {
 func TestLoad_commentsAndBlanks(t *testing.T) {
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "# This is a comment\n\n# Another comment\n\n"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -40,7 +40,7 @@ func TestLoad_basic(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TEST_KEY_A=value_a\nTEST_KEY_B=value with spaces\nTEST_KEY_C="
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -65,7 +65,7 @@ func TestLoad_quotedValues(t *testing.T) {
 	content := `TEST_Q1="hello world"
 TEST_Q2='single quotes'
 `
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -84,7 +84,7 @@ func TestLoad_valueWithEquals(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TEST_EQ=a=b=c"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -101,7 +101,7 @@ func TestLoad_overridesExistingEnv(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TEST_OVERRIDE=from_envfile"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -117,7 +117,7 @@ func TestLoad_idempotent(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TEST_IDEM=first"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("first load error: %v", err)
@@ -136,7 +136,7 @@ func TestLoad_skipsMalformedLines(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "no_equals_sign\nTEST_GOOD=valid\n=empty_key\n"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -158,7 +158,7 @@ func TestLoad_realWorld(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "# ts-bridge environment configuration\nTS_AUTHKEY=tskey-auth-test-12345\nTS_TARGET=100.64.0.1:3389\nTS_INSTANCE_NAME=my-desktop\n"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -181,7 +181,7 @@ func TestLoad_precedence_chain(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TS_TARGET=from_envfile"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -197,7 +197,7 @@ func TestLoad_whitespaceOnlyKey(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "   TEST_WS = spaced   "
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -213,7 +213,7 @@ func TestLoad_noTrailingNewline(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TEST_NT=no_newline"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -230,7 +230,7 @@ func TestLoad_mixedLineEndings(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TEST_MLE_A=value_a\r\nTEST_MLE_B=value_b\n"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -249,7 +249,7 @@ func TestLoad_exportPrefix(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "export TEST_EXP=value"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -263,7 +263,7 @@ func TestLoad_exportPrefix(t *testing.T) {
 func BenchmarkLoad(b *testing.B) {
 	tmp := filepath.Join(b.TempDir(), ".env")
 	content := "TS_AUTHKEY=tskey-auth-xxx\nTS_TARGET=100.64.0.1:3389\nTS_INSTANCE_NAME=my-desktop\nTS_LOCAL_ADDR=127.0.0.1:33389\nTS_HEALTH_ADDR=127.0.0.1:9091\n"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -276,7 +276,7 @@ func TestLoad_emptyValueWithQuotes(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := `TEST_EQV=""`
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -292,7 +292,7 @@ func TestLoad_singleCharKey(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "X=val"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -308,7 +308,7 @@ func TestLoad_keyOnlyNoValue(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TEST_KEYONLY"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -324,7 +324,7 @@ func TestLoad_unbalancedQuotes(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := `TEST_UQ="unbalanced`
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -340,7 +340,7 @@ func TestLoad_unicodeValue(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TEST_UNICODE=hola mundo 你好"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -356,7 +356,7 @@ func TestLoad_duplicateKeys(t *testing.T) {
 
 	tmp := filepath.Join(t.TempDir(), ".env")
 	content := "TEST_DUP=first\nTEST_DUP=second"
-	os.WriteFile(tmp, []byte(content), 0600)
+	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -374,7 +374,7 @@ func TestLoad_largeFile(t *testing.T) {
 	}
 
 	tmp := filepath.Join(t.TempDir(), ".env")
-	os.WriteFile(tmp, []byte(sb.String()), 0600)
+	_ = os.WriteFile(tmp, []byte(sb.String()), 0600)
 
 	if err := Load(tmp); err != nil {
 		t.Fatalf("unexpected error: %v", err)
