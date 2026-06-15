@@ -27,6 +27,9 @@ import (
 // CLI flags and explicit TS_* env vars still override them (the merge
 // chain applies flags > env > yaml > defaults).
 func Load(path string) error {
+	// #nosec G304 -- path is ".env" from CWD, never user-controlled.
+	// The caller passes a hardcoded string literal; there is no path
+	// injection vector. os.Open is the correct choice here.
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -62,6 +65,7 @@ func Load(path string) error {
 			}
 		}
 
+		// #nosec G104 -- os.Setenv always returns nil in the standard library.
 		os.Setenv(key, value)
 	}
 
