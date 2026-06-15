@@ -85,6 +85,13 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 		applyAutoInstance(&cfg, flags)
 	}
 
+	// Apply default hostname as a final fallback — after auto-instance
+	// derivation so that deriveAutoHostname can still fire when
+	// cfg.Hostname is empty (BUG-009).
+	if cfg.Hostname == "" {
+		cfg.Hostname = defaultHostname
+	}
+
 	return cfg, nil
 }
 
