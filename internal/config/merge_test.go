@@ -274,6 +274,75 @@ func TestFlagSetEmptyByDefault(t *testing.T) {
 	}
 }
 
+// --- BUG-009: default hostname in manual-mode ---
+
+func TestMergeDefaultHostnameInManualMode(t *testing.T) {
+	os.Unsetenv("TS_HOSTNAME")
+	os.Unsetenv("TS_TARGET")
+	os.Unsetenv("TS_AUTHKEY")
+
+	flags := FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		ManualMode: true,
+	}
+
+	cfg, err := Merge(PartialConfig{}, flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Hostname == "" {
+		t.Fatal("Hostname should not be empty in manual-mode; expected default 'ts-bridge'")
+	}
+	if cfg.Hostname != "ts-bridge" {
+		t.Errorf("expected default hostname 'ts-bridge', got %q", cfg.Hostname)
+	}
+}
+
+func TestMergeExplicitHostnameOverridesDefault(t *testing.T) {
+	os.Unsetenv("TS_HOSTNAME")
+	os.Unsetenv("TS_TARGET")
+	os.Unsetenv("TS_AUTHKEY")
+
+	flags := FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		Hostname:   "my-server",
+		ManualMode: true,
+	}
+
+	cfg, err := Merge(PartialConfig{}, flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Hostname != "my-server" {
+		t.Errorf("expected explicit hostname 'my-server', got %q", cfg.Hostname)
+	}
+}
+
+func TestMergeAutoModeDerivesHostname(t *testing.T) {
+	os.Unsetenv("TS_HOSTNAME")
+	os.Unsetenv("TS_TARGET")
+	os.Unsetenv("TS_AUTHKEY")
+
+	flags := FlagSet{
+		Target:   "100.64.0.1:3389",
+		AuthKey:  "tskey-test",
+		Instance: "test-instance",
+	}
+
+	cfg, err := Merge(PartialConfig{}, flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Hostname == "" {
+		t.Fatal("Hostname should be derived in auto-mode")
+	}
+	if cfg.Hostname == "ts-bridge" {
+		t.Error("auto-mode should derive a specific hostname, not use the default")
+	}
+}
+
 // --- BUG-005: validation order tests ---
 
 func TestMergeValidationOrder_TargetFormatBeforeAuthKey(t *testing.T) {
