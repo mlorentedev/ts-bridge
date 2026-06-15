@@ -174,11 +174,15 @@ func run(cfg config.Config) error {
 
 	var ready atomic.Bool
 	var healthServer *http.Server
+	// Print banner BEFORE starting the health server to avoid concurrent
+	// log output corrupting the banner (BUG-010). The health server's
+	// goroutine logs "health server starting" which races with
+	// printBanner()'s fmt.Println() calls.
+	printBanner(cfg)
+
 	if cfg.HealthAddr != "" {
 		healthServer = health.StartServer(cfg.HealthAddr, &ready, logger)
 	}
-
-	printBanner(cfg)
 
 	sigCtx, sigCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer sigCancel()
