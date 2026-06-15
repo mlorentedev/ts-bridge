@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ts-bridge/internal/config"
+	"ts-bridge/internal/config/envfile"
 )
 
 const windowsOS = "windows"
@@ -102,6 +103,18 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	// (even when --auth-key-file also provided and takes precedence).
 	if authKeyFlagProvided {
 		fmt.Fprintln(os.Stderr, "WARNING: --auth-key is visible in the process list; use --auth-key-file instead")
+	}
+
+	// Auto-load .env from CWD if it exists.
+	// This mirrors docker-compose, webpack, rails conventions: the .env
+	// file created by "ts-bridge init" is automatically picked up by
+	// "ts-bridge connect" so the user never has to manually source it.
+	//
+	// Precedence is preserved: CLI flags > explicit env vars > .env > YAML > defaults.
+	// Load() writes into os.Setenv, and the merge chain reads from os.Getenv,
+	// so explicit env vars set before this call still win over .env values.
+	if err := envfile.Load(".env"); err != nil {
+		return fmt.Errorf("load .env: %w", err)
 	}
 
 	// Load YAML config (optional, not an error if missing).

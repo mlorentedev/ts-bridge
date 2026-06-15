@@ -314,11 +314,22 @@ func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 }
 
 
+// bannerWidth is the number of characters available for dynamic content
+// in the version line of the ASCII art banner. The inner border is 39
+// characters wide ("|  ...  |"); "TAILSCALE BRIDGE " is 17 characters,
+// leaving 22 for the version string. Versions longer than bannerWidth
+// are truncated with "..." so the border never breaks.
+const bannerWidth = 22
+
 //nolint:unused // wired into CLI subcommands in CLI-002..CLI-006
 func printBanner(cfg config.Config) {
 	fmt.Println()
 	fmt.Println("  +---------------------------------------+")
-	fmt.Printf("  |      TAILSCALE BRIDGE %-14s  |\n", version)
+	v := version
+	if len(v) > bannerWidth {
+		v = v[:bannerWidth-3] + "..."
+	}
+	fmt.Printf("  |      TAILSCALE BRIDGE %-*s  |\n", bannerWidth, v)
 	fmt.Println("  +---------------------------------------+")
 	fmt.Printf("  |  Host:   %-26s  |\n", cfg.Hostname)
 	fmt.Printf("  |  Local:  %-26s  |\n", cfg.LocalAddr)
