@@ -33,6 +33,7 @@ const (
 	cleanupMaxAttempts   = 5
 	cleanupRetryDelay    = 150 * time.Millisecond
 	stateDirPerms        = 0700
+	defaultControlURL    = "https://control.tailscale.com"
 )
 
 // Logger is the global structured logger.
@@ -342,6 +343,15 @@ func printBanner(cfg config.Config) {
 	fmt.Printf("  |  Host:   %-26s  |\n", cfg.Hostname)
 	fmt.Printf("  |  Local:  %-26s  |\n", cfg.LocalAddr)
 	fmt.Printf("  |  Target: %-26s  |\n", cfg.Target)
+	if cfg.ControlURL != "" && cfg.ControlURL != defaultControlURL {
+		fmt.Printf("  |  Control: %-25s  |\n", cfg.ControlURL)
+	}
+	if cfg.HealthAddr != "" {
+		fmt.Printf("  |  Health:  %-26s  |\n", cfg.HealthAddr)
+	}
+	if cfg.EphemeralState {
+		fmt.Println("  |  Node:    ephemeral (not persisted in admin console)  |")
+	}
 	fmt.Println("  +---------------------------------------+")
 	fmt.Println("  Waiting for connections...")
 	fmt.Println()

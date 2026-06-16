@@ -315,7 +315,11 @@ func validateAuthKey(key string) error {
 		return fmt.Errorf("auth key is required")
 	}
 	if !strings.HasPrefix(key, "tskey-") && !strings.HasPrefix(key, "hskey-") {
-		return fmt.Errorf("auth key invalid format (must start with tskey- or hskey-)")
+		msg := "auth key invalid format (must start with tskey- or hskey-)"
+		if strings.HasPrefix(key, "http://") || strings.HasPrefix(key, "https://") {
+			msg += " (did you paste a Tailscale login URL instead of the auth key? use the key value after /auth/singleusekey/ or /auth/key)"
+		}
+		return fmt.Errorf("%s", msg)
 	}
 	return nil
 }

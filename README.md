@@ -45,6 +45,9 @@ ts-bridge connect --target 100.82.151.104:3389 --auth-key tskey-auth-xxxxx
 
 # Interactive setup wizard
 ts-bridge init
+
+# See all options
+ts-bridge --help
 ```
 
 ### 2. Host Setup (Admin)
