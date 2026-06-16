@@ -231,7 +231,7 @@ func TestStatusWatchMode(t *testing.T) {
 		time.Sleep(600 * time.Millisecond)
 		// Send SIGINT via syscall to trigger the signal handler in runWatch.
 		pid := os.Getpid()
-		syscall.Kill(pid, syscall.SIGINT)
+		_ = syscall.Kill(pid, syscall.SIGINT) // signal always succeeds in-process test
 		close(stop)
 	}()
 
