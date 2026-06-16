@@ -289,7 +289,11 @@ func parseAuthKey() (string, error) {
 		return "", errors.New("TS_AUTHKEY is required")
 	}
 	if !strings.HasPrefix(authKey, "tskey-") && !strings.HasPrefix(authKey, "hskey-") {
-		return "", errors.New("TS_AUTHKEY: invalid format (must start with tskey- or hskey-)")
+		hint := ""
+		if strings.HasPrefix(authKey, "http://") || strings.HasPrefix(authKey, "https://") {
+			hint = " (did you paste a Tailscale login URL instead of the auth key? use the key value after /auth/singleusekey/ or /auth/key)"
+		}
+		return "", errors.New("TS_AUTHKEY: invalid format (must start with tskey- or hskey-)" + hint)
 	}
 	return authKey, nil
 }

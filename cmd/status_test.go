@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -218,26 +220,58 @@ func TestStatusWatchMode(t *testing.T) {
 	cmd.SetArgs([]string{
 		"--addr", addr,
 		"--watch",
-		"--interval", "500ms",
+		"--interval", "200ms",
 	})
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
-	// Run in a goroutine so we can stop it.
-	done := make(chan struct{})
+	// Send SIGINT after a short delay to stop the watch loop.
+	stop := make(chan struct{})
 	go func() {
-		time.Sleep(1200 * time.Millisecond)
-		close(done)
+		time.Sleep(600 * time.Millisecond)
+		// Send SIGINT via syscall to trigger the signal handler in runWatch.
+		pid := os.Getpid()
+		syscall.Kill(pid, syscall.SIGINT)
+		close(stop)
 	}()
 
-	// Create a context-based cancel mechanism by using a signal.
-	// Since Cobra doesn't support context cancellation directly,
-	// we test with a short watch and rely on the timer firing.
-	// For a proper test we'd need to mock time — skip for now.
-	_ = done
+	err := cmd.Execute()
 
-	// Just verify it doesn't panic with --watch
-	// (full watch test requires time mocking or real signal handling)
-	_ = buf.String()
-	_ = callCount
+	// Watch mode returns nil on graceful shutdown (SIGINT).
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+
+	// Assert: multiple poll cycles occurred (at least 2 ticks + initial).
+	// Each non-JSON tick produces a status block with "RUNNING".
+	lines := strings.Split(output, "\n")
+	runningCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "RUNNING") {
+			runningCount++
+		}
+	}
+	if runningCount < 2 {
+		t.Errorf("expected at least 2 RUNNING status lines (multiple polls), got %d\noutput:\n%s", runningCount, output)
+	}
+
+	// Assert: callCount incremented across multiple polls.
+	if callCount < 2 {
+		t.Errorf("expected at least 2 metric fetches across watch polls, got %d", callCount)
+	}
+
+	// Assert: output contains expected metrics fields.
+	if !strings.Contains(output, "Active connections") {
+		t.Errorf("expected output to contain 'Active connections', got:\n%s", output)
+	}
+	if !strings.Contains(output, "Bytes sent") {
+		t.Errorf("expected output to contain 'Bytes sent', got:\n%s", output)
+	}
+
+	// Assert: graceful shutdown message appears on stderr (we can't capture
+	// stderr in this test, but we verify the function returned nil — the
+	// signal handler path — confirming clean exit without panic).
+	<-stop
 }

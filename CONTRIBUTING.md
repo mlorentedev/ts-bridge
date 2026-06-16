@@ -101,13 +101,31 @@ golangci-lint run
 
 ```text
 ts-bridge/
-├── main.go                    # Core application
-├── main_test.go               # Unit tests
-├── main_integration_test.go   # Integration tests
+├── main.go                    # Orchestrator: flags, logger, signals, init, drain
+├── main_test.go               # Unit tests for main-package helpers
+├── main_integration_test.go   # Integration tests with mock Dialer
+├── cmd/
+│   ├── root.go                # Root command + subcommand registration
+│   ├── init.go                # 'ts-bridge init' interactive wizard
+│   ├── connect.go             # 'ts-bridge connect' bridge lifecycle
+│   ├── host.go                # 'ts-bridge host' (setup/check)
+│   ├── status.go              # 'ts-bridge status' health/metrics display
+│   └── version.go             # 'ts-bridge version'
+├── internal/
+│   ├── config/                # Env-var parsing, YAML config, validation
+│   ├── proxy/                 # Dialer interface, AcceptLoop, proxyConnections
+│   ├── health/                # /health/live, /health/ready, /metrics HTTP server
+│   ├── host/                  # Platform-specific host setup (Windows/Linux)
+│   └── telemetry/             # Atomic counters + read accessors
+├── specs/                     # Spec-Driven Development artifacts
 ├── scripts/
 │   ├── dev.sh                 # Development launcher
-│   ├── host/                  # Host setup (setup.ps1, ts-bridge.service)
-│   └── tests/                 # BATS tests (dev.sh, etc.)
+│   ├── tests/                 # BATS tests (dev.sh, etc.)
+│   └── host/                  # Host setup (setup.ps1, ts-bridge.service)
+├── docs/
+│   ├── adr/                   # Architecture Decision Records
+│   ├── runbooks/              # Operational procedures
+│   └── troubleshooting/       # Known errors and fixes
 ├── .github/workflows/
 │   ├── ci.yml                 # Build, test, lint, security
 │   └── release.yml            # Automatic releases
