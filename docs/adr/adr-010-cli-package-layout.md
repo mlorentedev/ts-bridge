@@ -40,15 +40,32 @@ the entry point. The `cmd/` directory becomes a namespace for CLI binaries;
 
 ```text
 ts-bridge/
-├── main.go              ← REMOVED
 ├── cmd/
-│   └── ts-bridge/       ← package main (was package cmd)
-│       ├── root.go
-│       ├── connect.go
-│       ├── init.go
-│       └── ...
-└── internal/            ← unchanged
+│   ├── cli/             ← package cmd (Cobra CLI code)
+│   │   ├── root.go      ← Execute(), initCmdWiring()
+│   │   ├── run.go       ← Runner, LoggerInit, bridge main loop
+│   │   ├── connect.go
+│   │   ├── init.go
+│   │   ├── host.go
+│   │   ├── status.go
+│   │   ├── version.go
+│   │   ├── confirm_overwrite.go
+│   │   └── *_test.go    ← package cmd + package cmd_test (same-dir)
+│   └── ts-bridge/       ← package main (entry point)
+│       └── main.go
+├── internal/            ← package internal/* (business logic)
+│   ├── config/
+│   ├── proxy/
+│   ├── health/
+│   ├── telemetry/
+│   └── host/
+└── go.mod
 ```
+
+Test placement follows Go conventions:
+- `package cmd` tests in `*_test.go` alongside source (access to internals)
+- `package cmd_test` external tests in the **same directory** (not a sibling dir)
+- `internal/*` tests in `*_test.go` alongside source
 
 `main.go` at the repository root is removed. The `main()` function lives in
 `cmd/ts-bridge/root.go` (or a dedicated `main.go` inside the package), directly
@@ -84,7 +101,7 @@ boundary."
 
 ### Negative
 
-- **Import path change.** `ts-bridge/cmd` → `ts-bridge/cmd/ts-bridge`.
+- **Import path change.** `ts-bridge/cmd` → `ts-bridge/cmd/cli`.
   Only affects `main.go` (one import). All other packages unchanged.
 - **`go build .` no longer works.** Must use `go build ./cmd/ts-bridge/` or
   `go build .` from within `cmd/ts-bridge/`.
