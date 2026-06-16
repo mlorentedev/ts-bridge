@@ -1,4 +1,4 @@
-package cmd
+package cmd_test
 
 import (
 	"bytes"
@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	cmdpkg "ts-bridge/cmd/cli"
 )
 
 const (
@@ -27,13 +29,13 @@ func newTestCommand() *cobra.Command {
 	version := &cobra.Command{
 		Use:   "version",
 		Short: "Print the version information",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			short, _ := cmd.Flags().GetBool("short")
+		RunE: func(c *cobra.Command, args []string) error {
+			short, _ := c.Flags().GetBool("short")
 			if short {
-				fmt.Fprintln(cmd.OutOrStdout(), Version())
+				fmt.Fprintln(c.OutOrStdout(), cmdpkg.Version())
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "ts-bridge %s (commit %s)\n", Version(), Commit())
+			fmt.Fprintf(c.OutOrStdout(), "ts-bridge %s (commit %s)\n", cmdpkg.Version(), cmdpkg.Commit())
 			return nil
 		},
 	}
@@ -44,14 +46,14 @@ func newTestCommand() *cobra.Command {
 }
 
 func TestRootHelp(t *testing.T) {
-	BuildVersion = defaultBuildVersion
-	BuildCommit = defaultBuildCommit
+	cmdpkg.BuildVersion = defaultBuildVersion
+	cmdpkg.BuildCommit = defaultBuildCommit
 
-	cmd := newTestCommand()
-	cmd.SetArgs([]string{"--help"})
+	c := newTestCommand()
+	c.SetArgs([]string{"--help"})
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	if err := cmd.Execute(); err != nil {
+	c.SetOut(&buf)
+	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	output := buf.String()
@@ -64,14 +66,14 @@ func TestRootHelp(t *testing.T) {
 }
 
 func TestVersionCommandDefault(t *testing.T) {
-	BuildVersion = defaultBuildVersion
-	BuildCommit = defaultBuildCommit
+	cmdpkg.BuildVersion = defaultBuildVersion
+	cmdpkg.BuildCommit = defaultBuildCommit
 
-	cmd := newTestCommand()
-	cmd.SetArgs([]string{"version"})
+	c := newTestCommand()
+	c.SetArgs([]string{"version"})
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	if err := cmd.Execute(); err != nil {
+	c.SetOut(&buf)
+	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	output := buf.String()
@@ -84,14 +86,14 @@ func TestVersionCommandDefault(t *testing.T) {
 }
 
 func TestVersionCommandShort(t *testing.T) {
-	BuildVersion = defaultBuildVersion
-	BuildCommit = defaultBuildCommit
+	cmdpkg.BuildVersion = defaultBuildVersion
+	cmdpkg.BuildCommit = defaultBuildCommit
 
-	cmd := newTestCommand()
-	cmd.SetArgs([]string{"version", "--short"})
+	c := newTestCommand()
+	c.SetArgs([]string{"version", "--short"})
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	if err := cmd.Execute(); err != nil {
+	c.SetOut(&buf)
+	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	output := strings.TrimSpace(buf.String())
@@ -101,14 +103,14 @@ func TestVersionCommandShort(t *testing.T) {
 }
 
 func TestVersionWithBuildVars(t *testing.T) {
-	BuildVersion = "1.0.0"
-	BuildCommit = "abc1234"
+	cmdpkg.BuildVersion = "1.0.0"
+	cmdpkg.BuildCommit = "abc1234"
 
-	cmd := newTestCommand()
-	cmd.SetArgs([]string{"version"})
+	c := newTestCommand()
+	c.SetArgs([]string{"version"})
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	if err := cmd.Execute(); err != nil {
+	c.SetOut(&buf)
+	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	output := buf.String()
@@ -121,14 +123,14 @@ func TestVersionWithBuildVars(t *testing.T) {
 }
 
 func TestVersionShortWithBuildVars(t *testing.T) {
-	BuildVersion = "2.1.0"
-	BuildCommit = "deadbeef"
+	cmdpkg.BuildVersion = "2.1.0"
+	cmdpkg.BuildCommit = "deadbeef"
 
-	cmd := newTestCommand()
-	cmd.SetArgs([]string{"version", "--short"})
+	c := newTestCommand()
+	c.SetArgs([]string{"version", "--short"})
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	if err := cmd.Execute(); err != nil {
+	c.SetOut(&buf)
+	if err := c.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	output := strings.TrimSpace(buf.String())

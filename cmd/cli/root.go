@@ -5,6 +5,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Build-time variables set via ldflags.
+var (
+	version = "dev"
+	commit  = "unknown"
+)
+
 // rootCmd is the root Cobra command.
 var rootCmd = &cobra.Command{
 	Use:   "ts-bridge",
@@ -47,4 +53,11 @@ func Commit() string {
 	return BuildCommit
 }
 
-
+// initCmdWiring is called by cmd/ts-bridge/main.go to wire build-time
+// variables and the bridge runner into this package before Execute().
+func initCmdWiring() {
+	BuildVersion = version
+	BuildCommit = commit
+	Runner = Run
+	LoggerInit = InitLogger
+}
