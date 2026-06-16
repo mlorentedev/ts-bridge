@@ -52,3 +52,6 @@ coverage.out
 coverage.html
 site/.astro/
 site/node_modules/
+
+# Agent session memory lives in the knowledge vault, never in this repo
+/MEMORY.md
