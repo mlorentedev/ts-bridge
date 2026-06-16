@@ -11,23 +11,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/spf13/cobra"
 )
-
-// newStatusCommand creates an isolated status command for testing.
-func newStatusCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "status",
-		Short: "Show bridge health and metrics summary",
-		RunE:  runStatus,
-	}
-	cmd.Flags().String("addr", "127.0.0.1:9090", "Health server address")
-	cmd.Flags().Bool("json", false, "Output raw JSON from /metrics")
-	cmd.Flags().BoolP("watch", "w", false, "Continuously watch and update status")
-	cmd.Flags().DurationP("interval", "i", 5*time.Second, "Polling interval for --watch")
-	return cmd
-}
 
 func TestStatusCommandNotRunning(t *testing.T) {
 	// When the bridge is not running, status should print a message to stderr

@@ -7,7 +7,9 @@ import (
 
 // Build-time variables set via ldflags.
 var (
+	//nolint:unused // wired into Runner/BuildCommit in main.go at runtime
 	version = "dev"
+	//nolint:unused // wired into BuildCommit in main.go at runtime
 	commit  = "unknown"
 )
 
@@ -53,11 +55,4 @@ func Commit() string {
 	return BuildCommit
 }
 
-// initCmdWiring is called by cmd/ts-bridge/main.go to wire build-time
-// variables and the bridge runner into this package before Execute().
-func initCmdWiring() {
-	BuildVersion = version
-	BuildCommit = commit
-	Runner = Run
-	LoggerInit = InitLogger
-}
+

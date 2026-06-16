@@ -98,6 +98,13 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 		cfg.Hostname = defaultHostname
 	}
 
+	// Apply default StateDir in manual mode — auto-mode derives it via
+	// applyAutoInstance(), but manual mode needs a fallback so the bridge
+	// doesn't fail with an empty path (BUG-020 secondary).
+	if cfg.StateDir == "" {
+		cfg.StateDir = defaultStateDir
+	}
+
 	return cfg, nil
 }
 
