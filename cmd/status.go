@@ -90,11 +90,16 @@ func runStatusWithWriter(addr string, jsonOut bool, w io.Writer) error {
 func runWatch(addr string, interval time.Duration, jsonOut bool, cmd *cobra.Command) error {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 
+	return runWatchLoop(addr, interval, jsonOut, cmd.OutOrStdout(), sigCh)
+}
+
+// runWatchLoop is the signal-agnostic watch loop. Accepts a signal channel
+// so tests can inject signals without relying on OS-level signal delivery.
+func runWatchLoop(addr string, interval time.Duration, jsonOut bool, w io.Writer, sigCh <-chan os.Signal) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-
-	w := cmd.OutOrStdout()
 
 	// First display immediately.
 	if err := displayOnce(addr, jsonOut, w); err != nil {
