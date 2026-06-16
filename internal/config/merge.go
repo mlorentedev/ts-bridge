@@ -81,9 +81,15 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 		return Config{}, err
 	}
 
-	if !flags.ManualMode {
-		applyAutoInstance(&cfg, flags)
-	}
+	// Resolve AutoInstance from the full precedence chain:
+	// flags.ManualMode > env TS_AUTO_INSTANCE > yaml auto_instance > default.
+	// This must happen BEFORE applyAutoInstance() so the derived values
+	// (LocalAddr, Hostname, StateDir) fire only when auto-mode is active.
+	resolveAutoInstance(&cfg, yamlCfg, flags)
+
+	// Derive auto-instance values (LocalAddr, Hostname, StateDir) only
+	// when auto-mode is active (BUG-020).
+	applyAutoInstance(&cfg, flags)
 
 	// Apply default hostname as a final fallback — after auto-instance
 	// derivation so that deriveAutoHostname can still fire when
@@ -222,6 +228,15 @@ func applyEnv(cfg *Config) {
 	applyEnvString(&cfg.HealthAddr, "TS_HEALTH_ADDR")
 	applyEnvString(&cfg.LogFormat, "TS_LOG_FORMAT")
 
+	// AutoInstance from env (TS_AUTO_INSTANCE / TS_MANUAL_MODE).
+	// This is applied here so that the env value is available for
+	// resolveAutoInstance() which runs after applyFlags().
+	if v := os.Getenv("TS_MANUAL_MODE"); v != "" {
+		cfg.AutoInstance = !parseBoolEnv(v)
+	} else if v := os.Getenv("TS_AUTO_INSTANCE"); v != "" {
+		cfg.AutoInstance = parseBoolEnv(v)
+	}
+
 	// Duration fields.
 	applyEnvDuration(&cfg.ConnectTimeout, "TS_TIMEOUT", nil)
 	applyEnvDuration(&cfg.DrainTimeout, "TS_DRAIN_TIMEOUT", nil)
@@ -326,6 +341,38 @@ func applyFlagString(dst *string, val string) {
 	if val != "" {
 		*dst = val
 	}
+}
+
+// resolveAutoInstance determines the final AutoInstance value from the
+// full precedence chain: flags.ManualMode > env TS_AUTO_INSTANCE > yaml
+// auto_instance > default. It must run AFTER applyFlags() so that the
+// flag takes highest priority, and BEFORE applyAutoInstance() so that
+// the derived values (LocalAddr, Hostname, StateDir) fire only when
+// auto-mode is actually active (BUG-020).
+func resolveAutoInstance(cfg *Config, yamlCfg PartialConfig, flags FlagSet) {
+	// Flag wins: --manual-mode forces manual mode regardless of env/YAML.
+	if flags.ManualMode {
+		cfg.AutoInstance = false
+		return
+	}
+
+	// Env wins: TS_AUTO_INSTANCE / TS_MANUAL_MODE from environment.
+	if v := os.Getenv("TS_MANUAL_MODE"); v != "" {
+		cfg.AutoInstance = !parseBoolEnv(v)
+		return
+	}
+	if v := os.Getenv("TS_AUTO_INSTANCE"); v != "" {
+		cfg.AutoInstance = parseBoolEnv(v)
+		return
+	}
+
+	// YAML: if auto_instance was explicitly set in YAML (non-nil pointer),
+	// use it. If nil, keep the current value (default or env).
+	if yamlCfg.AutoInstance != nil {
+		cfg.AutoInstance = *yamlCfg.AutoInstance
+	}
+
+	// Default: auto-mode is on (already set by defaults()).
 }
 
 func applyAutoInstance(cfg *Config, flags FlagSet) {
