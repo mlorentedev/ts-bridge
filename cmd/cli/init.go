@@ -561,11 +561,7 @@ func defaultConfigPath(format string) string {
 
 // checkPermissions warns if the file is world-readable (Unix only).
 func checkPermissions(path string) {
-<<<<<<< HEAD
 	if runtime.GOOS != windowsOS {
-=======
-	if runtime.GOOS != windowsOS {
->>>>>>> origin/master
 		info, err := os.Stat(path)
 		if err == nil && info.Mode().Perm()&0077 != 0 {
 			fmt.Fprintf(os.Stderr, "WARNING: %s has loose permissions (%04o); consider chmod 600 %s\n",
