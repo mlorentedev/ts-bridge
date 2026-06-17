@@ -5,6 +5,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Build-time variables set via ldflags.
+var (
+	//nolint:unused // wired into Runner/BuildCommit in main.go at runtime
+	version = "dev"
+	//nolint:unused // wired into BuildCommit in main.go at runtime
+	commit  = "unknown"
+)
+
 // rootCmd is the root Cobra command.
 var rootCmd = &cobra.Command{
 	Use:   "ts-bridge",
