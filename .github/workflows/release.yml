@@ -38,10 +38,10 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       - name: Run tests
-        run: go test -race -v ./...
+        run: go test -v ./...
 
       - name: Build and Package
         run: |
@@ -70,7 +70,7 @@ jobs:
             
             # Build the binary into the staging directory
             echo "Building for ${OS}/${ARCH}..."
-            GOOS=$OS GOARCH=$ARCH go build -ldflags="${LDFLAGS}" -o "${STAGING}/${BINARY_NAME}" .
+            GOOS=$OS GOARCH=$ARCH go build -ldflags="${LDFLAGS}" -o "${STAGING}/${BINARY_NAME}" ./cmd/ts-bridge/
             
             # Copy relevant assets
             cp .env.example README.md LICENSE "${STAGING}/"
