@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"context"
@@ -17,16 +17,9 @@ import (
 
 	"tailscale.com/tsnet"
 
-	"ts-bridge/cmd"
 	"ts-bridge/internal/config"
 	"ts-bridge/internal/health"
 	"ts-bridge/internal/proxy"
-)
-
-// Build-time variables set via ldflags.
-var (
-	version = "dev"
-	commit  = "unknown"
 )
 
 const (
@@ -39,42 +32,8 @@ const (
 // Logger is the global structured logger.
 var logger *slog.Logger
 
-func main() {
-	// Backward compat: handle deprecated -version and -v flags.
-	// These are the old flag-based entry points.
-	// Cobra's version subcommand and --verbose flag are the new canonical ways.
-	for i, arg := range os.Args[1:] {
-		if arg == "-version" || arg == "--version" {
-			fmt.Printf("ts-bridge %s (commit %s)\n", version, commit)
-			os.Exit(0)
-		}
-		if arg == "-v" {
-			// Replace -v with --verbose in-place.
-			newArgs := make([]string, 0, len(os.Args))
-			newArgs = append(newArgs, os.Args[:i+1]...)
-			newArgs[i] = "--verbose"
-			newArgs = append(newArgs, os.Args[i+2:]...)
-			os.Args = newArgs
-			break
-		}
-	}
-
-	// Wire build-time variables into the cmd package.
-	cmd.BuildVersion = version
-	cmd.BuildCommit = commit
-
-	// Wire the bridge runner and logger into cmd package.
-	cmd.Runner = run
-	cmd.LoggerInit = initLogger
-
-	// Let Cobra handle all flag parsing and command dispatch.
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-}
-
-func initLogger(cfg config.Config) {
+// InitLogger initializes the global structured logger.
+func InitLogger(cfg config.Config) {
 	var handler slog.Handler
 	opts := &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -111,13 +70,13 @@ func ensureStateDir(dir string) error {
 		return fmt.Errorf("state path exists but is not a directory: %s", dir)
 	}
 	// Warn if permissions are too open (Unix-style perms are not reliable on Windows).
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
+	if runtime.GOOS != windowsOS && info.Mode().Perm()&0077 != 0 {
 		logger.Warn("state directory has loose permissions", "path", dir, "perms", fmt.Sprintf("%o", info.Mode().Perm()))
 	}
 	return nil
 }
 
-//nolint:unused // wired into cmd.Runner = run
+//nolint:unused // wired into Runner = run
 func cleanupEphemeralStateDir(dir string) {
 	for attempt := 1; attempt <= cleanupMaxAttempts; attempt++ {
 		err := os.RemoveAll(dir)
@@ -142,7 +101,7 @@ func cleanupEphemeralStateDir(dir string) {
 	}
 }
 
-//nolint:unused // helper for cleanupEphemeralStateDir (called via cmd.Runner)
+//nolint:unused // helper for cleanupEphemeralStateDir (called via Runner)
 func isRetryableCleanupError(err error) bool {
 	if err == nil {
 		return false
@@ -156,8 +115,8 @@ func isRetryableCleanupError(err error) bool {
 		strings.Contains(errStr, "device or resource busy")
 }
 
-//nolint:unused // wired into cmd.Runner = run
-func run(cfg config.Config) error {
+//nolint:unused // wired into Runner = Run
+func Run(cfg config.Config) error {
 	if err := ensureStateDir(cfg.StateDir); err != nil {
 		return err
 	}
@@ -214,7 +173,7 @@ func run(cfg config.Config) error {
 	return errAccept
 }
 
-//nolint:unused // wired into cmd.Runner = run
+//nolint:unused // wired into Runner = Run
 func initTailscale(cfg config.Config) (*tsnet.Server, error) {
 	var tsnetLogf func(string, ...any)
 	if cfg.Verbose {
@@ -281,7 +240,7 @@ func diagnoseTailscaleInitError(err error) (hint, remediation string) {
 	return "", ""
 }
 
-//nolint:unused // wired into cmd.Runner = run
+//nolint:unused // wired into Runner = Run
 func handleShutdown(ctx context.Context, ready *atomic.Bool, listener net.Listener, healthServer *http.Server) {
 	<-ctx.Done()
 	logger.Info("shutting down")
@@ -298,7 +257,7 @@ func handleShutdown(ctx context.Context, ready *atomic.Bool, listener net.Listen
 	}
 }
 
-//nolint:unused // wired into cmd.Runner = run
+//nolint:unused // wired into Runner = Run
 func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 	if cfg.DrainTimeout <= 0 {
 		return
@@ -322,7 +281,6 @@ func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 	}
 }
 
-
 // bannerWidth is the number of characters available for dynamic content
 // in the version line of the ASCII art banner. The inner border is 39
 // characters wide ("|  ...  |"); "TAILSCALE BRIDGE " is 17 characters,
@@ -330,11 +288,11 @@ func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 // are truncated with "..." so the border never breaks.
 const bannerWidth = 22
 
-//nolint:unused // wired into cmd.Runner = run
+//nolint:unused // wired into Runner = Run
 func printBanner(cfg config.Config) {
 	fmt.Println()
 	fmt.Println("  +---------------------------------------+")
-	v := version
+	v := Version()
 	if len(v) > bannerWidth {
 		v = v[:bannerWidth-3] + "..."
 	}

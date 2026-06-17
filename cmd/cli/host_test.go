@@ -1,4 +1,4 @@
-package cmd
+package cmd_test
 
 import (
 	"bytes"
@@ -20,7 +20,7 @@ import (
 // Cobra error output.
 func TestRunHostSetupElevationErrorReturnsNotExits(t *testing.T) {
 	// Simulate the elevation-check pattern from runHostSetup.
-	cmd := &cobra.Command{
+	c := &cobra.Command{
 		Use: "test-setup",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// This mirrors the real code path:
@@ -34,11 +34,11 @@ func TestRunHostSetupElevationErrorReturnsNotExits(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{})
+	c.SetOut(&buf)
+	c.SetErr(&buf)
+	c.SetArgs([]string{})
 
-	err := cmd.Execute()
+	err := c.Execute()
 	if err == nil {
 		t.Fatal("expected error from RunE, got nil")
 	}

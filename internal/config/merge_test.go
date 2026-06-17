@@ -533,6 +533,174 @@ func TestMergeDialRetriesValidation(t *testing.T) {
 	}
 }
 
+// --- BUG-020: AutoInstance resolution in Merge() ---
+
+func TestMergeManualModeFlagDisablesAutoInstance(t *testing.T) {
+	os.Unsetenv("TS_AUTO_INSTANCE")
+	os.Unsetenv("TS_MANUAL_MODE")
+	os.Unsetenv("TS_TARGET")
+	os.Unsetenv("TS_AUTHKEY")
+
+	flags := FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		ManualMode: true,
+	}
+
+	cfg, err := Merge(PartialConfig{}, flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AutoInstance {
+		t.Error("AutoInstance should be false when --manual-mode flag is set")
+	}
+	// In manual mode, LocalAddr/Hostname should NOT be auto-derived.
+	if cfg.LocalAddr != "" {
+		t.Errorf("LocalAddr should be empty in manual mode without explicit flag, got %q", cfg.LocalAddr)
+	}
+	if cfg.Hostname != "ts-bridge" {
+		t.Errorf("Hostname should be default 'ts-bridge' in manual mode, got %q", cfg.Hostname)
+	}
+}
+
+func TestMergeEnvAutoInstanceFalse(t *testing.T) {
+	os.Setenv("TS_AUTO_INSTANCE", "false")
+	os.Setenv("TS_TARGET", "100.64.0.1:3389")
+	os.Setenv("TS_AUTHKEY", "tskey-test")
+	defer os.Unsetenv("TS_AUTO_INSTANCE")
+	defer os.Unsetenv("TS_TARGET")
+	defer os.Unsetenv("TS_AUTHKEY")
+
+	cfg, err := Merge(PartialConfig{}, FlagSet{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AutoInstance {
+		t.Error("AutoInstance should be false when TS_AUTO_INSTANCE=false")
+	}
+}
+
+func TestMergeEnvManualModeTrue(t *testing.T) {
+	os.Setenv("TS_MANUAL_MODE", "true")
+	os.Setenv("TS_TARGET", "100.64.0.1:3389")
+	os.Setenv("TS_AUTHKEY", "tskey-test")
+	defer os.Unsetenv("TS_MANUAL_MODE")
+	defer os.Unsetenv("TS_TARGET")
+	defer os.Unsetenv("TS_AUTHKEY")
+
+	cfg, err := Merge(PartialConfig{}, FlagSet{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AutoInstance {
+		t.Error("AutoInstance should be false when TS_MANUAL_MODE=true")
+	}
+}
+
+func TestMergeFlagManualModeOverridesEnvAutoInstance(t *testing.T) {
+	// Env says auto, flag says manual → flag wins.
+	os.Setenv("TS_AUTO_INSTANCE", "true")
+	os.Setenv("TS_TARGET", "100.64.0.1:3389")
+	os.Setenv("TS_AUTHKEY", "tskey-test")
+	defer os.Unsetenv("TS_AUTO_INSTANCE")
+	defer os.Unsetenv("TS_TARGET")
+	defer os.Unsetenv("TS_AUTHKEY")
+
+	flags := FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		ManualMode: true,
+	}
+
+	cfg, err := Merge(PartialConfig{}, flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AutoInstance {
+		t.Error("--manual-mode flag should override TS_AUTO_INSTANCE=true")
+	}
+}
+
+func TestMergeYAMLAutoInstanceExplicit(t *testing.T) {
+	os.Unsetenv("TS_AUTO_INSTANCE")
+	os.Unsetenv("TS_MANUAL_MODE")
+	os.Unsetenv("TS_TARGET")
+	os.Unsetenv("TS_AUTHKEY")
+
+	yamlCfg := PartialConfig{
+		Target:       "100.64.0.1:3389",
+		AutoInstance: boolPtr(false),
+	}
+
+	cfg, err := Merge(yamlCfg, FlagSet{AuthKey: "tskey-test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AutoInstance {
+		t.Error("AutoInstance should be false when YAML sets auto_instance: false")
+	}
+}
+
+func TestMergeAutoInstanceEnvOverridesYAML(t *testing.T) {
+	// Env should override YAML for AutoInstance.
+	os.Setenv("TS_AUTO_INSTANCE", "true")
+	os.Setenv("TS_TARGET", "100.64.0.1:3389")
+	os.Setenv("TS_AUTHKEY", "tskey-test")
+	defer os.Unsetenv("TS_AUTO_INSTANCE")
+	defer os.Unsetenv("TS_TARGET")
+	defer os.Unsetenv("TS_AUTHKEY")
+
+	yamlCfg := PartialConfig{
+		Target:       "100.64.0.1:3389",
+		AutoInstance: boolPtr(false),
+	}
+
+	cfg, err := Merge(yamlCfg, FlagSet{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.AutoInstance {
+		t.Error("TS_AUTO_INSTANCE=true env should override YAML auto_instance: false")
+	}
+}
+
+func TestMergeManualModeNoAutoDerivedValues(t *testing.T) {
+	// In manual mode, LocalAddr/Hostname/StateDir should NOT be auto-derived.
+	os.Unsetenv("TS_AUTO_INSTANCE")
+	os.Unsetenv("TS_MANUAL_MODE")
+	os.Unsetenv("TS_LOCAL_ADDR")
+	os.Unsetenv("TS_HOSTNAME")
+	os.Unsetenv("TS_STATE_DIR")
+	os.Unsetenv("TS_TARGET")
+	os.Unsetenv("TS_AUTHKEY")
+
+	flags := FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		ManualMode: true,
+	}
+
+	cfg, err := Merge(PartialConfig{}, flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AutoInstance {
+		t.Error("AutoInstance should be false in manual mode")
+	}
+	if cfg.EphemeralState {
+		t.Error("EphemeralState should be false in manual mode (no auto-derived StateDir)")
+	}
+	// LocalAddr should be empty (no auto-derivation, no env, no flag).
+	// The default LocalAddr is applied by LoadConfig(), not Merge().
+	if cfg.LocalAddr != "" {
+		t.Errorf("LocalAddr should be empty in manual mode without explicit value, got %q", cfg.LocalAddr)
+	}
+}
+
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 // --- Helper ---
 
 func mustParseDuration(s string) time.Duration {

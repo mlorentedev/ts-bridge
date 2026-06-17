@@ -16,6 +16,8 @@ import (
 )
 
 // newStatusCommand creates an isolated status command for testing.
+//
+//nolint:unused // used by internal test helpers in this package
 func newStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -216,26 +218,22 @@ func TestStatusWatchMode(t *testing.T) {
 	defer srv.Close()
 
 	addr := strings.TrimPrefix(srv.URL, "http://")
-	cmd := newStatusCommand()
-	cmd.SetArgs([]string{
-		"--addr", addr,
-		"--watch",
-		"--interval", "200ms",
-	})
 	var buf bytes.Buffer
-	cmd.SetOut(&buf)
 
 	// Send SIGINT after a short delay to stop the watch loop.
+	// We call runWatchLoop directly (bypassing signal.Notify) so the test
+	// can inject signals into the channel without OS-level syscall.Kill
+	// (which is Unix-only on Windows).
 	stop := make(chan struct{})
+	sigCh := make(chan os.Signal, 1)
+
 	go func() {
 		time.Sleep(600 * time.Millisecond)
-		// Send SIGINT via syscall to trigger the signal handler in runWatch.
-		pid := os.Getpid()
-		_ = syscall.Kill(pid, syscall.SIGINT) // signal always succeeds in-process test
+		sigCh <- syscall.SIGINT
 		close(stop)
 	}()
 
-	err := cmd.Execute()
+	err := runWatchLoop(addr, 200*time.Millisecond, false, &buf, sigCh)
 
 	// Watch mode returns nil on graceful shutdown (SIGINT).
 	if err != nil {
