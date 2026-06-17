@@ -31,7 +31,7 @@ Download the binary from [Releases](https://github.com/mlorentedev/ts-bridge/rel
 
 ```env
 TS_AUTHKEY=tskey-auth-kXXXXXXXXX   # From Tailscale admin panel
-TS_TARGET=100.82.151.104:3389       # Host's Tailscale IP + RDP port
+TS_TARGET=my-desktop:3389           # Host's MagicDNS name + RDP port
 ```
 
 Then run the CLI:
@@ -41,7 +41,7 @@ Then run the CLI:
 ts-bridge connect
 
 # Or run with inline flags (overrides .env)
-ts-bridge connect --target 100.82.151.104:3389 --auth-key tskey-auth-xxxxx
+ts-bridge connect --target my-desktop:3389 --auth-key tskey-auth-xxxxx
 
 # Interactive setup wizard
 ts-bridge init
@@ -75,6 +75,32 @@ ts-bridge host check
 | **Ephemeral by Default** | Leaves no trace. The node is automatically removed from the network when the bridge closes. |
 | **Health & Metrics** | Built-in HTTP health endpoints plus `ts-bridge status` for human-readable summaries. |
 
+## MagicDNS
+
+ts-bridge works with MagicDNS out of the box — no configuration changes needed.
+
+### With MagicDNS (recommended)
+
+If MagicDNS is enabled in your tailnet, use your device's name instead of its Tailscale IP:
+
+```env
+TS_TARGET=my-desktop:3389
+```
+
+This is more readable, resilient to IP changes, and works the same way whether you're on Tailscale SaaS or Headscale.
+
+### Without MagicDNS (IP fallback)
+
+If MagicDNS is not available (e.g., custom control plane without MagicDNS configured), use the Tailscale IP directly:
+
+```env
+TS_TARGET=100.82.151.104:3389
+```
+
+### Headscale note
+
+When using a self-hosted Headscale instance, MagicDNS must be explicitly enabled in the Headscale configuration. Without it, fall back to IP-based targets.
+
 ## Before/After (The Workflow)
 
 ### Before (Native Tailscale on locked-down PC)
@@ -91,7 +117,7 @@ Error: Administrator privilege is required to install or start the Tailscale ser
   +---------------------------------------+
   |  Host:   tsb-office-laptop-a1b2c3     |
   |  Local:  127.0.0.1:33389              |
-  |  Target: 100.82.151.104:3389          |
+  |  Target: my-desktop:3389              |
   +---------------------------------------+
   Waiting for connections...
 ```
@@ -109,7 +135,7 @@ ssh -p 33389 user@127.0.0.1       # SSH targets
 | Variable | Default | Description |
 |---|---|---|
 | `TS_AUTHKEY` | — | **Required**. Tailscale/Headscale auth key (`tskey-*` or `hskey-*`). |
-| `TS_TARGET` | — | **Required**. Target IP/hostname and port (e.g., `100.x.x.x:3389`). |
+| `TS_TARGET` | — | **Required**. Target host:port — supports both IPs and MagicDNS hostnames (e.g., `100.x.x.x:3389` or `my-desktop:3389`). |
 | `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local bind address. |
 | `TS_CONTROL_URL` | — | Custom control plane URL for Headscale. |
 | `TS_INSTANCE_NAME` | — | Stable alias for deterministic port selection. |
