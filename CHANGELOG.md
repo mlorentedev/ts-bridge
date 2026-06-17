@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.12.9](https://github.com/mlorentedev/ts-bridge/compare/v1.12.8...v1.12.9) (2026-06-17)
+
+
+### Bug Fixes
+
+* **ci:** fix build-matrix cross-compile package path ([#156](https://github.com/mlorentedev/ts-bridge/issues/156)) ([e2cb699](https://github.com/mlorentedev/ts-bridge/commit/e2cb699485a9340f42e7baa3d77220618c7097bc))
+* **config:** resolve AutoInstance from full precedence chain (BUG-020) ([#151](https://github.com/mlorentedev/ts-bridge/issues/151)) ([fdc5cf4](https://github.com/mlorentedev/ts-bridge/commit/fdc5cf4a4f900cadfb6fbcd6895f0236b301a6aa))
+
 ## [1.12.8](https://github.com/mlorentedev/ts-bridge/compare/v1.12.7...v1.12.8) (2026-06-15)
 
 
