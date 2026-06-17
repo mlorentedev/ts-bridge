@@ -244,5 +244,5 @@ func formatDuration(d time.Duration) string {
 // below suppresses that false-positive lint warning.
 //nolint:unparam // runtime.GOOS is platform-dependent, not always true
 func supportsClearScreen() bool {
-	return runtime.GOOS != "windows"
+	return runtime.GOOS != windowsOS
 }

@@ -20,6 +20,7 @@ bin/
 dist/
 vendor/
 ts-bridge
+!/cmd/ts-bridge/
 
 # IDE
 .idea/

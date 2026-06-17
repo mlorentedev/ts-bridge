@@ -16,6 +16,8 @@ import (
 )
 
 // newStatusCommand creates an isolated status command for testing.
+//
+//nolint:unused // used by internal test helpers in this package
 func newStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
