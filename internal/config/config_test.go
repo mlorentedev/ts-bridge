@@ -209,6 +209,26 @@ func TestLoadConfig(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "hostname target (MagicDNS)",
+			env:     map[string]string{"TS_TARGET": "acemagic-lab-1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Target != "acemagic-lab-1:3389" {
+					t.Errorf("expected target acemagic-lab-1:3389, got %s", cfg.Target)
+				}
+			},
+		},
+		{
+			name:    "FQDN target (MagicDNS)",
+			env:     map[string]string{"TS_TARGET": "acemagic-lab-1.tail-abc123.ts.net:22", "TS_AUTHKEY": "tskey-auth-test123"},
+			wantErr: false,
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Target != "acemagic-lab-1.tail-abc123.ts.net:22" {
+					t.Errorf("expected target acemagic-lab-1.tail-abc123.ts.net:22, got %s", cfg.Target)
+				}
+			},
+		},
+		{
 			name:    "invalid auth key format",
 			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "invalid-key-format"},
 			wantErr: true,
