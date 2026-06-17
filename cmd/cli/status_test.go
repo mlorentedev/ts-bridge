@@ -13,6 +13,9 @@ import (
 	"time"
 )
 
+<<<<<<< HEAD
+=======
+
 func TestStatusCommandNotRunning(t *testing.T) {
 	// When the bridge is not running, status should print a message to stderr
 	// and return nil (not an error exit).

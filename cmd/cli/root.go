@@ -54,5 +54,3 @@ func Version() string {
 func Commit() string {
 	return BuildCommit
 }
-
-

@@ -70,7 +70,7 @@ func ensureStateDir(dir string) error {
 		return fmt.Errorf("state path exists but is not a directory: %s", dir)
 	}
 	// Warn if permissions are too open (Unix-style perms are not reliable on Windows).
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0 {
+	if runtime.GOOS != windowsOS && info.Mode().Perm()&0077 != 0 {
 		logger.Warn("state directory has loose permissions", "path", dir, "perms", fmt.Sprintf("%o", info.Mode().Perm()))
 	}
 	return nil
@@ -292,7 +292,7 @@ const bannerWidth = 22
 func printBanner(cfg config.Config) {
 	fmt.Println()
 	fmt.Println("  +---------------------------------------+")
-	v := version
+	v := Version()
 	if len(v) > bannerWidth {
 		v = v[:bannerWidth-3] + "..."
 	}
