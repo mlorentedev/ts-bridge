@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.10](https://github.com/mlorentedev/ts-bridge/compare/v1.12.9...v1.12.10) (2026-06-18)
+
+
+### Bug Fixes
+
+* **ci:** fix release build — use correct package path ([#162](https://github.com/mlorentedev/ts-bridge/issues/162)) ([6591ae8](https://github.com/mlorentedev/ts-bridge/commit/6591ae8217506fa02eca8a9fe0197156cd015dd2))
+
 ## [1.12.9](https://github.com/mlorentedev/ts-bridge/compare/v1.12.8...v1.12.9) (2026-06-17)
 
 
