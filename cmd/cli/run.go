@@ -19,6 +19,7 @@ import (
 
 	"ts-bridge/internal/config"
 	"ts-bridge/internal/health"
+	"ts-bridge/internal/logging"
 	"ts-bridge/internal/proxy"
 )
 
@@ -29,29 +30,36 @@ const (
 	defaultControlURL    = "https://control.tailscale.com"
 )
 
-// Logger is the global structured logger.
+// Logger is the global structured logger (console).
 var logger *slog.Logger
 
-// InitLogger initializes the global structured logger.
-func InitLogger(cfg config.Config) {
-	var handler slog.Handler
-	opts := &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}
-	if cfg.Verbose {
-		opts.Level = slog.LevelDebug
-	}
+// logDir is the current log file path, used by the banner.
+var logDir string
 
-	if cfg.LogFormat == "json" {
-		handler = slog.NewJSONHandler(os.Stdout, opts)
-	} else {
-		handler = slog.NewTextHandler(os.Stdout, opts)
-	}
-	logger = slog.New(handler)
+// logging is the dual-output logger instance.
+var loggingInstance *logging.Logger
+
+// InitLogger initializes the dual structured logger (console + file).
+func InitLogger(cfg config.Config) {
+	logDir = logging.LogDirForPlatform()
+
+	loggingInstance = logging.New(logging.Config{
+		Verbose:   cfg.Verbose,
+		LogFormat: cfg.LogFormat,
+		LogDir:    logDir,
+	})
+
+	// Use the combined logger (writes to both console and file).
+	logger = loggingInstance.Combined()
 
 	// Also set the package-level logger in config so that YAML
 	// warnings use structured logging (BUG-016).
 	config.SetLogger(logger)
+}
+
+// LogFile returns the current log file path for banner display.
+func LogFile() string {
+	return logDir
 }
 
 func ensureStateDir(dir string) error {
@@ -149,7 +157,13 @@ func Run(cfg config.Config) error {
 	}
 
 	sigCtx, sigCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer sigCancel()
+	defer func() {
+		sigCancel()
+		if loggingInstance != nil {
+			// #nosec G104 // cleanup: ignore close errors.
+			loggingInstance.Close()
+		}
+	}()
 
 	go handleShutdown(sigCtx, &ready, listener, healthServer)
 
@@ -176,9 +190,9 @@ func Run(cfg config.Config) error {
 //nolint:unused // wired into Runner = Run
 func initTailscale(cfg config.Config) (*tsnet.Server, error) {
 	var tsnetLogf func(string, ...any)
-	if cfg.Verbose {
+	if loggingInstance != nil {
 		tsnetLogf = func(format string, args ...any) {
-			logger.Debug(fmt.Sprintf(format, args...), "component", "tsnet")
+			loggingInstance.File().Debug(fmt.Sprintf(format, args...), "component", "tsnet")
 		}
 	} else {
 		tsnetLogf = func(string, ...any) {}
@@ -309,6 +323,9 @@ func printBanner(cfg config.Config) {
 	}
 	if cfg.EphemeralState {
 		fmt.Println("  |  Node:    ephemeral (not persisted in admin console)  |")
+	}
+	if logDir != "" {
+		fmt.Printf("  |  Log:      %-26s  |\n", logDir)
 	}
 	fmt.Println("  +---------------------------------------+")
 	fmt.Println("  Waiting for connections...")
