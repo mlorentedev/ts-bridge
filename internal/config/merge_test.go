@@ -1,8 +1,10 @@
 package config
 
 import (
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -340,6 +342,112 @@ func TestMergeAutoModeDerivesHostname(t *testing.T) {
 	}
 	if cfg.Hostname == "ts-bridge" {
 		t.Error("auto-mode should derive a specific hostname, not use the default")
+	}
+}
+
+// --- BUG-021: auto-mode always derives LocalAddr ---
+
+func TestMergeAutoModeDerivesLocalAddr(t *testing.T) {
+	// When no LocalAddr flag/env is set, auto-mode must derive one.
+	os.Unsetenv("TS_LOCAL_ADDR")
+	os.Unsetenv("TS_HOSTNAME")
+	os.Unsetenv("TS_TARGET")
+	os.Unsetenv("TS_AUTHKEY")
+	os.Unsetenv("TS_PORT_RANGE")
+
+	flags := FlagSet{
+		Target:  "100.64.0.1:3389",
+		AuthKey: "tskey-test",
+	}
+
+	cfg, err := Merge(PartialConfig{}, flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.LocalAddr == "" {
+		t.Fatal("LocalAddr should be derived in auto-mode (BUG-021)")
+	}
+	if !strings.HasPrefix(cfg.LocalAddr, "127.0.0.1:") {
+		t.Errorf("LocalAddr should be 127.0.0.1:PORT, got %q", cfg.LocalAddr)
+	}
+	if !cfg.AutoInstance {
+		t.Error("AutoInstance should be true in default auto-mode")
+	}
+}
+
+func TestMergeAutoModeLocalAddrFromPortRangeFlag(t *testing.T) {
+	// When --port-range is set, derive from that range.
+	os.Unsetenv("TS_LOCAL_ADDR")
+	os.Unsetenv("TS_HOSTNAME")
+	os.Unsetenv("TS_TARGET")
+	os.Unsetenv("TS_AUTHKEY")
+	os.Unsetenv("TS_PORT_RANGE")
+
+	flags := FlagSet{
+		Target:    "100.64.0.1:3389",
+		AuthKey:   "tskey-test",
+		PortRange: "40000-41000",
+	}
+
+	cfg, err := Merge(PartialConfig{}, flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.LocalAddr == "" {
+		t.Fatal("LocalAddr should be derived from --port-range")
+	}
+	// Verify port is in the requested range.
+	_, portStr, err := net.SplitHostPort(cfg.LocalAddr)
+	if err != nil {
+		t.Fatalf("invalid LocalAddr: %v", err)
+	}
+	port, _ := strconv.Atoi(portStr)
+	if port < 40000 || port > 41000 {
+		t.Errorf("LocalAddr port %d not in range 40000-41000", port)
+	}
+}
+
+func TestMergeAutoModeLocalAddrFromEnv(t *testing.T) {
+	// When TS_LOCAL_ADDR is set, use it (no derivation).
+	os.Setenv("TS_LOCAL_ADDR", "127.0.0.1:9999")
+	os.Setenv("TS_TARGET", "100.64.0.1:3389")
+	os.Setenv("TS_AUTHKEY", "tskey-test")
+	defer os.Unsetenv("TS_LOCAL_ADDR")
+	defer os.Unsetenv("TS_TARGET")
+	defer os.Unsetenv("TS_AUTHKEY")
+
+	cfg, err := Merge(PartialConfig{}, FlagSet{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.LocalAddr != "127.0.0.1:9999" {
+		t.Errorf("LocalAddr should be from env, got %q", cfg.LocalAddr)
+	}
+}
+
+func TestMergeManualModeNoLocalAddrDerived(t *testing.T) {
+	// Manual mode: LocalAddr stays empty (user must set it).
+	os.Unsetenv("TS_LOCAL_ADDR")
+	os.Unsetenv("TS_HOSTNAME")
+	os.Unsetenv("TS_TARGET")
+	os.Unsetenv("TS_AUTHKEY")
+	os.Unsetenv("TS_PORT_RANGE")
+
+	flags := FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		ManualMode: true,
+	}
+
+	cfg, err := Merge(PartialConfig{}, flags)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AutoInstance {
+		t.Error("AutoInstance should be false in manual mode")
+	}
+	if cfg.LocalAddr != "" {
+		t.Errorf("LocalAddr should be empty in manual mode, got %q", cfg.LocalAddr)
 	}
 }
 

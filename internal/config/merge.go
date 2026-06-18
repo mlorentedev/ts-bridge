@@ -383,30 +383,35 @@ func resolveAutoInstance(cfg *Config, yamlCfg PartialConfig, flags FlagSet) {
 }
 
 func applyAutoInstance(cfg *Config, flags FlagSet) {
-	// Check if auto-instance should be disabled.
-	if flags.PortRange != "" || flags.Instance != "" {
-		// User provided instance-specific flags → enable auto mode.
-		cfg.AutoInstance = true
-	}
-
 	if !cfg.AutoInstance {
 		return
 	}
 
-	instanceName := flags.Instance
-	portRange := flags.PortRange
-
-	if cfg.LocalAddr == "" && portRange != "" {
+	// Derive LocalAddr from the explicit port-range flag (if provided),
+	// otherwise fall back to the well-known default so the user only
+	// needs to configure hostname + auth key (BUG-021 fix).
+	if cfg.LocalAddr == "" {
+		portRange := flags.PortRange
+		if portRange == "" {
+			portRange = defaultAutoPortRange
+		}
+		instanceName := flags.Instance
 		localAddr, err := deriveAutoLocalAddr(cfg.Target, instanceName, portRange)
 		if err == nil {
 			cfg.LocalAddr = localAddr
 		}
 	}
 
-	if cfg.Hostname == "" && instanceName != "" {
-		cfg.Hostname = deriveAutoHostname(cfg.Target, instanceName)
+	// Derive hostname from the instance flag (if provided), otherwise
+	// fall back to the default so MagicDNS works out of the box.
+	if cfg.Hostname == "" {
+		instanceName := flags.Instance
+		if instanceName != "" {
+			cfg.Hostname = deriveAutoHostname(cfg.Target, instanceName)
+		}
 	}
 
+	// Derive StateDir only when LocalAddr was auto-derived (auto-mode).
 	if cfg.StateDir == "" && cfg.Hostname != "" {
 		cfg.StateDir = defaultStateDir
 		cfg.EphemeralState = true
