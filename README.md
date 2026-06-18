@@ -146,7 +146,7 @@ TS_LOCAL_ADDR=127.0.0.1:9999
 | `TS_CONTROL_URL` | — | Custom control plane URL for Headscale. |
 | `TS_HEALTH_ADDR` | — | Enable health/metrics HTTP server. |
 | `TS_VERBOSE` | `false` | Debug logging. |
-| `TS_LOG_FORMAT` | `text` | `text` or `json`. |
+| `TS_LOG_FORMAT` | `text` | `text` (console) or `json` (file). |
 
 > **Minimal setup:** For most users, only `TS_AUTHKEY` and `TS_TARGET` are needed. Everything else has sensible defaults.
 
