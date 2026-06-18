@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.11](https://github.com/mlorentedev/ts-bridge/compare/v1.12.10...v1.12.11) (2026-06-18)
+
+
+### Bug Fixes
+
+* **config:** derive LocalAddr in auto-mode — fixes BUG-021 ([#165](https://github.com/mlorentedev/ts-bridge/issues/165)) ([73c4699](https://github.com/mlorentedev/ts-bridge/commit/73c46995ad99ff30e306b7336c245531e83681a7))
+
 ## [1.12.10](https://github.com/mlorentedev/ts-bridge/compare/v1.12.9...v1.12.10) (2026-06-18)
 
 
