@@ -121,13 +121,18 @@ Error: Administrator privilege is required to install or start the Tailscale ser
   +---------------------------------------+
   Waiting for connections...
 ```
-Connect using the address from the banner's `Local:` line. In auto mode the port is hash-derived from the `33389-34388` range, so it differs per machine/instance:
+Connect using the address from the banner's `Local:` line. By default the bridge listens on `127.0.0.1:33389`:
 
 ```bash
-# Read the actual port from the banner above (example shows :33389)
 mstsc /v:127.0.0.1:33389          # Windows RDP
 xfreerdp /v:127.0.0.1:33389       # Linux RDP
 ssh -p 33389 user@127.0.0.1       # SSH targets
+```
+
+To use a different port, set `TS_LOCAL_ADDR`:
+
+```env
+TS_LOCAL_ADDR=127.0.0.1:9999
 ```
 
 ## Configuration
@@ -137,12 +142,13 @@ ssh -p 33389 user@127.0.0.1       # SSH targets
 | `TS_AUTHKEY` | — | **Required**. Tailscale/Headscale auth key (`tskey-*` or `hskey-*`). |
 | `TS_TARGET` | — | **Required**. Target host:port — supports both IPs and MagicDNS hostnames (e.g., `100.x.x.x:3389` or `my-desktop:3389`). |
 | `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local bind address. |
+| `TS_HOSTNAME` | — | Tailscale hostname (default: auto-derived from target). |
 | `TS_CONTROL_URL` | — | Custom control plane URL for Headscale. |
-| `TS_INSTANCE_NAME` | — | Stable alias for deterministic port selection. |
-| `TS_PORT_RANGE` | `33389-34388` | Port range for auto mode. |
 | `TS_HEALTH_ADDR` | — | Enable health/metrics HTTP server. |
 | `TS_VERBOSE` | `false` | Debug logging. |
 | `TS_LOG_FORMAT` | `text` | `text` or `json`. |
+
+> **Minimal setup:** For most users, only `TS_AUTHKEY` and `TS_TARGET` are needed. Everything else has sensible defaults.
 
 For the full configuration reference (all env vars, YAML config, CLI flags), see the [Configuration](https://mlorentedev.github.io/ts-bridge/configuration/) and [CLI Reference](https://mlorentedev.github.io/ts-bridge/cli-reference/) pages.
 

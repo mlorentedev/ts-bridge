@@ -321,6 +321,13 @@ func applyAutoInstanceConfig(cfg *Config) error {
 			return err
 		}
 		cfg.LocalAddr = localAddr
+	} else if cfg.LocalAddr == defaultLocalAddr {
+		// Explicit port configured — user set TS_LOCAL_ADDR.
+		// Skip hostname derivation so the user can pick their own.
+		if cfg.Hostname == "" {
+			cfg.Hostname = defaultHostname
+		}
+		return nil
 	}
 
 	if cfg.Hostname == "" {
