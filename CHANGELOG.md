@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.1](https://github.com/mlorentedev/ts-bridge/compare/v1.15.0...v1.15.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* **host:** honor bool-flag precedence, report actual RDP port, add Windows CI ([#194](https://github.com/mlorentedev/ts-bridge/issues/194)) ([65e5c41](https://github.com/mlorentedev/ts-bridge/commit/65e5c41bc5fc99bf54d4230df14f0ce606d16be4))
+
 ## [1.15.0](https://github.com/mlorentedev/ts-bridge/compare/v1.14.0...v1.15.0) (2026-06-19)
 
 
