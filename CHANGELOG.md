@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/mlorentedev/ts-bridge/compare/v1.12.11...v1.13.0) (2026-06-18)
+
+
+### Features
+
+* SRE-grade structured logging with file output and rotation ([#169](https://github.com/mlorentedev/ts-bridge/issues/169)) ([0dfc030](https://github.com/mlorentedev/ts-bridge/commit/0dfc030130e8072fa2b838798e8c512753398d99))
+
 ## [1.12.11](https://github.com/mlorentedev/ts-bridge/compare/v1.12.10...v1.12.11) (2026-06-18)
 
 
