@@ -34,11 +34,20 @@ func DefaultVerbose() bool { return defaultVerbose }
 func DefaultLogFormat() string { return defaultLogFormat }
 
 // Flags holds values provided via CLI flags for host commands.
+//
+// NoSleepSet / VerboseSet record whether the corresponding bool flag was
+// explicitly passed on the command line. Cobra defaults a bool flag to false,
+// so the value alone can't distinguish "not set" from "explicitly false";
+// without the *Set companion an unset flag would clobber the env layer and
+// break the flags > env > defaults precedence chain. Non-bool flags use a
+// natural sentinel instead (Port == 0, FirewallRule/LogFormat == "").
 type Flags struct {
 	FirewallRule string
 	NoSleep      bool
+	NoSleepSet   bool
 	Port         int
 	Verbose      bool
+	VerboseSet   bool
 	LogFormat    string
 }
 
@@ -131,18 +140,21 @@ func applyFlags(cfg *Config, flags Flags) {
 		cfg.FirewallRule = flags.FirewallRule
 	}
 
-	// NoSleep — apply if explicitly set (Cobra always sets bool to false by default,
-	// so we can't distinguish "not set" from "explicitly false". We apply it anyway
-	// since the flag is the highest-precedence source).
-	cfg.NoSleep = flags.NoSleep
+	// NoSleep — apply only if the flag was explicitly passed, so an unset
+	// --no-sleep does not overwrite TS_HOST_NO_SLEEP from the environment.
+	if flags.NoSleepSet {
+		cfg.NoSleep = flags.NoSleep
+	}
 
 	// RDP Port — apply only if positive (zero means "not set").
 	if flags.Port > 0 {
 		cfg.Port = flags.Port
 	}
 
-	// Verbose.
-	cfg.Verbose = flags.Verbose
+	// Verbose — apply only if explicitly passed (same reasoning as NoSleep).
+	if flags.VerboseSet {
+		cfg.Verbose = flags.Verbose
+	}
 
 	// Log format — apply if non-empty.
 	if flags.LogFormat != "" {

@@ -28,6 +28,7 @@ func TestMerge_FlagsOverrideDefaults(t *testing.T) {
 		FirewallRule: "CustomRule",
 		Port:         3390,
 		NoSleep:      true,
+		NoSleepSet:   true,
 	}
 	cfg := Merge(flags)
 	if cfg.FirewallRule != "CustomRule" {
@@ -60,11 +61,43 @@ func TestMerge_EmptyFirewallRuleIsIgnored(t *testing.T) {
 }
 
 func TestMerge_VerboseFlag(t *testing.T) {
-	flags := Flags{Verbose: true}
+	flags := Flags{Verbose: true, VerboseSet: true}
 	cfg := Merge(flags)
 	if !cfg.Verbose {
 		t.Error("Verbose = false, want true")
 	}
+}
+
+// TestMerge_BoolFlagPrecedence guards the flags > env > defaults chain for the
+// bool flags (no-sleep, verbose): an unset flag must NOT clobber an env value,
+// and an explicitly-passed flag must win over env. Regression test for the bug
+// where applyFlags unconditionally assigned cfg.NoSleep = flags.NoSleep.
+func TestMerge_BoolFlagPrecedence(t *testing.T) {
+	t.Run("unset flag does not override env", func(t *testing.T) {
+		t.Setenv("TS_HOST_NO_SLEEP", "true")
+		t.Setenv("TS_HOST_VERBOSE", "true")
+		// Flag not passed: NoSleepSet/VerboseSet are false.
+		cfg := Merge(Flags{})
+		if !cfg.NoSleep {
+			t.Error("NoSleep = false, want true (env should win when flag unset)")
+		}
+		if !cfg.Verbose {
+			t.Error("Verbose = false, want true (env should win when flag unset)")
+		}
+	})
+
+	t.Run("explicit flag overrides env", func(t *testing.T) {
+		t.Setenv("TS_HOST_NO_SLEEP", "true")
+		t.Setenv("TS_HOST_VERBOSE", "true")
+		// Flag explicitly passed as false (the ambiguous case).
+		cfg := Merge(Flags{NoSleep: false, NoSleepSet: true, Verbose: false, VerboseSet: true})
+		if cfg.NoSleep {
+			t.Error("NoSleep = true, want false (explicit flag should win over env)")
+		}
+		if cfg.Verbose {
+			t.Error("Verbose = true, want false (explicit flag should win over env)")
+		}
+	})
 }
 
 func TestMerge_LogFormatFlag(t *testing.T) {
