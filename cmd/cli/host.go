@@ -4,6 +4,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"runtime"
 
@@ -85,7 +86,14 @@ Examples:
 func init() {
 	setupCmd.Flags().Bool("no-sleep", false, "Skip disabling sleep mode")
 	setupCmd.Flags().String("firewall-rule", "Tailscale-RDP-Ingress", "Custom firewall rule name")
+	setupCmd.Flags().Int("port", 0, "RDP port (default: 3389)")
+	setupCmd.Flags().Bool("json", false, "Output in JSON format")
+	setupCmd.Flags().Bool("verbose", false, "Enable verbose (debug) logging")
+	setupCmd.Flags().String("log-format", "", "Log format (text|json)")
+
 	checkCmd.Flags().Bool("json", false, "Output in JSON format")
+	checkCmd.Flags().Bool("verbose", false, "Enable verbose (debug) logging")
+	checkCmd.Flags().String("log-format", "", "Log format (text|json)")
 
 	hostCmd.AddCommand(setupCmd)
 	hostCmd.AddCommand(checkCmd)
@@ -108,22 +116,41 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("host setup requires elevated privileges")
 	}
 
-	fmt.Println()
-	fmt.Println("  HOST SETUP")
-	fmt.Println("  ---------------------------------------")
+	// Initialize logger for host commands.
+	logger := hostInitLogger(cmd)
 
-	noSleep, _ := cmd.Flags().GetBool("no-sleep")
-	firewallRule, _ := cmd.Flags().GetString("firewall-rule")
-	if firewallRule == "" {
-		firewallRule = "Tailscale-RDP-Ingress"
+	// Collect CLI flags.
+	flags := host.Flags{
+		NoSleep:      mustBool(cmd, "no-sleep"),
+		FirewallRule: mustString(cmd, "firewall-rule"),
+		Port:         mustInt(cmd, "port"),
+		Verbose:      mustBool(cmd, "verbose"),
+		LogFormat:    mustString(cmd, "log-format"),
 	}
 
-	result, err := host.Setup(host.SetupFlags{
-		NoSleep:      noSleep,
-		FirewallRule: firewallRule,
-	})
+	// Merge: flags > env > defaults.
+	cfg := host.Merge(flags)
+
+	// Validate firewall rule early (before any side effects).
+	if _, err := host.SanitizeFirewallRule(cfg.FirewallRule); err != nil {
+		return fmt.Errorf("invalid firewall rule: %w", err)
+	}
+
+	logger.Info("starting host setup",
+		"firewall_rule", cfg.FirewallRule,
+		"rdp_port", cfg.Port,
+		"no_sleep", cfg.NoSleep,
+	)
+
+	result, err := host.Setup(cfg, logger)
 	if err != nil {
+		logger.Error("host setup failed", "error", err)
 		return fmt.Errorf("host setup failed: %w", err)
+	}
+
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	if jsonOut {
+		return printSetupJSON(result, cfg)
 	}
 
 	// Print step-by-step results.
@@ -136,17 +163,21 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	printSetupSummary(result.RDPPort)
+	printSetupSummary(cfg)
 	return nil
 }
 
 // ─── Check ───────────────────────────────────────────────────────
 
 func runHostCheck(cmd *cobra.Command, args []string) error {
+	// Initialize logger for host commands.
+	logger := hostInitLogger(cmd)
+
 	jsonOut, _ := cmd.Flags().GetBool("json")
 
-	result, err := host.Check()
+	result, err := host.Check(logger)
 	if err != nil {
+		logger.Error("host check failed", "error", err)
 		return fmt.Errorf("host check failed: %w", err)
 	}
 
@@ -156,6 +187,29 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 
 	printCheckText(result)
 	return nil
+}
+
+// ─── Logger initialization ──────────────────────────────────────
+
+// hostInitLogger creates a lightweight structured logger for host commands.
+// Host commands run independently (not after connect), so they need their
+// own logger. File logging is not used for setup/check — only console.
+func hostInitLogger(cmd *cobra.Command) *slog.Logger {
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	logFormat, _ := cmd.Flags().GetBool("json")
+	_ = logFormat // --json is output format, not log format.
+
+	var level slog.Level
+	if verbose {
+		level = slog.LevelDebug
+	} else {
+		level = slog.LevelInfo
+	}
+
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: level,
+	})
+	return slog.New(handler)
 }
 
 // ─── Print helpers ───────────────────────────────────────────────
@@ -170,6 +224,23 @@ func printOk(msg string) {
 
 func printWarn(msg string) {
 	fmt.Fprintf(os.Stderr, "       WARNING: %s\n", msg)
+}
+
+// mustBool, mustString, mustInt are helper getters that ignore errors
+// since Cobra always succeeds for registered flags.
+func mustBool(cmd *cobra.Command, name string) bool {
+	v, _ := cmd.Flags().GetBool(name)
+	return v
+}
+
+func mustString(cmd *cobra.Command, name string) string {
+	v, _ := cmd.Flags().GetString(name)
+	return v
+}
+
+func mustInt(cmd *cobra.Command, name string) int {
+	v, _ := cmd.Flags().GetInt(name)
+	return v
 }
 
 // ─── Output helpers ──────────────────────────────────────────────
@@ -194,7 +265,7 @@ func printElevationError() {
 	}
 }
 
-func printSetupSummary(rdpPort int) {
+func printSetupSummary(cfg host.Config) {
 	fmt.Println()
 	fmt.Println("  ---------------------------------------")
 	fmt.Println("  HOST READY")
@@ -204,11 +275,49 @@ func printSetupSummary(rdpPort int) {
 	if tsIP != "" {
 		fmt.Printf("  Tailscale IP: %s\n", tsIP)
 	}
-	fmt.Printf("  RDP Port:     %d\n", rdpPort)
+	fmt.Printf("  RDP Port:     %d\n", cfg.Port)
 	fmt.Println()
 	fmt.Println("  Client .env config:")
-	fmt.Printf("  TS_TARGET=%s:%d\n", tsIP, rdpPort)
+	fmt.Printf("  TS_TARGET=%s:%d\n", tsIP, cfg.Port)
 	fmt.Println()
+}
+
+// setupJSONOutput is the JSON structure for host setup --json output.
+type setupJSONOutput struct {
+	Steps    []setupStepJSON `json:"steps"`
+	RDPPort  int             `json:"rdp_port"`
+	Warnings []string        `json:"warnings"`
+	Errors   []string        `json:"errors"`
+}
+
+type setupStepJSON struct {
+	Name    string `json:"name"`
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+func printSetupJSON(result host.SetupResult, cfg host.Config) error {
+	output := setupJSONOutput{
+		RDPPort: cfg.Port,
+	}
+
+	for _, step := range result.Steps {
+		output.Steps = append(output.Steps, setupStepJSON{
+			Name:    step.Name,
+			Success: step.Success,
+			Message: step.Message,
+		})
+		if !step.Success {
+			output.Warnings = append(output.Warnings, step.Message)
+		}
+	}
+
+	data, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal setup result: %w", err)
+	}
+	fmt.Println(string(data))
+	return nil
 }
 
 func printCheckText(r host.CheckResult) {
