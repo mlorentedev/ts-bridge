@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ts-bridge/internal/config/envfile"
 	"ts-bridge/internal/host"
 )
 
@@ -116,8 +117,12 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("host setup requires elevated privileges")
 	}
 
-	// Initialize logger for host commands.
-	logger := hostInitLogger(cmd)
+	// Auto-load .env from CWD so the TS_HOST_* values written by
+	// "ts-bridge host init" are honored here, mirroring "ts-bridge connect".
+	// Explicit env vars and CLI flags still win over .env (merge precedence).
+	if err := envfile.Load(".env"); err != nil {
+		return fmt.Errorf("load .env: %w", err)
+	}
 
 	// Collect CLI flags.
 	flags := host.Flags{
@@ -135,6 +140,10 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	if _, err := host.SanitizeFirewallRule(cfg.FirewallRule); err != nil {
 		return fmt.Errorf("invalid firewall rule: %w", err)
 	}
+
+	// Build the logger from the resolved config so --log-format / --verbose
+	// (and their TS_HOST_* env equivalents) actually take effect.
+	logger := hostInitLogger(cfg)
 
 	logger.Info("starting host setup",
 		"firewall_rule", cfg.FirewallRule,
@@ -170,12 +179,22 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 // ─── Check ───────────────────────────────────────────────────────
 
 func runHostCheck(cmd *cobra.Command, args []string) error {
-	// Initialize logger for host commands.
-	logger := hostInitLogger(cmd)
+	// Auto-load .env so the check reflects the configured firewall rule / port
+	// written by "ts-bridge host init", mirroring "ts-bridge connect".
+	if err := envfile.Load(".env"); err != nil {
+		return fmt.Errorf("load .env: %w", err)
+	}
+
+	// check has no firewall-rule/port flags; those resolve from env + defaults.
+	cfg := host.Merge(host.Flags{
+		Verbose:   mustBool(cmd, "verbose"),
+		LogFormat: mustString(cmd, "log-format"),
+	})
+	logger := hostInitLogger(cfg)
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 
-	result, err := host.Check(logger)
+	result, err := host.Check(cfg, logger)
 	if err != nil {
 		logger.Error("host check failed", "error", err)
 		return fmt.Errorf("host check failed: %w", err)
@@ -191,24 +210,25 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 
 // ─── Logger initialization ──────────────────────────────────────
 
-// hostInitLogger creates a lightweight structured logger for host commands.
-// Host commands run independently (not after connect), so they need their
-// own logger. File logging is not used for setup/check — only console.
-func hostInitLogger(cmd *cobra.Command) *slog.Logger {
-	verbose, _ := cmd.Flags().GetBool("verbose")
-	logFormat, _ := cmd.Flags().GetBool("json")
-	_ = logFormat // --json is output format, not log format.
-
-	var level slog.Level
-	if verbose {
+// hostInitLogger creates a lightweight structured logger for host commands
+// from the resolved config. Host commands run independently (not after
+// connect), so they need their own logger. File logging is not used for
+// setup/check — only console. The output format honors cfg.LogFormat, and the
+// level honors cfg.Verbose (note: the separate --json flag controls the
+// command's result output, not the logger).
+func hostInitLogger(cfg host.Config) *slog.Logger {
+	level := slog.LevelInfo
+	if cfg.Verbose {
 		level = slog.LevelDebug
-	} else {
-		level = slog.LevelInfo
 	}
+	opts := &slog.HandlerOptions{Level: level}
 
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: level,
-	})
+	var handler slog.Handler
+	if cfg.LogFormat == "json" {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	}
 	return slog.New(handler)
 }
 
@@ -298,7 +318,10 @@ type setupStepJSON struct {
 
 func printSetupJSON(result host.SetupResult, cfg host.Config) error {
 	output := setupJSONOutput{
-		RDPPort: cfg.Port,
+		RDPPort:  cfg.Port,
+		Steps:    make([]setupStepJSON, 0, len(result.Steps)),
+		Warnings: []string{},
+		Errors:   []string{},
 	}
 
 	for _, step := range result.Steps {

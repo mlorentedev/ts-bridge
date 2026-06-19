@@ -15,6 +15,7 @@ const (
 	defaultNoSleep          = false
 	defaultVerbose          = false
 	defaultLogFormat        = "text"
+	logFormatJSON           = "json"
 )
 
 // DefaultRDPPort returns the default RDP port.
@@ -113,11 +114,13 @@ func applyEnv(cfg *Config) {
 		cfg.Verbose = parseBoolEnv(v)
 	}
 
-	// Log format.
+	// Log format. Invalid values warn and fall back to the existing default.
 	if v := os.Getenv("TS_HOST_LOG_FORMAT"); v != "" {
-		cfg.LogFormat = strings.ToLower(v)
-		if cfg.LogFormat != "text" && cfg.LogFormat != "json" {
+		format := strings.ToLower(v)
+		if format != defaultLogFormat && format != logFormatJSON {
 			warnHostEnvVar("TS_HOST_LOG_FORMAT", v, "must be 'text' or 'json'")
+		} else {
+			cfg.LogFormat = format
 		}
 	}
 }

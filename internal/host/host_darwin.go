@@ -17,12 +17,12 @@ func setupImpl(_ Config, _ *slog.Logger) (SetupResult, error) {
 	return SetupResult{RDPPort: 3389}, nil
 }
 
-func checkImpl(_ *slog.Logger) (CheckResult, error) {
+func checkImpl(_ Config, _ *slog.Logger) (CheckResult, error) {
 	result := CheckResult{}
 	tsIP := TailscaleIP()
 	result.TailscaleIP = tsIP
 	result.TailscaleUp = tsIP != ""
-	result.RDPPort = 3389
+	result.RDPPort = defaultRDPPort
 	return result, nil
 }
 

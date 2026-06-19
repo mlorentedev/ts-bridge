@@ -169,8 +169,6 @@ func TestLoadConfig_InvalidFirewallRule(t *testing.T) {
 	}
 }
 
-
-
 func TestLoadConfig_Port1(t *testing.T) {
 	t.Setenv("TS_HOST_RDP_PORT", "1")
 	cfg, err := LoadConfig()
@@ -229,9 +227,11 @@ func TestLoadConfig_InvalidLogFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
-	// Invalid log format should still return a config but with the invalid value
-	// (validation is a soft warning, not a hard error for log format).
-	_ = cfg
+	// Invalid log format is a soft warning (not a hard error) and falls back to
+	// the default, as documented on LoadConfig.
+	if cfg.LogFormat != defaultLogFormat {
+		t.Errorf("LogFormat = %q, want fallback %q", cfg.LogFormat, defaultLogFormat)
+	}
 }
 
 // ─── Default accessor tests ──────────────────────────────────────

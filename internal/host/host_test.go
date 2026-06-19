@@ -109,7 +109,7 @@ func TestSetup_NoSleepSkipsPowerSettings(t *testing.T) {
 
 // TestCheck_DoesNotPanic verifies the delegation function works.
 func TestCheck_DoesNotPanic(t *testing.T) {
-	result, err := Check(nil)
+	result, err := Check(Config{}, nil)
 	if err != nil {
 		t.Fatalf("Check returned unexpected error: %v", err)
 	}

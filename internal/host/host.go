@@ -9,8 +9,8 @@ type SetupFlags = Flags
 
 // SetupResult holds the result of a host setup operation.
 type SetupResult struct {
-	RDPPort      int
-	Steps        []SetupStep
+	RDPPort int
+	Steps   []SetupStep
 }
 
 // SetupStep describes a single setup step and its outcome.
@@ -28,17 +28,19 @@ func Setup(cfg Config, logger *slog.Logger) (SetupResult, error) {
 
 // CheckResult holds the result of a host check operation.
 type CheckResult struct {
-	TailscaleIP  string
-	RDPPort      int
-	RDPEnabled   bool
-	FirewallOK   bool
-	TailscaleUp  bool
+	TailscaleIP string
+	RDPPort     int
+	RDPEnabled  bool
+	FirewallOK  bool
+	TailscaleUp bool
 }
 
-// Check performs a read-only verification of host readiness.
+// Check performs a read-only verification of host readiness. The resolved
+// config supplies the firewall rule name and RDP port so the check matches the
+// host's actual setup instead of assuming defaults.
 // The logger may be nil — callers that don't need structured output can pass nil.
-func Check(logger *slog.Logger) (CheckResult, error) {
-	return checkImpl(logger)
+func Check(cfg Config, logger *slog.Logger) (CheckResult, error) {
+	return checkImpl(cfg, logger)
 }
 
 // TailscaleIP returns the Tailscale IPv4 address, or empty string on failure.

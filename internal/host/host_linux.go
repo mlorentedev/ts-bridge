@@ -73,24 +73,27 @@ func setupImpl(cfg Config, logger *slog.Logger) (SetupResult, error) {
 	return SetupResult{RDPPort: rdpPort, Steps: steps}, nil
 }
 
-func checkImpl(logger *slog.Logger) (CheckResult, error) {
+func checkImpl(cfg Config, logger *slog.Logger) (CheckResult, error) {
 	result := CheckResult{}
 	tsIP := TailscaleIP()
 	result.TailscaleIP = tsIP
 	result.TailscaleUp = tsIP != ""
 
+	rdpPort := cfg.Port
+	if rdpPort == 0 {
+		rdpPort = defaultRDPPort
+	}
+
 	if _, err := exec.LookPath("xrdp"); err == nil {
 		result.RDPEnabled = true
-		result.RDPPort = 3389
+		result.RDPPort = rdpPort
 		if logger != nil {
 			logger.Info("xrdp check", "enabled", true, "port", result.RDPPort)
 		}
-	} else {
-		if logger != nil {
-			logger.Warn("xrdp not found")
-		}
+	} else if logger != nil {
+		logger.Warn("xrdp not found")
 	}
-	result.FirewallOK = checkFirewallRule()
+	result.FirewallOK = checkFirewallRule(rdpPort)
 	return result, nil
 }
 
@@ -121,13 +124,14 @@ func runIPTables(port int) error {
 	return exec.Command("iptables", "-A", "INPUT", "-p", "tcp", "--dport", fmt.Sprintf("%d", port), "-j", "ACCEPT").Run()
 }
 
-func checkFirewallRule() bool {
+func checkFirewallRule(port int) bool {
+	portStr := fmt.Sprintf("%d", port)
 	// #nosec G204 -- ufw/iptables are hardcoded system binaries.
-	if out, err := exec.Command("ufw", "status").Output(); err == nil && strings.Contains(string(out), "3389") {
+	if out, err := exec.Command("ufw", "status").Output(); err == nil && strings.Contains(string(out), portStr) {
 		return true
 	}
 	// #nosec G204 -- iptables is a hardcoded system binary.
-	if out, err := exec.Command("iptables", "-L", "INPUT", "-n").Output(); err == nil && strings.Contains(string(out), "3389") {
+	if out, err := exec.Command("iptables", "-L", "INPUT", "-n").Output(); err == nil && strings.Contains(string(out), portStr) {
 		return true
 	}
 	return false

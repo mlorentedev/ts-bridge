@@ -154,7 +154,7 @@ func runHostInitInteractive(cmd *cobra.Command, f hostInitFlags) error {
 
 	// Resolve config path.
 	if f.Config == "" {
-		f.Config = ".env"
+		f.Config = defaultConfigPath(formatENV)
 	}
 
 	// Write .env.
@@ -167,7 +167,7 @@ func runHostInitInteractive(cmd *cobra.Command, f hostInitFlags) error {
 }
 
 // runHostInitNonInteractive writes configuration silently from flags.
-func runHostInitNonInteractive(cmd *cobra.Command, f hostInitFlags) error {
+func runHostInitNonInteractive(_ *cobra.Command, f hostInitFlags) error {
 	// Apply defaults for unset values.
 	if f.Port < 1 {
 		f.Port = host.DefaultRDPPort()
@@ -178,7 +178,7 @@ func runHostInitNonInteractive(cmd *cobra.Command, f hostInitFlags) error {
 
 	// Resolve config path.
 	if f.Config == "" {
-		f.Config = ".env"
+		f.Config = defaultConfigPath(formatENV)
 	}
 
 	// Write .env.
@@ -195,54 +195,30 @@ func runHostInitNonInteractive(cmd *cobra.Command, f hostInitFlags) error {
 func writeHostEnv(f hostInitFlags) error {
 	envPath := f.Config
 
-	// Read existing .env if it exists.
-	existingVars := make(map[string]string)
+	// Read existing .env if it exists, preserving its (trimmed) lines so the file
+	// can be rewritten with the host section replaced rather than duplicated.
 	existingLines := []string{}
+	// #nosec G304 -- envPath is from the --config flag (user-controlled), the user's own .env file.
 	if data, err := os.ReadFile(envPath); err == nil {
 		for _, line := range strings.Split(string(data), "\n") {
-			trimmed := strings.TrimSpace(line)
-			existingLines = append(existingLines, trimmed)
-			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-				continue
-			}
-			if idx := strings.Index(trimmed, "="); idx > 0 {
-				key := strings.TrimSpace(trimmed[:idx])
-				val := strings.TrimSpace(trimmed[idx+1:])
-				existingVars[key] = val
-			}
+			existingLines = append(existingLines, strings.TrimSpace(line))
 		}
 	}
 
 	// Build new content: existing content + host vars at the end.
 	var sb strings.Builder
 
-	// Write existing non-host lines first.
-	inHostSection := false
-	for _, line := range existingLines {
-		// Skip existing TS_HOST_* lines — we'll replace them.
-		if strings.HasPrefix(line, "TS_HOST_") {
-			inHostSection = true
-			continue
-		}
-		// Skip the host section comment header if we're in it.
-		if strings.Contains(line, "Host configuration (ts-bridge host init)") {
-			inHostSection = true
-			continue
-		}
-		// If we were in a host section and hit a non-host line, skip blank/comment lines
-		// that belong to the old section.
-		if inHostSection && (line == "" || strings.HasPrefix(line, "#")) {
-			continue
-		}
-		if inHostSection && line != "" {
-			inHostSection = false
-		}
+	// Write existing non-host lines first (the previous host section is stripped
+	// so re-running `host init` replaces it instead of appending a duplicate).
+	for _, line := range stripHostSection(existingLines) {
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
 
-	// Add blank line separator if file had content.
-	if len(existingLines) > 0 {
+	// Add a blank-line separator + header only if the file had real (non-blank)
+	// content, so an empty .env gets no spurious header but an existing file
+	// (including one that already held a host section) keeps exactly one.
+	if hasNonBlank(existingLines) {
 		sb.WriteString("\n")
 		sb.WriteString("# ── Host configuration (ts-bridge host init) ──────────────────────\n")
 		sb.WriteString("#\n")
@@ -272,6 +248,38 @@ func writeHostEnv(f hostInitFlags) error {
 	}
 
 	return nil
+}
+
+// stripHostSection removes a previously-written host configuration block — the
+// TS_HOST_* assignments and their comment header — from the existing .env lines,
+// so a re-run of `host init` replaces the section instead of duplicating it.
+func stripHostSection(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	inHostSection := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "TS_HOST_") ||
+			strings.Contains(line, "Host configuration (ts-bridge host init)") {
+			inHostSection = true
+			continue
+		}
+		// Within an old host section, skip its trailing blank/comment lines.
+		if inHostSection && (line == "" || strings.HasPrefix(line, "#")) {
+			continue
+		}
+		inHostSection = false
+		out = append(out, line)
+	}
+	return out
+}
+
+// hasNonBlank reports whether any line has non-whitespace content.
+func hasNonBlank(lines []string) bool {
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // printHostInitSummary displays the configuration written.

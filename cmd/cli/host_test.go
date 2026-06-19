@@ -521,7 +521,7 @@ func TestHostInitCmd_Registered(t *testing.T) {
 	// We verify the command's RunE is set by checking that a command
 	// with the same structure works.
 	c := &cobra.Command{
-		Use:  "host",
+		Use:   "host",
 		Short: "Host commands",
 	}
 	if c.Use != "host" {
@@ -627,8 +627,8 @@ func TestHostInitFlags_BoundaryPorts(t *testing.T) {
 		{1, false},
 		{3389, false},
 		{65535, false},
-		{0, false},  // 0 = "use default", valid
-		{-1, false}, // -1 = "use default" (negative is treated as not set)
+		{0, false},    // 0 = "use default", valid
+		{-1, true},    // negative is invalid (matches parseHostInitFlags)
 		{65536, true}, // too high
 	}
 	for _, tt := range tests {
@@ -723,8 +723,8 @@ func newTestHostInitCommand() *cobra.Command {
 			noSleep, _ := cmd.Flags().GetBool("no-sleep")
 			config, _ := cmd.Flags().GetString("config")
 
-			// Validate port.
-			if port > 0 && (port < 1 || port > 65535) {
+			// Validate port (mirror parseHostInitFlags: non-zero out-of-range is invalid).
+			if port != 0 && (port < 1 || port > 65535) {
 				return fmt.Errorf("port must be between 1 and 65535, got %d", port)
 			}
 
