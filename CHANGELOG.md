@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/mlorentedev/ts-bridge/compare/v1.14.0...v1.15.0) (2026-06-19)
+
+
+### Features
+
+* **host:** parity host with client architecture ([#187](https://github.com/mlorentedev/ts-bridge/issues/187)) ([4aa13ec](https://github.com/mlorentedev/ts-bridge/commit/4aa13ec4a7588bcfb0a5f776ba87c37e7b2e7b64))
+
 ## [1.14.0](https://github.com/mlorentedev/ts-bridge/compare/v1.13.0...v1.14.0) (2026-06-19)
 
 
