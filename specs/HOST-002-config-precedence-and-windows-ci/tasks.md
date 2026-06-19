@@ -24,6 +24,9 @@ issue: 193
 - [x] **Un-skip** `TestWriteHostEnv_FilePermissions` on non-Windows.
 - [x] **Add** `test-windows` CI job (build + vet + test on `windows-latest`).
 - [x] **Strengthen** `smoke.ps1` to assert `host --help` lists `init`.
+- [x] **Fix flake exposed by the Windows job:** `TestStartServer`
+      (`internal/health`) slept a fixed 50ms then made one request; on Windows
+      the listener wasn't accepting yet. Poll until ready with a 3s deadline.
 
 ## Verification
 

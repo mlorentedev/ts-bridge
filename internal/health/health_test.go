@@ -246,11 +246,21 @@ func TestStartServer(t *testing.T) {
 		_ = server.Close()
 	}()
 
-	// Give it a moment to start.
-	time.Sleep(50 * time.Millisecond)
-	resp, err := http.Get("http://" + addr + "/health/live")
-	if err != nil {
-		t.Fatalf("real StartServer request failed: %v", err)
+	// StartServer runs ListenAndServe in a goroutine, so the listener may not
+	// be accepting the instant it returns — especially on Windows, where
+	// rebinding a just-closed port can lag. Poll until ready instead of relying
+	// on a fixed sleep, which was flaky across platforms.
+	var resp *http.Response
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		resp, err = http.Get("http://" + addr + "/health/live")
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("real StartServer request failed after retries: %v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	defer resp.Body.Close()
 
