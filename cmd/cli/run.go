@@ -158,10 +158,11 @@ func Run(cfg config.Config) error {
 
 	sigCtx, sigCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer func() {
+		sigCancel()
 		if loggingInstance != nil {
+			// #nosec G104 // cleanup: ignore close errors.
 			loggingInstance.Close()
 		}
-		sigCancel()
 	}()
 
 	go handleShutdown(sigCtx, &ready, listener, healthServer)

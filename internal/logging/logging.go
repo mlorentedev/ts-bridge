@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -49,8 +50,8 @@ func New(cfg Config) *Logger {
 	}
 
 	// Ensure log directory exists.
-	// #nosec G301 // log directory permissions 0755 are safe for user-scoped logs.
-	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
+	// #nosec G301 // log directory permissions 0700 restrict access to the owner.
+	if err := os.MkdirAll(cfg.LogDir, 0700); err != nil {
 		console.Warn("failed to create log directory", "dir", cfg.LogDir, "error", err)
 		return &Logger{console: console}
 	}
@@ -59,13 +60,12 @@ func New(cfg Config) *Logger {
 	rot := NewFileRotator(cfg.LogDir)
 
 	// Open the current log file.
-	fh, err := rot.Open()
-	if err != nil {
+	if _, err := rot.Open(); err != nil {
 		console.Warn("failed to open log file", "error", err)
 		return &Logger{console: console}
 	}
 
-	fileHandler := slog.NewJSONHandler(fh, &slog.HandlerOptions{Level: slog.LevelDebug})
+	fileHandler := slog.NewJSONHandler(rot, &slog.HandlerOptions{Level: slog.LevelDebug})
 	file := slog.New(fileHandler)
 
 	return &Logger{
@@ -88,7 +88,10 @@ func (l *Logger) File() *slog.Logger {
 // Combined returns a logger that writes to both console and file.
 // Use this for logs that should appear in both places.
 func (l *Logger) Combined() *slog.Logger {
-	return slog.New(NewMultiHandler(l.console.Handler(), l.file.Handler()))
+	if l.file != nil {
+		return slog.New(NewMultiHandler(l.console.Handler(), l.file.Handler()))
+	}
+	return l.console
 }
 
 // Close flushes and closes the file logger.
@@ -118,9 +121,9 @@ func NewMultiHandler(hs ...slog.Handler) slog.Handler {
 }
 
 //nolint:contextcheck // slog.Handler interface requires context but we don't need one here.
-func (m *multiHandler) Enabled(_ context.Context, _ slog.Level) bool {
+func (m *multiHandler) Enabled(_ context.Context, level slog.Level) bool {
 	for _, h := range m.handlers {
-		if h.Enabled(context.TODO(), slog.LevelInfo) {
+		if h.Enabled(context.TODO(), level) {
 			return true
 		}
 	}
@@ -131,8 +134,10 @@ func (m *multiHandler) Enabled(_ context.Context, _ slog.Level) bool {
 func (m *multiHandler) Handle(_ context.Context, r slog.Record) error {
 	var firstErr error
 	for _, h := range m.handlers {
-		if err := h.Handle(context.TODO(), r); err != nil && firstErr == nil {
-			firstErr = err
+		if h.Enabled(context.TODO(), r.Level) {
+			if err := h.Handle(context.TODO(), r); err != nil && firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 	return firstErr
@@ -181,6 +186,38 @@ func (r *FileRotator) CurrentPath() string {
 	return r.current.Name()
 }
 
+// Write implements io.Writer so FileRotator can be passed directly to
+// slog handlers. This enables dynamic rotation: every log write checks
+// if the day has changed and rotates if needed.
+func (r *FileRotator) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	today := time.Now().Format("2006-01-02")
+
+	// Rotate if the day has changed.
+	if r.current == nil || r.currentDay != today {
+		if r.current != nil {
+			// #nosec G104 // cleanup: ignore close errors.
+			r.current.Close()
+			r.currentDay = "" // Force re-open below.
+		}
+
+		if r.currentDay != today {
+			path := filepath.Join(r.dir, fmt.Sprintf("ts-bridge-%s.log", today))
+			// #nosec G302,G304 // filename is date-derived, not user-controlled.
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+			if err != nil {
+				return 0, fmt.Errorf("open log file: %w", err)
+			}
+			r.current = f
+			r.currentDay = today
+		}
+	}
+
+	return r.current.Write(p)
+}
+
 // Open opens (or creates) the log file for today.
 // If the current file is from a different day, it closes it,
 // compresses it, and opens a new one.
@@ -205,7 +242,7 @@ func (r *FileRotator) Open() (*os.File, error) {
 	// Open today's file.
 	path := filepath.Join(r.dir, fmt.Sprintf("ts-bridge-%s.log", today))
 	// #nosec G302,G304 // filename is date-derived, not user-controlled.
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("open log file: %w", err)
 	}
@@ -337,16 +374,14 @@ func LogDirForPlatform() string {
 	home := os.Getenv("HOME")
 	appData := os.Getenv("LOCALAPPDATA")
 
-	switch {
-	case appData != "":
-		// Windows
+	switch runtime.GOOS {
+	case "windows":
 		return filepath.Join(appData, "ts-bridge", "logs")
-	case home != "":
-		// Linux/macOS
-		return filepath.Join(home, ".local", "share", "ts-bridge", "logs")
+	case "darwin":
+		return filepath.Join(home, "Library", "Logs", "ts-bridge")
 	default:
-		// Fallback to current directory
-		return "logs"
+		// Linux and others
+		return filepath.Join(home, ".local", "share", "ts-bridge", "logs")
 	}
 }
 
