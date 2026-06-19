@@ -1,0 +1,61 @@
+# Mutation testing configuration for ts-bridge (go-gremlins/gremlins).
+#
+# Advisory only: thresholds are 0, so a run never fails on the mutation
+# score. The CI workflow surfaces the report as an artifact; it does not
+# gate merges. See specs/QA-014-mutation-testing/ for the rollout plan.
+#
+# gremlins is a CI-only dev tool installed via `go install` — it is NOT a
+# module dependency and must never appear in go.mod / go.sum.
+
+unleash:
+  # Quality gates disabled — the mutation score is informational.
+  # Setting either to a non-zero value would make gremlins exit non-zero
+  # (10 = efficacy unmet, 11 = coverage unmet) and turn the job into a gate.
+  threshold:
+    efficacy: 0
+    mutant-coverage: 0
+
+  # Skip platform-tagged shell-exec wrappers. These call out to PowerShell,
+  # sc, netsh, ufw, iptables, powercfg, etc. and cannot be killed by unit
+  # tests without real OS services. On a Linux runner the *_windows.go and
+  # *_darwin.go files are already build-tag-excluded; the regexes below also
+  # cover local runs on Windows/macOS. Patterns are REGULAR EXPRESSIONS.
+  exclude-files:
+    - "_linux\\.go$"
+    - "_windows\\.go$"
+    - "_darwin\\.go$"
+
+  # 0 => use all available CPUs for both worker fan-out and per-test GOMAXPROCS.
+  workers: 0
+  test-cpu: 0
+
+  # Per-mutant test timeout = coefficient * baseline test duration. A little
+  # headroom avoids false "timed out" verdicts on slower mutants.
+  timeout-coefficient: 3
+
+# Mutant operators. The enabled set matches gremlins' safe defaults, which
+# rarely produce equivalent (un-killable) mutants. The riskier inversions are
+# left disabled to keep the survived-mutant list signal-rich rather than noisy.
+mutants:
+  arithmetic-base:
+    enabled: true
+  conditionals-boundary:
+    enabled: true
+  conditionals-negation:
+    enabled: true
+  increment-decrement:
+    enabled: true
+  invert-negatives:
+    enabled: true
+  invert-assignments:
+    enabled: false
+  invert-bitwise:
+    enabled: false
+  invert-bwassign:
+    enabled: false
+  invert-logical:
+    enabled: false
+  invert-loopctrl:
+    enabled: false
+  remove-self-assignments:
+    enabled: false
