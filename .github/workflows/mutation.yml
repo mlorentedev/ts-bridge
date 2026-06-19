@@ -1,0 +1,76 @@
+name: Mutation Testing
+
+# Mutation testing is slow, so it does NOT run on every push/PR. It runs on a
+# weekly schedule and on demand. The job is advisory: thresholds are 0 in
+# .gremlins.yaml, so survived mutants are reported but never fail the build.
+
+on:
+  schedule:
+    # Mondays at 03:00 UTC.
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    # Whole-module mutation runs can be long; give them room.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Add GOPATH bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Install gremlins
+        run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
+
+      - name: Verify go.mod is untouched
+        # `go install pkg@version` must not mutate the module graph — guards the
+        # project's zero-dependency invariant. This step is intentionally strict.
+        run: git diff --exit-code go.mod go.sum
+
+      - name: Run mutation testing (advisory)
+        id: mutation
+        continue-on-error: true
+        run: gremlins unleash --output mutation-report.json 2>&1 | tee mutation-output.txt
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Mutation testing report"
+            echo ""
+            if [ -f mutation-output.txt ]; then
+              echo '```'
+              grep -iE 'killed|lived|timed out|not viable|not covered|mutation score' mutation-output.txt || tail -n 20 mutation-output.txt
+              echo '```'
+            else
+              echo "No output produced (gremlins did not run)."
+            fi
+            echo ""
+            echo "_Advisory only — survived mutants do not fail this job. See \`specs/QA-014-mutation-testing/\`._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: |
+            mutation-report.json
+            mutation-output.txt
+          if-no-files-found: warn

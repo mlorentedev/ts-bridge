@@ -83,11 +83,11 @@ func TestIsElevated_DoesNotPanic(t *testing.T) {
 // On platforms without tailscale installed, this will return steps with
 // errors — that's expected and valid behavior.
 func TestSetup_DoesNotPanic(t *testing.T) {
-	flags := SetupFlags{
+	cfg := Config{
 		NoSleep:      false,
 		FirewallRule: "TestRule",
 	}
-	result, err := Setup(flags)
+	result, err := Setup(cfg, nil)
 	if err != nil {
 		t.Fatalf("Setup returned unexpected error: %v", err)
 	}
@@ -96,11 +96,11 @@ func TestSetup_DoesNotPanic(t *testing.T) {
 
 // TestSetup_NoSleepSkipsPowerSettings verifies that NoSleep flag is passed correctly.
 func TestSetup_NoSleepSkipsPowerSettings(t *testing.T) {
-	flags := SetupFlags{
+	cfg := Config{
 		NoSleep:      true,
 		FirewallRule: "TestRule",
 	}
-	result, err := Setup(flags)
+	result, err := Setup(cfg, nil)
 	if err != nil {
 		t.Fatalf("Setup returned unexpected error: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestSetup_NoSleepSkipsPowerSettings(t *testing.T) {
 
 // TestCheck_DoesNotPanic verifies the delegation function works.
 func TestCheck_DoesNotPanic(t *testing.T) {
-	result, err := Check()
+	result, err := Check(Config{}, nil)
 	if err != nil {
 		t.Fatalf("Check returned unexpected error: %v", err)
 	}

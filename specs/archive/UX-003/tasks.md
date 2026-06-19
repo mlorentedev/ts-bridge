@@ -1,7 +1,7 @@
 ---
 id: "UX-003"
 type: spec
-status: proposed
+status: archived
 created: "2026-06-18"
 tags: [spec, ux, discovery, api, tailscale, headscale]
 issue: 168
@@ -65,4 +65,4 @@ issue: 168
 - [x] **Test:** `go test ./...` — all packages green
 - [x] **Verify:** `golangci-lint run` — clean
 - [x] **Verify:** `gosec ./...` — clean (0 issues, 1 #nosec for G304 justified)
-- [ ] **Note:** Production diff ~872 LOC (14 new files, 1795 total with tests). Needs split into 2-3 PRs per ~300 LOC cap.
+- [x] **PR:** #171 `feat/ux-003-discover` pushed, open against master

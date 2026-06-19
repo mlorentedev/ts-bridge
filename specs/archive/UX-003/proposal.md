@@ -1,7 +1,7 @@
 ---
 id: "UX-003"
 type: spec
-status: proposed
+status: archived
 created: "2026-06-18"
 tags: [spec, ux, discovery, api, tailscale, headscale]
 issue: 168

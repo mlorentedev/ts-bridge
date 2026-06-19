@@ -4,6 +4,7 @@ package host
 
 import (
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -13,7 +14,7 @@ func isElevatedImpl() bool {
 	return exec.Command("net", "session").Run() == nil
 }
 
-func setupImpl(flags SetupFlags) (SetupResult, error) {
+func setupImpl(cfg Config, logger *slog.Logger) (SetupResult, error) {
 	var steps []SetupStep
 
 	steps = append(steps, stepTailscaleUnattended())
@@ -21,16 +22,34 @@ func setupImpl(flags SetupFlags) (SetupResult, error) {
 	steps = append(steps, stepUPnPServices()...)
 	steps = append(steps, stepNetworkProfile())
 
+	// On Windows the RDP listening port lives in the registry; stepRDPConfig
+	// reads the authoritative value and the firewall must open that exact port.
 	rdpPort, stepRDP := stepRDPConfig()
 	steps = append(steps, stepRDP)
 
-	steps = append(steps, stepFirewall(flags.FirewallRule, rdpPort))
+	steps = append(steps, stepFirewall(cfg.FirewallRule, rdpPort))
 
-	if !flags.NoSleep {
+	if !cfg.NoSleep {
 		steps = append(steps, stepPowerSettings())
 	}
 
+	logSetupSteps(logger, steps)
+
 	return SetupResult{RDPPort: rdpPort, Steps: steps}, nil
+}
+
+// logSetupSteps emits one structured log line per step. The logger may be nil.
+func logSetupSteps(logger *slog.Logger, steps []SetupStep) {
+	if logger == nil {
+		return
+	}
+	for _, s := range steps {
+		if s.Success {
+			logger.Info(s.Name, "message", s.Message)
+		} else {
+			logger.Warn(s.Name, "message", s.Message)
+		}
+	}
 }
 
 // stepTailscaleUnattended enables Tailscale unattended mode.
@@ -106,7 +125,7 @@ func stepPowerSettings() SetupStep {
 	return SetupStep{Name: name, Success: true, Message: "Sleep disabled (AC power)"}
 }
 
-func checkImpl() (CheckResult, error) {
+func checkImpl(cfg Config, logger *slog.Logger) (CheckResult, error) {
 	result := CheckResult{}
 	tsIP := TailscaleIP()
 	result.TailscaleIP = tsIP
@@ -117,7 +136,15 @@ func checkImpl() (CheckResult, error) {
 		result.RDPPort = rdpPort
 		result.RDPEnabled = rdpPort > 0
 	}
-	result.FirewallOK = checkFirewallRule()
+	result.FirewallOK = checkFirewallRule(cfg.FirewallRule)
+
+	if logger != nil {
+		logger.Info("host check",
+			"tailscale_up", result.TailscaleUp,
+			"rdp_port", result.RDPPort,
+			"firewall_ok", result.FirewallOK,
+		)
+	}
 	return result, nil
 }
 
@@ -199,7 +226,12 @@ func getRDPPort() (int, error) {
 	return port, nil
 }
 
-func checkFirewallRule() bool {
-	out, err := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", `Get-NetFirewallRule -DisplayName "Tailscale-RDP-Ingress" -ErrorAction SilentlyContinue`).Output()
+func checkFirewallRule(ruleName string) bool {
+	sanitized, err := sanitizeFirewallRule(ruleName)
+	if err != nil {
+		return false
+	}
+	ps := fmt.Sprintf(`Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue`, sanitized)
+	out, err := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps).Output()
 	return err == nil && len(out) > 0
 }
