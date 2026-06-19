@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/mlorentedev/ts-bridge/compare/v1.13.0...v1.14.0) (2026-06-19)
+
+
+### Features
+
+* add 'ts-bridge discover' subcommand for tailnet host auto-discovery ([#171](https://github.com/mlorentedev/ts-bridge/issues/171)) ([e6f41b6](https://github.com/mlorentedev/ts-bridge/commit/e6f41b619d3992fc0e88e357feae1bb516639d51))
+
 ## [1.13.0](https://github.com/mlorentedev/ts-bridge/compare/v1.12.11...v1.13.0) (2026-06-18)
 
 
