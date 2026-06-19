@@ -4,6 +4,7 @@ package host
 
 import (
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -13,7 +14,7 @@ func isElevatedImpl() bool {
 	return syscall.Geteuid() == 0
 }
 
-func setupImpl(flags SetupFlags) (SetupResult, error) {
+func setupImpl(cfg Config, logger *slog.Logger) (SetupResult, error) {
 	var steps []SetupStep
 
 	// 1. Detect xrdp.
@@ -21,20 +22,35 @@ func setupImpl(flags SetupFlags) (SetupResult, error) {
 	if _, err := exec.LookPath("xrdp"); err == nil {
 		steps[0].Success = true
 		steps[0].Message = "xrdp found"
+		if logger != nil {
+			logger.Info("xrdp detected")
+		}
 	} else {
 		steps[0].Success = false
 		steps[0].Message = "xrdp not installed — install with: sudo apt install xrdp"
+		if logger != nil {
+			logger.Warn("xrdp not found", "hint", "sudo apt install xrdp")
+		}
 	}
 
 	// 2. Configure firewall.
 	steps = append(steps, SetupStep{Name: "Firewall configuration"})
-	rdpPort := 3389
-	if err := configureFirewall(flags.FirewallRule, rdpPort); err != nil {
+	rdpPort := cfg.Port
+	if rdpPort == 0 {
+		rdpPort = defaultRDPPort
+	}
+	if err := configureFirewall(cfg.FirewallRule, rdpPort); err != nil {
 		steps[1].Success = false
 		steps[1].Message = fmt.Sprintf("Could not configure firewall: %v", err)
+		if logger != nil {
+			logger.Warn("failed to configure firewall", "error", err)
+		}
 	} else {
 		steps[1].Success = true
-		steps[1].Message = fmt.Sprintf("Firewall rule '%s' active (port %d)", flags.FirewallRule, rdpPort)
+		steps[1].Message = fmt.Sprintf("Firewall rule '%s' active (port %d)", cfg.FirewallRule, rdpPort)
+		if logger != nil {
+			logger.Info("configured firewall", "rule", cfg.FirewallRule, "port", rdpPort)
+		}
 	}
 
 	// 3. Print Tailscale IP.
@@ -43,25 +59,41 @@ func setupImpl(flags SetupFlags) (SetupResult, error) {
 	if tsIP != "" {
 		steps[2].Success = true
 		steps[2].Message = fmt.Sprintf("Tailscale IP: %s", tsIP)
+		if logger != nil {
+			logger.Info("Tailscale IP", "ip", tsIP)
+		}
 	} else {
 		steps[2].Success = false
 		steps[2].Message = "Tailscale not connected or CLI not available"
+		if logger != nil {
+			logger.Warn("Tailscale not connected or CLI not available")
+		}
 	}
 
 	return SetupResult{RDPPort: rdpPort, Steps: steps}, nil
 }
 
-func checkImpl() (CheckResult, error) {
+func checkImpl(cfg Config, logger *slog.Logger) (CheckResult, error) {
 	result := CheckResult{}
 	tsIP := TailscaleIP()
 	result.TailscaleIP = tsIP
 	result.TailscaleUp = tsIP != ""
 
+	rdpPort := cfg.Port
+	if rdpPort == 0 {
+		rdpPort = defaultRDPPort
+	}
+
 	if _, err := exec.LookPath("xrdp"); err == nil {
 		result.RDPEnabled = true
-		result.RDPPort = 3389
+		result.RDPPort = rdpPort
+		if logger != nil {
+			logger.Info("xrdp check", "enabled", true, "port", result.RDPPort)
+		}
+	} else if logger != nil {
+		logger.Warn("xrdp not found")
 	}
-	result.FirewallOK = checkFirewallRule()
+	result.FirewallOK = checkFirewallRule(rdpPort)
 	return result, nil
 }
 
@@ -92,13 +124,14 @@ func runIPTables(port int) error {
 	return exec.Command("iptables", "-A", "INPUT", "-p", "tcp", "--dport", fmt.Sprintf("%d", port), "-j", "ACCEPT").Run()
 }
 
-func checkFirewallRule() bool {
+func checkFirewallRule(port int) bool {
+	portStr := fmt.Sprintf("%d", port)
 	// #nosec G204 -- ufw/iptables are hardcoded system binaries.
-	if out, err := exec.Command("ufw", "status").Output(); err == nil && strings.Contains(string(out), "3389") {
+	if out, err := exec.Command("ufw", "status").Output(); err == nil && strings.Contains(string(out), portStr) {
 		return true
 	}
 	// #nosec G204 -- iptables is a hardcoded system binary.
-	if out, err := exec.Command("iptables", "-L", "INPUT", "-n").Output(); err == nil && strings.Contains(string(out), "3389") {
+	if out, err := exec.Command("iptables", "-L", "INPUT", "-n").Output(); err == nil && strings.Contains(string(out), portStr) {
 		return true
 	}
 	return false
