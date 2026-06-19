@@ -252,7 +252,7 @@ Test-Step -Name "connect with invalid auth key (should fail auth, not crash)" -B
 Write-Host "`n[5/6] HOST" -ForegroundColor Yellow
 
 Test-Step -Name "host --help" -Block { & $Bin host --help; $LASTEXITCODE } `
-    -ExpectedOutputContains @("setup", "check")
+    -ExpectedOutputContains @("init", "setup", "check")
 
 Test-Step -Name "host setup --help" -Block { & $Bin host setup --help; $LASTEXITCODE } `
     -ExpectedOutputContains "firewall"

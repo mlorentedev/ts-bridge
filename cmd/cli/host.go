@@ -124,12 +124,15 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load .env: %w", err)
 	}
 
-	// Collect CLI flags.
+	// Collect CLI flags. The *Set fields record whether each bool flag was
+	// explicitly passed, so an unset flag does not clobber the env layer.
 	flags := host.Flags{
 		NoSleep:      mustBool(cmd, "no-sleep"),
+		NoSleepSet:   cmd.Flags().Changed("no-sleep"),
 		FirewallRule: mustString(cmd, "firewall-rule"),
 		Port:         mustInt(cmd, "port"),
 		Verbose:      mustBool(cmd, "verbose"),
+		VerboseSet:   cmd.Flags().Changed("verbose"),
 		LogFormat:    mustString(cmd, "log-format"),
 	}
 
@@ -157,9 +160,20 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("host setup failed: %w", err)
 	}
 
+	// On Windows the RDP listening port is read from the registry, not set by
+	// ts-bridge; the firewall opens the actual (registry) port. If the user
+	// explicitly requested a different --port, say so rather than leaving the
+	// flag silently ineffective.
+	if runtime.GOOS == windowsOS && cmd.Flags().Changed("port") && cfg.Port != result.RDPPort {
+		printWarn(fmt.Sprintf(
+			"--port %d not applied: Windows RDP listens on port %d (set in the registry). "+
+				"Change the RDP port in Windows, then re-run host setup.",
+			cfg.Port, result.RDPPort))
+	}
+
 	jsonOut, _ := cmd.Flags().GetBool("json")
 	if jsonOut {
-		return printSetupJSON(result, cfg)
+		return printSetupJSON(result)
 	}
 
 	// Print step-by-step results.
@@ -172,7 +186,9 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	printSetupSummary(cfg)
+	// Report the port that was actually configured (result.RDPPort), which on
+	// Windows comes from the registry and may differ from the requested --port.
+	printSetupSummary(result.RDPPort)
 	return nil
 }
 
@@ -187,8 +203,9 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 
 	// check has no firewall-rule/port flags; those resolve from env + defaults.
 	cfg := host.Merge(host.Flags{
-		Verbose:   mustBool(cmd, "verbose"),
-		LogFormat: mustString(cmd, "log-format"),
+		Verbose:    mustBool(cmd, "verbose"),
+		VerboseSet: cmd.Flags().Changed("verbose"),
+		LogFormat:  mustString(cmd, "log-format"),
 	})
 	logger := hostInitLogger(cfg)
 
@@ -285,7 +302,7 @@ func printElevationError() {
 	}
 }
 
-func printSetupSummary(cfg host.Config) {
+func printSetupSummary(rdpPort int) {
 	fmt.Println()
 	fmt.Println("  ---------------------------------------")
 	fmt.Println("  HOST READY")
@@ -295,10 +312,10 @@ func printSetupSummary(cfg host.Config) {
 	if tsIP != "" {
 		fmt.Printf("  Tailscale IP: %s\n", tsIP)
 	}
-	fmt.Printf("  RDP Port:     %d\n", cfg.Port)
+	fmt.Printf("  RDP Port:     %d\n", rdpPort)
 	fmt.Println()
 	fmt.Println("  Client .env config:")
-	fmt.Printf("  TS_TARGET=%s:%d\n", tsIP, cfg.Port)
+	fmt.Printf("  TS_TARGET=%s:%d\n", tsIP, rdpPort)
 	fmt.Println()
 }
 
@@ -316,9 +333,9 @@ type setupStepJSON struct {
 	Message string `json:"message"`
 }
 
-func printSetupJSON(result host.SetupResult, cfg host.Config) error {
+func printSetupJSON(result host.SetupResult) error {
 	output := setupJSONOutput{
-		RDPPort:  cfg.Port,
+		RDPPort:  result.RDPPort,
 		Steps:    make([]setupStepJSON, 0, len(result.Steps)),
 		Warnings: []string{},
 		Errors:   []string{},

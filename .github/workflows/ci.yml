@@ -54,6 +54,29 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  # Native Windows job. The Linux `test` job above does not compile the
+  # //go:build windows files, so a Windows-only build break (e.g. a stale
+  # platform signature) can pass all other checks. Running build + vet + test
+  # on a real Windows runner closes that gap. Race detector is omitted here
+  # (it needs a C toolchain on Windows); the Linux job already runs -race.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test ./...
+
   build-matrix:
     runs-on: ubuntu-latest
     needs: test

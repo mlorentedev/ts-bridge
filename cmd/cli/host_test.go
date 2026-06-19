@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -284,9 +285,12 @@ func TestWriteHostEnv_DefaultValues(t *testing.T) {
 }
 
 // TestWriteHostEnv_FilePermissions verifies the file is written with 0600.
-// Skipped on Windows where file permissions work differently.
+// Skipped only on Windows, where the Unix permission model does not apply;
+// on Linux/macOS (including CI) it runs and verifies the 0600 write.
 func TestWriteHostEnv_FilePermissions(t *testing.T) {
-	t.Skip("file permissions test skipped on Windows (perm model differs)")
+	if runtime.GOOS == "windows" {
+		t.Skip("file permissions test not applicable on Windows (perm model differs)")
+	}
 
 	tmpDir := t.TempDir()
 	envPath := filepath.Join(tmpDir, ".env")
@@ -326,9 +330,7 @@ func TestPrintSetupJSON_Serialization(t *testing.T) {
 			{Name: "Step 3", Success: true, Message: "Also OK"},
 		},
 	}
-	cfg := host.Config{Port: 3390}
-
-	err := cmdpkg.PrintSetupJSONForTest(result, cfg)
+	err := cmdpkg.PrintSetupJSONForTest(result)
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
 	}
@@ -347,9 +349,7 @@ func TestPrintSetupJSON_EmptySteps(t *testing.T) {
 		RDPPort: 3389,
 		Steps:   []host.SetupStep{},
 	}
-	cfg := host.Config{Port: 3389}
-
-	err := cmdpkg.PrintSetupJSONForTest(result, cfg)
+	err := cmdpkg.PrintSetupJSONForTest(result)
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
 	}
@@ -364,9 +364,7 @@ func TestPrintSetupJSON_AllWarnings(t *testing.T) {
 			{Name: "Step 2", Success: false, Message: "Warning 2"},
 		},
 	}
-	cfg := host.Config{Port: 3389}
-
-	err := cmdpkg.PrintSetupJSONForTest(result, cfg)
+	err := cmdpkg.PrintSetupJSONForTest(result)
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
 	}

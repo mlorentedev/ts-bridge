@@ -26,8 +26,8 @@ type SetupJSONOutputForTest = setupJSONOutput
 type SetupStepJSONForTest = setupStepJSON
 
 // PrintSetupJSONForTest is a test-only wrapper for printSetupJSON.
-func PrintSetupJSONForTest(result host.SetupResult, cfg host.Config) error {
-	return printSetupJSON(result, cfg)
+func PrintSetupJSONForTest(result host.SetupResult) error {
+	return printSetupJSON(result)
 }
 
 // PrintCheckJSONForTest is a test-only wrapper for printCheckJSON.
