@@ -1,0 +1,42 @@
+# Dependabot version updates. Security updates (for open alerts) are enabled
+# separately in repo settings. Grouped + weekly to keep PR noise low; the
+# add-to-project workflow skips dependabot[bot] so these PRs stay off the board.
+version: 2
+updates:
+  # Go modules (root go.mod). Most current alerts are transitive deps here.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      go-modules:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore(deps)
+
+  # Frontend toolchain (site/).
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      npm:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore(deps)
+
+  # GitHub Actions used across the workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore(ci)
