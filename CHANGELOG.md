@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.2](https://github.com/mlorentedev/ts-bridge/compare/v1.15.1...v1.15.2) (2026-06-21)
+
+
+### Bug Fixes
+
+* **ci:** add PRs to bitácora board ([#196](https://github.com/mlorentedev/ts-bridge/issues/196)) ([c9d3006](https://github.com/mlorentedev/ts-bridge/commit/c9d3006c70828a5dd7d97b6f4da10c79c354ce2d))
+
 ## [1.15.1](https://github.com/mlorentedev/ts-bridge/compare/v1.15.0...v1.15.1) (2026-06-19)
 
 
