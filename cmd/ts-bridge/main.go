@@ -15,21 +15,16 @@ var (
 )
 
 func main() {
-	// Backward compat: handle deprecated -version and -v flags.
-	for i, arg := range os.Args[1:] {
-		if arg == "-version" || arg == "--version" {
-			fmt.Printf("ts-bridge %s (commit %s)\n", version, commit)
-			os.Exit(0)
-		}
-		if arg == "-v" {
-			newArgs := make([]string, 0, len(os.Args))
-			newArgs = append(newArgs, os.Args[:i+1]...)
-			newArgs[i] = "--verbose"
-			newArgs = append(newArgs, os.Args[i+2:]...)
-			os.Args = newArgs
-			break
-		}
+	// Backward compat: the pre-Cobra binary accepted -version/--version as
+	// flags. Cobra exposes version via the "version" subcommand instead, so
+	// handle the legacy flag forms here before dispatch.
+	if cli.LegacyVersionRequested(os.Args) {
+		fmt.Printf("ts-bridge %s (commit %s)\n", version, commit)
+		os.Exit(0)
 	}
+
+	// Normalize legacy flag shorthands (-v -> --verbose) before Cobra parses.
+	os.Args = cli.NormalizeArgs(os.Args)
 
 	// Wire build-time variables and the bridge runner into the cmd package.
 	cli.BuildVersion = version
