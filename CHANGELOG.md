@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.3](https://github.com/mlorentedev/ts-bridge/compare/v1.15.2...v1.15.3) (2026-06-23)
+
+
+### Bug Fixes
+
+* **cli:** correct -v rewrite that corrupted the --target value ([#215](https://github.com/mlorentedev/ts-bridge/issues/215)) ([373fd3f](https://github.com/mlorentedev/ts-bridge/commit/373fd3fa8c532b77c421a16137c562708dbdc43d))
+
 ## [1.15.2](https://github.com/mlorentedev/ts-bridge/compare/v1.15.1...v1.15.2) (2026-06-21)
 
 
