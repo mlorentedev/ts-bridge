@@ -56,3 +56,7 @@ site/node_modules/
 
 # Agent session memory lives in the knowledge vault, never in this repo
 /MEMORY.md
+
+# Scratch files for `gh pr/issue create --body-file` (never commit these)
+pr-body.md
+*-body.md
