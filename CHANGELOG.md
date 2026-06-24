@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.4](https://github.com/mlorentedev/ts-bridge/compare/v1.15.3...v1.15.4) (2026-06-24)
+
+
+### Bug Fixes
+
+* **cli:** stop dumping the usage block on runtime errors ([#210](https://github.com/mlorentedev/ts-bridge/issues/210)) ([#222](https://github.com/mlorentedev/ts-bridge/issues/222)) ([d3985be](https://github.com/mlorentedev/ts-bridge/commit/d3985bedab77ed6448bd57069c1d63f6bd74758b))
+* **config:** default tsnet state to a fixed per-user directory ([#207](https://github.com/mlorentedev/ts-bridge/issues/207)) ([#219](https://github.com/mlorentedev/ts-bridge/issues/219)) ([7aa99f6](https://github.com/mlorentedev/ts-bridge/commit/7aa99f6a8a6ba6e80e9c156bdba508c2f26835a4))
+
 ## [1.15.3](https://github.com/mlorentedev/ts-bridge/compare/v1.15.2...v1.15.3) (2026-06-23)
 
 
