@@ -1,0 +1,58 @@
+[
+  {
+    "id": "STATE-001-f1",
+    "behavior": "connect default (no state-dir input) resolves StateDir to an absolute per-user path containing ts-bridge, never ./ts-state",
+    "verification": "go test ./internal/config -run TestStateDirResolution",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f2",
+    "behavior": "StateDirForPlatform returns the correct per-OS path, honors XDG_STATE_HOME (incl. ~/.local/state fallback), and is always absolute even with HOME/LOCALAPPDATA/XDG unset",
+    "verification": "go test ./internal/config -run TestStateDirFor",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f3",
+    "behavior": "auto-instance ephemeral state resolves under a temp dir (not CWD-relative) with EphemeralState true",
+    "verification": "go test ./internal/config -run TestStateDirResolution",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f4",
+    "behavior": "explicit --state-dir / TS_STATE_DIR / yaml state_dir overrides are preserved verbatim (incl. relative for back-compat)",
+    "verification": "go test ./internal/config -run 'TestStateDirResolution|TestStateDirAbsoluteOverridePreserved'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f5",
+    "behavior": "a resolved relative state dir emits a non-blocking Warn naming the leakage risk; an absolute one does not",
+    "verification": "go test ./internal/config -run TestWarnRelativeStateDir",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f6",
+    "behavior": "no regression: manual mode keeps EphemeralState false with the new absolute default",
+    "verification": "go test ./internal/config -run TestMergeManualModeNoAutoDerivedValues",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f7",
+    "behavior": "all four docs reflect the new per-user default state location; legacy ./ts-state default corrected",
+    "verification": "rg -q per-user docs/troubleshooting/error-state-permissions.md && rg -q per-user site/src/content/docs/configuration.md && rg -q per-user site/src/content/docs/getting-started.md && rg -q per-user site/src/content/docs/cli-reference.md",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f8",
+    "behavior": "EphemeralStateDir sanitizes the hostname to a single safe segment so separators/.. cannot escape the temp state root",
+    "verification": "go test ./internal/config -run TestEphemeralStateDirNoTraversal",
+    "state": "pending",
+    "evidence": ""
+  }
+]

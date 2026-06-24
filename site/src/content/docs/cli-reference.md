@@ -51,7 +51,7 @@ ts-bridge connect [flags]
 | `--max-conns` | int | Max concurrent connections (default `1000`) |
 | `--port-range` | string | Auto port range, e.g. `33389-34388` |
 | `--reset` | flag | Reset state (manual mode only) |
-| `--state-dir` | string | State directory (default `./ts-state`) |
+| `--state-dir` | string | State directory holding the node identity. Default is a fixed per-user dir (e.g. `~/.local/state/ts-bridge/state` on Linux); a relative value is warned about |
 | `--target` | string | Target address HOST:PORT |
 | `--timeout` | duration | Connect timeout for tsnet init (default `30s`) |
 
