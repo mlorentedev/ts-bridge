@@ -117,8 +117,8 @@ jobs:
         with:
           # Pinned so local `golangci-lint run` and CI report identical findings.
           # Bump deliberately when the project upgrades; do not silently track latest.
-          version: v1.62.2
-          install-mode: goinstall
+          # v2.x is required by golangci-lint-action@v9 and uses the v2 config schema.
+          version: v2.12.2
 
   security:
     runs-on: ubuntu-latest

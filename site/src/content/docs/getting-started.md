@@ -138,7 +138,7 @@ TS_CONTROL_URL=https://vpn.example.com
 | `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local bind address. Auto-derived in auto mode when unset. |
 | `TS_CONTROL_URL` | _(Tailscale default)_ | Custom control plane URL for self-hosted Headscale. |
 | `TS_HOSTNAME` | `ts-bridge` | Node name in the admin console. Auto-generated per run in auto mode. |
-| `TS_STATE_DIR` | `./ts-state` | Directory for node state. Created with `0700` permissions. Ephemeral temp dir in auto mode. |
+| `TS_STATE_DIR` | _(per-user)_ | Directory for node state (holds the private node identity). Default is a fixed per-user dir (e.g. `~/.local/state/ts-bridge/state` on Linux, `%LOCALAPPDATA%\ts-bridge\state` on Windows). Created with `0700` permissions. Ephemeral temp dir in auto mode with an instance. A relative override is warned about. |
 | `TS_AUTO_INSTANCE` | `true` | Auto mode toggle. Set `false` to disable auto behavior. |
 | `TS_MANUAL_MODE` | `false` | Force legacy persistent mode. Takes precedence over `TS_AUTO_INSTANCE`. |
 | `TS_INSTANCE_NAME` | _(empty)_ | Stable instance alias for deterministic local port selection. |
