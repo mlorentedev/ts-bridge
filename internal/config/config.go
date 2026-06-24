@@ -180,6 +180,9 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 	}
 	warnRelativeStateDir(cfg.StateDir)
 
+	// Normalize before validating so the value we check is the value we persist
+	// and hand to tsnet (#209 review).
+	cfg.ControlURL = strings.TrimSpace(cfg.ControlURL)
 	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
 		return Config{}, err
 	}

@@ -933,6 +933,22 @@ func TestStateDirAbsoluteOverridePreserved(t *testing.T) {
 	})
 }
 
+// A padded control URL must be normalized (trimmed) and stored, so the value
+// validated is the value handed to tsnet (#209 review).
+func TestMergeControlURLNormalized(t *testing.T) {
+	restoreStateEnv(t)
+	cfg, err := Merge(PartialConfig{ControlURL: "  https://hs.example.com  "}, FlagSet{
+		Target:  "100.64.0.1:3389",
+		AuthKey: "hskey-test123",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.ControlURL != "https://hs.example.com" {
+		t.Errorf("control URL should be trimmed and stored, got %q", cfg.ControlURL)
+	}
+}
+
 // Control-plane routing by key prefix (#209): a Headscale key (hskey-) needs a
 // control URL; a Tailscale key (tskey-) routes to SaaS by default.
 func TestMergeControlPlaneForKey(t *testing.T) {

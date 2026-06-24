@@ -77,6 +77,10 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	if err := validateRequiredFields(cfg); err != nil {
 		return Config{}, err
 	}
+	// Normalize before validating so the value we check is the value we persist
+	// and hand to tsnet (a padded URL would otherwise pass validation but fail
+	// deeper) — #209 review.
+	cfg.ControlURL = strings.TrimSpace(cfg.ControlURL)
 	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
 		return Config{}, err
 	}
