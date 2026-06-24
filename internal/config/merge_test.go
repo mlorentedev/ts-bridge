@@ -825,7 +825,7 @@ func mustParseDuration(s string) time.Duration {
 var stateEnvKeys = []string{
 	"TS_STATE_DIR", "TS_AUTO_INSTANCE", "TS_MANUAL_MODE",
 	"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_INSTANCE_NAME", "TS_PORT_RANGE",
-	"TS_TARGET", "TS_AUTHKEY",
+	"TS_TARGET", "TS_AUTHKEY", "TS_CONTROL_URL",
 }
 
 // restoreStateEnv snapshots and clears every state-influencing env var, then
@@ -931,4 +931,61 @@ func TestStateDirAbsoluteOverridePreserved(t *testing.T) {
 			t.Errorf("yaml override must be preserved, got %q", cfg.StateDir)
 		}
 	})
+}
+
+// A padded control URL must be normalized (trimmed) and stored, so the value
+// validated is the value handed to tsnet (#209 review).
+func TestMergeControlURLNormalized(t *testing.T) {
+	restoreStateEnv(t)
+	cfg, err := Merge(PartialConfig{ControlURL: "  https://hs.example.com  "}, FlagSet{
+		Target:  "100.64.0.1:3389",
+		AuthKey: "hskey-test123",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.ControlURL != "https://hs.example.com" {
+		t.Errorf("control URL should be trimmed and stored, got %q", cfg.ControlURL)
+	}
+}
+
+// Control-plane routing by key prefix (#209): a Headscale key (hskey-) needs a
+// control URL; a Tailscale key (tskey-) routes to SaaS by default.
+func TestMergeControlPlaneForKey(t *testing.T) {
+	cases := []struct {
+		name       string
+		authKey    string
+		controlURL string
+		wantErr    bool
+	}{
+		{"headscale key without control url is rejected", "hskey-test123", "", true},
+		{"headscale key with control url is accepted", "hskey-test123", "https://hs.example.com", false},
+		{"headscale key with whitespace-only control url is rejected", "hskey-test123", "   ", true},
+		{"headscale key with http control url is accepted (dev)", "hskey-test123", "http://localhost:8080", false},
+		{"tailscale key without control url is accepted (SaaS default)", "tskey-test123", "", false},
+		{"tailscale key with custom control url is accepted", "tskey-test123", "https://self-hosted.example.com", false},
+		{"control url without scheme is rejected", "tskey-test123", "headscale.example.com", true},
+		{"control url with wrong scheme is rejected", "hskey-test123", "ftp://hs.example.com", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			restoreStateEnv(t)
+			_, err := Merge(PartialConfig{ControlURL: tc.controlURL}, FlagSet{
+				Target:  "100.64.0.1:3389",
+				AuthKey: tc.authKey,
+			})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for %q + control %q", tc.authKey, tc.controlURL)
+				}
+				if !strings.Contains(err.Error(), "control URL") {
+					t.Errorf("error should point at the control URL, got: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }
