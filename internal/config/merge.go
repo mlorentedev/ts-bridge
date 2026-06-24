@@ -77,6 +77,9 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	if err := validateRequiredFields(cfg); err != nil {
 		return Config{}, err
 	}
+	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
+		return Config{}, err
+	}
 	if err := validateDialRetries(flags, cfg); err != nil {
 		return Config{}, err
 	}

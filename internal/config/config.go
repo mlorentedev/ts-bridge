@@ -180,6 +180,10 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 	}
 	warnRelativeStateDir(cfg.StateDir)
 
+	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
+		return Config{}, err
+	}
+
 	return cfg, nil
 }
 
@@ -312,6 +316,34 @@ func parseAuthKey() (string, error) {
 		return "", errors.New("TS_AUTHKEY: invalid format (must start with tskey- or hskey-)" + hint)
 	}
 	return authKey, nil
+}
+
+// validateControlPlaneForKey routes the auth key to the right control plane by
+// prefix (#209):
+//
+//   - A Headscale key (hskey-) with no control URL is rejected: it would
+//     otherwise be sent to the default Tailscale SaaS control plane, which
+//     rejects it with a misleading "API key does not exist" and a remediation
+//     pointing at the wrong fix.
+//   - A Tailscale key (tskey-) needs no control URL — it routes to SaaS by
+//     default — and a tskey- with a custom control URL is left alone, since it
+//     may be a legitimate self-hosted Tailscale-compatible control plane.
+//   - Any non-empty control URL must look like an http(s):// URL, so a typo
+//     (e.g. a host with no scheme) is caught here rather than failing deeper in
+//     tsnet with a less obvious error.
+func validateControlPlaneForKey(authKey, controlURL string) error {
+	trimmed := strings.TrimSpace(controlURL)
+	if strings.HasPrefix(authKey, "hskey-") && trimmed == "" {
+		return errors.New("Headscale auth key (hskey-) requires a control URL; " +
+			"set TS_CONTROL_URL (or --control-url) to your Headscale server, e.g. https://headscale.example.com")
+	}
+	if trimmed != "" {
+		scheme := strings.ToLower(trimmed)
+		if !strings.HasPrefix(scheme, "http://") && !strings.HasPrefix(scheme, "https://") {
+			return fmt.Errorf("control URL must be an http:// or https:// URL, got %q", controlURL)
+		}
+	}
+	return nil
 }
 
 // EnvOr returns the environment variable or a fallback.
