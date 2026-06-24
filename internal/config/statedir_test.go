@@ -10,27 +10,58 @@ import (
 	"testing"
 )
 
-// StateDirForPlatform must always return an absolute, per-user path. A
-// CWD-relative result is the #207 bug (node identity leaking into the working
-// dir / any git tree).
-func TestStateDirForPlatform(t *testing.T) {
-	got := StateDirForPlatform()
-	if !filepath.IsAbs(got) {
-		t.Fatalf("StateDirForPlatform must be absolute, got %q", got)
+// stateDirFor must resolve the correct per-OS path. Path assertions are
+// filepath-semantics-specific, so each case runs only on its own OS; the
+// Linux + Windows CI test jobs cover those two branches between them.
+func TestStateDirFor(t *testing.T) {
+	cases := []struct {
+		name string
+		goos string
+		env  map[string]string
+		want string
+	}{
+		{
+			name: "windows under LOCALAPPDATA",
+			goos: osWindows,
+			env:  map[string]string{"LOCALAPPDATA": `C:\Users\test\AppData\Local`},
+			want: filepath.Join(`C:\Users\test\AppData\Local`, appDirName, stateDirLeaf),
+		},
+		{
+			name: "darwin under Application Support",
+			goos: osDarwin,
+			env:  map[string]string{"HOME": "/Users/test"},
+			want: filepath.Join("/Users/test", "Library", "Application Support", appDirName, stateDirLeaf),
+		},
+		{
+			name: "linux honors XDG_STATE_HOME",
+			goos: "linux",
+			env:  map[string]string{"XDG_STATE_HOME": "/custom/state", "HOME": "/home/test"},
+			want: filepath.Join("/custom/state", appDirName, stateDirLeaf),
+		},
+		{
+			name: "linux falls back to ~/.local/state when XDG unset",
+			goos: "linux",
+			env:  map[string]string{"HOME": "/home/test"},
+			want: filepath.Join("/home/test", ".local", "state", appDirName, stateDirLeaf),
+		},
 	}
-	if !strings.Contains(got, "ts-bridge") {
-		t.Errorf("expected path under ts-bridge, got %q", got)
-	}
-	if got == "./ts-state" || got == "ts-state" {
-		t.Errorf("state dir must not be the legacy CWD-relative default, got %q", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.goos != runtime.GOOS {
+				t.Skipf("path assertions are %s-specific (filepath semantics differ per OS)", tc.goos)
+			}
+			env := func(k string) string { return tc.env[k] }
+			if got := stateDirFor(tc.goos, env); got != tc.want {
+				t.Errorf("stateDirFor(%q) = %q, want %q", tc.goos, got, tc.want)
+			}
+		})
 	}
 }
 
 // Even with HOME / LOCALAPPDATA / XDG_STATE_HOME all unset, the result must
-// stay absolute (temp fallback) — never a CWD-relative path.
-func TestStateDirForPlatform_EmptyEnvFallsBackToAbsoluteTemp(t *testing.T) {
-	empty := func(string) string { return "" }
-	got := stateDirFor(runtime.GOOS, empty)
+// stay absolute (temp fallback) — never a CWD-relative path (#207).
+func TestStateDirForAlwaysAbsolute(t *testing.T) {
+	got := stateDirFor(runtime.GOOS, func(string) string { return "" })
 	if !filepath.IsAbs(got) {
 		t.Fatalf("with all env unset, state dir must still be absolute (no CWD leak), got %q", got)
 	}
@@ -39,34 +70,37 @@ func TestStateDirForPlatform_EmptyEnvFallsBackToAbsoluteTemp(t *testing.T) {
 	}
 }
 
-// The primary per-user base env var of the current OS must be honored, and the
-// app + state leaf appended. Tested on the current OS only so path/filepath
-// semantics match (the test matrix runs Linux + Windows).
-func TestStateDirForPlatform_HonorsPlatformBaseEnv(t *testing.T) {
-	var key, base string
-	switch runtime.GOOS {
-	case "windows":
-		key, base = "LOCALAPPDATA", `C:\Users\test\AppData\Local`
-	case "darwin":
-		key, base = "HOME", "/Users/test"
-	default:
-		key, base = "XDG_STATE_HOME", "/home/test/.local/state"
-	}
-	env := func(k string) string {
-		if k == key {
-			return base
-		}
-		return ""
-	}
-	got := stateDirFor(runtime.GOOS, env)
+// The live per-platform default must be absolute, per-user, and never the
+// legacy CWD-relative default.
+func TestStateDirForPlatformLive(t *testing.T) {
+	got := StateDirForPlatform()
 	if !filepath.IsAbs(got) {
-		t.Fatalf("expected absolute path, got %q", got)
+		t.Fatalf("StateDirForPlatform must be absolute, got %q", got)
 	}
-	if !strings.HasPrefix(got, filepath.Clean(base)) {
-		t.Errorf("expected state dir under %q, got %q", base, got)
+	if !strings.Contains(got, appDirName) {
+		t.Errorf("expected path under %s, got %q", appDirName, got)
 	}
-	if !strings.Contains(got, "ts-bridge") {
-		t.Errorf("expected ts-bridge in path, got %q", got)
+	if got == "./ts-state" || got == "ts-state" {
+		t.Errorf("must not be the legacy CWD-relative default, got %q", got)
+	}
+}
+
+// A hostname containing path separators or ".." must not let the ephemeral
+// state dir escape the temp state root.
+func TestEphemeralStateDirNoTraversal(t *testing.T) {
+	tempRoot := filepath.Clean(os.TempDir())
+	appRoot := filepath.Join(tempRoot, appDirName)
+	for _, hostname := range []string{"../../evil", `..\..\evil`, "/etc/passwd", "a/b/c", "normal-host", ""} {
+		t.Run("hostname="+hostname, func(t *testing.T) {
+			got := EphemeralStateDir(hostname)
+			if !filepath.IsAbs(got) || !strings.HasPrefix(got, appRoot) {
+				t.Fatalf("ephemeral dir must stay under %q, got %q", appRoot, got)
+			}
+			rel, err := filepath.Rel(appRoot, got)
+			if err != nil || strings.Contains(rel, "..") || strings.ContainsAny(rel, `/\`) {
+				t.Errorf("ephemeral dir must be a single safe segment under %q, got %q (rel %q)", appRoot, got, rel)
+			}
+		})
 	}
 }
 
@@ -93,26 +127,5 @@ func TestWarnRelativeStateDir(t *testing.T) {
 	warnRelativeStateDir("")
 	if buf.Len() != 0 {
 		t.Errorf("expected no warning for an empty state dir, got %q", buf.String())
-	}
-}
-
-// On Linux, XDG_STATE_HOME must win over the ~/.local/state fallback.
-func TestStateDirForPlatform_LinuxXDGOverride(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("XDG_STATE_HOME override is Linux-specific")
-	}
-	env := func(k string) string {
-		switch k {
-		case "XDG_STATE_HOME":
-			return "/custom/state"
-		case "HOME":
-			return "/home/test"
-		default:
-			return ""
-		}
-	}
-	got := stateDirFor("linux", env)
-	if !strings.HasPrefix(got, "/custom/state") {
-		t.Errorf("expected XDG_STATE_HOME to win, got %q", got)
 	}
 }

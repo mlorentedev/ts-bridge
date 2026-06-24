@@ -455,7 +455,7 @@ func LoadYAMLConfig(path string) (PartialConfig, error) {
 	}
 
 	// Warn on world-readable permissions (Unix only).
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != osWindows {
 		info, err := os.Stat(path)
 		if err == nil && info.Mode().Perm()&0077 != 0 {
 			warnPermission(path, uint32(info.Mode().Perm()))

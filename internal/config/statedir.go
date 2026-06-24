@@ -6,11 +6,13 @@ import (
 	"runtime"
 )
 
-// Path components shared across the per-user state directories. Extracted as
-// consts so they are not repeated string literals (goconst).
+// Path components and GOOS values shared across the per-user state directories.
+// Extracted as consts so they are not repeated string literals (goconst).
 const (
 	appDirName   = "ts-bridge"
 	stateDirLeaf = "state"
+	osWindows    = "windows"
+	osDarwin     = "darwin"
 )
 
 // StateDirForPlatform returns the fixed, per-user, CWD-independent directory
@@ -26,8 +28,10 @@ func StateDirForPlatform() string {
 	return stateDirFor(runtime.GOOS, os.Getenv)
 }
 
-// stateDirFor is the pure, table-testable core of StateDirForPlatform.
-// getenv is injected so the per-OS branches can be exercised deterministically.
+// stateDirFor is the pure core of StateDirForPlatform. goos and getenv are
+// injected so the per-OS branches can be exercised deterministically in tests.
+//
+//nolint:unparam // goos is parameterized for cross-platform table tests; the sole production caller passes runtime.GOOS (test callers are excluded from unparam).
 func stateDirFor(goos string, getenv func(string) string) string {
 	dir := platformStateBase(goos, getenv)
 	if !filepath.IsAbs(dir) {
@@ -52,22 +56,31 @@ func stateDirIsCWDRelative(dir string) bool {
 // auto-instance (throwaway-identity) mode. Like StateDirForPlatform it is
 // always absolute, so ephemeral node state never lands in the working dir.
 func EphemeralStateDir(hostname string) string {
-	return filepath.Join(os.TempDir(), appDirName, hostname)
+	return filepath.Join(os.TempDir(), appDirName, ephemeralSegment(hostname))
+}
+
+// ephemeralSegment reduces hostname to a single safe path segment so a value
+// containing path separators or ".." cannot escape the temp state root.
+func ephemeralSegment(hostname string) string {
+	if seg := SanitizeHostnameLabel(hostname); seg != "" {
+		return seg
+	}
+	return "instance"
 }
 
 // platformStateBase resolves the per-OS state directory before the
 // absolute-path guard in stateDirFor.
 func platformStateBase(goos string, getenv func(string) string) string {
 	switch goos {
-	case "windows":
+	case osWindows:
 		return filepath.Join(getenv("LOCALAPPDATA"), appDirName, stateDirLeaf)
-	case "darwin":
+	case osDarwin:
 		return filepath.Join(getenv("HOME"), "Library", "Application Support", appDirName, stateDirLeaf)
 	default:
 		// Linux and others: honor $XDG_STATE_HOME, fall back to ~/.local/state.
 		base := getenv("XDG_STATE_HOME")
 		if base == "" {
-			base = filepath.Join(getenv("HOME"), ".local", "state")
+			base = filepath.Join(getenv("HOME"), ".local", stateDirLeaf)
 		}
 		return filepath.Join(base, appDirName, stateDirLeaf)
 	}
