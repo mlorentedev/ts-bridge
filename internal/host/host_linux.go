@@ -15,7 +15,7 @@ func isElevatedImpl() bool {
 }
 
 func setupImpl(cfg Config, logger *slog.Logger) (SetupResult, error) {
-	var steps []SetupStep
+	steps := make([]SetupStep, 0, 3)
 
 	// 1. Detect xrdp.
 	steps = append(steps, SetupStep{Name: "xrdp detection"})

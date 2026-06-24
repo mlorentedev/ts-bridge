@@ -20,6 +20,11 @@ linters:
     goconst:
       min-len: 3
       min-occurrences: 3
+      # Repeated literals in table-driven test data are not constants worth
+      # extracting. In v1, test files were excluded from goconst analysis; v2
+      # exclusion rules only filter *reported* issues, not the occurrence count,
+      # so ignore test files explicitly to preserve the v1 behavior.
+      ignore-tests: true
     gosec:
       excludes:
         - G117
