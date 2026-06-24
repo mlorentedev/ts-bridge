@@ -33,10 +33,29 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
+// configureUsageOnErrors makes runtime (RunE) failures print just the error,
+// not the full usage/help block (#210). Usage is only useful when the user got
+// the invocation wrong, so it is still shown for flag-parsing errors via a
+// custom FlagErrorFunc. SilenceErrors is set because main() prints the returned
+// error itself — without it cobra would print the error a second time.
+// Setting these on the root is sufficient: cobra gates usage/error output on
+// the root command's flags for every subcommand.
+func configureUsageOnErrors(cmd *cobra.Command) {
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
+		_ = c.Usage() // flag-parse error: usage is genuinely helpful here
+		return err
+	})
+}
+
 func init() {
 	// Global flags available on every subcommand.
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
 	rootCmd.PersistentFlags().String("config", "", "Config file path (reserved for future use)")
+
+	// Runtime errors should not bury themselves under the usage block (#210).
+	configureUsageOnErrors(rootCmd)
 }
 
 // BuildVersion is set by main() at startup from the build-time ldflags variable.
