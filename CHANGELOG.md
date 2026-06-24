@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.5](https://github.com/mlorentedev/ts-bridge/compare/v1.15.4...v1.15.5) (2026-06-24)
+
+
+### Bug Fixes
+
+* **config:** route auth keys by prefix; reject hskey- without a control URL ([#209](https://github.com/mlorentedev/ts-bridge/issues/209)) ([#223](https://github.com/mlorentedev/ts-bridge/issues/223)) ([1eee9e5](https://github.com/mlorentedev/ts-bridge/commit/1eee9e5096dd83ee503ca65f9bc64ce77ea31104))
+
 ## [1.15.4](https://github.com/mlorentedev/ts-bridge/compare/v1.15.3...v1.15.4) (2026-06-24)
 
 
