@@ -10,6 +10,9 @@ import (
 	"ts-bridge/internal/telemetry"
 )
 
+// statusField is the JSON key returned by the health endpoints.
+const statusField = "status"
+
 // StartServer initializes and runs the health and metrics HTTP server.
 func StartServer(addr string, ready *atomic.Bool, logger *slog.Logger) *http.Server {
 	mux := http.NewServeMux()
@@ -17,18 +20,18 @@ func StartServer(addr string, ready *atomic.Bool, logger *slog.Logger) *http.Ser
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{statusField: "ok"})
 	})
 
 	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if !ready.Load() {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "not_ready"})
+			_ = json.NewEncoder(w).Encode(map[string]string{statusField: "not_ready"})
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{statusField: "ok"})
 	})
 
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {

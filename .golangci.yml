@@ -1,44 +1,64 @@
+version: "2"
+
 run:
   timeout: 5m
 
 linters:
+  # `standard` enables errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
   enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - gosec
     - goconst
     - gocyclo
+    - gosec
     - misspell
     - prealloc
     - unconvert
     - unparam
-
-linters-settings:
-  gocyclo:
-    min-complexity: 15
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  gosec:
-    excludes:
-      - G117
-  misspell:
-    locale: US
+  settings:
+    gocyclo:
+      min-complexity: 15
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+      # Repeated literals in table-driven test data are not constants worth
+      # extracting. In v1, test files were excluded from goconst analysis; v2
+      # exclusion rules only filter *reported* issues, not the occurrence count,
+      # so ignore test files explicitly to preserve the v1 behavior.
+      ignore-tests: true
+    gosec:
+      excludes:
+        - G117
+    misspell:
+      locale: US
+    staticcheck:
+      # v1 enabled only `staticcheck` (SA*), not `gosimple` (S1*) or
+      # `stylecheck` (ST1*), which v2 merged into this single linter. Keep the
+      # SA-only scope so the v1->v2 migration doesn't silently add new
+      # style/simplify checks (this PR is a toolchain bump, not new rules).
+      checks:
+        - all
+        - -S1*
+        - -ST1*
+        - -QF1*
+  exclusions:
+    # Preserve v1's `issues.exclude-use-default: true` behavior.
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - site
+    rules:
+      - path: '_test\.go'
+        linters:
+          - gocyclo
+          - goconst
+          - unparam
+      - linters:
+          - unparam
+        text: 'acceptLoop.*result 0.*is always nil'
 
 issues:
-  exclude-dirs:
-    - site
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - goconst
-        - unparam
-    - linters:
-        - unparam
-      text: "acceptLoop.*result 0.*is always nil"
   max-issues-per-linter: 50
   max-same-issues: 5

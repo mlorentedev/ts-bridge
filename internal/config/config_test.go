@@ -61,8 +61,11 @@ func TestLoadConfig(t *testing.T) {
 				if cfg.Hostname != "ts-bridge" {
 					t.Errorf("expected legacy hostname, got %s", cfg.Hostname)
 				}
-				if cfg.StateDir != "./ts-state" {
-					t.Errorf("expected legacy state dir, got %s", cfg.StateDir)
+				if cfg.StateDir != StateDirForPlatform() {
+					t.Errorf("expected per-user state dir %s, got %s", StateDirForPlatform(), cfg.StateDir)
+				}
+				if cfg.StateDir == "./ts-state" {
+					t.Error("state dir must not be the CWD-relative ./ts-state (#207)")
 				}
 				if cfg.EphemeralState {
 					t.Error("expected legacy mode to keep persistent state")

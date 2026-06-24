@@ -16,17 +16,27 @@ state directory has loose permissions
 Or permission errors accessing the state directory.
 
 ## Cause
-The state directory (`TS_STATE_DIR`, default `./ts-state`) must have `0700` permissions. tsnet stores Tailscale node state here and warns if other users can read it.
+The state directory (`TS_STATE_DIR` / `--state-dir`) must have `0700` permissions. tsnet stores Tailscale node state here — including `tailscaled.state`, which holds the node's private identity — and warns if other users can read it.
+
+The default is a **fixed, per-user, absolute** directory (never the current working directory):
+
+| OS | Default state directory |
+| --- | --- |
+| Windows | `%LOCALAPPDATA%\ts-bridge\state` |
+| macOS | `~/Library/Application Support/ts-bridge/state` |
+| Linux | `$XDG_STATE_HOME/ts-bridge/state` (falls back to `~/.local/state/ts-bridge/state`) |
+
+> Earlier versions defaulted to a CWD-relative `./ts-state`, which could leak the node identity into the working directory (and any git tree that auto-commits it). If you relied on that location, pass `--state-dir ./ts-state` explicitly — ts-bridge now warns when the resolved state directory is relative.
 
 ## Fix
 
 ```bash
-# Reset state directory
-rm -rf ./ts-state
+# Reset state directory (Linux example; adjust path per the table above)
+rm -rf ~/.local/state/ts-bridge/state
 ./ts-bridge  # Will recreate with correct permissions
 
 # Or fix permissions manually
-chmod 700 ./ts-state
+chmod 700 ~/.local/state/ts-bridge/state
 ```
 
 ## Authentication Failures After Restart

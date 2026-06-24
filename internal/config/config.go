@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +43,23 @@ func warnPermission(path string, perm uint32) {
 	}
 }
 
+// warnRelativeStateDir warns when the resolved state directory is CWD-relative
+// — an explicit relative override that risks leaking the tsnet node identity
+// into the working directory (and any git tree that auto-commits it) (#207).
+func warnRelativeStateDir(dir string) {
+	if !stateDirIsCWDRelative(dir) {
+		return
+	}
+	const msg = "state directory is relative to the current working directory; " +
+		"the tsnet node identity (tailscaled.state) may leak into it and any git tree " +
+		"that auto-commits it — prefer an absolute --state-dir"
+	if logger != nil {
+		logger.Warn(msg, "path", dir)
+	} else {
+		fmt.Fprintf(os.Stderr, "WARNING: %s (path %q)\n", msg, dir)
+	}
+}
+
 // warnEnvVar logs an environment variable parsing/validation warning via the
 // package logger, falling back to stderr if the logger is not yet initialized.
 func warnEnvVar(key, value, reason string) {
@@ -59,7 +75,6 @@ const (
 	// Default runtime values.
 	defaultLocalAddr     = "127.0.0.1:33389"
 	defaultHostname      = "ts-bridge"
-	defaultStateDir      = "./ts-state"
 	defaultAutoPortRange = "33389-34388"
 	defaultTimeout       = 30 * time.Second
 	defaultDrainTimeout  = 15 * time.Second
@@ -161,8 +176,9 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		cfg.Hostname = defaultHostname
 	}
 	if cfg.StateDir == "" {
-		cfg.StateDir = defaultStateDir
+		cfg.StateDir = StateDirForPlatform()
 	}
+	warnRelativeStateDir(cfg.StateDir)
 
 	return cfg, nil
 }
@@ -335,7 +351,7 @@ func applyAutoInstanceConfig(cfg *Config) error {
 	}
 
 	if cfg.StateDir == "" {
-		cfg.StateDir = filepath.Join(os.TempDir(), "ts-bridge", cfg.Hostname)
+		cfg.StateDir = EphemeralStateDir(cfg.Hostname)
 		cfg.EphemeralState = true
 	}
 
