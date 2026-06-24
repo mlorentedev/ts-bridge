@@ -1,0 +1,51 @@
+[
+  {
+    "id": "STATE-001-f1",
+    "behavior": "connect default (no state-dir input) resolves StateDir to an absolute per-user path containing ts-bridge, never ./ts-state",
+    "verification": "go test ./internal/config -run TestStateDirDefaultIsAbsolutePerUser",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f2",
+    "behavior": "StateDirForPlatform returns the correct per-OS path, honors XDG_STATE_HOME, and is always absolute even with HOME/LOCALAPPDATA/XDG unset",
+    "verification": "go test ./internal/config -run TestStateDirForPlatform",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f3",
+    "behavior": "auto-instance ephemeral state resolves under a temp dir (not CWD-relative) with EphemeralState true",
+    "verification": "go test ./internal/config -run TestAutoInstanceEphemeralStateNotRelative",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f4",
+    "behavior": "explicit --state-dir / TS_STATE_DIR / yaml state_dir overrides are preserved verbatim (incl. relative for back-compat)",
+    "verification": "go test ./internal/config -run TestStateDirExplicitOverridePreserved",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f5",
+    "behavior": "a resolved relative state dir emits a non-blocking Warn naming the leakage risk; an absolute one does not",
+    "verification": "go test ./internal/config -run TestWarnRelativeStateDir",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f6",
+    "behavior": "no regression: manual mode keeps EphemeralState false with the new absolute default",
+    "verification": "go test ./internal/config -run TestMergeManualModeNoAutoDerivedValues",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "STATE-001-f7",
+    "behavior": "docs reflect the new default state location; legacy ./ts-state default corrected",
+    "verification": "rg -q \"Application Support|XDG_STATE_HOME|LOCALAPPDATA.*state|per-user\" docs/troubleshooting/error-state-permissions.md site/src/content/docs/configuration.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]

@@ -818,3 +818,138 @@ func mustParseDuration(s string) time.Duration {
 	}
 	return d
 }
+
+// --- STATE-001: fixed per-user state directory (#207) ---
+
+// unsetStateEnv clears every env var that can influence state-dir / auto-mode
+// resolution so each case starts from a clean slate.
+func unsetStateEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{
+		"TS_STATE_DIR", "TS_AUTO_INSTANCE", "TS_MANUAL_MODE",
+		"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_INSTANCE_NAME", "TS_PORT_RANGE",
+		"TS_TARGET", "TS_AUTHKEY",
+	} {
+		os.Unsetenv(k)
+	}
+}
+
+// Manual mode with no state-dir input must resolve to the fixed per-user
+// directory, never the CWD-relative ./ts-state (#207).
+func TestStateDirDefaultIsAbsolutePerUser(t *testing.T) {
+	unsetStateEnv(t)
+	cfg, err := Merge(PartialConfig{}, FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		ManualMode: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.StateDir == "./ts-state" {
+		t.Fatal("default state dir is still the CWD-relative ./ts-state (#207 not fixed)")
+	}
+	if !filepath.IsAbs(cfg.StateDir) {
+		t.Errorf("default state dir must be absolute, got %q", cfg.StateDir)
+	}
+	if cfg.StateDir != StateDirForPlatform() {
+		t.Errorf("expected default == StateDirForPlatform() %q, got %q", StateDirForPlatform(), cfg.StateDir)
+	}
+	if cfg.EphemeralState {
+		t.Error("manual-mode persistent state must not be marked ephemeral")
+	}
+}
+
+// Default auto mode without an --instance keeps a stable per-user identity:
+// it must also land on the fixed per-user dir, not ./ts-state.
+func TestStateDirDefaultAutoNoInstanceIsPerUser(t *testing.T) {
+	unsetStateEnv(t)
+	cfg, err := Merge(PartialConfig{}, FlagSet{
+		Target:  "100.64.0.1:3389",
+		AuthKey: "tskey-test",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.StateDir == "./ts-state" {
+		t.Fatal("default auto-mode state dir is still ./ts-state (#207 not fixed)")
+	}
+	if !filepath.IsAbs(cfg.StateDir) {
+		t.Errorf("default state dir must be absolute, got %q", cfg.StateDir)
+	}
+}
+
+// Auto mode with an --instance derives an ephemeral identity. That throwaway
+// state must live under a temp dir, never a CWD-relative path.
+func TestAutoInstanceEphemeralStateNotRelative(t *testing.T) {
+	unsetStateEnv(t)
+	cfg, err := Merge(PartialConfig{}, FlagSet{
+		Target:   "100.64.0.1:3389",
+		AuthKey:  "tskey-test",
+		Instance: "office",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.EphemeralState {
+		t.Fatal("expected ephemeral state in auto mode with an instance")
+	}
+	if cfg.StateDir == "./ts-state" {
+		t.Fatal("ephemeral state still resolves to ./ts-state (#207 not fixed)")
+	}
+	if !filepath.IsAbs(cfg.StateDir) {
+		t.Errorf("ephemeral state must not be CWD-relative, got %q", cfg.StateDir)
+	}
+}
+
+// Explicit overrides (flag / env / yaml) must be preserved verbatim, including
+// relative values, so users who depended on ./ts-state can opt back in.
+func TestStateDirExplicitOverridePreserved(t *testing.T) {
+	unsetStateEnv(t)
+
+	// Flag override (relative, intentional opt-in to legacy behavior).
+	cfg, err := Merge(PartialConfig{}, FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		StateDir:   "./ts-state",
+		ManualMode: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.StateDir != "./ts-state" {
+		t.Errorf("explicit flag override must be preserved, got %q", cfg.StateDir)
+	}
+
+	// Env override (absolute path, OS-appropriate via t.TempDir).
+	unsetStateEnv(t)
+	envDir := filepath.Join(t.TempDir(), "custom-state")
+	os.Setenv("TS_STATE_DIR", envDir)
+	defer os.Unsetenv("TS_STATE_DIR")
+	cfg2, err := Merge(PartialConfig{}, FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		ManualMode: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg2.StateDir != envDir {
+		t.Errorf("explicit env override must be preserved, got %q", cfg2.StateDir)
+	}
+
+	// YAML override (absolute path, OS-appropriate via t.TempDir).
+	unsetStateEnv(t)
+	yamlDir := filepath.Join(t.TempDir(), "yaml-state")
+	cfg3, err := Merge(PartialConfig{StateDir: yamlDir}, FlagSet{
+		Target:     "100.64.0.1:3389",
+		AuthKey:    "tskey-test",
+		ManualMode: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg3.StateDir != yamlDir {
+		t.Errorf("explicit yaml override must be preserved, got %q", cfg3.StateDir)
+	}
+}

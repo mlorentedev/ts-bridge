@@ -98,12 +98,14 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 		cfg.Hostname = defaultHostname
 	}
 
-	// Apply default StateDir in manual mode — auto-mode derives it via
+	// Apply the default StateDir in manual mode — auto-mode derives it via
 	// applyAutoInstance(), but manual mode needs a fallback so the bridge
-	// doesn't fail with an empty path (BUG-020 secondary).
+	// doesn't fail with an empty path (BUG-020 secondary). The default is a
+	// fixed per-user directory, never the CWD (#207 / STATE-001).
 	if cfg.StateDir == "" {
-		cfg.StateDir = defaultStateDir
+		cfg.StateDir = StateDirForPlatform()
 	}
+	warnRelativeStateDir(cfg.StateDir)
 
 	return cfg, nil
 }
@@ -411,9 +413,11 @@ func applyAutoInstance(cfg *Config, flags FlagSet) {
 		}
 	}
 
-	// Derive StateDir only when LocalAddr was auto-derived (auto-mode).
+	// Derive StateDir only when LocalAddr was auto-derived (auto-mode). The
+	// ephemeral identity lives under a temp dir, never the CWD (#207 /
+	// STATE-001) — it is cleaned up on shutdown.
 	if cfg.StateDir == "" && cfg.Hostname != "" {
-		cfg.StateDir = defaultStateDir
+		cfg.StateDir = EphemeralStateDir(cfg.Hostname)
 		cfg.EphemeralState = true
 	}
 }
