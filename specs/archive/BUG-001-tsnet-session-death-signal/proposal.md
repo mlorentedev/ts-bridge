@@ -1,7 +1,7 @@
 ---
 id: "BUG-001"
 type: spec
-status: draft
+status: archived
 created: "2026-06-26"
 issue: "ts-bridge#208"
 tags: [spec, bug, reliability, proxy, health]
