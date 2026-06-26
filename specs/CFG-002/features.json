@@ -2,49 +2,49 @@
   {
     "id": "CFG-002-f1",
     "behavior": "host setup/check emit a descriptor carrying the detected port (45000 case, not 3389)",
-    "verification": "go test ./internal/host -run TestEmitDescriptorDetectedPort",
+    "verification": "go test ./cmd/cli/... -run TestBuildDescriptorLine_SaaSControl",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CFG-002-f2",
     "behavior": "importing a descriptor yields a profile whose target uses the descriptor's port; connect --profile dials it",
-    "verification": "go test ./internal/profile -run TestImportProfileTarget",
+    "verification": "go test ./cmd/cli/... -run TestRunImport_WritesProfile && go test ./cmd/cli/... -run TestApplyProfile_ResolvesTargetFromStore",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CFG-002-f3",
     "behavior": "descriptor round-trips losslessly (parse(emit(x))==x) incl. version; malformed input errors without panic",
-    "verification": "go test ./internal/profile -run TestDescriptorRoundTrip",
+    "verification": "go test ./internal/profile/... -run TestDescriptor",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CFG-002-f4",
     "behavior": "backward compatibility: existing TS_TARGET=host:port keeps working with no profile present",
-    "verification": "go test ./internal/config -run TestTargetBackwardCompat",
+    "verification": "go test ./cmd/cli/... -run TestBackwardCompat_ExistingTargetWithoutProfile",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CFG-002-f5",
-    "behavior": "cross-platform emission: non-Windows host paths also produce a descriptor with their detected port",
-    "verification": "go test ./internal/host -run TestEmitDescriptorCrossPlatform",
+    "behavior": "cross-platform emission: buildDescriptorLine is OS-agnostic; test runs on all platforms",
+    "verification": "go test ./cmd/cli/... -run TestBuildDescriptorLine",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CFG-002-f6",
     "behavior": "control-plane parity: a descriptor with cp=<Headscale URL> imports and connects identically to cp=saas",
-    "verification": "go test ./internal/profile -run TestControlPlaneParity",
+    "verification": "go test ./cmd/cli/... -run TestControlPlaneParity_HeadscaleDescriptorRoundTrip",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CFG-002-f7",
     "behavior": "idempotent import: importing the same descriptor twice yields a single, uncorrupted profile",
-    "verification": "go test ./internal/profile -run TestImportIdempotent",
+    "verification": "go test ./internal/profile/... -run TestStore_Import_Idempotent",
     "state": "pending",
     "evidence": ""
   },
