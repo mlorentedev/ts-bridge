@@ -122,3 +122,97 @@ func TestStore_PersistsToDisk(t *testing.T) {
 		t.Errorf("Target = %q, want %q", p.Target, "host:3389")
 	}
 }
+
+func TestStore_Set_WritesProfile(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(filepath.Join(dir, "profiles.yaml"))
+
+	if err := s.Set("work", "host:3389", ""); err != nil {
+		t.Fatalf("Set error: %v", err)
+	}
+
+	p, err := s.Get("work")
+	if err != nil {
+		t.Fatalf("Get error: %v", err)
+	}
+	if p.Target != "host:3389" {
+		t.Errorf("Target = %q, want %q", p.Target, "host:3389")
+	}
+	if p.ControlURL != "" {
+		t.Errorf("ControlURL = %q, want empty", p.ControlURL)
+	}
+}
+
+func TestStore_Set_Headscale(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(filepath.Join(dir, "profiles.yaml"))
+
+	if err := s.Set("kubelab", "host:3389", "https://vpn.kubelab.live"); err != nil {
+		t.Fatalf("Set error: %v", err)
+	}
+
+	p, err := s.Get("kubelab")
+	if err != nil {
+		t.Fatalf("Get error: %v", err)
+	}
+	if p.ControlURL != "https://vpn.kubelab.live" {
+		t.Errorf("ControlURL = %q, want %q", p.ControlURL, "https://vpn.kubelab.live")
+	}
+}
+
+func TestStore_Set_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(filepath.Join(dir, "profiles.yaml"))
+
+	for i := 0; i < 3; i++ {
+		if err := s.Set("work", "host:3389", ""); err != nil {
+			t.Fatalf("Set #%d error: %v", i+1, err)
+		}
+	}
+
+	names, err := s.List()
+	if err != nil {
+		t.Fatalf("List error: %v", err)
+	}
+	if len(names) != 1 {
+		t.Errorf("expected 1 profile after 3 identical sets, got %d", len(names))
+	}
+}
+
+func TestStore_Set_OverwritesExisting(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(filepath.Join(dir, "profiles.yaml"))
+
+	if err := s.Set("work", "old-host:3389", ""); err != nil {
+		t.Fatalf("initial Set error: %v", err)
+	}
+	if err := s.Set("work", "new-host:45000", "https://vpn.example.com"); err != nil {
+		t.Fatalf("overwrite Set error: %v", err)
+	}
+
+	p, err := s.Get("work")
+	if err != nil {
+		t.Fatalf("Get error: %v", err)
+	}
+	if p.Target != "new-host:45000" {
+		t.Errorf("Target = %q, want %q", p.Target, "new-host:45000")
+	}
+	if p.ControlURL != "https://vpn.example.com" {
+		t.Errorf("ControlURL = %q, want %q", p.ControlURL, "https://vpn.example.com")
+	}
+}
+
+func TestStore_Set_RejectsSecretInTarget(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(filepath.Join(dir, "profiles.yaml"))
+
+	cases := []string{
+		"tskey-auth-abc123:3389",
+		"hskey-preauth-xyz:3389",
+	}
+	for _, target := range cases {
+		if err := s.Set("bad", target, ""); err == nil {
+			t.Errorf("Set(%q) expected error for secret in target, got nil", target)
+		}
+	}
+}

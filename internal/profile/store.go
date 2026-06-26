@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -55,6 +56,28 @@ func (s *Store) Import(name string, d Descriptor) error {
 	}
 	data.DescriptorVersion = 1
 
+	return s.save(data)
+}
+
+// secretPrefixes holds auth-key prefixes that must never appear in a profile target.
+var secretPrefixes = []string{"tskey-", "hskey-"}
+
+// Set writes (or updates) a named profile from raw parameters.
+// Use this when no tsb:// descriptor is available (e.g. ts-bridge init --profile).
+// Returns an error if target contains a known secret prefix.
+func (s *Store) Set(name, target, controlURL string) error {
+	for _, pfx := range secretPrefixes {
+		if strings.Contains(target, pfx) {
+			return fmt.Errorf("profile target must not contain auth key material (found %q prefix)", pfx)
+		}
+	}
+
+	data, err := s.load()
+	if err != nil {
+		return err
+	}
+	data.Profiles[name] = profileEntry{Target: target, ControlURL: controlURL}
+	data.DescriptorVersion = 1
 	return s.save(data)
 }
 
