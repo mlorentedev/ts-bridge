@@ -1,0 +1,37 @@
+[
+  {
+    "id": "CFG-001-f1",
+    "behavior": "ts-bridge init --profile <name> --target host:port writes the profile to the store; --overwrite updates; without --overwrite fails when profile exists",
+    "verification": "go test ./cmd/cli/... -run TestRunInitProfile -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CFG-001-f2",
+    "behavior": "ts-bridge connect --profile <name> loads the profile; an explicit --target flag overrides it (flags > profile precedence)",
+    "verification": "go test ./cmd/cli/... -run TestApplyProfile -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CFG-001-f3",
+    "behavior": "Without --profile, the current .env behavior is identical — backward compatible",
+    "verification": "go test ./cmd/cli/... -run TestWriteEnvConfig -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CFG-001-f4",
+    "behavior": "Secrets absent from the profile store — Store.Set rejects targets containing tskey- or hskey-",
+    "verification": "go test ./internal/profile/... -run TestStore_Set_RejectsSecretInTarget -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CFG-001-f5",
+    "behavior": "ADR-012 authored and docs/adr/adr-002 marked status: deprecated",
+    "verification": "grep 'status: deprecated' docs/adr/adr-002-single-binary-no-config.md && grep 'status: accepted' docs/adr/adr-012-config-profiles-model.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
