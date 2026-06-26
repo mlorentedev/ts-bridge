@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ts-bridge/internal/config"
+	"ts-bridge/internal/profile"
 )
 
 // initCmd is the "ts-bridge init" subcommand — interactive setup wizard.
@@ -59,19 +60,23 @@ func init() {
 	initCmd.Flags().String("format", "env", "Output format: yaml or env (default: env)")
 	initCmd.Flags().String("config", "", "Output config file path (default: ./ts-bridge.yaml for yaml, ./.env for env)")
 	initCmd.Flags().Bool("force", false, "Overwrite existing config files without prompting")
+	initCmd.Flags().String("profile", "", "Write a named profile to the profile store instead of a config file")
+	initCmd.Flags().String("control-url", "", "Control plane URL for the profile (Headscale only; used with --profile)")
 
 	rootCmd.AddCommand(initCmd)
 }
 
 // initFlags holds values parsed from CLI flags for the init command.
 type initFlags struct {
-	AuthKey   string // #nosec G117 -- CLI flag value, not a secret in source code
-	Target    string
-	Instance  string
-	PortRange string
-	Format    string
-	Config    string
-	Force     bool
+	AuthKey    string // #nosec G117 -- CLI flag value, not a secret in source code
+	Target     string
+	Instance   string
+	PortRange  string
+	Format     string
+	Config     string
+	Force      bool
+	Profile    string
+	ControlURL string
 }
 
 const (
@@ -87,6 +92,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Profile mode: write a named profile to the store; no .env or YAML file.
+	if f.Profile != "" {
+		if err := validateProfileModeFlags(cmd, f); err != nil {
+			return err
+		}
+		return runInitProfile(defaultProfileStorePath, f)
+	}
+
 	// Determine mode.
 	isInteractive := f.AuthKey == "" || f.Target == ""
 
@@ -94,6 +107,55 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return runInitInteractive(cmd, f)
 	}
 	return runInitNonInteractive(cmd, f)
+}
+
+// validateProfileModeFlags returns an error if any flag incompatible with
+// --profile mode was explicitly set by the caller.
+func validateProfileModeFlags(cmd *cobra.Command, f initFlags) error {
+	incompatible := []struct {
+		flag  string
+		value string
+	}{
+		{"auth-key", f.AuthKey},
+		{"instance", f.Instance},
+		{"port-range", f.PortRange},
+		{"config", f.Config},
+	}
+	for _, ic := range incompatible {
+		if cmd.Flags().Changed(ic.flag) {
+			return fmt.Errorf("--%s is not compatible with --profile; profiles do not store auth keys or file paths", ic.flag)
+		}
+	}
+	if cmd.Flags().Changed("format") {
+		return fmt.Errorf("--format is not compatible with --profile; profiles are always written to the profile store")
+	}
+	return nil
+}
+
+// runInitProfile writes a named profile to the profile store.
+// storePath is injected so tests can pass a temp path without touching the real store.
+func runInitProfile(storePath string, f initFlags) error {
+	if err := validateTarget(f.Target); err != nil {
+		return fmt.Errorf("init --profile %q: %w", f.Profile, err)
+	}
+
+	s := profile.NewStore(storePath)
+
+	// Overwrite protection: check if profile already exists.
+	if !f.Force {
+		if _, err := s.Get(f.Profile); err == nil {
+			return fmt.Errorf("profile %q already exists in %s (use --force to overwrite)", f.Profile, storePath)
+		}
+	}
+
+	if err := s.Set(f.Profile, f.Target, f.ControlURL); err != nil {
+		return fmt.Errorf("write profile %q: %w", f.Profile, err)
+	}
+
+	fmt.Printf("\nProfile %q written to %s\n", f.Profile, storePath)
+	fmt.Println("\nNext step:")
+	fmt.Printf("  ts-bridge connect --profile %s\n\n", f.Profile)
+	return nil
 }
 
 // parseInitFlags reads all init-specific flags into a struct.
@@ -107,6 +169,8 @@ func parseInitFlags(cmd *cobra.Command) (initFlags, error) {
 	f.Format, _ = cmd.Flags().GetString("format")
 	f.Config, _ = cmd.Flags().GetString("config")
 	f.Force, _ = cmd.Flags().GetBool("force")
+	f.Profile, _ = cmd.Flags().GetString("profile")
+	f.ControlURL, _ = cmd.Flags().GetString("control-url")
 
 	// Validate format.
 	switch strings.ToLower(f.Format) {

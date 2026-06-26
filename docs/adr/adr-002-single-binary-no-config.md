@@ -1,7 +1,7 @@
 ---
 id: "ADR-002-single-binary-no-config"
 type: adr
-status: accepted
+status: deprecated
 date: "2024-01-01"
 tags: [architecture, decision, portability, configuration]
 owner: manu
@@ -33,3 +33,4 @@ We chose **environment variables** as the sole configuration method (with `-v` a
 
 ## References
 - https://12factor.net/config
+- Superseded by: `docs/adr/adr-012-config-profiles-model.md` (issue #185)

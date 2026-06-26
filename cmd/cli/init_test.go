@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"ts-bridge/internal/profile"
 )
 
 // BUG-001/002: init should not overwrite existing config without confirmation.
@@ -139,6 +141,79 @@ func TestWriteYAMLConfig_CreatesYamlAndEnv(t *testing.T) {
 	}
 	if !strings.Contains(string(envData), "TS_AUTHKEY=tskey-test") {
 		t.Error(".env should contain TS_AUTHKEY")
+	}
+}
+
+func TestRunInitProfile(t *testing.T) {
+	cases := []struct {
+		name          string
+		flags         initFlags
+		preExisting   string // if non-empty, pre-write this target under f.Profile name
+		wantErr       string // substring expected in error; empty = no error
+		wantTarget    string
+		wantControlURL string
+	}{
+		{
+			name:       "writes profile without control URL",
+			flags:      initFlags{Target: "host:3389", Profile: "work"},
+			wantTarget: "host:3389",
+		},
+		{
+			name:           "writes Headscale profile with control URL",
+			flags:          initFlags{Target: "host:3389", Profile: "kubelab", ControlURL: "https://vpn.kubelab.live"},
+			wantTarget:     "host:3389",
+			wantControlURL: "https://vpn.kubelab.live",
+		},
+		{
+			name:        "existing profile without --force returns error",
+			flags:       initFlags{Target: "new-host:45000", Profile: "work", Force: false},
+			preExisting: "old-host:3389",
+			wantErr:     "already exists",
+			wantTarget:  "old-host:3389", // unchanged
+		},
+		{
+			name:        "existing profile with --force overwrites",
+			flags:       initFlags{Target: "new-host:45000", Profile: "work", Force: true},
+			preExisting: "old-host:3389",
+			wantTarget:  "new-host:45000",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			storePath := filepath.Join(t.TempDir(), "profiles.yaml")
+			if tc.preExisting != "" {
+				if err := profile.NewStore(storePath).Set(tc.flags.Profile, tc.preExisting, ""); err != nil {
+					t.Fatalf("pre-write error: %v", err)
+				}
+			}
+
+			err := runInitProfile(storePath, tc.flags)
+
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want substring %q", err.Error(), tc.wantErr)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if tc.wantTarget != "" {
+				p, getErr := profile.NewStore(storePath).Get(tc.flags.Profile)
+				if getErr != nil {
+					t.Fatalf("Get error: %v", getErr)
+				}
+				if p.Target != tc.wantTarget {
+					t.Errorf("Target = %q, want %q", p.Target, tc.wantTarget)
+				}
+				if tc.wantControlURL != "" && p.ControlURL != tc.wantControlURL {
+					t.Errorf("ControlURL = %q, want %q", p.ControlURL, tc.wantControlURL)
+				}
+			}
+		})
 	}
 }
 
