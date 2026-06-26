@@ -9,6 +9,11 @@ import (
 	"ts-bridge/internal/host"
 )
 
+// BuildDescriptorLineForTest is a test-only wrapper for buildDescriptorLine.
+func BuildDescriptorLineForTest(ip string, port int, controlURL string) string {
+	return buildDescriptorLine(ip, port, controlURL)
+}
+
 // ─── Test-only exports ───────────────────────────────────────────
 
 // HostInitFlagsForTest is a test-only alias for hostInitFlags.
