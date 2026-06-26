@@ -1,7 +1,7 @@
 ---
 id: "CFG-002"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-23"
 issue: "ts-bridge#213"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
