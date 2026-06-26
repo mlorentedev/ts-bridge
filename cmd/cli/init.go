@@ -109,9 +109,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	return runInitNonInteractive(cmd, f)
 }
 
-// profileModeOnlyFlags lists flags that are meaningless when --profile is set.
-var profileModeOnlyFlags = []string{"auth-key", "format", "config", "instance", "port-range"}
-
 // validateProfileModeFlags returns an error if any flag incompatible with
 // --profile mode was explicitly set by the caller.
 func validateProfileModeFlags(cmd *cobra.Command, f initFlags) error {
