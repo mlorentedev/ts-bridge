@@ -78,7 +78,7 @@ func TestHandleConnWithDialer(t *testing.T) {
 
 			done := make(chan struct{})
 			go func() {
-				handleConn(proxyConn, dialer, cfg, logger)
+				handleConn(proxyConn, dialer, cfg, nil, logger)
 				close(done)
 			}()
 
@@ -150,7 +150,7 @@ func TestAcceptLoopWithDialer(t *testing.T) {
 	var wg sync.WaitGroup
 	loopDone := make(chan error, 1)
 	go func() {
-		loopDone <- AcceptLoop(listener, dialer, cfg, &wg, logger)
+		loopDone <- AcceptLoop(listener, dialer, cfg, &wg, nil, logger)
 	}()
 
 	conn, err := net.Dial("tcp", listener.Addr().String())
@@ -382,6 +382,86 @@ func TestHalfCloseWrite_ReturnsFalseForNonHalfCloser(t *testing.T) {
 	defer b.Close()
 	if halfCloseWrite(a) {
 		t.Fatal("halfCloseWrite should return false for non-halfCloser conns")
+	}
+}
+
+func TestHandleConn_TerminalDialError_CallsCancel(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := config.Config{
+		Target:      "host:3389",
+		DialTimeout: 2 * time.Second,
+	}
+
+	termErr := &TerminalDialError{Cause: errors.New("tsnet: backend in state Stopped")}
+	dialer := &mockDialer{
+		dialFunc: func(_ context.Context, _, _ string) (net.Conn, error) {
+			return nil, termErr
+		},
+	}
+
+	var cancelCalled atomic.Bool
+	var cancelledWith error
+	cancel := func(cause error) {
+		cancelCalled.Store(true)
+		cancelledWith = cause
+	}
+
+	clientConn, proxyConn := net.Pipe()
+	defer clientConn.Close()
+
+	done := make(chan struct{})
+	go func() {
+		handleConn(proxyConn, dialer, cfg, cancel, logger)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("handleConn did not return")
+	}
+
+	if !cancelCalled.Load() {
+		t.Error("expected cancel to be called on TerminalDialError, but it was not")
+	}
+	var got *TerminalDialError
+	if !errors.As(cancelledWith, &got) {
+		t.Errorf("expected cancel called with *TerminalDialError, got %T: %v", cancelledWith, cancelledWith)
+	}
+}
+
+func TestHandleConn_TransientDialError_DoesNotCallCancel(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	cfg := config.Config{
+		Target:      "host:3389",
+		DialTimeout: 2 * time.Second,
+	}
+
+	dialer := &mockDialer{
+		dialFunc: func(_ context.Context, _, _ string) (net.Conn, error) {
+			return nil, io.EOF // transient, not a TerminalDialError
+		},
+	}
+
+	var cancelCalled atomic.Bool
+	cancel := func(_ error) { cancelCalled.Store(true) }
+
+	_, proxyConn := net.Pipe()
+
+	done := make(chan struct{})
+	go func() {
+		handleConn(proxyConn, dialer, cfg, cancel, logger)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("handleConn did not return")
+	}
+
+	if cancelCalled.Load() {
+		t.Error("cancel should NOT be called for transient dial errors")
 	}
 }
 

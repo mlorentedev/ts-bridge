@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -11,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -150,14 +150,16 @@ func Run(cfg config.Config) error {
 	// printBanner()'s fmt.Println() calls.
 	printBanner(cfg)
 
-	var ready atomic.Bool
+	var tunnelStatus health.TunnelStatus
 	var healthServer *http.Server
 	if cfg.HealthAddr != "" {
-		healthServer = health.StartServer(cfg.HealthAddr, &ready, logger)
+		healthServer = health.StartServer(cfg.HealthAddr, &tunnelStatus, logger)
 	}
 
 	sigCtx, sigCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancelWithCause := context.WithCancelCause(sigCtx)
 	defer func() {
+		cancelWithCause(nil)
 		sigCancel()
 		if loggingInstance != nil {
 			// #nosec G104 // cleanup: ignore close errors.
@@ -165,9 +167,9 @@ func Run(cfg config.Config) error {
 		}
 	}()
 
-	go handleShutdown(sigCtx, &ready, listener, healthServer)
+	go handleShutdown(ctx, &tunnelStatus, listener, healthServer)
 
-	ready.Store(true)
+	tunnelStatus.MarkReady()
 	var activeConns sync.WaitGroup
 	dialer := &proxy.ReconnectDialer{
 		Inner:       server,
@@ -176,7 +178,7 @@ func Run(cfg config.Config) error {
 		MaxBackoff:  cfg.DialBackoffMax,
 		Logger:      logger,
 	}
-	errAccept := proxy.AcceptLoop(listener, dialer, cfg, &activeConns, logger)
+	errAccept := proxy.AcceptLoop(listener, dialer, cfg, &activeConns, cancelWithCause, logger)
 
 	drainActiveConnections(cfg, &activeConns)
 
@@ -255,10 +257,16 @@ func diagnoseTailscaleInitError(err error) (hint, remediation string) {
 }
 
 //nolint:unused // wired into Runner = Run
-func handleShutdown(ctx context.Context, ready *atomic.Bool, listener net.Listener, healthServer *http.Server) {
+func handleShutdown(ctx context.Context, status *health.TunnelStatus, listener net.Listener, healthServer *http.Server) {
 	<-ctx.Done()
 	logger.Info("shutting down")
-	ready.Store(false)
+	cause := context.Cause(ctx)
+	if cause != nil && !errors.Is(cause, context.Canceled) {
+		logger.Error("tsnet session terminal", "reason", cause.Error())
+		status.Store(false, cause.Error())
+	} else {
+		status.Store(false, "")
+	}
 	if err := listener.Close(); err != nil {
 		logger.Error("error closing listener", "error", err)
 	}

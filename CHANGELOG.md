@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.6](https://github.com/mlorentedev/ts-bridge/compare/v1.15.5...v1.15.6) (2026-06-26)
+
+
+### Bug Fixes
+
+* **proxy:** exit non-zero and surface dead state when tsnet session dies ([#226](https://github.com/mlorentedev/ts-bridge/issues/226)) ([28715a4](https://github.com/mlorentedev/ts-bridge/commit/28715a42b7c765597021bbcb08f7520abf5da80c)), closes [#208](https://github.com/mlorentedev/ts-bridge/issues/208)
+
 ## [1.15.5](https://github.com/mlorentedev/ts-bridge/compare/v1.15.4...v1.15.5) (2026-06-24)
 
 

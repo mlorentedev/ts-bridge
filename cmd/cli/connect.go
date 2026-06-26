@@ -77,6 +77,7 @@ func init() {
 	// Misc.
 	connectCmd.Flags().Bool("reset", false, "Reset state (manual mode only; no-op in auto mode)")
 	connectCmd.Flags().String("config", "", "Path to YAML config file (default: none)")
+	connectCmd.Flags().String("profile", "", "Named connection profile (overrides --target / TS_TARGET)")
 
 	// Register the subcommand.
 	rootCmd.AddCommand(connectCmd)
@@ -126,6 +127,12 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	// Merge: flags > env > yaml > defaults.
 	cfg, err := config.Merge(yamlCfg, flags)
 	if err != nil {
+		return err
+	}
+
+	// Resolve --profile after Merge so explicit --target / TS_TARGET still wins.
+	profileName, _ := cmd.Flags().GetString("profile")
+	if err := applyProfile(&cfg, profileName, defaultProfileStorePath); err != nil {
 		return err
 	}
 
