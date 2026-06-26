@@ -223,6 +223,48 @@ func TestIsPermanentDialError(t *testing.T) {
 	}
 }
 
+func TestReconnectDialer_TerminalErrorWrapped(t *testing.T) {
+	tsnetErr := errors.New("tsnet: backend in state Stopped")
+	inner := &recordingDialer{failuresBefore: 100, errFail: tsnetErr}
+	d := newReconnectDialer(inner, 3, 1*time.Millisecond, 10*time.Millisecond)
+
+	_, err := d.Dial(context.Background(), "tcp", "x:1")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	// Must short-circuit after one attempt (permanent).
+	if got := inner.attempts.Load(); got != 1 {
+		t.Errorf("expected 1 attempt for terminal error, got %d", got)
+	}
+
+	// Must be unwrappable as *TerminalDialError.
+	var termErr *TerminalDialError
+	if !errors.As(err, &termErr) {
+		t.Errorf("expected *TerminalDialError via errors.As, got %T: %v", err, err)
+	}
+
+	// Inner cause must be preserved.
+	if !errors.Is(err, tsnetErr) {
+		t.Errorf("expected original tsnet error via errors.Is, got %v", err)
+	}
+}
+
+func TestReconnectDialer_TransientErrorNotWrappedAsTerminal(t *testing.T) {
+	inner := &recordingDialer{failuresBefore: 100, errFail: io.EOF}
+	d := newReconnectDialer(inner, 1, 1*time.Millisecond, 10*time.Millisecond)
+
+	_, err := d.Dial(context.Background(), "tcp", "x:1")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	var termErr *TerminalDialError
+	if errors.As(err, &termErr) {
+		t.Errorf("transient error should NOT be wrapped as *TerminalDialError, but got one")
+	}
+}
+
 // Sanity: ReconnectDialer must satisfy the Dialer interface so it can be
 // passed in place of *tsnet.Server.
 var _ Dialer = (*ReconnectDialer)(nil)
