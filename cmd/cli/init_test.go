@@ -144,86 +144,76 @@ func TestWriteYAMLConfig_CreatesYamlAndEnv(t *testing.T) {
 	}
 }
 
-func TestRunInitProfile_WritesProfile(t *testing.T) {
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "profiles.yaml")
-
-	f := initFlags{Target: "host:3389", Profile: "work", Force: false}
-	if err := runInitProfile(storePath, f); err != nil {
-		t.Fatalf("runInitProfile error: %v", err)
+func TestRunInitProfile(t *testing.T) {
+	cases := []struct {
+		name          string
+		flags         initFlags
+		preExisting   string // if non-empty, pre-write this target under f.Profile name
+		wantErr       string // substring expected in error; empty = no error
+		wantTarget    string
+		wantControlURL string
+	}{
+		{
+			name:       "writes profile without control URL",
+			flags:      initFlags{Target: "host:3389", Profile: "work"},
+			wantTarget: "host:3389",
+		},
+		{
+			name:           "writes Headscale profile with control URL",
+			flags:          initFlags{Target: "host:3389", Profile: "kubelab", ControlURL: "https://vpn.kubelab.live"},
+			wantTarget:     "host:3389",
+			wantControlURL: "https://vpn.kubelab.live",
+		},
+		{
+			name:        "existing profile without --force returns error",
+			flags:       initFlags{Target: "new-host:45000", Profile: "work", Force: false},
+			preExisting: "old-host:3389",
+			wantErr:     "already exists",
+			wantTarget:  "old-host:3389", // unchanged
+		},
+		{
+			name:        "existing profile with --force overwrites",
+			flags:       initFlags{Target: "new-host:45000", Profile: "work", Force: true},
+			preExisting: "old-host:3389",
+			wantTarget:  "new-host:45000",
+		},
 	}
 
-	p, err := profile.NewStore(storePath).Get("work")
-	if err != nil {
-		t.Fatalf("Get error: %v", err)
-	}
-	if p.Target != "host:3389" {
-		t.Errorf("Target = %q, want %q", p.Target, "host:3389")
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			storePath := filepath.Join(t.TempDir(), "profiles.yaml")
+			if tc.preExisting != "" {
+				if err := profile.NewStore(storePath).Set(tc.flags.Profile, tc.preExisting, ""); err != nil {
+					t.Fatalf("pre-write error: %v", err)
+				}
+			}
 
-func TestRunInitProfile_WithControlURL(t *testing.T) {
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "profiles.yaml")
+			err := runInitProfile(storePath, tc.flags)
 
-	f := initFlags{Target: "host:3389", Profile: "kubelab", ControlURL: "https://vpn.kubelab.live"}
-	if err := runInitProfile(storePath, f); err != nil {
-		t.Fatalf("runInitProfile error: %v", err)
-	}
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want substring %q", err.Error(), tc.wantErr)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
-	p, err := profile.NewStore(storePath).Get("kubelab")
-	if err != nil {
-		t.Fatalf("Get error: %v", err)
-	}
-	if p.ControlURL != "https://vpn.kubelab.live" {
-		t.Errorf("ControlURL = %q, want %q", p.ControlURL, "https://vpn.kubelab.live")
-	}
-}
-
-func TestRunInitProfile_ExistingProfileWithoutForce_Errors(t *testing.T) {
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "profiles.yaml")
-
-	// Write initial profile.
-	if err := profile.NewStore(storePath).Set("work", "old-host:3389", ""); err != nil {
-		t.Fatalf("initial Set error: %v", err)
-	}
-
-	f := initFlags{Target: "new-host:45000", Profile: "work", Force: false}
-	err := runInitProfile(storePath, f)
-	if err == nil {
-		t.Fatal("expected error for existing profile without --force")
-	}
-	if !strings.Contains(err.Error(), "already exists") {
-		t.Errorf("expected 'already exists' error, got: %v", err)
-	}
-
-	// Profile should be unchanged.
-	p, _ := profile.NewStore(storePath).Get("work")
-	if p.Target != "old-host:3389" {
-		t.Errorf("profile should not have been overwritten: Target = %q", p.Target)
-	}
-}
-
-func TestRunInitProfile_ExistingProfileWithForce_Overwrites(t *testing.T) {
-	dir := t.TempDir()
-	storePath := filepath.Join(dir, "profiles.yaml")
-
-	if err := profile.NewStore(storePath).Set("work", "old-host:3389", ""); err != nil {
-		t.Fatalf("initial Set error: %v", err)
-	}
-
-	f := initFlags{Target: "new-host:45000", Profile: "work", Force: true}
-	if err := runInitProfile(storePath, f); err != nil {
-		t.Fatalf("runInitProfile with --force error: %v", err)
-	}
-
-	p, err := profile.NewStore(storePath).Get("work")
-	if err != nil {
-		t.Fatalf("Get error: %v", err)
-	}
-	if p.Target != "new-host:45000" {
-		t.Errorf("Target = %q, want %q", p.Target, "new-host:45000")
+			if tc.wantTarget != "" {
+				p, getErr := profile.NewStore(storePath).Get(tc.flags.Profile)
+				if getErr != nil {
+					t.Fatalf("Get error: %v", getErr)
+				}
+				if p.Target != tc.wantTarget {
+					t.Errorf("Target = %q, want %q", p.Target, tc.wantTarget)
+				}
+				if tc.wantControlURL != "" && p.ControlURL != tc.wantControlURL {
+					t.Errorf("ControlURL = %q, want %q", p.ControlURL, tc.wantControlURL)
+				}
+			}
+		})
 	}
 }
 

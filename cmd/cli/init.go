@@ -94,6 +94,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Profile mode: write a named profile to the store; no .env or YAML file.
 	if f.Profile != "" {
+		if err := validateProfileModeFlags(cmd, f); err != nil {
+			return err
+		}
 		return runInitProfile(defaultProfileStorePath, f)
 	}
 
@@ -106,11 +109,37 @@ func runInit(cmd *cobra.Command, args []string) error {
 	return runInitNonInteractive(cmd, f)
 }
 
+// profileModeOnlyFlags lists flags that are meaningless when --profile is set.
+var profileModeOnlyFlags = []string{"auth-key", "format", "config", "instance", "port-range"}
+
+// validateProfileModeFlags returns an error if any flag incompatible with
+// --profile mode was explicitly set by the caller.
+func validateProfileModeFlags(cmd *cobra.Command, f initFlags) error {
+	incompatible := []struct {
+		flag  string
+		value string
+	}{
+		{"auth-key", f.AuthKey},
+		{"instance", f.Instance},
+		{"port-range", f.PortRange},
+		{"config", f.Config},
+	}
+	for _, ic := range incompatible {
+		if cmd.Flags().Changed(ic.flag) {
+			return fmt.Errorf("--%s is not compatible with --profile; profiles do not store auth keys or file paths", ic.flag)
+		}
+	}
+	if cmd.Flags().Changed("format") {
+		return fmt.Errorf("--format is not compatible with --profile; profiles are always written to the profile store")
+	}
+	return nil
+}
+
 // runInitProfile writes a named profile to the profile store.
 // storePath is injected so tests can pass a temp path without touching the real store.
 func runInitProfile(storePath string, f initFlags) error {
 	if err := validateTarget(f.Target); err != nil {
-		return err
+		return fmt.Errorf("init --profile %q: %w", f.Profile, err)
 	}
 
 	s := profile.NewStore(storePath)

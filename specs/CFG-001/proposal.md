@@ -18,7 +18,7 @@ template_version: "1.0"
 
 ## What
 
-`ts-bridge init --profile <name>` escribe un bloque en `~/.config/ts-bridge/config.yaml` con los parámetros no-secretos del perfil (control URL, local addr, target). `ts-bridge connect --profile <name>` carga ese perfil y lo fusiona con la precedencia `flags > env > profile > defaults`. Sin `--profile`, el comportamiento actual (`.env`) queda intacto — backward compatible.
+`ts-bridge init --profile <name> --target host:port` escribe una entrada en `profiles.yaml` (en el state dir de plataforma, vía `config.ProfileStorePath()`) con los parámetros no-secretos del perfil (target, control URL). `ts-bridge connect --profile <name>` carga ese perfil y lo fusiona con la precedencia `flags > env > profile > defaults`. Sin `--profile`, el comportamiento actual (`.env`) queda intacto — backward compatible.
 
 ## Out of scope
 
@@ -28,13 +28,13 @@ template_version: "1.0"
 
 ## Risks / open questions
 
-- **[RESOLVED]** Path de `config.yaml`: usar `os.UserConfigDir()` (Go stdlib) + subdir `ts-bridge/` — devuelve `%APPDATA%` en Windows y `$XDG_CONFIG_HOME` (o `~/.config`) en Linux/macOS. Sin `//go:build` por plataforma.
+- **[RESOLVED]** Path del profile store: usar `config.ProfileStorePath()` (ya en uso desde CFG-002) — ruta derivada de `filepath.Dir(StateDirForPlatform()) + "profiles.yaml"`. Se rechazó `os.UserConfigDir()` porque el store ya está live en el state dir y los profiles son estado persistente de conexión, no configuración de usuario versionable.
 - **[RESOLVED]** Compatibilidad `config.yaml` ↔ descriptor `tsb://`: representaciones distintas con propósito distinto (persistencia local vs. URL de un solo uso para compartir). El conversor ya existe: `ts-bridge import <tsb://...> --profile <name>` (PR #228) escribe del descriptor al perfil. No se necesita conversor adicional.
 - **[OPEN]** `goconst` puede dispararse al añadir nuevas string literals en el mismo paquete — extraer constantes desde el principio para no romper CI lint.
 
 ## Acceptance criteria
 
-- [ ] `ts-bridge init --profile work` escribe el perfil en `config.yaml`; re-ejecutar con `--overwrite` actualiza; sin `--overwrite` falla con error claro.
+- [ ] `ts-bridge init --profile work --target host:port` escribe el perfil en `profiles.yaml` (vía `ProfileStorePath()`); re-ejecutar con `--force` actualiza; sin `--force` falla con error claro.
 - [ ] `ts-bridge connect --profile work` carga el perfil; un flag `--target` explícito lo sobreescribe (precedencia `flags > profile`).
 - [ ] Sin `--profile`, el comportamiento actual con `.env` es idéntico — test de regresión pasa sin cambios.
 - [ ] Secrets ausentes del `config.yaml` generado — test que verifica que ningún campo contiene `tskey-` o `hskey-`.

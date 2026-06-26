@@ -51,8 +51,10 @@ Descriptor), `ts-bridge import <tsb://> --profile <name>`, and `ts-bridge connec
 live in the codebase (`internal/config/statedir.go`). This resolves to:
 
 - Windows: `%LOCALAPPDATA%\ts-bridge\profiles.yaml`
-- Linux: `$XDG_STATE_HOME/ts-bridge/profiles.yaml` (falls back to `~/.local/state/ts-bridge/`)
+- Linux: `$XDG_STATE_HOME/ts-bridge/profiles.yaml` (falls back to `~/.local/state/ts-bridge/profiles.yaml` when `$XDG_STATE_HOME` is unset)
 - macOS: `~/Library/Application Support/ts-bridge/profiles.yaml`
+
+The file is a sibling of the `state/` subdirectory (not inside it) — `ProfileStorePath()` is derived from `filepath.Dir(StateDirForPlatform()) + "profiles.yaml"`, so profiles survive a state reset that wipes `state/`.
 
 ### Why not `os.UserConfigDir()` + `~/.config/ts-bridge/config.yaml`
 

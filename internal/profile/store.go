@@ -64,8 +64,11 @@ var secretPrefixes = []string{"tskey-", "hskey-"}
 
 // Set writes (or updates) a named profile from raw parameters.
 // Use this when no tsb:// descriptor is available (e.g. ts-bridge init --profile).
-// Returns an error if target contains a known secret prefix.
+// Returns an error if name is empty or if target contains a known secret prefix.
 func (s *Store) Set(name, target, controlURL string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("profile name must not be empty")
+	}
 	for _, pfx := range secretPrefixes {
 		if strings.Contains(target, pfx) {
 			return fmt.Errorf("profile target must not contain auth key material (found %q prefix)", pfx)
@@ -74,11 +77,14 @@ func (s *Store) Set(name, target, controlURL string) error {
 
 	data, err := s.load()
 	if err != nil {
-		return err
+		return fmt.Errorf("load profile store: %w", err)
 	}
 	data.Profiles[name] = profileEntry{Target: target, ControlURL: controlURL}
 	data.DescriptorVersion = 1
-	return s.save(data)
+	if err := s.save(data); err != nil {
+		return fmt.Errorf("save profile store: %w", err)
+	}
+	return nil
 }
 
 // Get returns the named profile or an error if it does not exist.
