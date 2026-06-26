@@ -150,3 +150,45 @@ func TestRunImport_MalformedDescriptor(t *testing.T) {
 		t.Error("profiles.yaml should not exist after failed import")
 	}
 }
+
+// TestControlPlaneParity_HeadscaleDescriptorRoundTrip verifies that a descriptor
+// carrying a Headscale control URL imports and resolves identically to a SaaS
+// descriptor — only ControlURL differs, not the target.
+func TestControlPlaneParity_HeadscaleDescriptorRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "profiles.yaml")
+
+	const headscaleURL = "https://vpn.corp.example.com"
+	descriptor := "tsb://rdp.corp.example.com:3389?cp=" + headscaleURL
+
+	if err := runImportDirect("work", descriptor, storePath); err != nil {
+		t.Fatalf("runImportDirect with Headscale URL: %v", err)
+	}
+
+	cfg := config.Config{}
+	if err := applyProfile(&cfg, "work", storePath); err != nil {
+		t.Fatalf("applyProfile: %v", err)
+	}
+	if cfg.Target != "rdp.corp.example.com:3389" {
+		t.Errorf("Target = %q, want %q", cfg.Target, "rdp.corp.example.com:3389")
+	}
+	if cfg.ControlURL != headscaleURL {
+		t.Errorf("ControlURL = %q, want %q", cfg.ControlURL, headscaleURL)
+	}
+}
+
+// TestBackwardCompat_ExistingTargetWithoutProfile verifies that a non-empty
+// cfg.Target from --target / TS_TARGET is honored unchanged when no profile
+// name is given — the legacy one-env-var connect path must not regress.
+func TestBackwardCompat_ExistingTargetWithoutProfile(t *testing.T) {
+	cfg := config.Config{Target: "100.64.0.1:3389"}
+	if err := applyProfile(&cfg, "", ""); err != nil {
+		t.Fatalf("applyProfile with empty name should be no-op: %v", err)
+	}
+	if cfg.Target != "100.64.0.1:3389" {
+		t.Errorf("Target should be unchanged; got %q", cfg.Target)
+	}
+	if cfg.ControlURL != "" {
+		t.Errorf("ControlURL should be empty; got %q", cfg.ControlURL)
+	}
+}

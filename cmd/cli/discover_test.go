@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"ts-bridge/internal/discover"
@@ -81,5 +84,45 @@ func TestDiscoverCommandRegistered(t *testing.T) {
 	}
 	if !found {
 		t.Error("discover subcommand not registered with root command")
+	}
+}
+
+// TestUpdateEnvFile_UsesNonDefaultPort verifies that a non-3389 port is written
+// to .env without substituting the default — this is the "port capture" guarantee.
+func TestUpdateEnvFile_UsesNonDefaultPort(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+
+	if err := updateEnvFile(path, "acemagic-office", 45000, ""); err != nil {
+		t.Fatalf("updateEnvFile: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .env: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "TS_TARGET=acemagic-office:45000") {
+		t.Errorf("expected TS_TARGET=acemagic-office:45000, got:\n%s", content)
+	}
+}
+
+// TestUpdateEnvFile_DefaultPortNotSubstituted verifies port 3389 is also
+// captured correctly (no accidental override to another value).
+func TestUpdateEnvFile_DefaultPortNotSubstituted(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".env")
+
+	if err := updateEnvFile(path, "host", 3389, ""); err != nil {
+		t.Fatalf("updateEnvFile: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .env: %v", err)
+	}
+	if !strings.Contains(string(data), "TS_TARGET=host:3389") {
+		t.Errorf("expected TS_TARGET=host:3389, got:\n%s", string(data))
 	}
 }
