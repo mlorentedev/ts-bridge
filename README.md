@@ -50,6 +50,25 @@ ts-bridge init
 ts-bridge --help
 ```
 
+**Using a named profile (recommended when the host uses a non-default port):**
+
+When the host runs `ts-bridge host setup` or `ts-bridge host check`, the output includes a shareable descriptor:
+
+```
+  Shareable descriptor:
+  tsb://acemagic-office:45000?cp=saas
+  (import with: ts-bridge import home "tsb://acemagic-office:45000?cp=saas")
+```
+
+Import it once, then connect by name:
+
+```bash
+ts-bridge import home "tsb://acemagic-office:45000?cp=saas"
+ts-bridge connect --profile home    # resolves target+port automatically
+```
+
+`--profile` is additive: if `TS_TARGET` or `--target` is also set, it wins over the profile.
+
 ### 2. Host Setup (Admin)
 
 Ensure Tailscale is running on the target machine and RDP is enabled:
@@ -69,7 +88,7 @@ ts-bridge host check
 | Feature | Description |
 |---|---|
 | **Zero-Admin VPN** | Connect from heavily restricted laptops without filing an IT ticket. |
-| **Professional CLI** | Cobra-based subcommands: `connect`, `init`, `status`, `host`. Full `--help` and autocomplete. |
+| **Professional CLI** | Cobra-based subcommands: `connect`, `import`, `discover`, `init`, `status`, `host`. Full `--help` and autocomplete. |
 | **Headscale Support** | Compatible with open-source control planes (via `TS_CONTROL_URL`). |
 | **Multi-Instance** | Run multiple bridges concurrently to connect to different machines. |
 | **Ephemeral by Default** | Leaves no trace. The node is automatically removed from the network when the bridge closes. |
@@ -140,7 +159,7 @@ TS_LOCAL_ADDR=127.0.0.1:9999
 | Variable | Default | Description |
 |---|---|---|
 | `TS_AUTHKEY` | — | **Required**. Tailscale/Headscale auth key (`tskey-*` or `hskey-*`). |
-| `TS_TARGET` | — | **Required**. Target host:port — supports both IPs and MagicDNS hostnames (e.g., `100.x.x.x:3389` or `my-desktop:3389`). |
+| `TS_TARGET` | — | **Required** (unless `--profile` is used). Target host:port — supports both IPs and MagicDNS hostnames (e.g., `100.x.x.x:3389` or `my-desktop:3389`). |
 | `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local bind address. |
 | `TS_HOSTNAME` | — | Tailscale hostname (default: auto-derived from target). |
 | `TS_CONTROL_URL` | — | Custom control plane URL for Headscale. |

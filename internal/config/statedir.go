@@ -59,6 +59,13 @@ func EphemeralStateDir(hostname string) string {
 	return filepath.Join(os.TempDir(), appDirName, ephemeralSegment(hostname))
 }
 
+// ProfileStorePath returns the default path for the named-profile store.
+// It lives one level above the state directory — i.e. in the ts-bridge
+// application data directory — so profiles survive a state reset.
+func ProfileStorePath() string {
+	return filepath.Join(filepath.Dir(StateDirForPlatform()), "profiles.yaml")
+}
+
 // ephemeralSegment reduces hostname to a single safe path segment so a value
 // containing path separators or ".." cannot escape the temp state root.
 func ephemeralSegment(hostname string) string {

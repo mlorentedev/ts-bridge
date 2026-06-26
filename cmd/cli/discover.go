@@ -124,8 +124,11 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\nSelected: %s\n", target)
 
+	// Read controlURL from env so the descriptor reflects the active control plane.
+	controlURL := os.Getenv("TS_CONTROL_URL")
+
 	if flags.Auto {
-		return updateEnvFile(".env", target, flags.Port)
+		return updateEnvFile(".env", target, flags.Port, controlURL)
 	}
 
 	// Ask user to update .env.
@@ -138,7 +141,7 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	return updateEnvFile(".env", target, flags.Port)
+	return updateEnvFile(".env", target, flags.Port, controlURL)
 }
 
 func parseDiscoverFlags(cmd *cobra.Command) (discoverFlags, error) {
@@ -270,12 +273,17 @@ func printDevicesJSON(devices []discover.Device) error {
 	return nil
 }
 
-// updateEnvFile updates .env with the selected target.
-func updateEnvFile(path, target string, port int) error {
+// updateEnvFile updates .env with the selected target and optionally prints a
+// shareable tsb:// descriptor for the chosen host/port/controlURL.
+func updateEnvFile(path, target string, port int, controlURL string) error {
 	if err := discover.UpdateEnv(path, target, port); err != nil {
 		return fmt.Errorf("update .env: %w", err)
 	}
 	fmt.Printf("\n✓ TS_TARGET=%s:%d added to .env\n", target, port)
+	if desc := buildDescriptorLine(target, port, controlURL); desc != "" {
+		fmt.Printf("  Descriptor: %s\n", desc)
+		fmt.Printf("  (import: ts-bridge import <name> %q)\n", desc)
+	}
 	return nil
 }
 

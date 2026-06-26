@@ -12,6 +12,7 @@ import (
 
 	"ts-bridge/internal/config/envfile"
 	"ts-bridge/internal/host"
+	"ts-bridge/internal/profile"
 )
 
 // hostCmd is the "ts-bridge host" parent command.
@@ -316,7 +317,24 @@ func printSetupSummary(rdpPort int) {
 	fmt.Println()
 	fmt.Println("  Client .env config:")
 	fmt.Printf("  TS_TARGET=%s:%d\n", tsIP, rdpPort)
+	if desc := buildDescriptorLine(tsIP, rdpPort, ""); desc != "" {
+		fmt.Println()
+		fmt.Println("  Shareable descriptor:")
+		fmt.Printf("  %s\n", desc)
+		fmt.Printf("  (import with: ts-bridge import <name> %q)\n", desc)
+	}
 	fmt.Println()
+}
+
+// buildDescriptorLine returns a tsb:// descriptor string for the given host IP,
+// port, and control URL, or empty string if either ip or port is missing.
+// controlURL="" produces cp=saas (Tailscale SaaS).
+func buildDescriptorLine(ip string, port int, controlURL string) string {
+	if ip == "" || port == 0 {
+		return ""
+	}
+	d := profile.Descriptor{Host: ip, Port: port, ControlURL: controlURL, Version: 1}
+	return d.String()
 }
 
 // setupJSONOutput is the JSON structure for host setup --json output.
@@ -369,6 +387,9 @@ func printCheckText(r host.CheckResult) {
 	fmt.Printf("  Tailscale IP:  %s\n", r.TailscaleIP)
 	fmt.Printf("  RDP:           %s (port %d)\n", statusStr(r.RDPEnabled), r.RDPPort)
 	fmt.Printf("  Firewall:      %s\n", statusStr(r.FirewallOK))
+	if desc := buildDescriptorLine(r.TailscaleIP, r.RDPPort, ""); desc != "" {
+		fmt.Printf("  Descriptor:    %s\n", desc)
+	}
 	fmt.Println("  ---------------------------------------")
 	fmt.Println()
 }
@@ -381,6 +402,7 @@ func printCheckJSON(r host.CheckResult) error {
 		FirewallOK  bool   `json:"firewall_ok"`
 		TailscaleUp bool   `json:"tailscale_up"`
 		Platform    string `json:"platform"`
+		Descriptor  string `json:"descriptor,omitempty"`
 	}
 
 	out := jsonOutput{
@@ -390,6 +412,7 @@ func printCheckJSON(r host.CheckResult) error {
 		FirewallOK:  r.FirewallOK,
 		TailscaleUp: r.TailscaleUp,
 		Platform:    runtime.GOOS,
+		Descriptor:  buildDescriptorLine(r.TailscaleIP, r.RDPPort, ""),
 	}
 
 	data, err := json.MarshalIndent(out, "", "  ")
