@@ -1,7 +1,7 @@
 ---
 id: "HOST-002"
 type: spec
-status: proposed
+status: archived
 created: "2026-06-19"
 tags: [spec, host, config, precedence, ci, windows, bugfix]
 issue: 193

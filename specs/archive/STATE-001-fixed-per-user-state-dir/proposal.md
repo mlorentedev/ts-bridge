@@ -1,7 +1,7 @@
 ---
 id: "STATE-001"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-24"
 issue: "ts-bridge#207"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, bug, reliability]
