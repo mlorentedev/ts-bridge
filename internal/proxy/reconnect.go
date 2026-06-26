@@ -44,7 +44,7 @@ func (r *ReconnectDialer) Dial(ctx context.Context, network, address string) (ne
 			return nil, ctx.Err()
 		}
 		if isPermanentDialError(err) {
-			return nil, err
+			return nil, &TerminalDialError{Cause: err}
 		}
 		if attempt == totalAttempts-1 {
 			break
@@ -102,6 +102,17 @@ func computeBackoff(attempt int, base, maxBackoff time.Duration) time.Duration {
 	jitter := time.Duration(rand.Int64N(jitterMax))
 	return d + jitter
 }
+
+// TerminalDialError wraps a permanent dial failure that will not resolve
+// without operator intervention (e.g. tsnet backend in a terminal state,
+// unresolvable DNS). Callers can use errors.As to distinguish this from
+// a plain "retries exhausted on transient error" result.
+type TerminalDialError struct {
+	Cause error
+}
+
+func (e *TerminalDialError) Error() string { return e.Cause.Error() }
+func (e *TerminalDialError) Unwrap() error { return e.Cause }
 
 // isPermanentDialError reports whether err indicates a failure that won't
 // resolve on retry (DNS, address parse, terminal tsnet backend state).

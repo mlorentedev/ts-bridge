@@ -6,14 +6,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"log/slog"
 )
 
-func startTestServer(t *testing.T, ready *atomic.Bool) *httptest.Server {
+func startTestServer(t *testing.T, status *TunnelStatus) *httptest.Server {
 	t.Helper()
 
 	mux := http.NewServeMux()
@@ -26,9 +25,14 @@ func startTestServer(t *testing.T, ready *atomic.Bool) *httptest.Server {
 
 	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if !ready.Load() {
+		ready, reason := status.Load()
+		if !ready {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "not_ready"})
+			body := map[string]string{"status": "not_ready"}
+			if reason != "" {
+				body["reason"] = reason
+			}
+			_ = json.NewEncoder(w).Encode(body)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -51,8 +55,8 @@ func startTestServer(t *testing.T, ready *atomic.Bool) *httptest.Server {
 }
 
 func TestLiveEndpoint_Returns200(t *testing.T) {
-	var ready atomic.Bool
-	srv := startTestServer(t, &ready)
+	var status TunnelStatus
+	srv := startTestServer(t, &status)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/health/live")
@@ -76,8 +80,8 @@ func TestLiveEndpoint_Returns200(t *testing.T) {
 }
 
 func TestLiveEndpoint_ContentType(t *testing.T) {
-	var ready atomic.Bool
-	srv := startTestServer(t, &ready)
+	var status TunnelStatus
+	srv := startTestServer(t, &status)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/health/live")
@@ -93,9 +97,9 @@ func TestLiveEndpoint_ContentType(t *testing.T) {
 }
 
 func TestReadyEndpoint_Returns503WhenNotReady(t *testing.T) {
-	var ready atomic.Bool
-	ready.Store(false)
-	srv := startTestServer(t, &ready)
+	var status TunnelStatus
+	status.Store(false, "")
+	srv := startTestServer(t, &status)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/health/ready")
@@ -118,10 +122,39 @@ func TestReadyEndpoint_Returns503WhenNotReady(t *testing.T) {
 	}
 }
 
+func TestReadyEndpoint_Returns503WithReasonWhenTerminal(t *testing.T) {
+	var status TunnelStatus
+	status.Store(false, "tsnet: backend in state Stopped")
+	srv := startTestServer(t, &status)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/health/ready")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	var result map[string]string
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("invalid JSON body: %v", err)
+	}
+	if result["status"] != "not_ready" {
+		t.Errorf("expected status=not_ready, got %q", result["status"])
+	}
+	if result["reason"] != "tsnet: backend in state Stopped" {
+		t.Errorf("expected reason in 503 body, got %q", result["reason"])
+	}
+}
+
 func TestReadyEndpoint_Returns200WhenReady(t *testing.T) {
-	var ready atomic.Bool
-	ready.Store(true)
-	srv := startTestServer(t, &ready)
+	var status TunnelStatus
+	status.MarkReady()
+	srv := startTestServer(t, &status)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/health/ready")
@@ -145,9 +178,9 @@ func TestReadyEndpoint_Returns200WhenReady(t *testing.T) {
 }
 
 func TestReadyEndpoint_TransitionsFromNotReadyToReady(t *testing.T) {
-	var ready atomic.Bool
-	ready.Store(false)
-	srv := startTestServer(t, &ready)
+	var status TunnelStatus
+	status.Store(false, "")
+	srv := startTestServer(t, &status)
 	defer srv.Close()
 
 	// First check: not ready
@@ -161,7 +194,7 @@ func TestReadyEndpoint_TransitionsFromNotReadyToReady(t *testing.T) {
 	}
 
 	// Transition to ready
-	ready.Store(true)
+	status.MarkReady()
 
 	// Second check: ready
 	resp, err = http.Get(srv.URL + "/health/ready")
@@ -175,8 +208,8 @@ func TestReadyEndpoint_TransitionsFromNotReadyToReady(t *testing.T) {
 }
 
 func TestMetricsEndpoint_ReturnsJSON(t *testing.T) {
-	var ready atomic.Bool
-	srv := startTestServer(t, &ready)
+	var status TunnelStatus
+	srv := startTestServer(t, &status)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/metrics")
@@ -211,8 +244,8 @@ func TestMetricsEndpoint_ReturnsJSON(t *testing.T) {
 }
 
 func TestMetricsEndpoint_ContentType(t *testing.T) {
-	var ready atomic.Bool
-	srv := startTestServer(t, &ready)
+	var status TunnelStatus
+	srv := startTestServer(t, &status)
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/metrics")
@@ -230,7 +263,8 @@ func TestMetricsEndpoint_ContentType(t *testing.T) {
 // TestStartServer verifies the real StartServer function creates a working server.
 func TestStartServer(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	var ready atomic.Bool
+	var status TunnelStatus
+	status.MarkReady()
 
 	// Find a free port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -241,7 +275,7 @@ func TestStartServer(t *testing.T) {
 	listener.Close()
 
 	// Start on the resolved port.
-	server := StartServer(addr, &ready, logger)
+	server := StartServer(addr, &status, logger)
 	defer func() {
 		_ = server.Close()
 	}()

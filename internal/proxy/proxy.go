@@ -77,7 +77,9 @@ func isIdleTimeoutErr(err error) bool {
 }
 
 // AcceptLoop accepts incoming connections and routes them to the dialer.
-func AcceptLoop(listener net.Listener, dialer Dialer, cfg config.Config, wg *sync.WaitGroup, logger *slog.Logger) error {
+// cancel is called with a TerminalDialError when tsnet enters an irrecoverable
+// state; nil is safe (disables terminal propagation, used in tests).
+func AcceptLoop(listener net.Listener, dialer Dialer, cfg config.Config, wg *sync.WaitGroup, cancel context.CancelCauseFunc, logger *slog.Logger) error {
 	backoff := backoffMin
 
 	for {
@@ -114,7 +116,7 @@ func AcceptLoop(listener net.Listener, dialer Dialer, cfg config.Config, wg *syn
 			// Release the claimed slot once the per-conn work returns,
 			// regardless of how it terminates (success, dial fail, panic-free abort).
 			defer telemetry.AddActiveConnection(-1)
-			handleConn(c, dialer, cfg, logger)
+			handleConn(c, dialer, cfg, cancel, logger)
 		}(conn)
 	}
 }
@@ -127,7 +129,10 @@ var bufferPool = sync.Pool{
 	},
 }
 
-func handleConn(client net.Conn, dialer Dialer, cfg config.Config, logger *slog.Logger) {
+// handleConn manages a single proxied connection. cancel is the root-context
+// CancelCauseFunc; when a TerminalDialError is detected, handleConn calls it
+// so the AcceptLoop and shutdown path react immediately. nil is safe (tests).
+func handleConn(client net.Conn, dialer Dialer, cfg config.Config, cancel context.CancelCauseFunc, logger *slog.Logger) {
 	// Active-connection slot management lives in AcceptLoop (atomic claim +
 	// release via defer in the spawned goroutine). We only count the total
 	// here so direct callers (unit tests that bypass AcceptLoop) still see
@@ -153,12 +158,18 @@ func handleConn(client net.Conn, dialer Dialer, cfg config.Config, logger *slog.
 	// DialTimeout covers each per-connection target dial. With ReconnectDialer
 	// retrying, a large ConnectTimeout would let one stuck client hog a slot
 	// for many minutes; DialTimeout=5s keeps the worst case bounded.
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.DialTimeout)
-	defer cancel()
+	ctx, dialCancel := context.WithTimeout(context.Background(), cfg.DialTimeout)
+	defer dialCancel()
 
 	remote, err := dialer.Dial(ctx, "tcp", cfg.Target)
 	if err != nil {
 		telemetry.AddError()
+
+		var termErr *TerminalDialError
+		if errors.As(err, &termErr) && cancel != nil {
+			cancel(err)
+		}
+
 		logger.Error("dial failed", "client", addr, "target", cfg.Target, "error", err)
 		_ = client.Close()
 		return
