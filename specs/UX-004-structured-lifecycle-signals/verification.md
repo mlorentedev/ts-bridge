@@ -13,7 +13,7 @@ All new tests in `cmd/cli/signal_test.go`. Emission wiring in `cmd/cli/run.go`; 
 - [x] Criterion 2 (`--quiet` suppresses banner, keeps READY) -> `TestWriteStartupBanner_QuietSuppresses` (quiet -> 0 bytes; non-quiet -> banner header). Wiring: `writeStartupBanner` returns early on `cfg.Quiet`; `emitReady` is called unconditionally right after, so READY survives `--quiet`. Flag registered in `connect.go`, resolved post-Merge onto `cfg.Quiet`.
 - [x] Criterion 3 (ERROR reason token per category) -> `TestDiagnoseTailscaleInitError_Reason` (table: `bad_authkey` for api-key/invalid-key/expired; `control_plane_unreachable` for deadline/timeout), `TestFormatErrorLine`, `TestEmitError`. **End-to-end smoke:** the built binary run against a fake key emitted `ERROR reason=bad_authkey detail="tsnet.Up: backend: invalid key: unable to validate API key"` to stderr and exited `1`.
 - [x] Criterion 4 (`unknown` fallback never silent) -> `TestDiagnoseTailscaleInitError_Reason/unrecognized` returns `reasonUnknown`; `initTailscale` emits the ERROR line for every non-nil `server.Up` error (reason falls back to `unknown`).
-- [x] Criterion 5 (`detail=` escaping, single line) -> `TestEscapeSignalDetail` (plain, embedded quotes -> `\"`, `\n`/`\r\n`/`\r` collapse to space, combined + trim).
+- [x] Criterion 5 (`detail=` escaping, single line) -> `TestEscapeSignalDetail` (plain, embedded quotes -> `\"`, backslashes -> `\\` incl. trailing-backslash Windows path, `\n`/`\r\n`/`\r` collapse to space, combined + trim).
 - [x] Criterion 6 (no regression) -> `go test ./... -count=1` — all packages pass; existing `Run`/connect behavior unchanged without `--quiet`.
 
 ## Test status
@@ -28,7 +28,7 @@ All new tests in `cmd/cli/signal_test.go`. Emission wiring in `cmd/cli/run.go`; 
 
 - READY is emitted right after the banner and **before** the health server starts — grouped with the banner's direct stdout writes, ahead of any logger stdout output, to avoid the BUG-010 stdout-interleave race (the console logger writes to `os.Stdout`). The listener is already bound at that point, so the OS queues incoming connections until `AcceptLoop` runs — "READY" is accurate.
 - `--quiet` is resolved post-Merge in `runConnect` (like `--profile`), not threaded through env/YAML precedence — it is a pure console-output concern with no env/YAML source.
-- `escapeSignalDetail` escapes `"` -> `\"` and collapses newlines; `formatErrorLine` wraps `detail` in literal quotes (not `%q`) so the output is plain-readable rather than Go-quoted.
+- `escapeSignalDetail` escapes `\` -> `\\` (FIRST) then `"` -> `\"` and collapses newlines; `formatErrorLine` wraps `detail` in literal quotes (not `%q`) so the output is plain-readable rather than Go-quoted. Backslash-first ordering was added after a pre-merge review flagged that a `detail` ending in `\` (Windows state-dir paths in tsnet errors) would otherwise backslash the closing quote and break a backslash-aware parser.
 - `diagnoseTailscaleInitError` signature changed from `(hint, remediation)` to `(reason, hint, remediation)`; `reason` is never empty for a non-nil error (falls back to `unknown`) so the ERROR signal is never silent, while `hint`/`remediation` stay empty for unrecognized errors to keep the human log quiet on noise.
 
 ## Promotion candidates

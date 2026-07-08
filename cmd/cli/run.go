@@ -149,10 +149,11 @@ func Run(cfg config.Config) error {
 	// log output corrupting the banner (BUG-010). The health server's
 	// goroutine logs "health server starting" which races with the
 	// banner's stdout writes. The READY signal (#203) is emitted here for
-	// the same reason — grouped with the banner, before any logger stdout —
-	// and uses the actual bound address so auto-port mode reports the real
-	// port. The listener already accepts (the OS queues connections until
-	// AcceptLoop runs), so "READY" is accurate at this point.
+	// the same reason — grouped with the banner, before the health server's
+	// concurrent stdout logging — and uses the actual bound address so
+	// auto-port mode reports the real port. The listener already accepts
+	// (the OS queues connections until AcceptLoop runs), so "READY" is
+	// accurate at this point.
 	writeStartupBanner(os.Stdout, cfg)
 	emitReady(os.Stdout, listener.Addr().String(), cfg.Target)
 

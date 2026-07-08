@@ -37,6 +37,8 @@ func TestEscapeSignalDetail(t *testing.T) {
 		{"newline collapses to space", "line1\nline2", "line1 line2"},
 		{"crlf collapses", "a\r\nb", "a b"},
 		{"combined and trimmed", "  a \"b\"\nc  ", `a \"b\" c`},
+		{"trailing backslash (Windows path)", `open C:\tmp\`, `open C:\\tmp\\`},
+		{"backslash before quote", `a\"b`, `a\\\"b`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

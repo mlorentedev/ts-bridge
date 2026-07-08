@@ -36,13 +36,19 @@ func formatErrorLine(reason, detail string) string {
 }
 
 // escapeSignalDetail makes an arbitrary error message safe for a single
-// quoted key=value field: newlines collapse to spaces, embedded double
-// quotes are backslash-escaped, and the result is trimmed so the emitted
-// line stays single-line and parseable.
+// quoted key=value field: newlines collapse to spaces, backslashes and
+// embedded double quotes are backslash-escaped, and the result is trimmed
+// so the emitted line stays single-line and parseable.
+//
+// Backslashes are escaped FIRST — otherwise a detail ending in "\" (common
+// in Windows state-dir paths surfaced by tsnet errors) would backslash the
+// closing quote and break a backslash-aware parser; and escaping quotes
+// first would re-escape the backslashes we add for them.
 func escapeSignalDetail(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", " ")
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
 	return strings.TrimSpace(s)
 }
