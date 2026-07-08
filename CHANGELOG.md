@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.16.0](https://github.com/mlorentedev/ts-bridge/compare/v1.15.6...v1.16.0) (2026-06-26)
+
+
+### Features
+
+* **config:** named profile model — init --profile, Store.Set, ADR-012 (CFG-001) ([#232](https://github.com/mlorentedev/ts-bridge/issues/232)) ([6046f22](https://github.com/mlorentedev/ts-bridge/commit/6046f22f01ab872f10e792ed380e887693716299))
+* **profile:** host-emitted shareable connection profiles (CFG-002) ([#228](https://github.com/mlorentedev/ts-bridge/issues/228)) ([5208d9d](https://github.com/mlorentedev/ts-bridge/commit/5208d9d549254a22b3d58b9a096d1af12684e822))
+
 ## [1.15.6](https://github.com/mlorentedev/ts-bridge/compare/v1.15.5...v1.15.6) (2026-06-26)
 
 
