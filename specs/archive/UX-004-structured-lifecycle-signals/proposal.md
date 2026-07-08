@@ -1,7 +1,7 @@
 ---
 id: "UX-004-structured-lifecycle-signals"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-07-08"
 issue: "ts-bridge#203"   # primary; also closes ts-bridge#204 (combined PR)
 tags: [spec, proposal, ux, cli, observability]
