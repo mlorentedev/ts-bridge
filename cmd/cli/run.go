@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -146,9 +147,14 @@ func Run(cfg config.Config) error {
 
 	// Print banner BEFORE starting the health server to avoid concurrent
 	// log output corrupting the banner (BUG-010). The health server's
-	// goroutine logs "health server starting" which races with
-	// printBanner()'s fmt.Println() calls.
-	printBanner(cfg)
+	// goroutine logs "health server starting" which races with the
+	// banner's stdout writes. The READY signal (#203) is emitted here for
+	// the same reason — grouped with the banner, before any logger stdout —
+	// and uses the actual bound address so auto-port mode reports the real
+	// port. The listener already accepts (the OS queues connections until
+	// AcceptLoop runs), so "READY" is accurate at this point.
+	writeStartupBanner(os.Stdout, cfg)
+	emitReady(os.Stdout, listener.Addr().String(), cfg.Target)
 
 	var tunnelStatus health.TunnelStatus
 	var healthServer *http.Server
@@ -214,7 +220,12 @@ func initTailscale(cfg config.Config) (*tsnet.Server, error) {
 
 	status, err := server.Up(ctx)
 	if err != nil {
-		if hint, remediation := diagnoseTailscaleInitError(err); hint != "" && logger != nil {
+		reason, hint, remediation := diagnoseTailscaleInitError(err)
+		// Machine-readable startup-failure signal for programmatic callers
+		// (#204) — always emitted (reason falls back to "unknown"), before
+		// the human-oriented log line.
+		emitError(os.Stderr, reason, err.Error())
+		if hint != "" && logger != nil {
 			logger.Warn(hint, "remediation", remediation)
 		}
 		// Release background goroutines and open file handles (tailscaled.log*)
@@ -234,26 +245,31 @@ func controlURLForError(controlURL string) string {
 	return controlURL
 }
 
-// diagnoseTailscaleInitError inspects a tsnet.Up failure and returns an
-// actionable hint when the error matches a known pattern. Returns empty
-// strings for unrecognized errors so callers stay silent on noise.
-func diagnoseTailscaleInitError(err error) (hint, remediation string) {
+// diagnoseTailscaleInitError inspects a tsnet.Up failure and returns a
+// stable machine-readable reason token (UX-004 / #204) plus an actionable
+// human hint when the error matches a known pattern. The hint/remediation
+// stay empty for unrecognized errors so the human log stays silent on
+// noise, but reason is never empty for a non-nil error — it falls back to
+// reasonUnknown so the ERROR signal is always emitted.
+func diagnoseTailscaleInitError(err error) (reason, hint, remediation string) {
 	if err == nil {
-		return "", ""
+		return "", "", ""
 	}
 	msg := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(msg, "api key does not exist"),
 		strings.Contains(msg, "invalid key"),
 		strings.Contains(msg, "key expired"):
-		return "auth key rejected by control plane (likely expired, revoked, or single-use already consumed)",
+		return reasonBadAuthKey,
+			"auth key rejected by control plane (likely expired, revoked, or single-use already consumed)",
 			"regenerate a reusable+ephemeral auth key in your control plane admin and update TS_AUTHKEY on every client"
 	case strings.Contains(msg, "context deadline exceeded"),
 		strings.Contains(msg, "i/o timeout"):
-		return "control plane unreachable within TS_TIMEOUT",
+		return reasonControlPlaneUnreachable,
+			"control plane unreachable within TS_TIMEOUT",
 			"check network access to the control URL; raise TS_TIMEOUT if the link is slow"
 	}
-	return "", ""
+	return reasonUnknown, "", ""
 }
 
 //nolint:unused // wired into Runner = Run
@@ -310,32 +326,40 @@ func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 // are truncated with "..." so the border never breaks.
 const bannerWidth = 22
 
+// writeStartupBanner renders the decorative human banner to w. It is a
+// no-op when cfg.Quiet is set (UX-004 / #203) — the machine-readable READY
+// line is emitted separately and always. Takes an io.Writer so it is unit
+// testable without capturing os.Stdout.
+//
 //nolint:unused // wired into Runner = Run
-func printBanner(cfg config.Config) {
-	fmt.Println()
-	fmt.Println("  +---------------------------------------+")
+func writeStartupBanner(w io.Writer, cfg config.Config) {
+	if cfg.Quiet {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  +---------------------------------------+")
 	v := Version()
 	if len(v) > bannerWidth {
 		v = v[:bannerWidth-3] + "..."
 	}
-	fmt.Printf("  |      TAILSCALE BRIDGE %-*s  |\n", bannerWidth, v)
-	fmt.Println("  +---------------------------------------+")
-	fmt.Printf("  |  Host:   %-26s  |\n", cfg.Hostname)
-	fmt.Printf("  |  Local:  %-26s  |\n", cfg.LocalAddr)
-	fmt.Printf("  |  Target: %-26s  |\n", cfg.Target)
+	fmt.Fprintf(w, "  |      TAILSCALE BRIDGE %-*s  |\n", bannerWidth, v)
+	fmt.Fprintln(w, "  +---------------------------------------+")
+	fmt.Fprintf(w, "  |  Host:   %-26s  |\n", cfg.Hostname)
+	fmt.Fprintf(w, "  |  Local:  %-26s  |\n", cfg.LocalAddr)
+	fmt.Fprintf(w, "  |  Target: %-26s  |\n", cfg.Target)
 	if cfg.ControlURL != "" && cfg.ControlURL != defaultControlURL {
-		fmt.Printf("  |  Control: %-25s  |\n", cfg.ControlURL)
+		fmt.Fprintf(w, "  |  Control: %-25s  |\n", cfg.ControlURL)
 	}
 	if cfg.HealthAddr != "" {
-		fmt.Printf("  |  Health:  %-26s  |\n", cfg.HealthAddr)
+		fmt.Fprintf(w, "  |  Health:  %-26s  |\n", cfg.HealthAddr)
 	}
 	if cfg.EphemeralState {
-		fmt.Println("  |  Node:    ephemeral (not persisted in admin console)  |")
+		fmt.Fprintln(w, "  |  Node:    ephemeral (not persisted in admin console)  |")
 	}
 	if logDir != "" {
-		fmt.Printf("  |  Log:      %-26s  |\n", logDir)
+		fmt.Fprintf(w, "  |  Log:      %-26s  |\n", logDir)
 	}
-	fmt.Println("  +---------------------------------------+")
-	fmt.Println("  Waiting for connections...")
-	fmt.Println()
+	fmt.Fprintln(w, "  +---------------------------------------+")
+	fmt.Fprintln(w, "  Waiting for connections...")
+	fmt.Fprintln(w)
 }

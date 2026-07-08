@@ -154,6 +154,26 @@ To use a different port, set `TS_LOCAL_ADDR`:
 TS_LOCAL_ADDR=127.0.0.1:9999
 ```
 
+### Structured signals (for scripts)
+
+Callers that spawn `ts-bridge connect` programmatically get two line-oriented
+signals with a stable `TOKEN key=value` grammar — no port-polling or stderr
+parsing required:
+
+```text
+# stdout, once the tunnel is accepting connections (local = the actual bound address):
+READY local=127.0.0.1:33389 target=my-desktop:3389
+
+# stderr, if startup fails, before a non-zero exit:
+ERROR reason=bad_authkey detail="invalid key: unable to validate API key"
+```
+
+`reason` is one of a stable set: `bad_authkey`, `control_plane_unreachable`,
+`unknown`. Read stdout line-by-line and react on the `READY ` prefix; on early
+exit, read the `reason` token instead of guessing from the exit code (which stays
+a generic `1`). Pass `--quiet` to suppress the decorative banner — the `READY`
+and `ERROR` lines still print.
+
 ## Configuration
 
 | Variable | Default | Description |

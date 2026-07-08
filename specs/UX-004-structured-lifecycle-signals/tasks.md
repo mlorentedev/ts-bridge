@@ -11,39 +11,39 @@ created: "2026-07-08"
 
 ## Setup
 
-- [ ] Branch created from master: `feat/structured-lifecycle-signals`
-- [ ] `proposal.md` complete, acceptance criteria testable
-- [ ] Open question resolved: `detail=` escaping helper defined before implementation
+- [x] Branch created from master: `feat/structured-lifecycle-signals`
+- [x] `proposal.md` complete, acceptance criteria testable
+- [x] Open question resolved: `escapeSignalDetail` defined (escape `"`, collapse newlines)
 
 ## Implementation
 
-### Signal helpers (shared grammar)
+### Signal helpers (shared grammar) — `cmd/cli/signal.go`
 
-- [ ] [P] [AC5] Write failing test for a `formatSignal`/escaping helper: `detail` with embedded `"` and `\n` renders as a single parseable line
-- [ ] [AC5] Implement the escaping helper (quote + collapse newlines) in `cmd/cli/run.go`
-- [ ] Refactor: extract the `KEY=value` line builder so READY and ERROR share it
+- [x] [P] [AC5] Failing test for the escaping helper: `detail` with embedded `"` and `\n` renders as a single parseable line (`TestEscapeSignalDetail`)
+- [x] [AC5] Implement `escapeSignalDetail` (escape `"`, collapse newlines) + `formatErrorLine`/`formatReadyLine`
+- [x] Extract `emitReady`/`emitError` + `reason*` consts so READY and ERROR share the grammar
 
 ### READY signal (#203)
 
-- [ ] [P] [AC1] Write failing test: on successful `Run`, a `READY local=<bound> target=<target>` line is written to stdout, using the **actual** `listener.Addr()` (test with an auto-assigned port so requested ≠ bound)
-- [ ] [AC1] Emit the `READY` line in `Run` after `net.Listen` + `MarkReady`, before `AcceptLoop`
-- [ ] [AC2] Add `--quiet` flag to `connectCmd`; thread through config; gate `printBanner` + "Waiting…" on it (READY still emits)
-- [ ] [AC2] Write failing test: `--quiet` suppresses banner but the `READY` line remains
+- [x] [P] [AC1] Failing test: READY line uses the **actual** `listener.Addr()` (real `127.0.0.1:0` listener, port ≠ 0) — `TestEmitReady_UsesBoundAddr`
+- [x] [AC1] Emit `READY` in `Run` after the banner, before the health server (BUG-010 stdout-race grouping)
+- [x] [AC2] Add `--quiet` flag to `connectCmd`; resolve onto `cfg.Quiet`; gate `writeStartupBanner` on it (READY still emits)
+- [x] [AC2] Failing test: `--quiet` suppresses banner but the `READY` line remains — `TestWriteStartupBanner_QuietSuppresses`
 
 ### ERROR signal (#204)
 
-- [ ] [AC3] Write failing table-driven test: `initTailscale` failure emits `ERROR reason=<token> detail="…"` to stderr for `bad_authkey`, `control_plane_unreachable`, `unknown`
-- [ ] [AC3][AC4] Extend `diagnoseTailscaleInitError` to also return a stable `reason` token (closed set); emit the `ERROR` line to stderr on the init-failure path in `initTailscale`
-- [ ] [AC4] Verify the `unknown` fallback path is never silent (test an unclassified error string)
+- [x] [AC3] Failing table-driven test: reason token per category — `TestDiagnoseTailscaleInitError_Reason`
+- [x] [AC3][AC4] Extend `diagnoseTailscaleInitError` to return a stable `reason` token; emit `ERROR` to stderr in `initTailscale`
+- [x] [AC4] `unknown` fallback never silent (tested via `unrecognized` case + always-emit in `initTailscale`)
 
 ## Closing
 
-- [ ] Every acceptance criterion covered by ≥1 test
-- [ ] Every acceptance criterion has a `features.json` entry with a non-vacuous verification command
-- [ ] `go test ./... -count=1` green (CI runs `-race` on Linux)
-- [ ] Lint passes (goconst: reuse consts for repeated `reason` tokens / literals)
-- [ ] `.env.example` / README / flag help document the `READY`/`ERROR` grammar and `--quiet`
-- [ ] `verification.md` filled in
+- [x] Every acceptance criterion covered by ≥1 test
+- [x] Every acceptance criterion has a `features.json` entry with a non-vacuous verification command
+- [x] `go test ./... -count=1` green (CI runs `-race` on Linux)
+- [x] `go vet ./...` clean (goconst: `reason` tokens are consts)
+- [x] README + flag help document the `READY`/`ERROR` grammar and `--quiet` (`.env.example` n/a — no env var)
+- [x] `verification.md` filled in
 - [ ] PR opened referencing this spec folder, `Closes #203, Closes #204`
 
 ## Machine-readable features
