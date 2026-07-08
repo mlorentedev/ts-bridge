@@ -1,7 +1,7 @@
 ---
 id: "CFG-001"
 type: spec
-status: draft
+status: archived
 created: "2026-06-26"
 issue: "ts-bridge#185"
 tags: [spec, proposal, config, profiles]
