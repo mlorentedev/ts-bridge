@@ -39,7 +39,9 @@ All new tests in `cmd/cli/signal_test.go`. Emission wiring in `cmd/cli/run.go`; 
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/UX-004-structured-lifecycle-signals/` -> `specs/archive/`
-- [ ] Bitácora tickets #203 and #204 closed with PR link (ADR-018)
-- [ ] Promotions above executed (none)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/UX-004-structured-lifecycle-signals/` -> `specs/archive/`
+- [x] Bitácora tickets #203 and #204 closed with PR link (ADR-018) — both closed on PR #237 merge via `Closes #203, Closes #204`
+- [x] Promotions above executed (none)
+
+> Note: the `detail=` backslash-escaping refinement (from a pre-merge review) landed as follow-up PR #240 after #237 merged.
