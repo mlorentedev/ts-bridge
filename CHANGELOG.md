@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.17.0](https://github.com/mlorentedev/ts-bridge/compare/v1.16.0...v1.17.0) (2026-07-08)
+
+
+### Features
+
+* **cli:** structured lifecycle signals — READY/ERROR lines, --quiet (UX-004) ([#237](https://github.com/mlorentedev/ts-bridge/issues/237)) ([39c76ed](https://github.com/mlorentedev/ts-bridge/commit/39c76ed279fec628b5ac0b1bc249ea5ba19e5ee5))
+
+
+### Bug Fixes
+
+* **cli:** escape backslashes in ERROR signal detail (follow-up to [#237](https://github.com/mlorentedev/ts-bridge/issues/237)) ([#240](https://github.com/mlorentedev/ts-bridge/issues/240)) ([9cf3a18](https://github.com/mlorentedev/ts-bridge/commit/9cf3a181fe87f1bb88740c9d60eef82e29be199d))
+
 ## [1.16.0](https://github.com/mlorentedev/ts-bridge/compare/v1.15.6...v1.16.0) (2026-06-26)
 
 
