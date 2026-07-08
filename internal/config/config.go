@@ -103,6 +103,7 @@ type Config struct {
 	MaxConnections  int64
 	HealthAddr     string
 	Verbose        bool
+	Quiet          bool
 	LogFormat      string
 	AutoInstance   bool
 	EphemeralState bool

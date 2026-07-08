@@ -1,0 +1,44 @@
+[
+  {
+    "id": "UX-004-f1",
+    "behavior": "On successful startup, connect emits one 'READY local=<bound> target=<target>' line to stdout before accepting, using the actual bound listener address",
+    "verification": "go test ./cmd/cli/... -run TestRun_EmitsReadyLine -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "UX-004-f2",
+    "behavior": "--quiet suppresses the decorative banner and 'Waiting...' text; the READY line still emits",
+    "verification": "go test ./cmd/cli/... -run TestRun_QuietSuppressesBanner -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "UX-004-f3",
+    "behavior": "tsnet init failure emits 'ERROR reason=<token> detail=\"...\"' to stderr with token in {bad_authkey, control_plane_unreachable, unknown} matching the classified cause",
+    "verification": "go test ./cmd/cli/... -run TestDiagnoseTailscaleInitError_Reason -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "UX-004-f4",
+    "behavior": "An unrecognized init failure still emits ERROR reason=unknown (never silent)",
+    "verification": "go test ./cmd/cli/... -run TestDiagnoseTailscaleInitError_Reason/unknown -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "UX-004-f5",
+    "behavior": "detail=\"...\" is a single parseable line with embedded quotes and newlines escaped",
+    "verification": "go test ./cmd/cli/... -run TestEscapeSignalDetail -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "UX-004-f6",
+    "behavior": "No regression: existing Run and connect flag behavior unchanged without --quiet",
+    "verification": "go test ./cmd/cli/... -count=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]

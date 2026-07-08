@@ -78,6 +78,7 @@ func init() {
 	connectCmd.Flags().Bool("reset", false, "Reset state (manual mode only; no-op in auto mode)")
 	connectCmd.Flags().String("config", "", "Path to YAML config file (default: none)")
 	connectCmd.Flags().String("profile", "", "Named connection profile (overrides --target / TS_TARGET)")
+	connectCmd.Flags().Bool("quiet", false, "Suppress the startup banner; the structured READY/ERROR lines still print")
 
 	// Register the subcommand.
 	rootCmd.AddCommand(connectCmd)
@@ -135,6 +136,10 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	if err := applyProfile(&cfg, profileName, defaultProfileStorePath); err != nil {
 		return err
 	}
+
+	// --quiet is a console-output concern (like --profile, resolved
+	// post-Merge — no env/YAML precedence needed).
+	cfg.Quiet, _ = cmd.Flags().GetBool("quiet")
 
 	// --reset is no-op in auto mode (ephemeral state by design).
 
