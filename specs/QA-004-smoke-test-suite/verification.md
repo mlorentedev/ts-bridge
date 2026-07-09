@@ -25,6 +25,12 @@ issue: 78
 - [x] Per-test CWD isolation via `BATS_TEST_TMPDIR` (idempotent, no state leakage)
 - [x] `docs/qa-coverage.md` `init` row → BATS ✅
 
+### QA-006 (#175) — status
+
+- [x] `bats scripts/tests/smoke.bats` — 29/29 green (adds 4 status tests: not-running, `--json` degrades to not-running with no metrics JSON, `--addr` reflected, `--help` documents `--watch`/`--interval`)
+- [x] `--watch` loop deliberately not executed (hang risk); flags checked via help, loop covered by `status_test.go` unit tests
+- [x] `docs/qa-coverage.md` `status` row + "Deliberately not smoke-tested" note
+
 ## Test Output
 
 ```
@@ -56,9 +62,15 @@ ok 22 init: --config writes to a custom output path
 ok 23 init: refuses to overwrite an existing config without --force
 ok 24 init: --force overwrites an existing config
 ok 25 init: missing a required flag with no TTY fails fast (does not hang)
+# QA-006 (#175) — status
+ok 26 status: reports 'not running' when no bridge is up (exit 0)
+ok 27 status --json: no bridge, reports not-running with no metrics JSON
+ok 28 status --addr: the queried address is reflected in the message
+ok 29 status --help: documents the --watch and --interval flags
 ```
 
 ## Commit Hashes
 
 - QA-004 (#173) CLI parsing — smoke suite + helpers + CI job + coverage matrix: `2543bc2` (PR #242, merged)
-- QA-005 (#174) init — this PR
+- QA-005 (#174) init: `fe32e7c` (PR #246, merged)
+- QA-006 (#175) status — this PR

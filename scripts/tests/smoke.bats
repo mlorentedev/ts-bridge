@@ -231,3 +231,45 @@ TARGET="100.64.0.1:3389"
   run "${BIN}" init --auth-key "${AUTH_KEY}" </dev/null
   assert_failure
 }
+
+# ---------------------------------------------------------------------------
+# QA-006 (#175) — status
+# ---------------------------------------------------------------------------
+# No live bridge runs during smoke tests, so these cover the not-running path
+# and the flag surface. The RUNNING summary and the metrics JSON require a live
+# health server — covered by the Go unit tests (status_test.go) and the QA-013
+# e2e run, not duplicated here.
+#
+# --watch is a signal-terminated infinite loop. It is deliberately NOT executed
+# here: a stop signal that fails to reach the process (observed on native
+# Windows) would hang the run, and a hung BATS test would stall CI until the
+# job's global timeout. Its flags are verified via `status --help`, and
+# runWatchLoop has unit coverage via an injected signal channel.
+
+@test "status: reports 'not running' when no bridge is up (exit 0)" {
+  run "${BIN}" status
+  assert_success
+  assert_contains "Bridge not running"
+}
+
+@test "status --json: no bridge, reports not-running with no metrics JSON" {
+  # The health check fails before the JSON branch, so --json degrades to the
+  # same not-running message rather than printing an empty/garbage object.
+  run "${BIN}" status --json
+  assert_success
+  assert_contains "Bridge not running"
+  refute_contains "active_connections"
+}
+
+@test "status --addr: the queried address is reflected in the message" {
+  run "${BIN}" status --addr 127.0.0.1:9999
+  assert_success
+  assert_contains "127.0.0.1:9999"
+}
+
+@test "status --help: documents the --watch and --interval flags" {
+  run "${BIN}" status --help
+  assert_success
+  assert_contains "--watch"
+  assert_contains "--interval"
+}
