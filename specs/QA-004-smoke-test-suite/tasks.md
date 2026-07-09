@@ -45,11 +45,11 @@ Each issue is a self-contained PR. Execute in this order:
 
 All BATS issues share the same test file: `scripts/tests/smoke.bats`. Each issue adds tests to the same file in its PR.
 
-- [ ] **Create:** `scripts/tests/helpers/smoke_helpers.bash` — BATS helper functions
-- [ ] **Create:** `scripts/tests/helpers/smoke_helpers.psm1` — PowerShell helper module
-- [ ] **Create:** `scripts/tests/fixtures/` — test data files
-- [ ] **Expand:** `scripts/tests/smoke.ps1` — add discover, status, host check coverage
-- [ ] **Update:** `.github/workflows/ci.yml` — add smoke jobs for Linux + Windows
-- [ ] **Create:** `docs/qa-coverage.md` — feature coverage matrix
+- [x] **Create:** `scripts/tests/helpers/smoke_helpers.bash` — BATS helper functions *(QA-004 / #173)*
+- [ ] **Create:** `scripts/tests/helpers/smoke_helpers.psm1` — PowerShell helper module *(deferred; smoke.ps1 uses inline helpers today)*
+- [ ] **Create:** `scripts/tests/fixtures/` — test data files *(deferred to QA-005/#174 — first ticket that needs YAML fixtures)*
+- [ ] **Expand:** `scripts/tests/smoke.ps1` — add discover, status, host check coverage *(QA-006/#175, QA-008/#177, QA-010/#179)*
+- [x] **Update:** `.github/workflows/ci.yml` — add `smoke` job (Linux/BATS) *(QA-004 / #173; Windows PowerShell smoke job deferred)*
+- [x] **Create:** `docs/qa-coverage.md` — feature coverage matrix *(QA-004 / #173)*
 
 > **Decision:** BATS for POSIX because it's the de facto standard for shell test suites, well-documented, and CI-friendly. PowerShell for Windows because the existing smoke test is already in PS and Windows doesn't have a POSIX shell by default.

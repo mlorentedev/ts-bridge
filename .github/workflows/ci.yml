@@ -77,6 +77,31 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+  # POSIX CLI smoke tests (BATS). Builds the binary once, then exercises the
+  # CLI surface end-to-end on a real Linux runner. Complements the Go unit
+  # tests: it catches wiring regressions (a command that no longer registers,
+  # a renamed flag, a broken help tree) that compile fine but break the CLI.
+  # The Windows mirror is scripts/tests/smoke.ps1.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26'
+
+      - name: Build binary
+        run: go build -o ts-bridge ./cmd/ts-bridge/
+
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+
+      - name: Run CLI smoke tests
+        env:
+          BIN: ${{ github.workspace }}/ts-bridge
+        run: bats scripts/tests/smoke.bats
+
   build-matrix:
     runs-on: ubuntu-latest
     needs: test
