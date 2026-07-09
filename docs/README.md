@@ -6,5 +6,6 @@ Project-bound knowledge for `ts-bridge`, kept in-repo (docs-as-code). The *opera
 - [`runbooks/`](runbooks/) — operational procedures (deploy, RDP host setup, multi-device operations, audits)
 - [`troubleshooting/`](troubleshooting/) — known errors, security audit, release issues
 - [`lessons.md`](lessons.md) — accumulated gotchas and post-mortems
+- [`qa-coverage.md`](qa-coverage.md) — automated smoke-test coverage matrix (what CI checks vs. what needs a human)
 
 The *decide/position* layer (roadmap, prestudy, strategy) and session memory live in the maintainer's cross-project knowledge store and are intentionally not committed here.
