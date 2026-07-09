@@ -36,6 +36,11 @@ setup_file() {
 # repo or into each other. Harmless for the parsing tests, which ignore CWD.
 setup() {
   cd "${BATS_TEST_TMPDIR}" || return 1
+  # connect resolves its target/auth key from these env vars. Clear them so a
+  # value inherited from the caller's environment can never let a connect test
+  # satisfy validation and reach the (long-running, hang-prone) bridge runner.
+  # Harmless for the other commands, which take their inputs from flags.
+  unset TS_TARGET TS_AUTHKEY
 }
 
 # ---------------------------------------------------------------------------
@@ -272,4 +277,60 @@ TARGET="100.64.0.1:3389"
   assert_success
   assert_contains "--watch"
   assert_contains "--interval"
+}
+
+# ---------------------------------------------------------------------------
+# QA-007 (#176) — connect
+# ---------------------------------------------------------------------------
+# Once config validates, connect starts the bridge (tsnet init) — a
+# long-running, network-touching operation. So these tests only exercise paths
+# that FAIL during flag parsing or config validation, before the bridge is ever
+# started. TS_TARGET/TS_AUTHKEY are cleared in setup(), and invalid inputs use a
+# bad *format* (rejected by config.Merge, never sent to the control plane), so
+# no test can reach the runner and hang. Actually starting the bridge and its
+# graceful shutdown are covered by main_integration_test.go and the QA-013 e2e
+# run — see docs/qa-coverage.md.
+
+@test "connect: with no target configured, fails asking for one" {
+  run "${BIN}" connect
+  assert_failure
+  assert_contains "target invalid format"
+}
+
+@test "connect: with a target but no auth key, fails asking for one" {
+  run "${BIN}" connect --target 100.64.0.1:3389
+  assert_failure
+  assert_contains "auth key is required"
+}
+
+@test "connect: rejects a malformed target before starting" {
+  run "${BIN}" connect --target no-port-here --auth-key tskey-x
+  assert_failure
+  assert_contains "target invalid format"
+  assert_contains "no-port-here"
+}
+
+@test "connect: rejects a malformed auth key before starting" {
+  run "${BIN}" connect --auth-key notavalidkey --target 100.64.0.1:3389
+  assert_failure
+  assert_contains "must start with tskey- or hskey-"
+}
+
+@test "connect: --auth-key-file pointing at a missing file fails fast" {
+  run "${BIN}" connect --auth-key-file "${BATS_TEST_TMPDIR}/nope" --target 100.64.0.1:3389
+  assert_failure
+  assert_contains "read auth key file"
+}
+
+@test "connect: an invalid flag value is a parse error" {
+  run "${BIN}" connect --timeout not-a-duration
+  assert_failure
+  assert_contains "invalid argument"
+}
+
+@test "connect: --auth-key warns that it is visible in the process list" {
+  # Security nudge toward --auth-key-file. No target, so it still fails before
+  # the bridge starts — but the warning must be emitted first.
+  run "${BIN}" connect --auth-key tskey-dummy
+  assert_contains "visible in the process list"
 }

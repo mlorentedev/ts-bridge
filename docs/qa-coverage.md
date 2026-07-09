@@ -32,7 +32,7 @@ Both run in CI: the `smoke` job (Linux) executes the BATS suite on every PR.
 | `host` | `--help`, subcommand `--help` reachable | 🔶 | 🔶 | QA-004 (#173) |
 | `init` | all flags, formats, overwrite protection, auth-key-not-in-yaml | ✅ | ✅ | QA-005 (#174) |
 | `status` | not-running, `--json` (down), `--addr`, `--watch`/`--interval` flags | 🔶 | 🔶 | QA-006 (#175) |
-| `connect` | flag parsing, error handling, graceful shutdown | ⬜ | 🔶 | QA-007 (#176) |
+| `connect` | flag parsing + config-validation errors (target/auth/auth-key-file/bad flag), auth-key warning | 🔶 | 🔶 | QA-007 (#176) |
 | `discover` | `--json`, `--filter`, `--auto`, `--port` | ⬜ | ⬜ | QA-008 (#177) |
 | `host setup` | Windows registry/firewall/UPnP/sleep; Linux xrdp/UFW | 👤 | 👤 | QA-009 (#178) |
 | `host check` | read-only, `--json` | ⬜ | 🔶 | QA-010 (#179) |
@@ -61,3 +61,8 @@ suite, to keep the suite fast, hermetic, and non-hanging:
   risks hanging CI if a stop signal is not delivered (observed on native
   Windows), so only its flags are smoke-checked; `runWatchLoop` has unit
   coverage via an injected signal channel.
+- **`connect` bridge start + graceful shutdown** — once config validates,
+  `connect` starts tsnet and runs until signalled (same hang risk as
+  `--watch`). Smoke tests cover only the pre-start validation/error paths;
+  starting the bridge and draining it is covered by `main_integration_test.go`
+  (mock `Dialer`) and the QA-013 e2e run.

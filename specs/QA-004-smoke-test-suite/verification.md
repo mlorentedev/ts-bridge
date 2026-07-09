@@ -31,6 +31,12 @@ issue: 78
 - [x] `--watch` loop deliberately not executed (hang risk); flags checked via help, loop covered by `status_test.go` unit tests
 - [x] `docs/qa-coverage.md` `status` row + "Deliberately not smoke-tested" note
 
+### QA-007 (#176) — connect
+
+- [x] `bats scripts/tests/smoke.bats` — 36/36 green (adds 7 connect tests: no-target, no-auth, malformed target, malformed auth key, missing auth-key-file, invalid flag value, `--auth-key` visibility warning)
+- [x] Only pre-`Runner` paths tested (flag parse + `config.Merge` validation); `setup()` clears `TS_TARGET`/`TS_AUTHKEY` and invalid inputs use bad *format*, so no test starts the bridge or hangs
+- [x] Bridge start + graceful shutdown left to `main_integration_test.go` + QA-013 (documented)
+
 ## Test Output
 
 ```
@@ -67,10 +73,19 @@ ok 26 status: reports 'not running' when no bridge is up (exit 0)
 ok 27 status --json: no bridge, reports not-running with no metrics JSON
 ok 28 status --addr: the queried address is reflected in the message
 ok 29 status --help: documents the --watch and --interval flags
+# QA-007 (#176) — connect
+ok 30 connect: with no target configured, fails asking for one
+ok 31 connect: with a target but no auth key, fails asking for one
+ok 32 connect: rejects a malformed target before starting
+ok 33 connect: rejects a malformed auth key before starting
+ok 34 connect: --auth-key-file pointing at a missing file fails fast
+ok 35 connect: an invalid flag value is a parse error
+ok 36 connect: --auth-key warns that it is visible in the process list
 ```
 
 ## Commit Hashes
 
 - QA-004 (#173) CLI parsing — smoke suite + helpers + CI job + coverage matrix: `2543bc2` (PR #242, merged)
 - QA-005 (#174) init: `fe32e7c` (PR #246, merged)
-- QA-006 (#175) status — this PR
+- QA-006 (#175) status: `8c0886a` (PR #247, merged)
+- QA-007 (#176) connect — this PR
