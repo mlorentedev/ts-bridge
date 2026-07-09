@@ -30,7 +30,7 @@ Both run in CI: the `smoke` job (Linux) executes the BATS suite on every PR.
 | `discover` | `--help` reachable | 🔶 | 🔶 | QA-004 (#173) |
 | `import` | `--help` reachable | 🔶 | ⬜ | QA-004 (#173) |
 | `host` | `--help`, subcommand `--help` reachable | 🔶 | 🔶 | QA-004 (#173) |
-| `init` | all flags, formats, overwrite protection | ⬜ | ✅ | QA-005 (#174) |
+| `init` | all flags, formats, overwrite protection, auth-key-not-in-yaml | ✅ | ✅ | QA-005 (#174) |
 | `status` | running/not-running, `--json`, `--watch`, `--addr` | ⬜ | 🔶 | QA-006 (#175) |
 | `connect` | flag parsing, error handling, graceful shutdown | ⬜ | 🔶 | QA-007 (#176) |
 | `discover` | `--json`, `--filter`, `--auto`, `--port` | ⬜ | ⬜ | QA-008 (#177) |

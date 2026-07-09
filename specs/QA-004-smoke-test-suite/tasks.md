@@ -47,7 +47,7 @@ All BATS issues share the same test file: `scripts/tests/smoke.bats`. Each issue
 
 - [x] **Create:** `scripts/tests/helpers/smoke_helpers.bash` — BATS helper functions *(QA-004 / #173)*
 - [ ] **Create:** `scripts/tests/helpers/smoke_helpers.psm1` — PowerShell helper module *(deferred; smoke.ps1 uses inline helpers today)*
-- [ ] **Create:** `scripts/tests/fixtures/` — test data files *(deferred to QA-005/#174 — first ticket that needs YAML fixtures)*
+- [ ] **Create:** `scripts/tests/fixtures/` — test data files *(deferred to QA-011/#181 — `init` writes config rather than reading it, so the first ticket that consumes YAML input fixtures is config-precedence)*
 - [ ] **Expand:** `scripts/tests/smoke.ps1` — add discover, status, host check coverage *(QA-006/#175, QA-008/#177, QA-010/#179)*
 - [x] **Update:** `.github/workflows/ci.yml` — add `smoke` job (Linux/BATS) *(QA-004 / #173; Windows PowerShell smoke job deferred)*
 - [x] **Create:** `docs/qa-coverage.md` — feature coverage matrix *(QA-004 / #173)*
