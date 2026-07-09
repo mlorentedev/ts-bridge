@@ -36,11 +36,12 @@ setup_file() {
 # repo or into each other. Harmless for the parsing tests, which ignore CWD.
 setup() {
   cd "${BATS_TEST_TMPDIR}" || return 1
-  # connect resolves its target/auth key from these env vars. Clear them so a
-  # value inherited from the caller's environment can never let a connect test
-  # satisfy validation and reach the (long-running, hang-prone) bridge runner.
+  # connect/discover resolve target, auth key, tailnet and control plane from
+  # these env vars. Clear them so a value inherited from the caller's
+  # environment can never let a test satisfy validation and reach a
+  # long-running or network path (the bridge runner, or the tailnet API).
   # Harmless for the other commands, which take their inputs from flags.
-  unset TS_TARGET TS_AUTHKEY
+  unset TS_TARGET TS_AUTHKEY TS_TAILNET TS_CONTROL_URL TS_HEADSCALE_API_KEY
 }
 
 # ---------------------------------------------------------------------------
@@ -333,4 +334,55 @@ TARGET="100.64.0.1:3389"
   # the bridge starts — but the warning must be emitted first.
   run "${BIN}" connect --auth-key tskey-dummy
   assert_contains "visible in the process list"
+}
+
+# ---------------------------------------------------------------------------
+# QA-008 (#177) — discover
+# ---------------------------------------------------------------------------
+# discover queries the tailnet API, and its default mode is interactive (it
+# prints a host list and prompts). Both are reached only AFTER a successful
+# device fetch, which needs a valid auth key + tailnet + network. setup()
+# clears the relevant env vars and these tests never supply both an auth key
+# and a tailnet, so every one fails during flag validation or the pre-fetch
+# required-input checks — no network call, no prompt. Filter/auto selection
+# against a live tailnet is covered by the QA-013 e2e run (see qa-coverage.md).
+
+@test "discover: with no auth key, fails asking for one" {
+  run "${BIN}" discover
+  assert_failure
+  assert_contains "auth key is required"
+}
+
+@test "discover --json: with no auth key, fails and emits no device JSON" {
+  run "${BIN}" discover --json
+  assert_failure
+  assert_contains "auth key is required"
+  refute_contains "hostname"
+}
+
+@test "discover: with an auth key but no tailnet, fails asking for one" {
+  run "${BIN}" discover --auth-key tskey-x
+  assert_failure
+  assert_contains "tailnet name is required"
+}
+
+@test "discover --port: rejects an out-of-range port" {
+  run "${BIN}" discover --port 99999
+  assert_failure
+  assert_contains "invalid port"
+}
+
+@test "discover --port: rejects a non-numeric port" {
+  run "${BIN}" discover --port not-a-number
+  assert_failure
+  assert_contains "invalid argument"
+}
+
+@test "discover --help: documents the discovery flags" {
+  run "${BIN}" discover --help
+  assert_success
+  assert_contains "--json"
+  assert_contains "--filter"
+  assert_contains "--auto"
+  assert_contains "--tailnet"
 }
