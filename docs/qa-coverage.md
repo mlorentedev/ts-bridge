@@ -33,7 +33,7 @@ Both run in CI: the `smoke` job (Linux) executes the BATS suite on every PR.
 | `init` | all flags, formats, overwrite protection, auth-key-not-in-yaml | ✅ | ✅ | QA-005 (#174) |
 | `status` | not-running, `--json` (down), `--addr`, `--watch`/`--interval` flags | 🔶 | 🔶 | QA-006 (#175) |
 | `connect` | flag parsing + config-validation errors (target/auth/auth-key-file/bad flag), auth-key warning | 🔶 | 🔶 | QA-007 (#176) |
-| `discover` | `--json`, `--filter`, `--auto`, `--port` | ⬜ | ⬜ | QA-008 (#177) |
+| `discover` | required auth/tailnet errors, `--port` validation, `--json` no-auth path, flag surface | 🔶 | ⬜ | QA-008 (#177) |
 | `host setup` | Windows registry/firewall/UPnP/sleep; Linux xrdp/UFW | 👤 | 👤 | QA-009 (#178) |
 | `host check` | read-only, `--json` | ⬜ | 🔶 | QA-010 (#179) |
 | *(cross-cutting)* | config precedence (flags > env > YAML > defaults) | ⬜ | 🔶 | QA-011 (#181) |
@@ -66,3 +66,7 @@ suite, to keep the suite fast, hermetic, and non-hanging:
   `--watch`). Smoke tests cover only the pre-start validation/error paths;
   starting the bridge and draining it is covered by `main_integration_test.go`
   (mock `Dialer`) and the QA-013 e2e run.
+- **`discover` live fetch, interactive selection, `--filter`/`--auto`** — these
+  are reached only after a successful tailnet API query (needs a real auth key,
+  tailnet, and network). Smoke tests cover the pre-fetch validation/error paths
+  and the flag surface; the live behaviour is covered by the QA-013 e2e run.

@@ -37,6 +37,12 @@ issue: 78
 - [x] Only pre-`Runner` paths tested (flag parse + `config.Merge` validation); `setup()` clears `TS_TARGET`/`TS_AUTHKEY` and invalid inputs use bad *format*, so no test starts the bridge or hangs
 - [x] Bridge start + graceful shutdown left to `main_integration_test.go` + QA-013 (documented)
 
+### QA-008 (#177) — discover
+
+- [x] `bats scripts/tests/smoke.bats` — 42/42 green (adds 6 discover tests: no-auth, `--json` no-auth with no device JSON, no-tailnet, out-of-range `--port`, non-numeric `--port`, flag surface)
+- [x] `setup()` clears `TS_TAILNET`/`TS_CONTROL_URL`/`TS_HEADSCALE_API_KEY` too; no test supplies both auth key and tailnet, so none reaches the tailnet API or the interactive prompt
+- [x] Live fetch + interactive selection + `--filter`/`--auto` left to QA-013 (documented)
+
 ## Test Output
 
 ```
@@ -81,6 +87,13 @@ ok 33 connect: rejects a malformed auth key before starting
 ok 34 connect: --auth-key-file pointing at a missing file fails fast
 ok 35 connect: an invalid flag value is a parse error
 ok 36 connect: --auth-key warns that it is visible in the process list
+# QA-008 (#177) — discover
+ok 37 discover: with no auth key, fails asking for one
+ok 38 discover --json: with no auth key, fails and emits no device JSON
+ok 39 discover: with an auth key but no tailnet, fails asking for one
+ok 40 discover --port: rejects an out-of-range port
+ok 41 discover --port: rejects a non-numeric port
+ok 42 discover --help: documents the discovery flags
 ```
 
 ## Commit Hashes
@@ -88,4 +101,5 @@ ok 36 connect: --auth-key warns that it is visible in the process list
 - QA-004 (#173) CLI parsing — smoke suite + helpers + CI job + coverage matrix: `2543bc2` (PR #242, merged)
 - QA-005 (#174) init: `fe32e7c` (PR #246, merged)
 - QA-006 (#175) status: `8c0886a` (PR #247, merged)
-- QA-007 (#176) connect — this PR
+- QA-007 (#176) connect: `0e0caa2` (PR #248, merged)
+- QA-008 (#177) discover — this PR
