@@ -30,6 +30,14 @@ setup_file() {
   export BIN
 }
 
+# Each test runs in its own throwaway directory. Commands like `init` write
+# config files into the CWD, and BATS_TEST_TMPDIR is unique per test and
+# removed afterwards — so tests stay idempotent and never leak state into the
+# repo or into each other. Harmless for the parsing tests, which ignore CWD.
+setup() {
+  cd "${BATS_TEST_TMPDIR}" || return 1
+}
+
 # ---------------------------------------------------------------------------
 # QA-004 (#173) — CLI parsing
 # ---------------------------------------------------------------------------
@@ -158,4 +166,68 @@ setup_file() {
   run "${BIN}" version --definitely-not-a-flag
   assert_failure
   assert_contains "unknown flag"
+}
+
+# ---------------------------------------------------------------------------
+# QA-005 (#174) — init
+# ---------------------------------------------------------------------------
+# Non-interactive mode requires BOTH --auth-key and --target; with only one it
+# falls back to the interactive wizard. init writes files into the CWD, which
+# setup() has pointed at a fresh per-test tmp dir.
+
+AUTH_KEY="tskey-auth-test-dummy"
+TARGET="100.64.0.1:3389"
+
+@test "init: env format (default) writes .env with auth key and target" {
+  run "${BIN}" init --auth-key "${AUTH_KEY}" --target "${TARGET}"
+  assert_success
+  assert_contains "written successfully"
+  [ -f .env ]
+  run cat .env
+  assert_contains "TS_AUTHKEY=${AUTH_KEY}"
+  assert_contains "TS_TARGET=${TARGET}"
+}
+
+@test "init: yaml format writes ts-bridge.yaml and keeps the auth key OUT of it" {
+  run "${BIN}" init --auth-key "${AUTH_KEY}" --target "${TARGET}" --format yaml
+  assert_success
+  [ -f ts-bridge.yaml ]
+  [ -f .env ]
+  # Security invariant: the auth key must never be written to the YAML file...
+  run cat ts-bridge.yaml
+  assert_contains "target: ${TARGET}"
+  refute_contains "${AUTH_KEY}"
+  # ...it goes to .env instead.
+  run cat .env
+  assert_contains "TS_AUTHKEY=${AUTH_KEY}"
+}
+
+@test "init: --config writes to a custom output path" {
+  run "${BIN}" init --auth-key "${AUTH_KEY}" --target "${TARGET}" --config custom.env
+  assert_success
+  [ -f custom.env ]
+}
+
+@test "init: refuses to overwrite an existing config without --force" {
+  run "${BIN}" init --auth-key "${AUTH_KEY}" --target "${TARGET}"
+  assert_success
+  # A second run must fail loudly rather than clobber the existing file.
+  run "${BIN}" init --auth-key "${AUTH_KEY}" --target "${TARGET}"
+  assert_failure
+  assert_contains "already exists"
+}
+
+@test "init: --force overwrites an existing config" {
+  run "${BIN}" init --auth-key "${AUTH_KEY}" --target "${TARGET}"
+  assert_success
+  run "${BIN}" init --auth-key "${AUTH_KEY}" --target "${TARGET}" --force
+  assert_success
+  assert_contains "written successfully"
+}
+
+@test "init: missing a required flag with no TTY fails fast (does not hang)" {
+  # Only --auth-key → falls back to the interactive wizard. With stdin closed
+  # (as in CI) the wizard must error out, never block the run.
+  run "${BIN}" init --auth-key "${AUTH_KEY}" </dev/null
+  assert_failure
 }

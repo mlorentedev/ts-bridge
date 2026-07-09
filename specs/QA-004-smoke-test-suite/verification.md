@@ -14,10 +14,16 @@ issue: 78
 ### QA-004 (#173) — CLI parsing
 
 - [x] `bats scripts/tests/smoke.bats` — 19/19 green (bats 1.13.0, local) covering the CLI-parsing surface
-- [x] `smoke` CI job added (`.github/workflows/ci.yml`, Linux/BATS) — pending first run on the PR
+- [x] `smoke` CI job added (`.github/workflows/ci.yml`, Linux/BATS) — green on PR #242
 - [x] `docs/qa-coverage.md` created (living matrix; 100% flag coverage is the QA-004 umbrella end-state, filled by QA-005..QA-013)
+- [x] CI `smoke` job green (PR #242, 11/11 jobs) — **merged** `2543bc2`
 - [ ] `powershell -File scripts/tests/smoke.ps1` — all tests green on Windows *(existing suite; expansion deferred)*
-- [ ] CI `smoke` job green on the PR *(confirm after push)*
+
+### QA-005 (#174) — init
+
+- [x] `bats scripts/tests/smoke.bats` — 25/25 green (adds 6 init tests: env/yaml formats, custom path, overwrite protection ±`--force`, auth-key-not-in-yaml, no-TTY fail-fast)
+- [x] Per-test CWD isolation via `BATS_TEST_TMPDIR` (idempotent, no state leakage)
+- [x] `docs/qa-coverage.md` `init` row → BATS ✅
 
 ## Test Output
 
@@ -43,10 +49,16 @@ ok 16 host setup --help: reachable
 ok 17 host check --help: reachable
 ok 18 unknown command: exits non-zero with a clear message
 ok 19 unknown flag: exits non-zero with a clear message
+# QA-005 (#174) — init
+ok 20 init: env format (default) writes .env with auth key and target
+ok 21 init: yaml format writes ts-bridge.yaml and keeps the auth key OUT of it
+ok 22 init: --config writes to a custom output path
+ok 23 init: refuses to overwrite an existing config without --force
+ok 24 init: --force overwrites an existing config
+ok 25 init: missing a required flag with no TTY fails fast (does not hang)
 ```
 
 ## Commit Hashes
 
-- Smoke test implementation: 
-- CI integration: 
-- Coverage matrix: 
+- QA-004 (#173) CLI parsing — smoke suite + helpers + CI job + coverage matrix: `2543bc2` (PR #242, merged)
+- QA-005 (#174) init — this PR
