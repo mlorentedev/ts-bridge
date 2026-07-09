@@ -31,7 +31,7 @@ Both run in CI: the `smoke` job (Linux) executes the BATS suite on every PR.
 | `import` | `--help` reachable | 🔶 | ⬜ | QA-004 (#173) |
 | `host` | `--help`, subcommand `--help` reachable | 🔶 | 🔶 | QA-004 (#173) |
 | `init` | all flags, formats, overwrite protection, auth-key-not-in-yaml | ✅ | ✅ | QA-005 (#174) |
-| `status` | running/not-running, `--json`, `--watch`, `--addr` | ⬜ | 🔶 | QA-006 (#175) |
+| `status` | not-running, `--json` (down), `--addr`, `--watch`/`--interval` flags | 🔶 | 🔶 | QA-006 (#175) |
 | `connect` | flag parsing, error handling, graceful shutdown | ⬜ | 🔶 | QA-007 (#176) |
 | `discover` | `--json`, `--filter`, `--auto`, `--port` | ⬜ | ⬜ | QA-008 (#177) |
 | `host setup` | Windows registry/firewall/UPnP/sleep; Linux xrdp/UFW | 👤 | 👤 | QA-009 (#178) |
@@ -49,3 +49,15 @@ is reachable, and unknown input fails loudly. Per-command *behaviour* (files
 written, sockets probed, connections dialled) is deferred to QA-005..QA-013,
 each of which appends its section to the same `smoke.bats` file and updates the
 row(s) above.
+
+### Deliberately not smoke-tested
+
+Some behaviour is intentionally left to unit tests / e2e rather than the smoke
+suite, to keep the suite fast, hermetic, and non-hanging:
+
+- **`status` RUNNING state + metrics JSON** — needs a live health server; covered
+  by `cmd/cli/status_test.go` and the QA-013 e2e run.
+- **`status --watch` loop** — a signal-terminated infinite loop. Executing it
+  risks hanging CI if a stop signal is not delivered (observed on native
+  Windows), so only its flags are smoke-checked; `runWatchLoop` has unit
+  coverage via an injected signal channel.
