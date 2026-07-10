@@ -3,40 +3,51 @@ package discover
 import (
 	"context"
 	"testing"
+	"time"
 
-	ts "tailscale.com/client/tailscale"
+	tsv2 "tailscale.com/client/tailscale/v2"
 )
 
 // mockTailscaleClient returns a predefined list of devices.
 type mockTailscaleClient struct {
-	devices []*ts.Device
+	devices []tsv2.Device
 	err     error
 }
 
-func (m *mockTailscaleClient) Devices(ctx context.Context, fields *ts.DeviceFieldsOpts) ([]*ts.Device, error) {
+func (m *mockTailscaleClient) Devices(ctx context.Context) ([]tsv2.Device, error) {
 	return m.devices, m.err
+}
+
+// tsTime builds a v2 API timestamp from an RFC3339 string for use in fixtures.
+func tsTime(t *testing.T, s string) *tsv2.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t.Fatalf("parse time %q: %v", s, err)
+	}
+	return &tsv2.Time{Time: parsed}
 }
 
 func TestListDevices_Success(t *testing.T) {
 	mock := &mockTailscaleClient{
-		devices: []*ts.Device{
+		devices: []tsv2.Device{
 			{
-				DeviceID:   "dev-1",
+				ID:         "dev-1",
 				Hostname:   "desktop",
 				Name:       "desktop.tailnet.ts.net.",
 				Addresses:  []string{"100.64.0.1/32"},
 				Authorized: true,
 				OS:         "windows",
-				LastSeen:   "2026-06-18T14:00:00Z",
+				LastSeen:   tsTime(t, "2026-06-18T14:00:00Z"),
 			},
 			{
-				DeviceID:   "dev-2",
+				ID:         "dev-2",
 				Hostname:   "server",
 				Name:       "server.tailnet.ts.net.",
 				Addresses:  []string{"100.64.0.2/32"},
 				Authorized: true,
 				OS:         "linux",
-				LastSeen:   "2026-06-18T13:00:00Z",
+				LastSeen:   tsTime(t, "2026-06-18T13:00:00Z"),
 			},
 		},
 	}
@@ -59,24 +70,49 @@ func TestListDevices_Success(t *testing.T) {
 	if !result[0].Authorized {
 		t.Error("device[0] should be authorized")
 	}
+	// The v2 DeviceID (renamed from ID) and the *Time -> RFC3339 string mapping
+	// must round-trip unchanged.
+	if result[0].DeviceID != "dev-1" {
+		t.Errorf("device[0].DeviceID = %q, want %q", result[0].DeviceID, "dev-1")
+	}
+	if result[0].LastSeen != "2026-06-18T14:00:00Z" {
+		t.Errorf("device[0].LastSeen = %q, want %q", result[0].LastSeen, "2026-06-18T14:00:00Z")
+	}
 	if result[1].Hostname != "server" {
 		t.Errorf("device[1].Hostname = %q, want %q", result[1].Hostname, "server")
 	}
 }
 
 func TestListDevices_Empty(t *testing.T) {
-	mock := &mockTailscaleClient{devices: []*ts.Device{}}
+	mock := &mockTailscaleClient{devices: []tsv2.Device{}}
 	result := convertTailscaleDevices(mock.devices)
 	if len(result) != 0 {
 		t.Errorf("expected 0 devices, got %d", len(result))
 	}
 }
 
+// A device connected to the control plane reports a nil LastSeen; it must map to
+// an empty string, not a zero-value timestamp.
+func TestListDevices_ConnectedDeviceNilLastSeen(t *testing.T) {
+	mock := &mockTailscaleClient{
+		devices: []tsv2.Device{
+			{ID: "dev-online", Hostname: "online-host", Authorized: true, LastSeen: nil},
+		},
+	}
+	result := convertTailscaleDevices(mock.devices)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 device, got %d", len(result))
+	}
+	if result[0].LastSeen != "" {
+		t.Errorf("nil LastSeen should map to \"\", got %q", result[0].LastSeen)
+	}
+}
+
 func TestListDevices_ExternalDevice(t *testing.T) {
 	mock := &mockTailscaleClient{
-		devices: []*ts.Device{
+		devices: []tsv2.Device{
 			{
-				DeviceID:   "ext-1",
+				ID:         "ext-1",
 				Hostname:   "external-host",
 				Name:       "external.ts.net.",
 				Addresses:  []string{"100.200.50.12/32"},

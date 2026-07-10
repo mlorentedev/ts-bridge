@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
-	ts "tailscale.com/client/tailscale"
+	tsv2 "tailscale.com/client/tailscale/v2"
 )
 
-// TailscaleClient is the interface for Tailscale API calls.
-// Implemented by *ts.Client for production, and by a mock for testing.
+// TailscaleClient is the interface for the Tailscale device-list API call.
+// Implemented by the v2 client in production and by a mock for testing.
 type TailscaleClient interface {
-	Devices(ctx context.Context, fields *ts.DeviceFieldsOpts) ([]*ts.Device, error)
+	Devices(ctx context.Context) ([]tsv2.Device, error)
 }
 
 // ListDevices fetches all devices from the Tailscale API.
@@ -23,8 +24,8 @@ func ListDevices(ctx context.Context, authKey, tailnet string) ([]Device, error)
 		return nil, fmt.Errorf("tailnet is required")
 	}
 
-	client := ts.NewClient(tailnet, ts.APIKey(authKey))
-	devices, err := client.Devices(ctx, nil)
+	client := &tsv2.Client{Tailnet: tailnet, APIKey: authKey}
+	devices, err := client.Devices().List(ctx)
 	if err != nil {
 		if hint, remediation := diagnoseTailscaleAPIError(err); hint != "" {
 			return nil, fmt.Errorf("%s — %s", err, remediation)
@@ -35,28 +36,48 @@ func ListDevices(ctx context.Context, authKey, tailnet string) ([]Device, error)
 	return convertTailscaleDevices(devices), nil
 }
 
-// convertTailscaleDevices converts ts.Device slices to our Device type.
+// convertTailscaleDevices converts v2 tailscale devices to our Device type.
 // Exported for testing.
-func convertTailscaleDevices(devices []*ts.Device) []Device {
+func convertTailscaleDevices(devices []tsv2.Device) []Device {
 	result := make([]Device, 0, len(devices))
 	for _, d := range devices {
 		result = append(result, Device{
 			Addresses:  d.Addresses,
-			DeviceID:   d.DeviceID,
+			DeviceID:   d.ID, // v2 renamed DeviceID -> ID
 			NodeID:     d.NodeID,
 			User:       d.User,
 			Name:       d.Name,
 			Hostname:   d.Hostname,
 			OS:         d.OS,
 			Tags:       d.Tags,
-			Created:    d.Created,
-			LastSeen:   d.LastSeen,
-			Expires:    d.Expires,
+			Created:    formatTSTime(d.Created),
+			LastSeen:   formatTSTimePtr(d.LastSeen),
+			Expires:    formatTSTime(d.Expires),
 			Authorized: d.Authorized,
 			IsExternal: d.IsExternal,
 		})
 	}
 	return result
+}
+
+// formatTSTime renders a v2 API timestamp (which wraps time.Time) as an RFC3339
+// string. It preserves the v1 client's behavior of leaving an unset time empty
+// rather than emitting the zero value "0001-01-01T00:00:00Z" — the API sends ""
+// for devices with no such date (e.g. the hello service).
+func formatTSTime(t tsv2.Time) string {
+	if t.Time.IsZero() {
+		return ""
+	}
+	return t.Time.Format(time.RFC3339)
+}
+
+// formatTSTimePtr is formatTSTime for the pointer-valued fields. LastSeen is nil
+// when the device is currently connected to the control plane; that maps to "".
+func formatTSTimePtr(t *tsv2.Time) string {
+	if t == nil {
+		return ""
+	}
+	return formatTSTime(*t)
 }
 
 // diagnoseTailscaleAPIError inspects a Tailscale API error and returns
