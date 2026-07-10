@@ -34,7 +34,7 @@ Both run in CI: the `smoke` job (Linux) executes the BATS suite on every PR.
 | `status` | not-running, `--json` (down), `--addr`, `--watch`/`--interval` flags | 🔶 | 🔶 | QA-006 (#175) |
 | `connect` | flag parsing + config-validation errors (target/auth/auth-key-file/bad flag), auth-key warning | 🔶 | 🔶 | QA-007 (#176) |
 | `discover` | required auth/tailnet errors, `--port` validation, `--json` no-auth path, flag surface | 🔶 | ⬜ | QA-008 (#177) |
-| `host setup` | Windows registry/firewall/UPnP/sleep; Linux xrdp/UFW | 👤 | 👤 | QA-009 (#178) |
+| `host setup` | `--help` flags + all platforms, non-root elevation guard, `--port` parse error | 🔶 | ⬜ | QA-009 (#178) |
 | `host check` | read-only, `--json` | ⬜ | 🔶 | QA-010 (#179) |
 | *(cross-cutting)* | config precedence (flags > env > YAML > defaults) | ⬜ | 🔶 | QA-011 (#181) |
 | *(cross-cutting)* | error handling (missing key, bad target/ports, timeouts) | ⬜ | ⬜ | QA-012 (#182) |
@@ -70,3 +70,9 @@ suite, to keep the suite fast, hermetic, and non-hanging:
   are reached only after a successful tailnet API query (needs a real auth key,
   tailnet, and network). Smoke tests cover the pre-fetch validation/error paths
   and the flag surface; the live behaviour is covered by the QA-013 e2e run.
+- **`host setup` real execution (Windows registry/firewall/UPnP/sleep; Linux
+  xrdp/UFW/iptables)** — mutates the machine and needs admin/root. The smoke
+  suite exercises only `--help`, flag parsing, and the non-root elevation guard,
+  which returns before any side effect; idempotency, per-step results, and
+  partial-failure handling stay manual / QA-013 e2e. `internal/host` carries the
+  unit coverage for the platform-specific logic.
