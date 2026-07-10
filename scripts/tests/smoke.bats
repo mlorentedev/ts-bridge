@@ -386,3 +386,60 @@ TARGET="100.64.0.1:3389"
   assert_contains "--auto"
   assert_contains "--tailnet"
 }
+
+# ---------------------------------------------------------------------------
+# QA-009 (#178) — host setup
+# ---------------------------------------------------------------------------
+# host setup MUTATES the machine (Windows registry/firewall/UPnP/sleep; Linux
+# xrdp/UFW/iptables) and requires admin/root, so the real setup path is NEVER
+# exercised here. Only two things are safe to run:
+#   * --help and flag-parse errors short-circuit inside Cobra before RunE, so
+#     they never touch the system.
+#   * The elevation guard — runHostSetup checks host.IsElevated() (euid == 0 on
+#     Linux) and returns BEFORE any side effect when not elevated. The CI smoke
+#     job runs as a non-root user, so exercising it only proves the refusal and
+#     mutates nothing. The `id -u` skip is belt-and-suspenders: if the suite is
+#     ever run as root, the destructive branch is never entered.
+# Real setup behaviour (idempotency, per-step results, partial-failure summary)
+# needs admin and is manual-only / QA-013 e2e — see docs/qa-coverage.md.
+
+@test "host setup --help: documents the setup flags and all three platforms" {
+  run "${BIN}" host setup --help
+  assert_success
+  assert_contains "--no-sleep"
+  assert_contains "--firewall-rule"
+  assert_contains "--port"
+  # The Long help enumerates the per-platform behaviour.
+  assert_contains "Windows"
+  assert_contains "Linux"
+  assert_contains "macOS"
+}
+
+@test "host setup: without root, refuses before making any system change" {
+  # The only test that reaches runHostSetup. Safe because the elevation guard
+  # returns before any side effect when euid != 0 (the CI runner is non-root).
+  if [ "$(id -u 2>/dev/null || echo 0)" = "0" ]; then
+    skip "running as root would enter the real (mutating) setup path"
+  fi
+  run "${BIN}" host setup
+  assert_failure
+  assert_contains "elevated privileges"
+}
+
+@test "host setup --no-sleep --firewall-rule: flags parse, then the guard refuses" {
+  # Passing the flags and reaching the elevation guard (not an 'unknown flag'
+  # error) proves they are registered and accepted, without running setup.
+  if [ "$(id -u 2>/dev/null || echo 0)" = "0" ]; then
+    skip "running as root would enter the real (mutating) setup path"
+  fi
+  run "${BIN}" host setup --no-sleep --firewall-rule "MyRDPRule"
+  assert_failure
+  assert_contains "elevated privileges"
+  refute_contains "unknown flag"
+}
+
+@test "host setup --port: a non-numeric value is a parse error, never reaches setup" {
+  run "${BIN}" host setup --port not-a-number
+  assert_failure
+  assert_contains "invalid argument"
+}
