@@ -35,7 +35,7 @@ Both run in CI: the `smoke` job (Linux) executes the BATS suite on every PR.
 | `connect` | flag parsing + config-validation errors (target/auth/auth-key-file/bad flag), auth-key warning | 🔶 | 🔶 | QA-007 (#176) |
 | `discover` | required auth/tailnet errors, `--port` validation, `--json` no-auth path, flag surface | 🔶 | ⬜ | QA-008 (#177) |
 | `host setup` | `--help` flags + all platforms, non-root elevation guard, `--port` parse error | 🔶 | ⬜ | QA-009 (#178) |
-| `host check` | read-only, `--json` | ⬜ | 🔶 | QA-010 (#179) |
+| `host check` | `--help`, read-only status block (exit 0, no admin), `--json` fields | ✅ | 🔶 | QA-010 (#179) |
 | *(cross-cutting)* | config precedence (flags > env > YAML > defaults) | ⬜ | 🔶 | QA-011 (#181) |
 | *(cross-cutting)* | error handling (missing key, bad target/ports, timeouts) | ⬜ | ⬜ | QA-012 (#182) |
 | *(e2e)* | multi-device real mesh, bidirectional forwarding | 👤 | 👤 | QA-013 (#183) |
@@ -76,3 +76,7 @@ suite, to keep the suite fast, hermetic, and non-hanging:
   which returns before any side effect; idempotency, per-step results, and
   partial-failure handling stay manual / QA-013 e2e. `internal/host` carries the
   unit coverage for the platform-specific logic.
+- **`host check --json` strict parseability** — the QA-010 test asserts the JSON
+  *fields* are present but not that stdout parses as a single JSON object,
+  because the logger currently prints a line to stdout before the payload
+  (bug #254). Tighten to a real `jq` parse once #254 is fixed.

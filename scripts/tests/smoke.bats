@@ -443,3 +443,46 @@ TARGET="100.64.0.1:3389"
   assert_failure
   assert_contains "invalid argument"
 }
+
+# ---------------------------------------------------------------------------
+# QA-010 (#179) — host check
+# ---------------------------------------------------------------------------
+# Unlike host setup, host check is READ-ONLY: it has no elevation guard and only
+# reads state (Tailscale IP via `tailscale ip`, RDP port, firewall status). Every
+# probe fails fast on the CI runner — tailscale/xrdp aren't installed, and
+# ufw/iptables error without root — so check exits 0 and reports "not OK" without
+# mutating or hanging. That makes its happy path safe to exercise directly here.
+
+@test "host check --help: reachable, documents --json and read-only" {
+  run "${BIN}" host check --help
+  assert_success
+  assert_contains "--json"
+  assert_contains "Read-only"
+}
+
+@test "host check: read-only, runs without admin and prints the status block" {
+  # No elevation guard: it exits 0 on the non-root CI runner (proving the
+  # read-only/no-admin path) and prints every status label even when nothing is
+  # installed (the 'Tailscale not installed' edge case reports rather than fails).
+  run "${BIN}" host check
+  assert_success
+  assert_contains "HOST CHECK"
+  assert_contains "Platform:"
+  assert_contains "Tailscale:"
+  assert_contains "RDP:"
+  assert_contains "Firewall:"
+}
+
+@test "host check --json: emits the documented JSON fields" {
+  run "${BIN}" host check --json
+  assert_success
+  assert_contains "\"platform\""
+  assert_contains "\"tailscale_ip\""
+  assert_contains "\"rdp_port\""
+  assert_contains "\"rdp_enabled\""
+  assert_contains "\"firewall_ok\""
+  assert_contains "\"tailscale_up\""
+  # NOTE: not asserting the whole stdout parses as JSON — the logger currently
+  # writes a line to stdout before the payload (bug #254). Tighten to a real jq
+  # parse once #254 lands.
+}
