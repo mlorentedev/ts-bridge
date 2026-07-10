@@ -15,31 +15,35 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 
 | Path | Purpose |
 |------|---------|
-| `main.go` | Orchestrator: flags, logger, signals, init, drain. Thin glue, no business logic. |
-| `main_test.go` | Unit tests for main-package helpers (error diagnosis, etc.) |
-| `main_integration_test.go` | Integration tests with mock Dialer (loopback, no tsnet) |
+| `cmd/ts-bridge/main.go` | Thin entry point — wires flags/logger/signals and delegates to `cmd/cli` (ADR-010). No business logic. |
+| `cmd/cli/` | Cobra command tree (`root`, `connect`, `init`, `status`, `host`, `discover`, `import`, `version`) + `args`/`run`/`signal` helpers, with per-command `*_test.go`. |
 | `internal/config/` | Env-var parsing + `Config` struct + validation |
 | `internal/proxy/` | `Dialer` interface, `AcceptLoop`, `handleConn`, `proxyConnections`, `idleConn`, `ReconnectDialer` |
 | `internal/health/` | `/health/live`, `/health/ready`, `/metrics` HTTP server |
 | `internal/telemetry/` | Atomic counters + read accessors |
+| `internal/discover/` | Tailnet device discovery via Tailscale and Headscale APIs |
+| `internal/host/` | Platform-specific host setup/check (firewall, RDP/xrdp, service) — `*_linux.go` / `*_windows.go` / `*_darwin.go` |
+| `internal/logging/` | Structured slog logging: text to console + JSON to a rotating log file |
+| `internal/profile/` | Shareable connection descriptor (`tsb://`) + profile store behind `connect --profile` (ADR-011/012) |
 | `specs/` (and `specs/archive/`) | Per-feature SDD folders (proposal + tasks + verification) — see §Workflow Rules |
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
 | `scripts/host/` | Host setup (`setup.ps1`, `ts-bridge.service`) |
-| `scripts/tests/` | BATS tests for dev.sh and other retained scripts |
-| `.github/workflows/ci.yml` | CI: test, lint, security (gosec), shellcheck, bats, build-matrix |
+| `scripts/tests/` | CLI smoke tests (`smoke.bats` POSIX / `smoke.ps1` Windows) exercising the built binary |
+| `Makefile` | Dev task runner — mutation-testing targets (gremlins, install-only; see QA-014) |
+| `.github/workflows/ci.yml` | CI jobs: `test`, `test-windows`, `smoke` (bats), `build-matrix`, `lint`, `security` (gosec) |
 | `.github/workflows/release.yml` | Automated releases via release-please (PAT-driven) |
 
 ## Commands
 
 ```sh
 # Build
-go build -o ts-bridge .
+go build -o ts-bridge ./cmd/ts-bridge/
 
-# Test (always use race detector)
+# Test (CI runs -race on Linux; the Windows job omits it — it needs a C toolchain)
 go test -race -v ./...
 
-# Lint (CI pins this version — run the same locally to avoid drift)
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.2
+# Lint (CI pins this version via golangci-lint-action@v9 — match it to avoid drift)
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 golangci-lint run
 
 # Security scan
