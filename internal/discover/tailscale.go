@@ -61,7 +61,7 @@ func convertTailscaleDevices(devices []tsv2.Device) []Device {
 }
 
 // formatTSTime renders a v2 API timestamp (which wraps time.Time) as an RFC3339
-// string. It preserves the v1 client's behaviour of leaving an unset time empty
+// string. It preserves the v1 client's behavior of leaving an unset time empty
 // rather than emitting the zero value "0001-01-01T00:00:00Z" — the API sends ""
 // for devices with no such date (e.g. the hello service).
 func formatTSTime(t tsv2.Time) string {
