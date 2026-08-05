@@ -6,6 +6,9 @@
 package cmd
 
 import (
+	"io"
+	"log/slog"
+
 	"ts-bridge/internal/host"
 )
 
@@ -38,4 +41,15 @@ func PrintSetupJSONForTest(result host.SetupResult) error {
 // PrintCheckJSONForTest is a test-only wrapper for printCheckJSON.
 func PrintCheckJSONForTest(r host.CheckResult) error {
 	return printCheckJSON(r)
+}
+
+// HostInitLoggerForTest is a test-only wrapper for hostInitLogger. It exercises
+// the production wiring, including which stream the logger targets.
+func HostInitLoggerForTest(cfg host.Config) *slog.Logger {
+	return hostInitLogger(cfg)
+}
+
+// NewHostLoggerForTest is a test-only wrapper for newHostLogger.
+func NewHostLoggerForTest(cfg host.Config, w io.Writer) *slog.Logger {
+	return newHostLogger(cfg, w)
 }

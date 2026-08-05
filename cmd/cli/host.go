@@ -4,6 +4,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"runtime"
@@ -234,7 +235,19 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 // setup/check — only console. The output format honors cfg.LogFormat, and the
 // level honors cfg.Verbose (note: the separate --json flag controls the
 // command's result output, not the logger).
+//
+// Logs go to stderr, not stdout: the --json result is machine-readable data and
+// must be the only thing on stdout, or `host check --json | jq .` fails on the
+// interleaved log line. Routing rather than silencing keeps --verbose useful
+// alongside --json.
 func hostInitLogger(cfg host.Config) *slog.Logger {
+	return newHostLogger(cfg, os.Stderr)
+}
+
+// newHostLogger builds the host command logger over an arbitrary writer. Split
+// out from hostInitLogger so tests can assert format and level against a buffer
+// without swapping process streams.
+func newHostLogger(cfg host.Config, w io.Writer) *slog.Logger {
 	level := slog.LevelInfo
 	if cfg.Verbose {
 		level = slog.LevelDebug
@@ -243,9 +256,9 @@ func hostInitLogger(cfg host.Config) *slog.Logger {
 
 	var handler slog.Handler
 	if cfg.LogFormat == "json" {
-		handler = slog.NewJSONHandler(os.Stdout, opts)
+		handler = slog.NewJSONHandler(w, opts)
 	} else {
-		handler = slog.NewTextHandler(os.Stdout, opts)
+		handler = slog.NewTextHandler(w, opts)
 	}
 	return slog.New(handler)
 }
