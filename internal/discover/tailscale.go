@@ -9,12 +9,6 @@ import (
 	tsv2 "tailscale.com/client/tailscale/v2"
 )
 
-// TailscaleClient is the interface for the Tailscale device-list API call.
-// Implemented by the v2 client in production and by a mock for testing.
-type TailscaleClient interface {
-	Devices(ctx context.Context) ([]tsv2.Device, error)
-}
-
 // ListDevices fetches all devices from the Tailscale API.
 func ListDevices(ctx context.Context, authKey, tailnet string) ([]Device, error) {
 	if authKey == "" {

@@ -37,5 +37,5 @@ run reliably on the maintainer's Windows box.
 - [x] 4 `go build ./...` → ok
 - [x] 5 `go vet ./...` → ok
 - [x] 6 `go test ./...` → all packages ok (`internal/discover` incl. the new nil-LastSeen + Time round-trip asserts)
-- [ ] 7 CI `lint` job — pending push (the gate that blocks #199)
+- [x] 7 CI `lint` job green on the PR #252 merge commit and on `master` since — SA1019 cleared, which unblocked and superseded Dependabot #199 (closed)
 - [x] 8 behaviour unchanged — conversion tests assert the same populated fields; `DeviceID` (from v2 `ID`) and `*Time`→RFC3339 round-trip covered

@@ -1,7 +1,7 @@
 ---
 id: "deps-001-tailscale-client-v2"
 type: spec
-status: proposed
+status: archived # draft | implementing | verifying | archived
 created: "2026-07-10"
 tags: [spec, deps, tailscale, discover, migration, sa1019]
 issue: 245

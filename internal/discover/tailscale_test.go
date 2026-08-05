@@ -1,22 +1,11 @@
 package discover
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	tsv2 "tailscale.com/client/tailscale/v2"
 )
-
-// mockTailscaleClient returns a predefined list of devices.
-type mockTailscaleClient struct {
-	devices []tsv2.Device
-	err     error
-}
-
-func (m *mockTailscaleClient) Devices(ctx context.Context) ([]tsv2.Device, error) {
-	return m.devices, m.err
-}
 
 // tsTime builds a v2 API timestamp from an RFC3339 string for use in fixtures.
 func tsTime(t *testing.T, s string) *tsv2.Time {
@@ -28,34 +17,34 @@ func tsTime(t *testing.T, s string) *tsv2.Time {
 	return &tsv2.Time{Time: parsed}
 }
 
-func TestListDevices_Success(t *testing.T) {
-	mock := &mockTailscaleClient{
-		devices: []tsv2.Device{
-			{
-				ID:         "dev-1",
-				Hostname:   "desktop",
-				Name:       "desktop.tailnet.ts.net.",
-				Addresses:  []string{"100.64.0.1/32"},
-				Authorized: true,
-				OS:         "windows",
-				LastSeen:   tsTime(t, "2026-06-18T14:00:00Z"),
-			},
-			{
-				ID:         "dev-2",
-				Hostname:   "server",
-				Name:       "server.tailnet.ts.net.",
-				Addresses:  []string{"100.64.0.2/32"},
-				Authorized: true,
-				OS:         "linux",
-				LastSeen:   tsTime(t, "2026-06-18T13:00:00Z"),
-			},
+// These tests target convertTailscaleDevices, the adapter from the v2 API type
+// to our Device. ListDevices itself constructs its own *tsv2.Client and would
+// need a live API or an HTTP stub, so the conversion — where the field mapping
+// bugs actually live — is exercised directly.
+
+func TestConvertTailscaleDevices_MapsFields(t *testing.T) {
+	devices := []tsv2.Device{
+		{
+			ID:         "dev-1",
+			Hostname:   "desktop",
+			Name:       "desktop.tailnet.ts.net.",
+			Addresses:  []string{"100.64.0.1/32"},
+			Authorized: true,
+			OS:         "windows",
+			LastSeen:   tsTime(t, "2026-06-18T14:00:00Z"),
+		},
+		{
+			ID:         "dev-2",
+			Hostname:   "server",
+			Name:       "server.tailnet.ts.net.",
+			Addresses:  []string{"100.64.0.2/32"},
+			Authorized: true,
+			OS:         "linux",
+			LastSeen:   tsTime(t, "2026-06-18T13:00:00Z"),
 		},
 	}
 
-	// We can't easily test ListDevices (which creates its own client)
-	// without a real API. Instead, test the conversion logic
-	// by calling the internal adapter directly.
-	result := convertTailscaleDevices(mock.devices)
+	result := convertTailscaleDevices(devices)
 
 	if len(result) != 2 {
 		t.Fatalf("expected 2 devices, got %d", len(result))
@@ -83,9 +72,8 @@ func TestListDevices_Success(t *testing.T) {
 	}
 }
 
-func TestListDevices_Empty(t *testing.T) {
-	mock := &mockTailscaleClient{devices: []tsv2.Device{}}
-	result := convertTailscaleDevices(mock.devices)
+func TestConvertTailscaleDevices_Empty(t *testing.T) {
+	result := convertTailscaleDevices([]tsv2.Device{})
 	if len(result) != 0 {
 		t.Errorf("expected 0 devices, got %d", len(result))
 	}
@@ -93,13 +81,12 @@ func TestListDevices_Empty(t *testing.T) {
 
 // A device connected to the control plane reports a nil LastSeen; it must map to
 // an empty string, not a zero-value timestamp.
-func TestListDevices_ConnectedDeviceNilLastSeen(t *testing.T) {
-	mock := &mockTailscaleClient{
-		devices: []tsv2.Device{
-			{ID: "dev-online", Hostname: "online-host", Authorized: true, LastSeen: nil},
-		},
+func TestConvertTailscaleDevices_ConnectedDeviceNilLastSeen(t *testing.T) {
+	devices := []tsv2.Device{
+		{ID: "dev-online", Hostname: "online-host", Authorized: true, LastSeen: nil},
 	}
-	result := convertTailscaleDevices(mock.devices)
+
+	result := convertTailscaleDevices(devices)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 device, got %d", len(result))
 	}
@@ -108,21 +95,19 @@ func TestListDevices_ConnectedDeviceNilLastSeen(t *testing.T) {
 	}
 }
 
-func TestListDevices_ExternalDevice(t *testing.T) {
-	mock := &mockTailscaleClient{
-		devices: []tsv2.Device{
-			{
-				ID:         "ext-1",
-				Hostname:   "external-host",
-				Name:       "external.ts.net.",
-				Addresses:  []string{"100.200.50.12/32"},
-				Authorized: false,
-				IsExternal: true,
-			},
+func TestConvertTailscaleDevices_ExternalDevice(t *testing.T) {
+	devices := []tsv2.Device{
+		{
+			ID:         "ext-1",
+			Hostname:   "external-host",
+			Name:       "external.ts.net.",
+			Addresses:  []string{"100.200.50.12/32"},
+			Authorized: false,
+			IsExternal: true,
 		},
 	}
 
-	result := convertTailscaleDevices(mock.devices)
+	result := convertTailscaleDevices(devices)
 	if len(result) != 1 {
 		t.Fatalf("expected 1 device, got %d", len(result))
 	}
