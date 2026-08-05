@@ -142,7 +142,16 @@ Test-Step -Name "version (default)" -Block { & $Bin version; $LASTEXITCODE } `
 Test-Step -Name "version --short" -Block { & $Bin version --short; $LASTEXITCODE } `
     -ExpectedOutputContains "dev"
 
-Test-Step -Name "version -v (deprecated flag)" -Block { & $Bin -v; $LASTEXITCODE } `
+# -v is the shorthand for the global --verbose flag (cmd/cli/root.go), NOT a
+# version alias. With no subcommand cobra prints the help text, which contains
+# the binary name — so the previous assertion of "ts-bridge" here passed by
+# accident while testing nothing it claimed to. Mirrors the BATS case
+# "-v (verbose) without a subcommand: prints help, not a version".
+Test-Step -Name "-v (verbose, not a version flag): prints help" -Block { & $Bin -v; $LASTEXITCODE } `
+    -ExpectedOutputContains "Usage:"
+
+# The real version flag, which the suite had no coverage for.
+Test-Step -Name "--version flag" -Block { & $Bin --version; $LASTEXITCODE } `
     -ExpectedOutputContains "ts-bridge"
 
 Test-Step -Name "--help (root)" -Block { & $Bin --help; $LASTEXITCODE } `
