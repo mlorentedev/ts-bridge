@@ -497,6 +497,16 @@ TARGET="100.64.0.1:3389"
   assert_json_object
 }
 
+@test "host check --json --log-format json: stdout is still exactly one object" {
+  # The nastiest variant of #254, and the reason assert_json_object slurps
+  # rather than calling `jq -e .`: with a JSON-formatted logger on stdout the
+  # output was two concatenated objects, which `jq -e .` accepts as a valid
+  # stream. Only an "exactly one value" assertion catches it.
+  run bash -c '"${BIN}" host check --json --log-format json 2>/dev/null'
+  assert_success
+  assert_json_object
+}
+
 @test "host check --json: the JSON payload does not leak onto stderr" {
   # `2>&1 >/dev/null` captures stderr only (order matters: stderr is duped to
   # the original stdout before stdout is redirected away).
