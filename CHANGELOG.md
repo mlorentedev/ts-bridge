@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.1](https://github.com/mlorentedev/ts-bridge/compare/v1.17.0...v1.17.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **cli:** route host command logs to stderr so --json stdout stays parseable ([#267](https://github.com/mlorentedev/ts-bridge/issues/267)) ([48589b4](https://github.com/mlorentedev/ts-bridge/commit/48589b42664ccfa9e452f4529653f82eb7da025c))
+
 ## [1.17.0](https://github.com/mlorentedev/ts-bridge/compare/v1.16.0...v1.17.0) (2026-07-08)
 
 
