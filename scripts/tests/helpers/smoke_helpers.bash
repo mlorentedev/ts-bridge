@@ -63,6 +63,31 @@ assert_contains() {
   fi
 }
 
+# assert_json_object fails the test unless $output is exactly one JSON object.
+#
+# The structural check always runs and is what catches the failure this guards
+# against (#254): anything printed before or after the payload — a stray log
+# line — leaves $output no longer starting with '{' and ending with '}'.
+# When jq is available (it is on the CI runner) the check is upgraded to a real
+# parse, which additionally rejects a malformed payload.
+assert_json_object() {
+  local first last
+  first="$(printf '%s' "${output}" | head -c 1)"
+  last="$(printf '%s' "${output}" | tail -c 1)"
+
+  if [ "${first}" != "{" ] || [ "${last}" != "}" ]; then
+    printf 'expected stdout to be exactly one JSON object\n--- output ---\n%s\n' "${output}" >&2
+    return 1
+  fi
+
+  if command -v jq >/dev/null 2>&1; then
+    if ! printf '%s' "${output}" | jq -e . >/dev/null 2>&1; then
+      printf 'stdout did not parse as JSON\n--- output ---\n%s\n' "${output}" >&2
+      return 1
+    fi
+  fi
+}
+
 # refute_contains fails the test if $output DOES contain the given substring.
 refute_contains() {
   if [[ "${output}" == *"$1"* ]]; then

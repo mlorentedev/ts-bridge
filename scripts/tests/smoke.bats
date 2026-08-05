@@ -473,8 +473,13 @@ TARGET="100.64.0.1:3389"
   assert_contains "Firewall:"
 }
 
+# BATS `run` merges stdout and stderr into $output, so the stream-separation
+# assertions below go through a subshell that redirects explicitly rather than
+# relying on `run --separate-stderr` (a BATS >= 1.5 feature; CI installs the
+# distro package, whose version is not pinned).
+
 @test "host check --json: emits the documented JSON fields" {
-  run "${BIN}" host check --json
+  run bash -c '"${BIN}" host check --json 2>/dev/null'
   assert_success
   assert_contains "\"platform\""
   assert_contains "\"tailscale_ip\""
@@ -482,7 +487,27 @@ TARGET="100.64.0.1:3389"
   assert_contains "\"rdp_enabled\""
   assert_contains "\"firewall_ok\""
   assert_contains "\"tailscale_up\""
-  # NOTE: not asserting the whole stdout parses as JSON — the logger currently
-  # writes a line to stdout before the payload (bug #254). Tighten to a real jq
-  # parse once #254 lands.
+}
+
+@test "host check --json: stdout is exactly one parseable JSON object" {
+  # Regression guard for #254: the logger used to write to stdout ahead of the
+  # payload, so `host check --json | jq .` failed on the interleaved line.
+  run bash -c '"${BIN}" host check --json 2>/dev/null'
+  assert_success
+  assert_json_object
+}
+
+@test "host check --json: the JSON payload does not leak onto stderr" {
+  # `2>&1 >/dev/null` captures stderr only (order matters: stderr is duped to
+  # the original stdout before stdout is redirected away).
+  #
+  # Only the negative is asserted. What the logger emits here is
+  # platform-dependent — Linux logs an xrdp line, Windows logs "host check",
+  # macOS's checkImpl logs nothing at all — so "stderr is non-empty" would not
+  # be portable. That logs reach stderr rather than stdout is pinned
+  # deterministically by TestHostInitLogger_WritesToStderrNotStdout.
+  run bash -c '"${BIN}" host check --json 2>&1 >/dev/null'
+  assert_success
+  refute_contains "\"tailscale_ip\""
+  refute_contains "\"rdp_port\""
 }
