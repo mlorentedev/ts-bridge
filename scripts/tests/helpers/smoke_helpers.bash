@@ -65,11 +65,17 @@ assert_contains() {
 
 # assert_json_object fails the test unless $output is exactly one JSON object.
 #
-# The structural check always runs and is what catches the failure this guards
-# against (#254): anything printed before or after the payload — a stray log
-# line — leaves $output no longer starting with '{' and ending with '}'.
-# When jq is available (it is on the CI runner) the check is upgraded to a real
-# parse, which additionally rejects a malformed payload.
+# "Exactly one" is the load-bearing word. `jq -e .` is NOT enough: jq accepts a
+# stream of concatenated values, so '{"a":1}{"b":2}' parses happily. That is the
+# precise shape #254 produced under --log-format json — a JSON log line followed
+# by the JSON payload — so a plain `jq -e .` guard would have passed on the very
+# bug it exists to catch. `jq -se` slurps the stream into an array, letting us
+# assert the array holds one element and that it is an object.
+#
+# The structural check runs first so the assertion still has teeth where jq is
+# absent, though it is strictly weaker: it pins the first and last characters
+# and so catches a log line printed before or after the payload, but cannot
+# detect two objects concatenated between them.
 assert_json_object() {
   local first last
   first="$(printf '%s' "${output}" | head -c 1)"
@@ -81,8 +87,8 @@ assert_json_object() {
   fi
 
   if command -v jq >/dev/null 2>&1; then
-    if ! printf '%s' "${output}" | jq -e . >/dev/null 2>&1; then
-      printf 'stdout did not parse as JSON\n--- output ---\n%s\n' "${output}" >&2
+    if ! printf '%s' "${output}" | jq -se 'length == 1 and (.[0] | type == "object")' >/dev/null 2>&1; then
+      printf 'expected stdout to be exactly one JSON object (jq)\n--- output ---\n%s\n' "${output}" >&2
       return 1
     fi
   fi
