@@ -81,7 +81,10 @@ jobs:
   # CLI surface end-to-end on a real Linux runner. Complements the Go unit
   # tests: it catches wiring regressions (a command that no longer registers,
   # a renamed flag, a broken help tree) that compile fine but break the CLI.
-  # The Windows mirror is scripts/tests/smoke.ps1.
+  # Linux-only by design: cross-platform CLI coverage belongs in Go tests under
+  # cmd/cli/, which the test-windows job already runs on windows-latest. The
+  # former PowerShell mirror was retired in #271 — a second suite describing the
+  # same surface drifts, and no job ever executed it.
   smoke:
     runs-on: ubuntu-latest
     steps:

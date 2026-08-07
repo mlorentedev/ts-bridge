@@ -4,7 +4,9 @@
 #
 # This is the shared smoke suite for the QA-004..QA-013 sequence: each QA
 # ticket appends its own section below, keeping one file as the single source
-# of CLI coverage on Linux/macOS. The PowerShell mirror lives at smoke.ps1.
+# of CLI coverage on Linux/macOS. There is no second suite: cross-platform CLI
+# coverage belongs in Go tests under cmd/cli/, which run on Windows via the
+# test-windows job (#271).
 #
 # This section (QA-004, issue #173) covers CLI PARSING only — the surface that
 # every other command depends on:
@@ -100,7 +102,7 @@ setup() {
 }
 
 @test "-v (verbose) without a subcommand: prints help, not a version" {
-  # Guard against the smoke.ps1 misconception that -v is a version flag:
+  # Guard against the #244 misconception that -v is a version flag:
   # -v is the global --verbose flag; with no subcommand cobra shows help.
   run "${BIN}" -v
   assert_success

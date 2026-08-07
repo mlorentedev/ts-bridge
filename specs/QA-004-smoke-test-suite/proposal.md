@@ -42,15 +42,17 @@ Create a **cross-platform automated smoke test suite** that:
 
 ```
 scripts/tests/
-├── smoke.ps1          # Windows — expands from ~200 to ~400 LOC
-├── smoke.bats         # POSIX — new, mirrors smoke.ps1 coverage
+├── smoke.bats         # POSIX — the single smoke suite
 ├── helpers/           # shared test utilities
-│   ├── smoke_helpers.bash  # BATS helper functions
-│   └── smoke_helpers.psm1  # PowerShell helper module
+│   └── smoke_helpers.bash  # BATS helper functions
 └── fixtures/          # test data
     ├── invalid.yaml   # YAML with unknown fields
     └── sample.yaml    # valid YAML config
 ```
+
+> Revised by #271: the original layout paired `smoke.bats` with a PowerShell
+> mirror (`smoke.ps1` + `smoke_helpers.psm1`). The mirror was retired — see the
+> superseded decision in `tasks.md`.
 
 ## CI Integration
 
@@ -58,8 +60,11 @@ Add a `smoke` job to the existing CI workflow (`.github/workflows/ci.yml`) that:
 
 1. Builds the binary for each platform
 2. Runs `smoke.bats` on Linux runner
-3. Runs `smoke.ps1` on Windows runner
-4. Fails the build if any test fails
+3. Fails the build if any test fails
+
+Windows CLI coverage is not a smoke-suite job: the existing `test-windows` job
+runs `go test ./...` on `windows-latest`, so Go tests under `cmd/cli/` are
+cross-platform at no extra CI cost (#271).
 
 ## Acceptance Criteria
 
