@@ -84,7 +84,7 @@ spec placed out of scope and which has six dedicated tests already.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/QA-011-config-precedence/` -> `specs/archive/`
-- [ ] #181 closed with PR link (ADR-018)
-- [ ] Lessons appended to `docs/lessons.md`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/QA-011-config-precedence/` -> `specs/archive/`
+- [x] #181 closed by PR #283 (`4089c29`)
+- [x] Lessons appended to `docs/lessons.md` (3 entries under `## 2026-08-07`)
