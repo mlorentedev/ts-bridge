@@ -5,9 +5,9 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 ## Tech Stack
 
 - **Language:** Go 1.26+
-- **Key dependency:** `tailscale.com/tsnet` v1.80.0
-- **Architecture:** Single binary, multi-package — `main.go` (~270 lines orchestrator) + four `internal/` packages (see ADR-007).
-- **Config:** Environment variables only (no config files) — see `.env.example`
+- **Key dependency:** `tailscale.com/tsnet` v1.102.1
+- **Architecture:** Single binary, multi-package — `cmd/ts-bridge/main.go` (~40 lines, thin entry point) delegates to the `cmd/cli` Cobra tree (ADR-010) over eight `internal/` packages (ADR-007).
+- **Config:** Flags, environment variables, and YAML config files, in that precedence order, plus named profiles (ADR-011/012). `.env.example` documents the env-var surface; `init` writes either format.
 - **Logging:** `log/slog` (structured, text or JSON)
 - **Metrics:** `sync/atomic` counters, JSON endpoint at `/metrics`
 
@@ -55,10 +55,12 @@ gosec ./...
 
 ## Architecture Decisions
 
-- **ADR-002:** Single binary, no config files, env-var driven
+- **ADR-002:** Single binary, no config files, env-var driven — **deprecated**; config files and profiles arrived with ADR-011/012. Kept for the portability rationale, not as current guidance.
 - **ADR-004:** Atomic metrics, no mutexes
 - **ADR-006:** `Dialer` interface for testability
 - **ADR-007:** Multi-package split under `internal/` (this is the current layout — see Key Paths)
+- **ADR-010:** `cmd/cli` Cobra package layout — `main.go` stays a thin entry point
+- **ADR-012:** Named profile model for multi-tailnet configuration (current config model)
 - Full ADR index: [`docs/adr/`](docs/adr/) (project-bound knowledge, docs-as-code)
 
 ## Documentation
