@@ -32,7 +32,11 @@ created: "2026-08-07"
 - Mutation, before: `merge.go` 50 killed / **43 lived** / 8 not covered
   (CI run `30789587228`, 2026-08-03).
 - Mutation, after: `merge.go` **90 killed / 11 lived / 0 not covered**.
-  Package totals 193 killed / 41 lived / 9 not covered; efficacy 78.21% -> 82.48%.
+  Package totals: **151 killed / 75 lived / 17 not covered -> 193 / 41 / 9**;
+  efficacy **66.81% -> 82.47%**. Both runs enumerate exactly 243 mutants, so the
+  comparison is like-for-like. (The baseline is the CI report of 2026-08-03, not
+  an intermediate local run — a mid-work local figure would already include
+  these tests and understate the change.)
 - No regressions: the pre-existing 40 tests in `merge_test.go` still pass.
 
 ## Attribution of the 11 remaining survivors

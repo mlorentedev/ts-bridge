@@ -65,7 +65,7 @@ created: "2026-08-07"
       landing ticket updates its row)
 - [x] No production code in the diff
 - [x] `verification.md` filled in
-- [ ] PR opened with `Closes #181`
+- [x] PR opened with `Closes #181` — #283
 
 ## Notes
 
