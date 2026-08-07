@@ -42,10 +42,16 @@ a smoke suite invoked as a subprocess is invisible to both.
 | `discover` | required auth/tailnet errors, `--port` validation, `--json` no-auth path, flag surface | 🔶 | QA-008 (#177) |
 | `host setup` | `--help` flags + all platforms, non-root elevation guard, `--port` parse error | 🔶 | QA-009 (#178) |
 | `host check` | `--help`, read-only status block (exit 0, no admin), `--json` fields, stdout is exactly one JSON object | ✅ | QA-010 (#179) |
-| *(cross-cutting)* | config precedence (flags > env > YAML > defaults) | ⬜ | QA-011 (#181) |
+| *(cross-cutting)* | config precedence (flags > env > YAML > defaults) | ⬜ Go¹ | QA-011 (#181) |
 | *(cross-cutting)* | error handling (missing key, bad target/ports, timeouts) | ⬜ | QA-012 (#182) |
 | *(e2e)* | multi-device real mesh, bidirectional forwarding | 👤 | QA-013 (#183) |
 
+> ¹ **QA-011 landed in Go, not BATS** (`internal/config/precedence_test.go`).
+> Precedence is decided in `internal/config`, below the CLI, and a BATS case
+> kills no mutants — so hardening it there would have been unmeasurable. The
+> BATS column stays ⬜ by design, not by omission. Result: `merge.go` survivors
+> 43 → 11, all eleven attributed in the spec's `verification.md`.
+>
 > The Go-side column is deliberately absent: some existing `cmd/cli` tests
 > exercise hand-built replicas of the command tree rather than the real one, so
 > a per-row Go mark would overstate coverage. It lands once the command tree is

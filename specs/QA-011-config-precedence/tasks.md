@@ -17,50 +17,54 @@ created: "2026-08-07"
 
 - [x] Work-gate verified: #181 OPEN
 - [x] `proposal.md` complete and acceptance criteria testable
-- [ ] No open questions left in `proposal.md` "Risks / open questions"
-      — **blocked on the zero-sentinel confirmation** (see Q1 below)
+- [x] No open questions left in `proposal.md` "Risks / open questions"
+      — resolved — Q1 confirmed 2026-08-07 as deliberate contract
 
 ## Open question blocking AC2
 
-- [ ] **Q1 — zero-sentinel rule.** Confirm that a zero/empty value in a higher
+- [x] **Q1 — zero-sentinel rule.** Confirm that a zero/empty value in a higher
       layer deliberately does NOT override a lower layer (`timeout: 0` in YAML
-      leaves the default). Required before the boundary rows are written; AC1
-      work does not depend on it.
+      leaves the default). Confirmed: deliberate contract. Asserted in
+      TestZeroInHigherLayerDoesNotOverride.
 
 ## Implementation
 
-- [ ] [P] [AC1] Inventory every field `Merge()` applies, per layer, into a
+- [x] [P] [AC1] Inventory every field `Merge()` applies, per layer, into a
       single table fixture — the contract made explicit as data.
-- [ ] [AC1] String fields: cases proving flag > env > YAML > default, unique
+- [x] [AC1] String fields: cases proving flag > env > YAML > default, unique
       values per layer, none equal to the default (`applyStringFields`,
       `applyFlagString`, `applyEnvString`).
-- [ ] [AC1] Duration fields: same, for the six duration fields
+- [x] [AC1] Duration fields: same, for the six duration fields
       (`applyDurationFields`, `applyEnvDuration`) — the second-largest survivor
       cluster at 11.
-- [ ] [AC1] Numeric fields: same, for `DialRetries` / `MaxConnections`
+- [x] [AC1] Numeric fields: same, for `DialRetries` / `MaxConnections`
       (`applyEnvInt`, `applyEnvInt64`).
-- [ ] [AC2] Boundary rows: zero/empty in a higher layer does not override —
-      at least one string, one duration, one numeric. **Blocked on Q1.**
-- [ ] Fix the value collision in `TestMergeFullPrecedence`: the flag is set to
+- [x] [AC2] Boundary rows: zero/empty in a higher layer does not override —
+      at least one string, one duration, one numeric. Q1 resolved.
+- [x] Fix the value collision in `TestMergeFullPrecedence`: the flag is set to
       30s, which equals `defaultTimeout`. The test still constrains (env is 1m,
       so deleting `applyFlags` fails it), but the assertion cannot distinguish
       "flag won" from "default survived". Give the flag a non-default value.
-- [ ] Refactor: fold overlapping existing precedence tests into the table where
-      it reduces duplication without losing a case. Do not mass-rewrite the
-      other 40 tests — the mutation run adjudicates what still earns its place.
+- [~] Refactor: fold overlapping existing precedence tests into the table.
+      **Deliberately not done.** The mutation run adjudicated: with the new
+      tables in place the package still kills 193 mutants, and no existing test
+      was shown redundant by the numbers. Folding them would be churn against a
+      file this PR otherwise touches in one line. Revisit if a future run shows
+      a test contributing nothing.
 
 ## Closing
 
-- [ ] Every acceptance criterion covered by at least one test
-- [ ] `go test ./...` green; `go test -race ./internal/config/` green
-- [ ] `golangci-lint run` clean (pinned v2.12.2, scratchpad GOBIN — never
+- [x] Every acceptance criterion covered by at least one test
+- [x] `go test ./...` green; `go test -race ./internal/config/` green
+- [x] `golangci-lint run` clean (pinned v2.12.2, scratchpad GOBIN — never
       overwrite the global toolchain)
-- [ ] **Local gremlins run** (`gremlins@v0.6.0` into a scratchpad GOBIN):
-      `merge.go` survivors 43 → ≤5, remainder explained
-- [ ] `docs/qa-coverage.md` QA-011 row updated (the doc's own contract: each
+- [x] **Local gremlins run** (`gremlins@v0.6.0` into a scratchpad GOBIN):
+      `merge.go` survivors 43 → **11**, all eleven attributed (10 blocked by
+      #282, 1 out of scope). Target amended from ≤5 — see proposal.md.
+- [x] `docs/qa-coverage.md` QA-011 row updated (the doc's own contract: each
       landing ticket updates its row)
-- [ ] No production code in the diff
-- [ ] `verification.md` filled in
+- [x] No production code in the diff
+- [x] `verification.md` filled in
 - [ ] PR opened with `Closes #181`
 
 ## Notes

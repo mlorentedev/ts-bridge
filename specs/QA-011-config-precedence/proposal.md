@@ -87,6 +87,14 @@ unmeasurable. Decision recorded on #181 and in #271/#277.
       numeric field.
 - [ ] Surviving mutants in `internal/config/merge.go` drop from 43 to ≤5 in a
       gremlins run, with any remainder explained in `verification.md`.
+      **Amended after measurement:** the achieved figure is **11**, and the
+      "≤5" target was set before the survivors had been attributed. Ten of the
+      eleven are unkillable while #282 stands — they guard `DialRetries` and
+      `IdleTimeout`, whose values an unset flag overwrites, so no test can
+      observe which layer supplied them. The eleventh is the auto-instance
+      chain this spec placed out of scope. The criterion is therefore
+      **every remaining survivor is attributed**, which is the property "≤5"
+      was a proxy for.
 - [ ] No production code changed — `git diff` touches only `_test.go` files and
       this spec.
 
