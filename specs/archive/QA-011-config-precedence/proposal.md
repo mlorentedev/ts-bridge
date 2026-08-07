@@ -1,7 +1,7 @@
 ---
 id: "QA-011-config-precedence"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-08-07"
 issue: "ts-bridge#181"
 tags: [spec, proposal, testing, qa, config, precedence, mutation]
