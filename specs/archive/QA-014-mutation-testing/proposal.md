@@ -1,7 +1,7 @@
 ---
 id: "qa-014-mutation-testing"
 type: spec
-status: proposed
+status: archived # draft | implementing | verifying | archived
 created: "2026-06-19"
 tags: [spec, testing, qa, mutation, gremlins, ci]
 issue: 189
