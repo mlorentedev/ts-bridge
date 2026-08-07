@@ -73,15 +73,18 @@ func TestMergeFullPrecedence(t *testing.T) {
 	defer os.Unsetenv("TS_AUTHKEY")
 
 	yaml := PartialConfig{Timeout: mustParseDuration("3m")}
-	flags := FlagSet{Timeout: mustParseDuration("30s")}
+	// 45s, not 30s: the flag value must differ from defaultTimeout (30s), or a
+	// passing assertion would also be consistent with the flag layer never
+	// having been applied at all.
+	flags := FlagSet{Timeout: mustParseDuration("45s")}
 
 	cfg, err := Merge(yaml, flags)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Flag (30s) > Env (1m) > YAML (3m) > Default (30s)
-	if cfg.ConnectTimeout != 30*time.Second {
-		t.Errorf("expected flag timeout 30s, got %v", cfg.ConnectTimeout)
+	// Flag (45s) > Env (1m) > YAML (3m) > Default (30s)
+	if cfg.ConnectTimeout != 45*time.Second {
+		t.Errorf("expected flag timeout 45s, got %v", cfg.ConnectTimeout)
 	}
 }
 
