@@ -1,6 +1,11 @@
 package config
 
 import (
+	"log/slog"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -420,4 +425,198 @@ func TestPrecedenceIssue282UnsetNumericFlagsClobber(t *testing.T) {
 	if cfg.IdleTimeout != 5*time.Minute {
 		t.Errorf("IdleTimeout: expected env value 5m, got %v", cfg.IdleTimeout)
 	}
+}
+
+// --- Guard boundaries and rejection paths ------------------------------------
+//
+// The cases above prove which layer wins. These prove the guards that decide
+// whether a layer's value is admissible at all: port bounds, env validators,
+// and the parse-failure paths. Without them the comparison operators in those
+// guards can be shifted with no test noticing.
+
+// captureWarnings installs a logger that records into buf for the duration of
+// the test, restoring the previous one afterwards.
+func captureWarnings(t *testing.T) *strings.Builder {
+	t.Helper()
+	var buf strings.Builder
+	SetLogger(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { SetLogger(nil) })
+	return &buf
+}
+
+func TestValidateTargetPortBoundaries(t *testing.T) {
+	cases := []struct {
+		target string
+		valid  bool
+	}{
+		{"100.64.0.1:1", true},      // lowest legal port — dies if `port < 1` becomes `<= 1`
+		{"100.64.0.1:65535", true},  // highest legal port — dies if `port > 65535` becomes `>= 65535`
+		{"100.64.0.1:0", false},     // just below the floor
+		{"100.64.0.1:65536", false}, // just above the ceiling
+		{"100.64.0.1:abc", false},   // unparseable
+		{":3389", false},            // empty host
+		{"100.64.0.1", false},       // no port at all
+	}
+
+	for _, c := range cases {
+		t.Run(c.target, func(t *testing.T) {
+			err := validateTarget(c.target)
+			if c.valid && err != nil {
+				t.Errorf("expected %q to be valid, got error: %v", c.target, err)
+			}
+			if !c.valid && err == nil {
+				t.Errorf("expected %q to be rejected, got no error", c.target)
+			}
+		})
+	}
+}
+
+func TestInvalidEnvValueLeavesLowerLayerIntact(t *testing.T) {
+	t.Run("unparseable duration keeps the yaml value and warns", func(t *testing.T) {
+		buf := captureWarnings(t)
+		yaml := PartialConfig{Timeout: 3 * time.Minute}
+		env := map[string]string{"TS_TIMEOUT": "not-a-duration"}
+
+		cfg := mergePrecedence(t, yaml, env, FlagSet{})
+		if cfg.ConnectTimeout != 3*time.Minute {
+			t.Errorf("expected the yaml value 3m to survive an unparseable env var, got %v", cfg.ConnectTimeout)
+		}
+		if !strings.Contains(buf.String(), "TS_TIMEOUT") {
+			t.Errorf("expected a warning naming TS_TIMEOUT, got: %s", buf.String())
+		}
+	})
+
+	t.Run("zero dial timeout is rejected by positiveDuration", func(t *testing.T) {
+		// positiveDuration requires > 0, so 0s must NOT be applied and the
+		// default survives. Dies if the predicate becomes `>= 0`.
+		env := map[string]string{"TS_DIAL_TIMEOUT": "0s"}
+
+		cfg := mergePrecedence(t, PartialConfig{}, env, FlagSet{})
+		if cfg.DialTimeout != defaultDialTimeout {
+			t.Errorf("TS_DIAL_TIMEOUT=0s must be rejected, leaving %v; got %v", defaultDialTimeout, cfg.DialTimeout)
+		}
+	})
+
+	t.Run("zero backoff base is accepted by nonNegativeDuration", func(t *testing.T) {
+		// The mirror case: nonNegativeDuration allows >= 0, so 0s IS applied.
+		// Dies if the predicate becomes `> 0`.
+		env := map[string]string{"TS_DIAL_BACKOFF_BASE": "0s"}
+
+		cfg := mergePrecedence(t, PartialConfig{}, env, FlagSet{})
+		if cfg.DialBackoffBase != 0 {
+			t.Errorf("TS_DIAL_BACKOFF_BASE=0s must be accepted, giving 0s; got %v", cfg.DialBackoffBase)
+		}
+	})
+
+	t.Run("negative backoff base is rejected", func(t *testing.T) {
+		env := map[string]string{"TS_DIAL_BACKOFF_BASE": "-1s"}
+
+		cfg := mergePrecedence(t, PartialConfig{}, env, FlagSet{})
+		if cfg.DialBackoffBase != defaultDialBackoffBase {
+			t.Errorf("a negative backoff base must be rejected, leaving %v; got %v", defaultDialBackoffBase, cfg.DialBackoffBase)
+		}
+	})
+
+	t.Run("zero max connections is rejected by positiveInt64", func(t *testing.T) {
+		// positiveInt64 requires > 0. Dies if the predicate becomes `>= 0`.
+		env := map[string]string{"TS_MAX_CONNECTIONS": "0"}
+
+		cfg := mergePrecedence(t, PartialConfig{}, env, FlagSet{})
+		if cfg.MaxConnections != int64(defaultMaxConnections) {
+			t.Errorf("TS_MAX_CONNECTIONS=0 must be rejected, leaving %d; got %d", defaultMaxConnections, cfg.MaxConnections)
+		}
+	})
+
+	t.Run("unparseable max connections keeps the default and warns", func(t *testing.T) {
+		buf := captureWarnings(t)
+		env := map[string]string{"TS_MAX_CONNECTIONS": "many"}
+
+		cfg := mergePrecedence(t, PartialConfig{}, env, FlagSet{})
+		if cfg.MaxConnections != int64(defaultMaxConnections) {
+			t.Errorf("expected the default %d to survive, got %d", defaultMaxConnections, cfg.MaxConnections)
+		}
+		if !strings.Contains(buf.String(), "TS_MAX_CONNECTIONS") {
+			t.Errorf("expected a warning naming TS_MAX_CONNECTIONS, got: %s", buf.String())
+		}
+	})
+}
+
+func TestLoadYAMLConfigPermissionWarning(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not enforced the same way on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: permission bits are not enforced")
+	}
+
+	write := func(t *testing.T, perm os.FileMode) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte("version: 1\ntarget: \"100.64.0.1:3389\"\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, perm); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	t.Run("world-readable file warns", func(t *testing.T) {
+		buf := captureWarnings(t)
+		cfg, err := LoadYAMLConfig(write(t, 0644))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Target != "100.64.0.1:3389" {
+			t.Errorf("expected the file to still parse, got target %q", cfg.Target)
+		}
+		if !strings.Contains(buf.String(), "loose permissions") {
+			t.Errorf("expected a loose-permissions warning, got: %q", buf.String())
+		}
+	})
+
+	t.Run("owner-only file does not warn", func(t *testing.T) {
+		buf := captureWarnings(t)
+		if _, err := LoadYAMLConfig(write(t, 0600)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if strings.Contains(buf.String(), "loose permissions") {
+			t.Errorf("0600 must not warn, got: %q", buf.String())
+		}
+	})
+}
+
+func TestLoadYAMLConfigMissingFileIsNotAnError(t *testing.T) {
+	cfg, err := LoadYAMLConfig(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
+	if err != nil {
+		t.Fatalf("a missing config file must not be an error, got: %v", err)
+	}
+	if cfg != (PartialConfig{}) {
+		t.Errorf("expected a zero PartialConfig, got %+v", cfg)
+	}
+}
+
+func TestValidateDialRetriesRejectsNegativeButAllowsZero(t *testing.T) {
+	// `.env.example` documents "0 disables". The guard is `n < 0`, so zero must
+	// pass — this dies if the comparison is shifted to `n <= 0`.
+	t.Run("zero is allowed", func(t *testing.T) {
+		t.Setenv("TS_DIAL_RETRIES", "0")
+		if err := validateDialRetries(FlagSet{}, Config{}); err != nil {
+			t.Errorf("TS_DIAL_RETRIES=0 must be allowed (0 disables retries), got: %v", err)
+		}
+	})
+
+	t.Run("negative env value is rejected", func(t *testing.T) {
+		t.Setenv("TS_DIAL_RETRIES", "-1")
+		if err := validateDialRetries(FlagSet{}, Config{}); err == nil {
+			t.Error("TS_DIAL_RETRIES=-1 must be rejected, got no error")
+		}
+	})
+
+	t.Run("negative flag value is rejected", func(t *testing.T) {
+		t.Setenv("TS_DIAL_RETRIES", "")
+		if err := validateDialRetries(FlagSet{DialRetries: -1}, Config{}); err == nil {
+			t.Error("--dial-retries=-1 must be rejected, got no error")
+		}
+	})
 }
