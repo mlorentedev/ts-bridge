@@ -28,7 +28,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `specs/` (and `specs/archive/`) | Per-feature SDD folders (proposal + tasks + verification) — see §Workflow Rules |
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
 | `scripts/host/` | Host setup (`setup.ps1`, `ts-bridge.service`) |
-| `scripts/tests/` | CLI smoke tests (`smoke.bats` POSIX / `smoke.ps1` Windows) exercising the built binary |
+| `scripts/tests/` | CLI smoke tests (`smoke.bats`, BATS) exercising the built binary. Cross-platform CLI coverage belongs in Go tests under `cmd/cli/`, which the `test-windows` job already runs on Windows. |
 | `Makefile` | Dev task runner — mutation-testing targets (gremlins, install-only; see QA-014) |
 | `.github/workflows/ci.yml` | CI jobs: `test`, `test-windows`, `smoke` (bats), `build-matrix`, `lint`, `security` (gosec) |
 | `.github/workflows/release.yml` | Automated releases via release-please (PAT-driven) |

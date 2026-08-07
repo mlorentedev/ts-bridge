@@ -4,10 +4,16 @@ Tracks what the automated smoke suites cover versus what still requires a human
 with real hardware. This is a **living** document: each QA ticket
 (QA-004..QA-013) updates the row(s) it lands.
 
-- **POSIX / Linux / macOS** → [`scripts/tests/smoke.bats`](../scripts/tests/smoke.bats) (BATS)
-- **Windows** → [`scripts/tests/smoke.ps1`](../scripts/tests/smoke.ps1) (PowerShell)
+- **POSIX / Linux / macOS** → [`scripts/tests/smoke.bats`](../scripts/tests/smoke.bats) (BATS),
+  run by the `smoke` job on every PR.
+- **Cross-platform (incl. Windows)** → Go tests under [`cmd/cli/`](../cmd/cli/),
+  run by the `test` and `test-windows` jobs on every PR.
 
-Both run in CI: the `smoke` job (Linux) executes the BATS suite on every PR.
+There is no PowerShell suite. `smoke.ps1` was retired in #271: it ran in no CI
+job, so it drifted from the CLI it claimed to test — three of its nineteen cases
+asserted things that were never true. Cross-platform CLI coverage is written in
+Go, where it is visible to `go test -cover` and to the mutation harness (QA-014);
+a smoke suite invoked as a subprocess is invisible to both.
 
 ## Legend
 
@@ -20,25 +26,30 @@ Both run in CI: the `smoke` job (Linux) executes the BATS suite on every PR.
 
 ## Coverage by command
 
-| Command | Surface | BATS | PowerShell | Ticket |
-|---------|---------|------|------------|--------|
-| `version` | output, `--short`, `--version` flag | ✅ | ✅ | QA-004 (#173) |
-| *(root)* | `--help`, `-h`, `help`, no-args, `-v`, unknown command, unknown flag | ✅ | 🔶 | QA-004 (#173) |
-| `connect` | `--help` reachable | 🔶 | 🔶 | QA-004 (#173) |
-| `init` | `--help` reachable | 🔶 | 🔶 | QA-004 (#173) |
-| `status` | `--help` reachable | 🔶 | 🔶 | QA-004 (#173) |
-| `discover` | `--help` reachable | 🔶 | 🔶 | QA-004 (#173) |
-| `import` | `--help` reachable | 🔶 | ⬜ | QA-004 (#173) |
-| `host` | `--help`, subcommand `--help` reachable | 🔶 | 🔶 | QA-004 (#173) |
-| `init` | all flags, formats, overwrite protection, auth-key-not-in-yaml | ✅ | ✅ | QA-005 (#174) |
-| `status` | not-running, `--json` (down), `--addr`, `--watch`/`--interval` flags | 🔶 | 🔶 | QA-006 (#175) |
-| `connect` | flag parsing + config-validation errors (target/auth/auth-key-file/bad flag), auth-key warning | 🔶 | 🔶 | QA-007 (#176) |
-| `discover` | required auth/tailnet errors, `--port` validation, `--json` no-auth path, flag surface | 🔶 | ⬜ | QA-008 (#177) |
-| `host setup` | `--help` flags + all platforms, non-root elevation guard, `--port` parse error | 🔶 | ⬜ | QA-009 (#178) |
-| `host check` | `--help`, read-only status block (exit 0, no admin), `--json` fields | ✅ | 🔶 | QA-010 (#179) |
-| *(cross-cutting)* | config precedence (flags > env > YAML > defaults) | ⬜ | 🔶 | QA-011 (#181) |
-| *(cross-cutting)* | error handling (missing key, bad target/ports, timeouts) | ⬜ | ⬜ | QA-012 (#182) |
-| *(e2e)* | multi-device real mesh, bidirectional forwarding | 👤 | 👤 | QA-013 (#183) |
+| Command | Surface | BATS | Ticket |
+|---------|---------|------|--------|
+| `version` | output, `--short`, `--version` flag | ✅ | QA-004 (#173) |
+| *(root)* | `--help`, `-h`, `help`, no-args, `-v`, unknown command, unknown flag | ✅ | QA-004 (#173) |
+| `connect` | `--help` reachable | 🔶 | QA-004 (#173) |
+| `init` | `--help` reachable | 🔶 | QA-004 (#173) |
+| `status` | `--help` reachable | 🔶 | QA-004 (#173) |
+| `discover` | `--help` reachable | 🔶 | QA-004 (#173) |
+| `import` | `--help` reachable | 🔶 | QA-004 (#173) |
+| `host` | `--help`, subcommand `--help` reachable | 🔶 | QA-004 (#173) |
+| `init` | all flags, formats, overwrite protection, auth-key-not-in-yaml | ✅ | QA-005 (#174) |
+| `status` | not-running, `--json` (down), `--addr`, `--watch`/`--interval` flags | 🔶 | QA-006 (#175) |
+| `connect` | flag parsing + config-validation errors (target/auth/auth-key-file/bad flag), auth-key warning | 🔶 | QA-007 (#176) |
+| `discover` | required auth/tailnet errors, `--port` validation, `--json` no-auth path, flag surface | 🔶 | QA-008 (#177) |
+| `host setup` | `--help` flags + all platforms, non-root elevation guard, `--port` parse error | 🔶 | QA-009 (#178) |
+| `host check` | `--help`, read-only status block (exit 0, no admin), `--json` fields, stdout is exactly one JSON object | ✅ | QA-010 (#179) |
+| *(cross-cutting)* | config precedence (flags > env > YAML > defaults) | ⬜ | QA-011 (#181) |
+| *(cross-cutting)* | error handling (missing key, bad target/ports, timeouts) | ⬜ | QA-012 (#182) |
+| *(e2e)* | multi-device real mesh, bidirectional forwarding | 👤 | QA-013 (#183) |
+
+> The Go-side column is deliberately absent: some existing `cmd/cli` tests
+> exercise hand-built replicas of the command tree rather than the real one, so
+> a per-row Go mark would overstate coverage. It lands once the command tree is
+> constructible from tests.
 
 ## Scope note
 
@@ -76,7 +87,6 @@ suite, to keep the suite fast, hermetic, and non-hanging:
   which returns before any side effect; idempotency, per-step results, and
   partial-failure handling stay manual / QA-013 e2e. `internal/host` carries the
   unit coverage for the platform-specific logic.
-- **`host check --json` strict parseability** — the QA-010 test asserts the JSON
-  *fields* are present but not that stdout parses as a single JSON object,
-  because the logger currently prints a line to stdout before the payload
-  (bug #254). Tighten to a real `jq` parse once #254 is fixed.
+(`host check --json` strict parseability used to be listed here, deferred on
+bug #254. That bug is fixed — host logs now go to stderr — and the suite asserts
+stdout holds exactly one JSON object, so the exclusion no longer applies.)

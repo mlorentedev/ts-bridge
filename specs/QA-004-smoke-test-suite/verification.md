@@ -17,7 +17,7 @@ issue: 78
 - [x] `smoke` CI job added (`.github/workflows/ci.yml`, Linux/BATS) — green on PR #242
 - [x] `docs/qa-coverage.md` created (living matrix; 100% flag coverage is the QA-004 umbrella end-state, filled by QA-005..QA-013)
 - [x] CI `smoke` job green (PR #242, 11/11 jobs) — **merged** `2543bc2`
-- [ ] `powershell -File scripts/tests/smoke.ps1` — all tests green on Windows *(existing suite; expansion deferred)*
+- [~] `powershell -File scripts/tests/smoke.ps1` — all tests green on Windows *(**dropped in #271** — suite retired unrun; 17 of its 19 cases were already covered by smoke.bats and 2 were defective)*
 
 ### QA-005 (#174) — init
 

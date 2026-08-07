@@ -46,10 +46,18 @@ Each issue is a self-contained PR. Execute in this order:
 All BATS issues share the same test file: `scripts/tests/smoke.bats`. Each issue adds tests to the same file in its PR.
 
 - [x] **Create:** `scripts/tests/helpers/smoke_helpers.bash` — BATS helper functions *(QA-004 / #173)*
-- [ ] **Create:** `scripts/tests/helpers/smoke_helpers.psm1` — PowerShell helper module *(deferred; smoke.ps1 uses inline helpers today)*
+- [~] **Create:** `scripts/tests/helpers/smoke_helpers.psm1` — PowerShell helper module *(**dropped in #271** — the PowerShell suite was retired; there is nothing left to share helpers with)*
 - [ ] **Create:** `scripts/tests/fixtures/` — test data files *(deferred to QA-011/#181 — `init` writes config rather than reading it, so the first ticket that consumes YAML input fixtures is config-precedence)*
-- [ ] **Expand:** `scripts/tests/smoke.ps1` — add discover, status, host check coverage *(QA-006/#175, QA-008/#177, QA-010/#179)*
+- [~] **Expand:** `scripts/tests/smoke.ps1` — add discover, status, host check coverage *(**dropped in #271** — smoke.ps1 retired; cross-platform CLI coverage moves to Go tests under `cmd/cli/`, which `test-windows` already runs)*
 - [x] **Update:** `.github/workflows/ci.yml` — add `smoke` job (Linux/BATS) *(QA-004 / #173; Windows PowerShell smoke job deferred)*
 - [x] **Create:** `docs/qa-coverage.md` — feature coverage matrix *(QA-004 / #173)*
 
 > **Decision:** BATS for POSIX because it's the de facto standard for shell test suites, well-documented, and CI-friendly. PowerShell for Windows because the existing smoke test is already in PS and Windows doesn't have a POSIX shell by default.
+>
+> **Superseded (#271, 2026-08-06):** the PowerShell half of that decision is
+> reversed. A second suite describing the same CLI surface drifts from it — and
+> did: three of smoke.ps1's nineteen cases asserted things that were never true,
+> unnoticed because no CI job ran the file. Cross-platform CLI coverage is
+> written in Go under `cmd/cli/` instead, where `test-windows` already executes
+> it on `windows-latest` and where it is visible to `go test -cover` and to the
+> QA-014 mutation harness. BATS stays as the Linux end-to-end wiring check.
