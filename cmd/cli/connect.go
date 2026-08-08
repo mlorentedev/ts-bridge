@@ -174,13 +174,24 @@ func collectFlags(cmd *cobra.Command) config.FlagSet {
 
 	fs.Timeout, _ = cmd.Flags().GetDuration("timeout")
 	fs.DialTimeout, _ = cmd.Flags().GetDuration("dial-timeout")
-	fs.IdleTimeout, _ = cmd.Flags().GetDuration("idle-timeout")
 	fs.DrainTimeout, _ = cmd.Flags().GetDuration("drain-timeout")
 	fs.DialBackoffBase, _ = cmd.Flags().GetDuration("dial-backoff-base")
 	fs.DialBackoffMax, _ = cmd.Flags().GetDuration("dial-backoff-max")
 
 	fs.MaxConns, _ = cmd.Flags().GetInt64("max-conns")
-	fs.DialRetries, _ = cmd.Flags().GetInt("dial-retries")
+
+	// 0 is a meaningful value for both of these (it disables the feature), so
+	// they are only recorded when the user actually passed the flag. Reading
+	// them unconditionally would send cobra's own default of 0 into Merge and
+	// silently overwrite whatever env or YAML supplied. (#282)
+	if cmd.Flags().Changed("idle-timeout") {
+		v, _ := cmd.Flags().GetDuration("idle-timeout")
+		fs.IdleTimeout = &v
+	}
+	if cmd.Flags().Changed("dial-retries") {
+		v, _ := cmd.Flags().GetInt("dial-retries")
+		fs.DialRetries = &v
+	}
 
 	fs.ManualMode, _ = cmd.Flags().GetBool("manual-mode")
 	fs.Reset, _ = cmd.Flags().GetBool("reset")

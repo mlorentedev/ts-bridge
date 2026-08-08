@@ -33,20 +33,25 @@ type PartialConfig struct {
 
 // FlagSet holds values provided via CLI flags.
 type FlagSet struct {
-	Target          string
-	AuthKey         string // #nosec G117 -- internal struct, never serialized
-	AuthKeyFile     string
-	Instance        string
-	LocalAddr       string
-	Hostname        string
-	StateDir        string
-	ControlURL      string
-	Timeout         time.Duration
-	DialTimeout     time.Duration
-	DrainTimeout    time.Duration
-	IdleTimeout     time.Duration
+	Target       string
+	AuthKey      string // #nosec G117 -- internal struct, never serialized
+	AuthKeyFile  string
+	Instance     string
+	LocalAddr    string
+	Hostname     string
+	StateDir     string
+	ControlURL   string
+	Timeout      time.Duration
+	DialTimeout  time.Duration
+	DrainTimeout time.Duration
+	// IdleTimeout and DialRetries are pointers because 0 is a legitimate value
+	// for both (0 disables the idle timeout; 0 disables retries), so the zero
+	// value cannot double as "the user did not pass this flag". Every other
+	// numeric field treats 0 as unset via a `> 0` guard — see applyFlags. nil
+	// means unset; a non-nil pointer means the user supplied that value. (#282)
+	IdleTimeout     *time.Duration
 	MaxConns        int64
-	DialRetries     int
+	DialRetries     *int
 	DialBackoffBase time.Duration
 	DialBackoffMax  time.Duration
 	HealthAddr      string
@@ -141,8 +146,8 @@ func validateRequiredFields(cfg Config) error {
 
 // validateDialRetries checks dial retries across all input sources.
 func validateDialRetries(flags FlagSet, cfg Config) error {
-	if flags.DialRetries < 0 {
-		return fmt.Errorf("dial retries must be non-negative (0 disables retries), got: %d", flags.DialRetries)
+	if flags.DialRetries != nil && *flags.DialRetries < 0 {
+		return fmt.Errorf("dial retries must be non-negative (0 disables retries), got: %d", *flags.DialRetries)
 	}
 	if v := os.Getenv("TS_DIAL_RETRIES"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n < 0 {
@@ -310,8 +315,8 @@ func applyEnvInt64(dst *int64, key string, validate func(int64) bool) {
 
 func nonNegativeDuration(d time.Duration) bool { return d >= 0 }
 func positiveDuration(d time.Duration) bool    { return d > 0 }
-func nonNegativeInt(n int) bool               { return n >= 0 }
-func positiveInt64(n int64) bool              { return n > 0 }
+func nonNegativeInt(n int) bool                { return n >= 0 }
+func positiveInt64(n int64) bool               { return n > 0 }
 
 func applyFlags(cfg *Config, flags FlagSet) {
 	// String fields.
@@ -334,8 +339,8 @@ func applyFlags(cfg *Config, flags FlagSet) {
 	if flags.DrainTimeout > 0 {
 		cfg.DrainTimeout = flags.DrainTimeout
 	}
-	if flags.IdleTimeout >= 0 {
-		cfg.IdleTimeout = flags.IdleTimeout
+	if flags.IdleTimeout != nil {
+		cfg.IdleTimeout = *flags.IdleTimeout
 	}
 	if flags.DialBackoffBase > 0 {
 		cfg.DialBackoffBase = flags.DialBackoffBase
@@ -348,8 +353,8 @@ func applyFlags(cfg *Config, flags FlagSet) {
 	if flags.MaxConns > 0 {
 		cfg.MaxConnections = flags.MaxConns
 	}
-	if flags.DialRetries >= 0 {
-		cfg.DialRetries = flags.DialRetries
+	if flags.DialRetries != nil {
+		cfg.DialRetries = *flags.DialRetries
 	}
 }
 

@@ -411,8 +411,6 @@ func TestZeroInHigherLayerDoesNotOverride(t *testing.T) {
 // test should pass as written. QA-011 is a test-only change (see
 // specs/QA-011-config-precedence/proposal.md), so the fix is not made here.
 func TestPrecedenceIssue282UnsetNumericFlagsClobber(t *testing.T) {
-	t.Skip("known defect: see #282 — unset --dial-retries/--idle-timeout clobber env and YAML")
-
 	env := map[string]string{
 		"TS_DIAL_RETRIES": "5",
 		"TS_IDLE_TIMEOUT": "5m",
@@ -433,6 +431,11 @@ func TestPrecedenceIssue282UnsetNumericFlagsClobber(t *testing.T) {
 // whether a layer's value is admissible at all: port bounds, env validators,
 // and the parse-failure paths. Without them the comparison operators in those
 // guards can be shifted with no test noticing.
+
+// ptr returns a pointer to v. FlagSet models "the user passed this flag" as a
+// non-nil pointer for the fields where 0 is a legitimate value (#282), so test
+// tables need to distinguish ptr(0) from nil explicitly.
+func ptr[T any](v T) *T { return &v }
 
 // captureWarnings installs a logger that records into buf for the duration of
 // the test, restoring the previous one afterwards.
@@ -615,7 +618,7 @@ func TestValidateDialRetriesRejectsNegativeButAllowsZero(t *testing.T) {
 
 	t.Run("negative flag value is rejected", func(t *testing.T) {
 		t.Setenv("TS_DIAL_RETRIES", "")
-		if err := validateDialRetries(FlagSet{DialRetries: -1}, Config{}); err == nil {
+		if err := validateDialRetries(FlagSet{DialRetries: ptr(-1)}, Config{}); err == nil {
 			t.Error("--dial-retries=-1 must be rejected, got no error")
 		}
 	})
