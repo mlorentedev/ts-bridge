@@ -425,6 +425,47 @@ func TestPrecedenceIssue282UnsetNumericFlagsClobber(t *testing.T) {
 	}
 }
 
+// TestMergeIdleTimeoutRejectsNegative covers the guard that had to replace the
+// accidental protection the old `>= 0` flag check provided. That comparison
+// silently discarded a negative --idle-timeout; once a supplied flag is always
+// applied, nothing stopped a negative duration reaching the proxy, where it
+// would expire every connection immediately. Only the flag layer can produce
+// one — TS_IDLE_TIMEOUT goes through nonNegativeDuration and the YAML guard is
+// `> 0`.
+func TestMergeIdleTimeoutRejectsNegative(t *testing.T) {
+	cases := []struct {
+		name  string
+		flag  *time.Duration
+		valid bool
+	}{
+		{"unset", nil, true},
+		{"zero disables the timeout", ptr(time.Duration(0)), true},
+		{"positive", ptr(30 * time.Minute), true},
+		{"negative", ptr(-1 * time.Second), false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("TS_TARGET", precedenceTarget)
+			t.Setenv("TS_AUTHKEY", precedenceAuthKey)
+
+			_, err := Merge(PartialConfig{}, FlagSet{IdleTimeout: c.flag})
+
+			if c.valid && err != nil {
+				t.Errorf("expected no error, got: %v", err)
+			}
+			if !c.valid {
+				if err == nil {
+					t.Fatal("expected an error, got none")
+				}
+				if !strings.Contains(err.Error(), "idle timeout must be non-negative") {
+					t.Errorf("error should name the idle timeout, got: %v", err)
+				}
+			}
+		})
+	}
+}
+
 // --- Guard boundaries and rejection paths ------------------------------------
 //
 // The cases above prove which layer wins. These prove the guards that decide

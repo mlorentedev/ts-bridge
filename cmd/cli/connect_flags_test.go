@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+// flagPtr returns a pointer to v. FlagSet models "the user passed this flag" as
+// a non-nil pointer for the fields where 0 is a legitimate value (#282), so the
+// case table has to express ptr(0) and nil as different expectations.
+func flagPtr[T any](v T) *T { return &v }
+
 // restoreFlag resets a connectCmd flag to its registered default after the test.
 // connectCmd is package-level state shared by every test in this package, and
 // pflag records "was this set" on the Flag itself, so both the value and the
@@ -31,60 +36,69 @@ func restoreFlag(t *testing.T, name, def string) {
 // This exercises connectCmd itself, with the flag registrations from init(),
 // rather than a hand-built replica of it.
 func TestCollectFlagsUnsetNumericFlags(t *testing.T) {
-	t.Run("unset flags stay nil", func(t *testing.T) {
-		fs := collectFlags(connectCmd)
+	cases := []struct {
+		name string
+		// "" means the flag is not passed at all — the case the bug lived in.
+		setIdle     string
+		setRetries  string
+		wantIdle    *time.Duration
+		wantRetries *int
+	}{
+		{
+			name: "unset flags stay nil",
+		},
+		{
+			name:       "explicit zero is recorded, not read as unset",
+			setIdle:    "0s",
+			setRetries: "0",
+			// The distinction the whole change exists for: nil here would mean
+			// "--dial-retries 0" silently fell back to the default of 3.
+			wantIdle:    flagPtr(time.Duration(0)),
+			wantRetries: flagPtr(0),
+		},
+		{
+			name:        "non-zero values are carried through",
+			setIdle:     "90s",
+			setRetries:  "7",
+			wantIdle:    flagPtr(90 * time.Second),
+			wantRetries: flagPtr(7),
+		},
+	}
 
-		if fs.IdleTimeout != nil {
-			t.Errorf("IdleTimeout: expected nil when --idle-timeout is not passed, got %v", *fs.IdleTimeout)
-		}
-		if fs.DialRetries != nil {
-			t.Errorf("DialRetries: expected nil when --dial-retries is not passed, got %d", *fs.DialRetries)
-		}
-	})
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.setIdle != "" {
+				restoreFlag(t, "idle-timeout", "0s")
+				if err := connectCmd.Flags().Set("idle-timeout", c.setIdle); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if c.setRetries != "" {
+				restoreFlag(t, "dial-retries", "0")
+				if err := connectCmd.Flags().Set("dial-retries", c.setRetries); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-	t.Run("explicit zero is recorded, not read as unset", func(t *testing.T) {
-		restoreFlag(t, "idle-timeout", "0s")
-		restoreFlag(t, "dial-retries", "0")
-		if err := connectCmd.Flags().Set("idle-timeout", "0s"); err != nil {
-			t.Fatal(err)
-		}
-		if err := connectCmd.Flags().Set("dial-retries", "0"); err != nil {
-			t.Fatal(err)
-		}
+			fs := collectFlags(connectCmd)
 
-		fs := collectFlags(connectCmd)
+			switch {
+			case c.wantIdle == nil && fs.IdleTimeout != nil:
+				t.Errorf("IdleTimeout: expected nil when --idle-timeout is not passed, got %v", *fs.IdleTimeout)
+			case c.wantIdle != nil && fs.IdleTimeout == nil:
+				t.Errorf("IdleTimeout: expected %v to be recorded, got nil", *c.wantIdle)
+			case c.wantIdle != nil && *fs.IdleTimeout != *c.wantIdle:
+				t.Errorf("IdleTimeout: expected %v, got %v", *c.wantIdle, *fs.IdleTimeout)
+			}
 
-		// The distinction this whole change exists for: a nil here would mean
-		// "--dial-retries 0" silently fell back to the default of 3.
-		if fs.IdleTimeout == nil {
-			t.Error("IdleTimeout: --idle-timeout 0s must be recorded, got nil")
-		} else if *fs.IdleTimeout != 0 {
-			t.Errorf("IdleTimeout: expected 0s, got %v", *fs.IdleTimeout)
-		}
-		if fs.DialRetries == nil {
-			t.Error("DialRetries: --dial-retries 0 must be recorded, got nil")
-		} else if *fs.DialRetries != 0 {
-			t.Errorf("DialRetries: expected 0, got %d", *fs.DialRetries)
-		}
-	})
-
-	t.Run("non-zero values are carried through", func(t *testing.T) {
-		restoreFlag(t, "idle-timeout", "0s")
-		restoreFlag(t, "dial-retries", "0")
-		if err := connectCmd.Flags().Set("idle-timeout", "90s"); err != nil {
-			t.Fatal(err)
-		}
-		if err := connectCmd.Flags().Set("dial-retries", "7"); err != nil {
-			t.Fatal(err)
-		}
-
-		fs := collectFlags(connectCmd)
-
-		if fs.IdleTimeout == nil || *fs.IdleTimeout != 90*time.Second {
-			t.Errorf("IdleTimeout: expected 90s, got %v", fs.IdleTimeout)
-		}
-		if fs.DialRetries == nil || *fs.DialRetries != 7 {
-			t.Errorf("DialRetries: expected 7, got %v", fs.DialRetries)
-		}
-	})
+			switch {
+			case c.wantRetries == nil && fs.DialRetries != nil:
+				t.Errorf("DialRetries: expected nil when --dial-retries is not passed, got %d", *fs.DialRetries)
+			case c.wantRetries != nil && fs.DialRetries == nil:
+				t.Errorf("DialRetries: expected %d to be recorded, got nil", *c.wantRetries)
+			case c.wantRetries != nil && *fs.DialRetries != *c.wantRetries:
+				t.Errorf("DialRetries: expected %d, got %d", *c.wantRetries, *fs.DialRetries)
+			}
+		})
+	}
 }

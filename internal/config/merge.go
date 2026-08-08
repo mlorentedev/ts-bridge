@@ -92,6 +92,9 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	if err := validateDialRetries(flags, cfg); err != nil {
 		return Config{}, err
 	}
+	if err := validateIdleTimeout(cfg); err != nil {
+		return Config{}, err
+	}
 
 	// Resolve AutoInstance from the full precedence chain:
 	// flags.ManualMode > env TS_AUTO_INSTANCE > yaml auto_instance > default.
@@ -156,6 +159,20 @@ func validateDialRetries(flags FlagSet, cfg Config) error {
 	}
 	if cfg.DialRetries < 0 {
 		return fmt.Errorf("dial retries must be non-negative (0 disables retries), got: %d", cfg.DialRetries)
+	}
+	return nil
+}
+
+// validateIdleTimeout rejects a negative idle timeout.
+//
+// Only the flag layer can produce one: TS_IDLE_TIMEOUT goes through
+// nonNegativeDuration, and the YAML guard is `> 0`. Before #282 the flag guard
+// was `>= 0`, which silently dropped a negative value rather than rejecting it;
+// now that a supplied flag is always applied, the check has to be explicit —
+// otherwise a negative deadline reaches the proxy and expires immediately.
+func validateIdleTimeout(cfg Config) error {
+	if cfg.IdleTimeout < 0 {
+		return fmt.Errorf("idle timeout must be non-negative (0 disables the idle timeout), got: %s", cfg.IdleTimeout)
 	}
 	return nil
 }
