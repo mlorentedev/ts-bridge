@@ -567,28 +567,31 @@ func TestMergeValidationOrder_InvalidAuthKeyFormat(t *testing.T) {
 
 func TestMergeDialRetriesValidation(t *testing.T) {
 	tests := []struct {
-		name            string
-		envDialRetries  string
-		flagDialRetries int
+		name           string
+		envDialRetries string
+		// nil means the user did not pass --dial-retries at all; ptr(0) means
+		// they passed it explicitly as 0. Before #282 these were the same value
+		// and the unset case silently clobbered env and YAML.
+		flagDialRetries *int
 		wantErr         bool
 		wantRetries     int
 		errContains     string
 	}{
 		{
 			name:            "negative flag rejected",
-			flagDialRetries: -1,
+			flagDialRetries: ptr(-1),
 			wantErr:         true,
 			errContains:     "dial retries must be non-negative",
 		},
 		{
 			name:            "zero flag accepted",
-			flagDialRetries: 0,
+			flagDialRetries: ptr(0),
 			wantErr:         false,
 			wantRetries:     0,
 		},
 		{
 			name:            "positive flag accepted",
-			flagDialRetries: 5,
+			flagDialRetries: ptr(5),
 			wantErr:         false,
 			wantRetries:     5,
 		},
@@ -599,16 +602,16 @@ func TestMergeDialRetriesValidation(t *testing.T) {
 			errContains:    "dial retries must be non-negative",
 		},
 		{
-			name:           "negative env with flag 0 rejected",
-			envDialRetries: "-5",
-			flagDialRetries: 0,
-			wantErr:        true,
-			errContains:    "dial retries must be non-negative",
+			name:            "negative env with flag 0 rejected",
+			envDialRetries:  "-5",
+			flagDialRetries: ptr(0),
+			wantErr:         true,
+			errContains:     "dial retries must be non-negative",
 		},
 		{
 			name:            "flag overrides env (flag 3, env 10)",
 			envDialRetries:  "10",
-			flagDialRetries: 3,
+			flagDialRetries: ptr(3),
 			wantErr:         false,
 			wantRetries:     3,
 		},

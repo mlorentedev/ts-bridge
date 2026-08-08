@@ -411,8 +411,6 @@ func TestZeroInHigherLayerDoesNotOverride(t *testing.T) {
 // test should pass as written. QA-011 is a test-only change (see
 // specs/QA-011-config-precedence/proposal.md), so the fix is not made here.
 func TestPrecedenceIssue282UnsetNumericFlagsClobber(t *testing.T) {
-	t.Skip("known defect: see #282 — unset --dial-retries/--idle-timeout clobber env and YAML")
-
 	env := map[string]string{
 		"TS_DIAL_RETRIES": "5",
 		"TS_IDLE_TIMEOUT": "5m",
@@ -427,12 +425,58 @@ func TestPrecedenceIssue282UnsetNumericFlagsClobber(t *testing.T) {
 	}
 }
 
+// TestMergeIdleTimeoutRejectsNegative covers the guard that had to replace the
+// accidental protection the old `>= 0` flag check provided. That comparison
+// silently discarded a negative --idle-timeout; once a supplied flag is always
+// applied, nothing stopped a negative duration reaching the proxy, where it
+// would expire every connection immediately. Only the flag layer can produce
+// one — TS_IDLE_TIMEOUT goes through nonNegativeDuration and the YAML guard is
+// `> 0`.
+func TestMergeIdleTimeoutRejectsNegative(t *testing.T) {
+	cases := []struct {
+		name  string
+		flag  *time.Duration
+		valid bool
+	}{
+		{"unset", nil, true},
+		{"zero disables the timeout", ptr(time.Duration(0)), true},
+		{"positive", ptr(30 * time.Minute), true},
+		{"negative", ptr(-1 * time.Second), false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("TS_TARGET", precedenceTarget)
+			t.Setenv("TS_AUTHKEY", precedenceAuthKey)
+
+			_, err := Merge(PartialConfig{}, FlagSet{IdleTimeout: c.flag})
+
+			if c.valid && err != nil {
+				t.Errorf("expected no error, got: %v", err)
+			}
+			if !c.valid {
+				if err == nil {
+					t.Fatal("expected an error, got none")
+				}
+				if !strings.Contains(err.Error(), "idle timeout must be non-negative") {
+					t.Errorf("error should name the idle timeout, got: %v", err)
+				}
+			}
+		})
+	}
+}
+
 // --- Guard boundaries and rejection paths ------------------------------------
 //
 // The cases above prove which layer wins. These prove the guards that decide
 // whether a layer's value is admissible at all: port bounds, env validators,
 // and the parse-failure paths. Without them the comparison operators in those
 // guards can be shifted with no test noticing.
+
+// ptr returns a pointer to v. FlagSet models "the user passed this flag" as a
+// non-nil pointer for the fields where 0 is a legitimate value (#282), so test
+// tables need to distinguish ptr(0) from nil explicitly.
+func ptr[T any](v T) *T { return &v }
 
 // captureWarnings installs a logger that records into buf for the duration of
 // the test, restoring the previous one afterwards.
@@ -615,7 +659,7 @@ func TestValidateDialRetriesRejectsNegativeButAllowsZero(t *testing.T) {
 
 	t.Run("negative flag value is rejected", func(t *testing.T) {
 		t.Setenv("TS_DIAL_RETRIES", "")
-		if err := validateDialRetries(FlagSet{DialRetries: -1}, Config{}); err == nil {
+		if err := validateDialRetries(FlagSet{DialRetries: ptr(-1)}, Config{}); err == nil {
 			t.Error("--dial-retries=-1 must be rejected, got no error")
 		}
 	})

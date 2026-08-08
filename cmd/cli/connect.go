@@ -174,13 +174,13 @@ func collectFlags(cmd *cobra.Command) config.FlagSet {
 
 	fs.Timeout, _ = cmd.Flags().GetDuration("timeout")
 	fs.DialTimeout, _ = cmd.Flags().GetDuration("dial-timeout")
-	fs.IdleTimeout, _ = cmd.Flags().GetDuration("idle-timeout")
 	fs.DrainTimeout, _ = cmd.Flags().GetDuration("drain-timeout")
 	fs.DialBackoffBase, _ = cmd.Flags().GetDuration("dial-backoff-base")
 	fs.DialBackoffMax, _ = cmd.Flags().GetDuration("dial-backoff-max")
 
 	fs.MaxConns, _ = cmd.Flags().GetInt64("max-conns")
-	fs.DialRetries, _ = cmd.Flags().GetInt("dial-retries")
+
+	collectOptionalNumericFlags(cmd, &fs)
 
 	fs.ManualMode, _ = cmd.Flags().GetBool("manual-mode")
 	fs.Reset, _ = cmd.Flags().GetBool("reset")
@@ -189,6 +189,25 @@ func collectFlags(cmd *cobra.Command) config.FlagSet {
 	// Validation happens in Merge().
 
 	return fs
+}
+
+// collectOptionalNumericFlags records --idle-timeout and --dial-retries only
+// when the user actually passed them.
+//
+// 0 is a meaningful value for both (it disables the feature), so cobra's own
+// default of 0 is indistinguishable from "not supplied" by value alone.
+// Reading them unconditionally sent that 0 into Merge, where it overwrote
+// whatever env or YAML had provided — and the built-in default of 3 retries
+// along with it. (#282)
+func collectOptionalNumericFlags(cmd *cobra.Command, fs *config.FlagSet) {
+	if cmd.Flags().Changed("idle-timeout") {
+		v, _ := cmd.Flags().GetDuration("idle-timeout")
+		fs.IdleTimeout = &v
+	}
+	if cmd.Flags().Changed("dial-retries") {
+		v, _ := cmd.Flags().GetInt("dial-retries")
+		fs.DialRetries = &v
+	}
 }
 
 // readAuthKeyFile reads an auth key from a file with permission checks.
