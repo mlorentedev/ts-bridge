@@ -61,6 +61,7 @@ gosec ./...
 - **ADR-007:** Multi-package split under `internal/` (this is the current layout — see Key Paths)
 - **ADR-010:** `cmd/cli` Cobra package layout — `main.go` stays a thin entry point
 - **ADR-012:** Named profile model for multi-tailnet configuration (current config model)
+- **ADR-013:** CLI coverage lives in Go tests under `cmd/cli/`, not a second native suite — `smoke.bats` is frozen as the Linux wiring check
 - Full ADR index: [`docs/adr/`](docs/adr/) (project-bound knowledge, docs-as-code)
 
 ## Documentation
