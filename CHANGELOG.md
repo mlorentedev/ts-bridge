@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.2](https://github.com/mlorentedev/ts-bridge/compare/v1.17.1...v1.17.2) (2026-08-08)
+
+
+### Bug Fixes
+
+* **config:** stop unset --dial-retries/--idle-timeout clobbering env and YAML ([#286](https://github.com/mlorentedev/ts-bridge/issues/286)) ([76af077](https://github.com/mlorentedev/ts-bridge/commit/76af0772921002e0281296e56f5a9c3021f253f3))
+
 ## [1.17.1](https://github.com/mlorentedev/ts-bridge/compare/v1.17.0...v1.17.1) (2026-08-05)
 
 
