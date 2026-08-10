@@ -14,11 +14,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// statusCmd is the "ts-bridge status" subcommand.
-var statusCmd = &cobra.Command{
-	Use:   "status [flags]",
-	Short: "Show bridge health and metrics summary",
-	Long: `Query the bridge's health and metrics endpoints and display
+// newStatusCmd constructs the "ts-bridge status" subcommand.
+func newStatusCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status [flags]",
+		Short: "Show bridge health and metrics summary",
+		Long: `Query the bridge's health and metrics endpoints and display
 a human-readable summary of the running bridge state.
 
 Endpoints queried:
@@ -31,26 +32,24 @@ Examples:
   ts-bridge status --addr 127.0.0.1:9090
   ts-bridge status --json
   ts-bridge status --watch --interval 2s`,
-	RunE: runStatus,
-}
+		RunE: runStatus,
+	}
 
-func init() {
-	statusCmd.Flags().String("addr", "127.0.0.1:9090", "Health server address")
-	statusCmd.Flags().Bool("json", false, "Output raw JSON from /metrics")
-	statusCmd.Flags().BoolP("watch", "w", false, "Continuously watch and update status")
-	statusCmd.Flags().DurationP("interval", "i", 5*time.Second, "Polling interval for --watch")
-
-	rootCmd.AddCommand(statusCmd)
+	cmd.Flags().String("addr", "127.0.0.1:9090", "Health server address")
+	cmd.Flags().Bool("json", false, "Output raw JSON from /metrics")
+	cmd.Flags().BoolP("watch", "w", false, "Continuously watch and update status")
+	cmd.Flags().DurationP("interval", "i", 5*time.Second, "Polling interval for --watch")
+	return cmd
 }
 
 // metricsResponse matches the JSON shape from /metrics.
 type metricsResponse struct {
-	ActiveConnections    int64 `json:"active_connections"`
-	TotalConnections     int64 `json:"total_connections"`
-	TotalBytesTx         int64 `json:"total_bytes_tx"`
-	TotalBytesRx         int64 `json:"total_bytes_rx"`
-	TotalErrors          int64 `json:"total_errors"`
-	RejectedConnections  int64 `json:"rejected_connections"`
+	ActiveConnections   int64 `json:"active_connections"`
+	TotalConnections    int64 `json:"total_connections"`
+	TotalBytesTx        int64 `json:"total_bytes_tx"`
+	TotalBytesRx        int64 `json:"total_bytes_rx"`
+	TotalErrors         int64 `json:"total_errors"`
+	RejectedConnections int64 `json:"rejected_connections"`
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {

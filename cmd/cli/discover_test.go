@@ -76,7 +76,7 @@ func TestConvertHeadscaleDevices(t *testing.T) {
 
 func TestDiscoverCommandRegistered(t *testing.T) {
 	found := false
-	for _, cmd := range rootCmd.Commands() {
+	for _, cmd := range NewRootCmd().Commands() {
 		if cmd.Name() == "discover" {
 			found = true
 			break

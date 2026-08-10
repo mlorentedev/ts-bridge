@@ -16,11 +16,12 @@ import (
 	"ts-bridge/internal/profile"
 )
 
-// hostCmd is the "ts-bridge host" parent command.
-var hostCmd = &cobra.Command{
-	Use:   "host",
-	Short: "Host setup and verification commands",
-	Long: `Manage host machine configuration for RDP access over Tailscale.
+// newHostCmd constructs the "ts-bridge host" command tree.
+func newHostCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "host",
+		Short: "Host setup and verification commands",
+		Long: `Manage host machine configuration for RDP access over Tailscale.
 
 Available subcommands:
   setup   Configure the host for RDP access (Windows/Linux)
@@ -32,13 +33,16 @@ Examples:
   ts-bridge host check
   ts-bridge host check --json
 `,
+	}
+	cmd.AddCommand(newHostSetupCmd(), newHostCheckCmd(), newHostInitCmd())
+	return cmd
 }
 
-// setupCmd is the "ts-bridge host setup" subcommand.
-var setupCmd = &cobra.Command{
-	Use:   "setup [flags]",
-	Short: "Configure the host for RDP access over Tailscale",
-	Long: `Configure the host machine for RDP access over the Tailscale mesh network.
+func newHostSetupCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "setup [flags]",
+		Short: "Configure the host for RDP access over Tailscale",
+		Long: `Configure the host machine for RDP access over the Tailscale mesh network.
 
 On Windows:
   - Enables RDP via registry
@@ -61,14 +65,22 @@ Examples:
   ts-bridge host setup --no-sleep
   ts-bridge host setup --firewall-rule "MyRDPRule"
 `,
-	RunE: runHostSetup,
+		RunE: runHostSetup,
+	}
+	cmd.Flags().Bool("no-sleep", false, "Skip disabling sleep mode")
+	cmd.Flags().String("firewall-rule", "Tailscale-RDP-Ingress", "Custom firewall rule name")
+	cmd.Flags().Int("port", 0, "RDP port (default: 3389)")
+	cmd.Flags().Bool("json", false, "Output in JSON format")
+	cmd.Flags().Bool("verbose", false, "Enable verbose (debug) logging")
+	cmd.Flags().String("log-format", "", "Log format (text|json)")
+	return cmd
 }
 
-// checkCmd is the "ts-bridge host check" subcommand.
-var checkCmd = &cobra.Command{
-	Use:   "check [flags]",
-	Short: "Verify host readiness (read-only)",
-	Long: `Verify that the host is ready for RDP access over Tailscale.
+func newHostCheckCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "check [flags]",
+		Short: "Verify host readiness (read-only)",
+		Long: `Verify that the host is ready for RDP access over Tailscale.
 
 Read-only — no administrative changes are made.
 
@@ -83,24 +95,12 @@ Examples:
   ts-bridge host check
   ts-bridge host check --json
 `,
-	RunE: runHostCheck,
-}
-
-func init() {
-	setupCmd.Flags().Bool("no-sleep", false, "Skip disabling sleep mode")
-	setupCmd.Flags().String("firewall-rule", "Tailscale-RDP-Ingress", "Custom firewall rule name")
-	setupCmd.Flags().Int("port", 0, "RDP port (default: 3389)")
-	setupCmd.Flags().Bool("json", false, "Output in JSON format")
-	setupCmd.Flags().Bool("verbose", false, "Enable verbose (debug) logging")
-	setupCmd.Flags().String("log-format", "", "Log format (text|json)")
-
-	checkCmd.Flags().Bool("json", false, "Output in JSON format")
-	checkCmd.Flags().Bool("verbose", false, "Enable verbose (debug) logging")
-	checkCmd.Flags().String("log-format", "", "Log format (text|json)")
-
-	hostCmd.AddCommand(setupCmd)
-	hostCmd.AddCommand(checkCmd)
-	rootCmd.AddCommand(hostCmd)
+		RunE: runHostCheck,
+	}
+	cmd.Flags().Bool("json", false, "Output in JSON format")
+	cmd.Flags().Bool("verbose", false, "Enable verbose (debug) logging")
+	cmd.Flags().String("log-format", "", "Log format (text|json)")
+	return cmd
 }
 
 // ─── Setup ───────────────────────────────────────────────────────

@@ -14,11 +14,12 @@ import (
 // temp-dir path without touching the real user store.
 var defaultProfileStorePath = config.ProfileStorePath()
 
-// importCmd is the "ts-bridge import" subcommand.
-var importCmd = &cobra.Command{
-	Use:   "import <name> <descriptor>",
-	Short: "Import a named connection profile from a tsb:// descriptor",
-	Long: `Import a named connection profile from a tsb:// descriptor string.
+// newImportCmd constructs the "ts-bridge import" subcommand.
+func newImportCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "import <name> <descriptor>",
+		Short: "Import a named connection profile from a tsb:// descriptor",
+		Long: `Import a named connection profile from a tsb:// descriptor string.
 
 The descriptor encodes the target host, port, and optional control-plane URL
 in a portable, shareable format. After importing, use the profile by name with
@@ -27,14 +28,11 @@ in a portable, shareable format. After importing, use the profile by name with
 Examples:
   ts-bridge import home "tsb://acemagic-office:45000?cp=saas"
   ts-bridge import work "tsb://rdp.corp.example.com:3389?cp=https://vpn.corp.example.com"`,
-	Args: cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runImportDirect(args[0], args[1], defaultProfileStorePath)
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(importCmd)
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runImportDirect(args[0], args[1], defaultProfileStorePath)
+		},
+	}
 }
 
 // runImportDirect is the pure, testable core of the import command.

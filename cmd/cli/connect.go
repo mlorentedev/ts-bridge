@@ -14,11 +14,12 @@ import (
 
 const windowsOS = "windows"
 
-// connectCmd is the "ts-bridge connect" subcommand.
-var connectCmd = &cobra.Command{
-	Use:   "connect [flags]",
-	Short: "Start the TCP bridge (replaces run.sh / run.ps1)",
-	Long: `Start the TCP bridge that forwards local connections to a remote
+// newConnectCmd constructs the "ts-bridge connect" subcommand.
+func newConnectCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "connect [flags]",
+		Short: "Start the TCP bridge (replaces run.sh / run.ps1)",
+		Long: `Start the TCP bridge that forwards local connections to a remote
 target over the Tailscale mesh network.
 
 All flags are optional — defaults come from env vars, YAML config, or
@@ -34,54 +35,51 @@ Examples:
   ts-bridge connect --auth-key-file /run/secrets/authkey
   ts-bridge connect --config ts-bridge.yaml --manual-mode
   ts-bridge connect --reset`,
-	RunE: runConnect,
-}
+		RunE: runConnect,
+	}
 
-func init() {
 	// Required-like flags (one of: flag, env, or YAML).
-	connectCmd.Flags().String("target", "", "Target address HOST:PORT (overrides TS_TARGET)")
-	connectCmd.Flags().String("auth-key", "", "Auth key (overrides TS_AUTHKEY) — WARNING: visible in process list")
-	connectCmd.Flags().String("auth-key-file", "", "Read auth key from file (secure alternative to --auth-key)")
+	cmd.Flags().String("target", "", "Target address HOST:PORT (overrides TS_TARGET)")
+	cmd.Flags().String("auth-key", "", "Auth key (overrides TS_AUTHKEY) — WARNING: visible in process list")
+	cmd.Flags().String("auth-key-file", "", "Read auth key from file (secure alternative to --auth-key)")
 
 	// Instance / auto-mode flags.
-	connectCmd.Flags().String("instance", "", "Instance name for auto-mode")
-	connectCmd.Flags().String("local-addr", "", "Local bind address")
-	connectCmd.Flags().String("hostname", "", "Tailscale hostname")
-	connectCmd.Flags().String("state-dir", "", "State directory")
-	connectCmd.Flags().String("control-url", "", "Custom control plane URL")
+	cmd.Flags().String("instance", "", "Instance name for auto-mode")
+	cmd.Flags().String("local-addr", "", "Local bind address")
+	cmd.Flags().String("hostname", "", "Tailscale hostname")
+	cmd.Flags().String("state-dir", "", "State directory")
+	cmd.Flags().String("control-url", "", "Custom control plane URL")
 
 	// Timeouts.
-	connectCmd.Flags().Duration("timeout", 0, "Connect timeout for tsnet init")
-	connectCmd.Flags().Duration("dial-timeout", 0, "Per-dial timeout")
-	connectCmd.Flags().Duration("idle-timeout", 0, "Idle connection timeout (0 = disabled)")
-	connectCmd.Flags().Duration("drain-timeout", 0, "Graceful drain timeout")
+	cmd.Flags().Duration("timeout", 0, "Connect timeout for tsnet init")
+	cmd.Flags().Duration("dial-timeout", 0, "Per-dial timeout")
+	cmd.Flags().Duration("idle-timeout", 0, "Idle connection timeout (0 = disabled)")
+	cmd.Flags().Duration("drain-timeout", 0, "Graceful drain timeout")
 
 	// Limits.
-	connectCmd.Flags().Int64("max-conns", 0, "Max concurrent connections")
+	cmd.Flags().Int64("max-conns", 0, "Max concurrent connections")
 
 	// Dial retry.
-	connectCmd.Flags().Int("dial-retries", 0, "Dial retry count")
-	connectCmd.Flags().Duration("dial-backoff-base", 0, "Dial backoff base")
-	connectCmd.Flags().Duration("dial-backoff-max", 0, "Dial backoff max")
+	cmd.Flags().Int("dial-retries", 0, "Dial retry count")
+	cmd.Flags().Duration("dial-backoff-base", 0, "Dial backoff base")
+	cmd.Flags().Duration("dial-backoff-max", 0, "Dial backoff max")
 
 	// Health.
-	connectCmd.Flags().String("health-addr", "", "Health server address")
+	cmd.Flags().String("health-addr", "", "Health server address")
 
 	// Logging.
-	connectCmd.Flags().String("log-format", "", "Log format (text|json)")
+	cmd.Flags().String("log-format", "", "Log format (text|json)")
 
 	// Mode.
-	connectCmd.Flags().Bool("manual-mode", false, "Disable auto-instance mode")
-	connectCmd.Flags().String("port-range", "", "Auto port range (e.g. 33389-34388)")
+	cmd.Flags().Bool("manual-mode", false, "Disable auto-instance mode")
+	cmd.Flags().String("port-range", "", "Auto port range (e.g. 33389-34388)")
 
 	// Misc.
-	connectCmd.Flags().Bool("reset", false, "Reset state (manual mode only; no-op in auto mode)")
-	connectCmd.Flags().String("config", "", "Path to YAML config file (default: none)")
-	connectCmd.Flags().String("profile", "", "Named connection profile (overrides --target / TS_TARGET)")
-	connectCmd.Flags().Bool("quiet", false, "Suppress the startup banner; the structured READY/ERROR lines still print")
-
-	// Register the subcommand.
-	rootCmd.AddCommand(connectCmd)
+	cmd.Flags().Bool("reset", false, "Reset state (manual mode only; no-op in auto mode)")
+	cmd.Flags().String("config", "", "Path to YAML config file (default: none)")
+	cmd.Flags().String("profile", "", "Named connection profile (overrides --target / TS_TARGET)")
+	cmd.Flags().Bool("quiet", false, "Suppress the startup banner; the structured READY/ERROR lines still print")
+	return cmd
 }
 
 func runConnect(cmd *cobra.Command, args []string) error {

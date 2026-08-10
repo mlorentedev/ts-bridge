@@ -19,11 +19,12 @@ import (
 	"ts-bridge/internal/profile"
 )
 
-// initCmd is the "ts-bridge init" subcommand — interactive setup wizard.
-var initCmd = &cobra.Command{
-	Use:   "init [flags]",
-	Short: "Interactive setup wizard to create a ts-bridge configuration file",
-	Long: `Run ts-bridge init to create a configuration file.
+// newInitCmd constructs the "ts-bridge init" subcommand.
+func newInitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init [flags]",
+		Short: "Interactive setup wizard to create a ts-bridge configuration file",
+		Long: `Run ts-bridge init to create a configuration file.
 
 Interactive mode (no flags): prompts for auth key (masked), target, instance
 name, and config format (YAML or .env).
@@ -49,21 +50,19 @@ Examples:
   # Custom output path
   ts-bridge init --auth-key tskey-auth-xxx --target 100.64.0.1:3389 --config /etc/ts-bridge.yaml
 `,
-	RunE: runInit,
-}
+		RunE: runInit,
+	}
 
-func init() {
-	initCmd.Flags().String("auth-key", "", "Auth key (non-interactive mode) — WARNING: visible in process list")
-	initCmd.Flags().String("target", "", "Target address HOST:PORT (non-interactive mode)")
-	initCmd.Flags().String("instance", "", "Instance name for auto-mode")
-	initCmd.Flags().String("port-range", "", "Port range for auto mode (e.g. 33389-34388)")
-	initCmd.Flags().String("format", "env", "Output format: yaml or env (default: env)")
-	initCmd.Flags().String("config", "", "Output config file path (default: ./ts-bridge.yaml for yaml, ./.env for env)")
-	initCmd.Flags().Bool("force", false, "Overwrite existing config files without prompting")
-	initCmd.Flags().String("profile", "", "Write a named profile to the profile store instead of a config file")
-	initCmd.Flags().String("control-url", "", "Control plane URL for the profile (Headscale only; used with --profile)")
-
-	rootCmd.AddCommand(initCmd)
+	cmd.Flags().String("auth-key", "", "Auth key (non-interactive mode) — WARNING: visible in process list")
+	cmd.Flags().String("target", "", "Target address HOST:PORT (non-interactive mode)")
+	cmd.Flags().String("instance", "", "Instance name for auto-mode")
+	cmd.Flags().String("port-range", "", "Port range for auto mode (e.g. 33389-34388)")
+	cmd.Flags().String("format", "env", "Output format: yaml or env (default: env)")
+	cmd.Flags().String("config", "", "Output config file path (default: ./ts-bridge.yaml for yaml, ./.env for env)")
+	cmd.Flags().Bool("force", false, "Overwrite existing config files without prompting")
+	cmd.Flags().String("profile", "", "Write a named profile to the profile store instead of a config file")
+	cmd.Flags().String("control-url", "", "Control plane URL for the profile (Headscale only; used with --profile)")
+	return cmd
 }
 
 // initFlags holds values parsed from CLI flags for the init command.

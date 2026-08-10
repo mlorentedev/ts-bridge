@@ -1,36 +1,49 @@
 // Package cmd provides the Cobra CLI for ts-bridge.
 package cmd
 
-import (
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 // Build-time variables set via ldflags.
 var (
 	//nolint:unused // wired into Runner/BuildCommit in main.go at runtime
 	version = "dev"
 	//nolint:unused // wired into BuildCommit in main.go at runtime
-	commit  = "unknown"
+	commit = "unknown"
 )
 
-// rootCmd is the root Cobra command.
-var rootCmd = &cobra.Command{
-	Use:   "ts-bridge",
-	Short: "Portable TCP bridge over Tailscale mesh networks",
-	Long: `ts-bridge is a portable TCP bridge that runs over Tailscale/Headscale
+// NewRootCmd constructs a complete CLI tree with invocation-local Cobra state.
+func NewRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "ts-bridge",
+		Short: "Portable TCP bridge over Tailscale mesh networks",
+		Long: `ts-bridge is a portable TCP bridge that runs over Tailscale/Headscale
 mesh networks using tsnet. It forwards local TCP connections to a remote
 target host through the encrypted Tailscale network.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Global flags resolved here so subcommands can access them early.
-	},
-	// We intentionally do NOT set Run or RunE here; the binary
-	// delegates to a subcommand (or exits with help).
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// Global flags resolved here so subcommands can access them early.
+		},
+		// We intentionally do NOT set Run or RunE here; the binary
+		// delegates to a subcommand (or exits with help).
+	}
+
+	root.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
+	root.PersistentFlags().String("config", "", "Config file path (reserved for future use)")
+	configureUsageOnErrors(root)
+	root.AddCommand(
+		newConnectCmd(),
+		newInitCmd(),
+		newStatusCmd(),
+		newDiscoverCmd(),
+		newImportCmd(),
+		newHostCmd(),
+		newVersionCmd(),
+	)
+	return root
 }
 
-// Execute adds all child commands to the root command and sets flags
-// appropriately. It is called after main() and executes the desired subcommand.
+// Execute constructs and executes the CLI tree.
 func Execute() error {
-	return rootCmd.Execute()
+	return NewRootCmd().Execute()
 }
 
 // configureUsageOnErrors makes runtime (RunE) failures print just the error,
@@ -47,15 +60,6 @@ func configureUsageOnErrors(cmd *cobra.Command) {
 		_ = c.Usage() // flag-parse error: usage is genuinely helpful here
 		return err
 	})
-}
-
-func init() {
-	// Global flags available on every subcommand.
-	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
-	rootCmd.PersistentFlags().String("config", "", "Config file path (reserved for future use)")
-
-	// Runtime errors should not bury themselves under the usage block (#210).
-	configureUsageOnErrors(rootCmd)
 }
 
 // BuildVersion is set by main() at startup from the build-time ldflags variable.
