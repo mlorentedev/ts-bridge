@@ -10,7 +10,7 @@ created: "2026-08-10"
 - [x] Criterion 1 -> `TestNewRootCmdContainsProductionCommands`, `TestRootHelp`, and existing command/flag tests exercise `NewRootCmd()`.
 - [x] Criterion 2 -> `TestNewRootCmdCreatesIndependentTrees`.
 - [x] Criterion 3 -> `cmd/cli/root.go` constructs every subcommand; source scans find no command singleton declarations or `func init()` under `cmd/cli`.
-- [ ] Criterion 4 -> local Windows gates pass; Linux race and CI checks pending on PR #290.
+- [x] Criterion 4 -> external tests use `NewRootCmd()` directly; PR #290 CI passed on implementation head `6f92617`, including Linux race, Windows tests, lint, security, smoke, and the six-platform build matrix.
 
 ## Test status
 
@@ -19,6 +19,7 @@ created: "2026-08-10"
 - Security: `GOOS=linux GOARCH=amd64 gosec ./...` -> 0 issues.
 - Manual smoke test: built `./cmd/ts-bridge/`; root help contains every production command and `version --short` prints `dev`.
 - Race detector: CI-only on Linux; the repository intentionally omits `-race` on Windows because no C toolchain is installed.
+- Pull request CI: PR #290 implementation head `6f92617` -> all required and informational checks passed.
 - No regressions in existing test suite: yes.
 
 ## Decisions made during implementation

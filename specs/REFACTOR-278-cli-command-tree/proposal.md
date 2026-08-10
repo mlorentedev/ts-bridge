@@ -38,7 +38,7 @@ The global Cobra tree is assembled through `init()`, so tests cannot instantiate
 - [x] `NewRootCmd()` constructs the complete production tree with the current commands, flags, defaults, shorthands, and error/usage behavior.
 - [x] Mutating args or flag state on one constructed tree does not affect a subsequent tree.
 - [x] Command singletons and command-registration `init()` functions are removed, and `Execute()` executes a newly constructed tree.
-- [ ] External CLI tests exercise the production tree without `newTestCommand`; targeted tests, the full race suite, lint, and build pass without dependency changes.
+- [x] External CLI tests exercise the production tree without `newTestCommand`; targeted tests, the full race suite, lint, and build pass without dependency changes.
 
 ## References
 
