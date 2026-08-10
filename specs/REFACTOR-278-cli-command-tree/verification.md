@@ -10,7 +10,7 @@ created: "2026-08-10"
 - [x] Criterion 1 -> `TestNewRootCmdContainsProductionCommands`, `TestRootHelp`, and existing command/flag tests exercise `NewRootCmd()`.
 - [x] Criterion 2 -> `TestNewRootCmdCreatesIndependentTrees`.
 - [x] Criterion 3 -> `cmd/cli/root.go` constructs every subcommand; source scans find no command singleton declarations or `func init()` under `cmd/cli`.
-- [ ] Criterion 4 -> local Windows gates pass; Linux race and CI checks pending on the pull request.
+- [ ] Criterion 4 -> local Windows gates pass; Linux race and CI checks pending on PR #290.
 
 ## Test status
 
