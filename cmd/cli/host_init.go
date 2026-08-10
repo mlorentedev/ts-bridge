@@ -15,12 +15,12 @@ import (
 	"ts-bridge/internal/host"
 )
 
-// hostInitCmd is the "ts-bridge host init" subcommand — interactive wizard
-// to configure the host machine for RDP access.
-var hostInitCmd = &cobra.Command{
-	Use:   "init [flags]",
-	Short: "Interactive wizard to configure the host for RDP access",
-	Long: `Run ts-bridge host init to configure the host machine for RDP access
+// newHostInitCmd constructs the "ts-bridge host init" subcommand.
+func newHostInitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init [flags]",
+		Short: "Interactive wizard to configure the host for RDP access",
+		Long: `Run ts-bridge host init to configure the host machine for RDP access
 over the Tailscale mesh network.
 
 Interactive mode (no flags): prompts for RDP port, firewall rule name, and
@@ -40,16 +40,14 @@ Examples:
   # Custom output path
   ts-bridge host init --port 3390 --config /etc/ts-bridge/.env
 `,
-	RunE: runHostInit,
-}
+		RunE: runHostInit,
+	}
 
-func init() {
-	hostInitCmd.Flags().Int("port", 0, "RDP port (default: 3389)")
-	hostInitCmd.Flags().String("firewall-rule", "", "Firewall rule name (default: Tailscale-RDP-Ingress)")
-	hostInitCmd.Flags().Bool("no-sleep", false, "Disable sleep mode")
-	hostInitCmd.Flags().String("config", "", "Output .env file path (default: ./.env in CWD)")
-
-	hostCmd.AddCommand(hostInitCmd)
+	cmd.Flags().Int("port", 0, "RDP port (default: 3389)")
+	cmd.Flags().String("firewall-rule", "", "Firewall rule name (default: Tailscale-RDP-Ingress)")
+	cmd.Flags().Bool("no-sleep", false, "Disable sleep mode")
+	cmd.Flags().String("config", "", "Output .env file path (default: ./.env in CWD)")
+	return cmd
 }
 
 // hostInitFlags holds values parsed from CLI flags for the host init command.

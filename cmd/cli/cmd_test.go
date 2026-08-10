@@ -2,11 +2,8 @@ package cmd_test
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 
 	cmdpkg "ts-bridge/cmd/cli"
 )
@@ -16,40 +13,11 @@ const (
 	defaultBuildCommit  = "unknown"
 )
 
-// newTestCommand creates a fresh root command with version subcommand
-// for isolated testing.
-func newTestCommand() *cobra.Command {
-	root := &cobra.Command{
-		Use:   "ts-bridge",
-		Short: "Portable TCP bridge over Tailscale mesh networks",
-	}
-	root.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
-	root.PersistentFlags().String("config", "", "Config file path (reserved for future use)")
-
-	version := &cobra.Command{
-		Use:   "version",
-		Short: "Print the version information",
-		RunE: func(c *cobra.Command, args []string) error {
-			short, _ := c.Flags().GetBool("short")
-			if short {
-				fmt.Fprintln(c.OutOrStdout(), cmdpkg.Version())
-				return nil
-			}
-			fmt.Fprintf(c.OutOrStdout(), "ts-bridge %s (commit %s)\n", cmdpkg.Version(), cmdpkg.Commit())
-			return nil
-		},
-	}
-	version.Flags().Bool("short", false, "Print just the semver version")
-	root.AddCommand(version)
-
-	return root
-}
-
 func TestRootHelp(t *testing.T) {
 	cmdpkg.BuildVersion = defaultBuildVersion
 	cmdpkg.BuildCommit = defaultBuildCommit
 
-	c := newTestCommand()
+	c := cmdpkg.NewRootCmd()
 	c.SetArgs([]string{"--help"})
 	var buf bytes.Buffer
 	c.SetOut(&buf)
@@ -65,11 +33,52 @@ func TestRootHelp(t *testing.T) {
 	}
 }
 
+func TestNewRootCmdCreatesIndependentTrees(t *testing.T) {
+	first := cmdpkg.NewRootCmd()
+	second := cmdpkg.NewRootCmd()
+
+	if first == second {
+		t.Fatal("NewRootCmd returned the same command instance")
+	}
+	if err := first.PersistentFlags().Set("verbose", "true"); err != nil {
+		t.Fatalf("set first --verbose: %v", err)
+	}
+
+	secondVerbose := second.PersistentFlags().Lookup("verbose")
+	if secondVerbose == nil {
+		t.Fatal("second tree does not define --verbose")
+	}
+	if secondVerbose.Changed {
+		t.Error("second tree inherited the first tree's --verbose Changed state")
+	}
+	if got := secondVerbose.Value.String(); got != "false" {
+		t.Errorf("second tree inherited --verbose=%s, want false", got)
+	}
+}
+
+func TestNewRootCmdContainsProductionCommands(t *testing.T) {
+	root := cmdpkg.NewRootCmd()
+	got := make(map[string]bool, len(root.Commands()))
+	for _, command := range root.Commands() {
+		got[command.Name()] = true
+	}
+
+	want := []string{"connect", "discover", "host", "import", "init", "status", "version"}
+	for _, name := range want {
+		if !got[name] {
+			t.Errorf("production root is missing %q", name)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("production root has %d commands, want %d", len(got), len(want))
+	}
+}
+
 func TestVersionCommandDefault(t *testing.T) {
 	cmdpkg.BuildVersion = defaultBuildVersion
 	cmdpkg.BuildCommit = defaultBuildCommit
 
-	c := newTestCommand()
+	c := cmdpkg.NewRootCmd()
 	c.SetArgs([]string{"version"})
 	var buf bytes.Buffer
 	c.SetOut(&buf)
@@ -89,7 +98,7 @@ func TestVersionCommandShort(t *testing.T) {
 	cmdpkg.BuildVersion = defaultBuildVersion
 	cmdpkg.BuildCommit = defaultBuildCommit
 
-	c := newTestCommand()
+	c := cmdpkg.NewRootCmd()
 	c.SetArgs([]string{"version", "--short"})
 	var buf bytes.Buffer
 	c.SetOut(&buf)
@@ -106,7 +115,7 @@ func TestVersionWithBuildVars(t *testing.T) {
 	cmdpkg.BuildVersion = "1.0.0"
 	cmdpkg.BuildCommit = "abc1234"
 
-	c := newTestCommand()
+	c := cmdpkg.NewRootCmd()
 	c.SetArgs([]string{"version"})
 	var buf bytes.Buffer
 	c.SetOut(&buf)
@@ -126,7 +135,7 @@ func TestVersionShortWithBuildVars(t *testing.T) {
 	cmdpkg.BuildVersion = "2.1.0"
 	cmdpkg.BuildCommit = "deadbeef"
 
-	c := newTestCommand()
+	c := cmdpkg.NewRootCmd()
 	c.SetArgs([]string{"version", "--short"})
 	var buf bytes.Buffer
 	c.SetOut(&buf)

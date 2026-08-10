@@ -99,14 +99,14 @@ func TestApplyProfile_EmptyName_NoOp(t *testing.T) {
 // TestImportCommandRegistered verifies the import subcommand is wired into root.
 func TestImportCommandRegistered(t *testing.T) {
 	found := false
-	for _, sub := range rootCmd.Commands() {
+	for _, sub := range NewRootCmd().Commands() {
 		if sub.Name() == "import" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("import subcommand not registered on rootCmd")
+		t.Error("import subcommand not registered on production root")
 	}
 }
 
@@ -117,10 +117,6 @@ func TestRunImport_WritesProfile(t *testing.T) {
 	origPath := defaultProfileStorePath
 	defaultProfileStorePath = filepath.Join(dir, "profiles.yaml")
 	defer func() { defaultProfileStorePath = origPath }()
-
-	err := rootCmd.Root().Execute()
-	// rootCmd.Execute() would run the full CLI; instead test runImport directly.
-	_ = err
 
 	storePath := defaultProfileStorePath
 	if err := runImportDirect("home", "tsb://acemagic-office:45000?cp=saas", storePath); err != nil {

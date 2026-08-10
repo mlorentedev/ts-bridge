@@ -10,20 +10,6 @@ import (
 // case table has to express ptr(0) and nil as different expectations.
 func flagPtr[T any](v T) *T { return &v }
 
-// restoreFlag resets a connectCmd flag to its registered default after the test.
-// connectCmd is package-level state shared by every test in this package, and
-// pflag records "was this set" on the Flag itself, so both the value and the
-// Changed bit have to be put back.
-func restoreFlag(t *testing.T, name, def string) {
-	t.Helper()
-	t.Cleanup(func() {
-		if err := connectCmd.Flags().Set(name, def); err != nil {
-			t.Fatalf("restoring --%s: %v", name, err)
-		}
-		connectCmd.Flags().Lookup(name).Changed = false
-	})
-}
-
 // TestCollectFlagsUnsetNumericFlags pins the production half of #282.
 //
 // --idle-timeout and --dial-retries both declare a cobra default of 0, and 0 is
@@ -33,8 +19,8 @@ func restoreFlag(t *testing.T, name, def string) {
 // including the built-in default of 3 retries. collectFlags must record them
 // only when cobra reports the flag as Changed.
 //
-// This exercises connectCmd itself, with the flag registrations from init(),
-// rather than a hand-built replica of it.
+// This exercises a fresh production connect command rather than a hand-built
+// replica or package-level command state.
 func TestCollectFlagsUnsetNumericFlags(t *testing.T) {
 	cases := []struct {
 		name string
@@ -67,20 +53,19 @@ func TestCollectFlagsUnsetNumericFlags(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			cmd := newConnectCmd()
 			if c.setIdle != "" {
-				restoreFlag(t, "idle-timeout", "0s")
-				if err := connectCmd.Flags().Set("idle-timeout", c.setIdle); err != nil {
+				if err := cmd.Flags().Set("idle-timeout", c.setIdle); err != nil {
 					t.Fatal(err)
 				}
 			}
 			if c.setRetries != "" {
-				restoreFlag(t, "dial-retries", "0")
-				if err := connectCmd.Flags().Set("dial-retries", c.setRetries); err != nil {
+				if err := cmd.Flags().Set("dial-retries", c.setRetries); err != nil {
 					t.Fatal(err)
 				}
 			}
 
-			fs := collectFlags(connectCmd)
+			fs := collectFlags(cmd)
 
 			switch {
 			case c.wantIdle == nil && fs.IdleTimeout != nil:

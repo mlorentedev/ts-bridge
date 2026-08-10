@@ -1,0 +1,30 @@
+[
+  {
+    "id": "REFACTOR-278-cli-command-tree-f1",
+    "behavior": "NewRootCmd constructs the complete production command tree with the existing CLI contract.",
+    "verification": "go test ./cmd/cli -run 'TestRootHelp|TestVersionCommand'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "REFACTOR-278-cli-command-tree-f2",
+    "behavior": "Separately constructed command trees do not share Cobra flag state.",
+    "verification": "go test ./cmd/cli -run TestNewRootCmdCreatesIndependentTrees",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "REFACTOR-278-cli-command-tree-f3",
+    "behavior": "Command singletons and command-registration init functions are absent and Execute builds a fresh tree.",
+    "verification": "go test ./cmd/cli -run TestNewRootCmd",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "REFACTOR-278-cli-command-tree-f4",
+    "behavior": "CLI tests exercise production and all repository quality gates pass without dependency changes.",
+    "verification": "go test -race ./... && go build ./cmd/ts-bridge/",
+    "state": "pending",
+    "evidence": ""
+  }
+]

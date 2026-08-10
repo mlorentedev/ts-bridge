@@ -14,11 +14,12 @@ import (
 	"ts-bridge/internal/discover"
 )
 
-// discoverCmd is the "ts-bridge discover" subcommand.
-var discoverCmd = &cobra.Command{
-	Use:   "discover [flags]",
-	Short: "Discover tailnet hosts and select one interactively",
-	Long: `Discover all hosts on your Tailscale/Headscale tailnet and select one.
+// newDiscoverCmd constructs the "ts-bridge discover" subcommand.
+func newDiscoverCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "discover [flags]",
+		Short: "Discover tailnet hosts and select one interactively",
+		Long: `Discover all hosts on your Tailscale/Headscale tailnet and select one.
 
 Queries the Tailscale API (or Headscale if TS_CONTROL_URL points to a
 Headscale instance) to list all authorized devices.
@@ -42,18 +43,16 @@ Examples:
   ts-bridge discover --filter "desktop"
   ts-bridge discover --auto --port 3389
 `,
-	RunE: runDiscover,
-}
+		RunE: runDiscover,
+	}
 
-func init() {
-	discoverCmd.Flags().Bool("json", false, "Output devices as JSON")
-	discoverCmd.Flags().String("filter", "", "Filter by hostname or IP substring")
-	discoverCmd.Flags().Bool("auto", false, "Auto-select first matching host and update .env")
-	discoverCmd.Flags().Int("port", 3389, "RDP port to use with --auto")
-	discoverCmd.Flags().String("auth-key", "", "Tailscale auth key (overrides TS_AUTHKEY)")
-	discoverCmd.Flags().String("tailnet", "", "Tailscale tailnet name (e.g. mycompany.ts.net)")
-
-	rootCmd.AddCommand(discoverCmd)
+	cmd.Flags().Bool("json", false, "Output devices as JSON")
+	cmd.Flags().String("filter", "", "Filter by hostname or IP substring")
+	cmd.Flags().Bool("auto", false, "Auto-select first matching host and update .env")
+	cmd.Flags().Int("port", 3389, "RDP port to use with --auto")
+	cmd.Flags().String("auth-key", "", "Tailscale auth key (overrides TS_AUTHKEY)")
+	cmd.Flags().String("tailnet", "", "Tailscale tailnet name (e.g. mycompany.ts.net)")
+	return cmd
 }
 
 // discoverFlags holds parsed flags for the discover command.

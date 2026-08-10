@@ -34,15 +34,27 @@ places the `main()` function inside `cmd/<binary-name>/`.
 
 ## Decision
 
-Move all CLI files from `cmd/` to `cmd/ts-bridge/`, making `cmd/ts-bridge/main.go`
-the entry point. The `cmd/` directory becomes a namespace for CLI binaries;
-`cmd/ts-bridge/` contains the single binary.
+Move the process entry point to `cmd/ts-bridge/main.go` and keep the Cobra command
+tree in the importable `cmd/cli` package. The entry point owns process-level
+concerns (legacy argument normalization, build variables, dependency wiring, and
+exit status); `cmd/cli` owns commands and bridge orchestration.
+
+As amended by issue #278 on 2026-08-10, `cmd/cli` exposes:
+
+```go
+func NewRootCmd() *cobra.Command // constructs a complete, fresh command tree
+func Execute() error            // executes NewRootCmd()
+```
+
+Every command is built by a `newXCmd()` constructor. Package `init()` functions
+and package-level command singletons are prohibited because they make Cobra flag
+state persist between invocations and force tests to replicate production wiring.
 
 ```text
 ts-bridge/
 ├── cmd/
 │   ├── cli/             ← package cmd (Cobra CLI code)
-│   │   ├── root.go      ← Execute(), initCmdWiring()
+│   │   ├── root.go      ← NewRootCmd(), Execute()
 │   │   ├── run.go       ← Runner, LoggerInit, bridge main loop
 │   │   ├── connect.go
 │   │   ├── init.go
@@ -68,15 +80,16 @@ Test placement follows Go conventions:
 - `internal/*` tests in `*_test.go` alongside source
 
 `main.go` at the repository root is removed. The `main()` function lives in
-`cmd/ts-bridge/root.go` (or a dedicated `main.go` inside the package), directly
-importing `internal/*` packages without the intermediate `cmd` layer.
+`cmd/ts-bridge/main.go` and imports `cmd/cli`; business logic remains under
+`internal/*`.
 
 ### Why not keep `main.go` at root?
 
 1. **Idiomatic Go.** `go list ./...` shows `ts-bridge/cmd/ts-bridge` as the
    main package, matching `go build ./cmd/ts-bridge/`.
-2. **No intermediate layer.** `main.go` importing `cmd` adds a package boundary
-   with zero value — `cmd` only exists to be called from `main()`.
+2. **Explicit binary boundary.** `cmd/ts-bridge` contains only process wiring;
+   the importable `cmd/cli` package lets tests construct the production tree
+   without executing `main()` or reproducing command definitions.
 3. **Future-proof.** If a second binary is ever needed (e.g. `ts-bridge-agent`),
    `cmd/` naturally extends to `cmd/ts-bridge/`, `cmd/ts-bridge-agent/`.
 4. **Standard convention.** Cobra documentation, `go run`, and IDE tooling
@@ -94,9 +107,10 @@ boundary."
 ### Positive
 
 - **Standard Go layout.** Matches conventions used by the entire Go ecosystem.
-- **Cleaner import graph.** `cmd/ts-bridge` imports `internal/*` directly — no
-  intermediate `cmd` package boundary.
-- **Testable.** All existing tests pass under `ts-bridge/cmd/ts-bridge`.
+- **Cleaner import graph.** `cmd/ts-bridge` imports `cmd/cli`; `cmd/cli` imports
+  the required `internal/*` packages.
+- **Testable.** External tests can call `cmd/cli.NewRootCmd()` and exercise the
+  complete production tree. Each call receives independent Cobra flag state.
 - **Extensible.** Adding a second binary (agent, daemon, etc.) fits naturally.
 
 ### Negative
@@ -110,18 +124,21 @@ boundary."
 
 ### Neutral
 
-- Package names inside `cmd/ts-bridge/` remain `package cmd` (not `package main`)
-  for all non-entry-point files. Only `root.go` (or a dedicated file) becomes
-  `package main`.
+- Files under `cmd/cli/` use `package cmd`; the entry point under
+  `cmd/ts-bridge/` uses `package main`.
 
 ## Migration
 
-1. Move `cmd/*.go` → `cmd/ts-bridge/`
-2. Update import in `main.go`: `"ts-bridge/cmd"` → `"ts-bridge/cmd/ts-bridge"`
+1. Move Cobra files from `cmd/` to `cmd/cli/`
+2. Move the root entry point to `cmd/ts-bridge/main.go` and import
+   `"ts-bridge/cmd/cli"`
 3. Remove root `main.go`
-4. Verify: `go build ./...` and `go test ./...`
+4. Replace command singletons and registration side effects with constructors
+5. Verify: `go build ./...` and `go test ./...`
 
 ## Related
 
 - [adr-007-multi-package-split.md](adr-007-multi-package-split.md) — internal package split
 - [adr-008-cli-architecture.md](adr-008-cli-architecture.md) — Cobra adoption
+- [adr-013-cli-tests-in-go.md](adr-013-cli-tests-in-go.md) — production CLI tests in Go
+- Issue #278 — command-tree constructor amendment
