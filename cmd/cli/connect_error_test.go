@@ -18,8 +18,14 @@ func TestConnectErrorHandling(t *testing.T) {
 	
 	tmpDir := t.TempDir()
 	originalWD, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	t.Cleanup(func() { os.Chdir(originalWD) })
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir to tmpDir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(originalWD); err != nil {
+			t.Fatalf("failed to chdir back to originalWD: %v", err)
+		}
+	})
 
 	cases := []struct {
 		name        string
