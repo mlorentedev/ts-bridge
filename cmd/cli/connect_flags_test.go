@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"os"
 	"testing"
 	"time"
+
+	"ts-bridge/internal/config"
 )
 
 // flagPtr returns a pointer to v. FlagSet models "the user passed this flag" as
@@ -85,5 +88,34 @@ func TestCollectFlagsUnsetNumericFlags(t *testing.T) {
 				t.Errorf("DialRetries: expected %d, got %d", *c.wantRetries, *fs.DialRetries)
 			}
 		})
+	}
+}
+
+
+func TestAuthKeyFilePrecedence(t *testing.T) {
+	tmpDir := t.TempDir()
+	keyFile := tmpDir + "/auth.key"
+	if err := os.WriteFile(keyFile, []byte("tskey-from-file"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	root := newConnectCmd()
+	root.SetArgs([]string{"--target", "100.64.0.1:3389", "--auth-key", "tskey-from-flag", "--auth-key-file", keyFile})
+	root.SilenceUsage = true
+	root.SilenceErrors = true
+
+	var capturedKey string
+	Runner = func(cfg config.Config) error {
+		capturedKey = cfg.AuthKey
+		return nil
+	}
+	defer func() { Runner = nil }()
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if capturedKey != "tskey-from-file" {
+		t.Errorf("expected tskey-from-file, got %q", capturedKey)
 	}
 }
