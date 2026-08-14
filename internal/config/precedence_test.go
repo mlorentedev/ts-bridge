@@ -630,13 +630,13 @@ func TestLoadYAMLConfigPermissionWarning(t *testing.T) {
 	})
 }
 
-func TestLoadYAMLConfigMissingFileIsNotAnError(t *testing.T) {
-	cfg, err := LoadYAMLConfig(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
-	if err != nil {
-		t.Fatalf("a missing config file must not be an error, got: %v", err)
+func TestLoadYAMLConfigMissingFileIsAnError(t *testing.T) {
+	_, err := LoadYAMLConfig(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
+	if err == nil {
+		t.Fatal("expected error for explicitly missing config file, got nil")
 	}
-	if cfg != (PartialConfig{}) {
-		t.Errorf("expected a zero PartialConfig, got %+v", cfg)
+	if !strings.Contains(err.Error(), "no such file or directory") {
+		t.Fatalf("expected file not found error, got: %v", err)
 	}
 }
 

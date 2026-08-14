@@ -175,13 +175,12 @@ hostname: "yaml-host"
 	}
 }
 
-func TestMergeMissingYAMLFileNotError(t *testing.T) {
-	// Missing YAML file should not error — config is optional
-	cfg, err := LoadYAMLConfig("/nonexistent/path.yaml")
-	if err != nil {
-		t.Fatalf("missing YAML file should not error, got: %v", err)
+func TestMergeMissingYAMLFileIsError(t *testing.T) {
+	// Missing explicit YAML file should error
+	_, err := LoadYAMLConfig("/nonexistent/path.yaml")
+	if err == nil {
+		t.Fatal("missing explicit YAML file should error")
 	}
-	_ = cfg
 }
 
 func TestMergeYAMLWorldReadableWarn(t *testing.T) {
