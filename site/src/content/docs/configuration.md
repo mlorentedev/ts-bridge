@@ -18,7 +18,7 @@ Configuration is resolved in this order (highest to lowest):
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TS_AUTHKEY` | Auth key. Tailscale: `tskey-*`. Headscale: `hskey-*` | `tskey-auth-kXXXXXX` |
+| `TS_AUTHKEY` | Auth key. Tailscale: `tskey-*`. Headscale: `hskey-*`. For better security, consider the `--auth-key-file` flag instead. | `tskey-auth-kXXXXXX` |
 | `TS_TARGET` | Host address on the mesh network | `100.82.151.104:3389` |
 
 ### Optional
@@ -44,6 +44,16 @@ Configuration is resolved in this order (highest to lowest):
 | `TS_HEALTH_ADDR` | _(disabled)_ | Address for health/metrics HTTP server. |
 | `TS_VERBOSE` | `false` | Enable debug logging. Also available as `-v` flag. |
 | `TS_LOG_FORMAT` | `text` | Log output format (`text` or `json`). |
+
+### Host Configuration
+
+These variables are used by the `ts-bridge host` commands. They are typically written to `.env` by `ts-bridge host init`.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TS_HOST_RDP_PORT` | `3389` | RDP listening port on the host. |
+| `TS_HOST_FIREWALL_RULE` | `Tailscale-RDP-Ingress` | Name of the firewall rule. |
+| `TS_HOST_NO_SLEEP` | `false` | Disable sleep mode on the host (Windows). |
 
 ### Boolean parsing
 

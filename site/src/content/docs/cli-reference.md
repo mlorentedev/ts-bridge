@@ -154,7 +154,20 @@ ts-bridge host [command]
 
 Available Commands:
   check   Verify host readiness (read-only)
+  init    Interactive wizard to configure the host for RDP access
   setup   Configure the host for RDP access over Tailscale
+```
+
+### `ts-bridge host init`
+
+Interactive wizard to configure the host for RDP access. Writes `TS_HOST_*` settings to `.env`.
+
+```bash
+# Interactive wizard
+ts-bridge host init
+
+# Non-interactive
+ts-bridge host init --port 3389 --firewall-rule "MyRule" --no-sleep
 ```
 
 ### `ts-bridge host setup`
@@ -165,8 +178,11 @@ Configure the host machine for RDP access. Requires admin privileges on Windows.
 # Configure host for RDP
 ts-bridge host setup
 
-# Skip sleep prompts
+# Skip sleep mode
 ts-bridge host setup --no-sleep
+
+# Output JSON for automation
+ts-bridge host setup --json
 ```
 
 ### `ts-bridge host check`
