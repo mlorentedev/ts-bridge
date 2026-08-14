@@ -23,11 +23,8 @@ func newHostCmd() *cobra.Command {
 		Short: "Host setup and verification commands",
 		Long: `Manage host machine configuration for RDP access over Tailscale.
 
-Available subcommands:
-  setup   Configure the host for RDP access (Windows/Linux)
-  check   Verify host readiness (read-only)
-
 Examples:
+  ts-bridge host init
   ts-bridge host setup
   ts-bridge host setup --no-sleep
   ts-bridge host check

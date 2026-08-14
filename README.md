@@ -41,7 +41,7 @@ Then run the CLI:
 ts-bridge connect
 
 # Or run with inline flags (overrides .env)
-ts-bridge connect --target my-desktop:3389 --auth-key tskey-auth-xxxxx
+ts-bridge connect --target my-desktop:3389 --auth-key-file /path/to/authkey
 
 # Interactive setup wizard
 ts-bridge init
@@ -71,15 +71,20 @@ ts-bridge connect --profile home    # resolves target+port automatically
 
 ### 2. Host Setup (Admin)
 
-Ensure Tailscale is running on the target machine and RDP is enabled:
+Ensure Tailscale is running on the target machine and RDP is enabled. Configure the host in three steps:
 
 ```powershell
-# Configure host for RDP (Windows, requires admin)
+# 1. Interactive setup wizard (creates .env)
+ts-bridge host init
+
+# 2. Configure host for RDP (Windows, requires admin)
 ts-bridge host setup
 
-# Verify host readiness (read-only)
+# 3. Verify host readiness (read-only)
 ts-bridge host check
 ```
+
+For automation, use `--json`: `ts-bridge host setup --json` and `ts-bridge host check --json`.
 
 > **Note:** The old `scripts/client/` launchers (`run.sh`, `run.ps1`, `bootstrap.{sh,ps1}`) have been removed. Use the CLI binary directly — it reads `.env` automatically.
 
@@ -178,7 +183,7 @@ and `ERROR` lines still print.
 
 | Variable | Default | Description |
 |---|---|---|
-| `TS_AUTHKEY` | — | **Required**. Tailscale/Headscale auth key (`tskey-*` or `hskey-*`). |
+| `TS_AUTHKEY` | — | **Required**. Tailscale/Headscale auth key (`tskey-*` or `hskey-*`). Consider `--auth-key-file` for better security. |
 | `TS_TARGET` | — | **Required** (unless `--profile` is used). Target host:port — supports both IPs and MagicDNS hostnames (e.g., `100.x.x.x:3389` or `my-desktop:3389`). |
 | `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local bind address. |
 | `TS_HOSTNAME` | — | Tailscale hostname (default: auto-derived from target). |
