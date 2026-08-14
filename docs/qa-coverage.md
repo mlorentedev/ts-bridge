@@ -43,7 +43,7 @@ a smoke suite invoked as a subprocess is invisible to both.
 | `host setup` | `--help` flags + all platforms, non-root elevation guard, `--port` parse error | 🔶 | QA-009 (#178) |
 | `host check` | `--help`, read-only status block (exit 0, no admin), `--json` fields, stdout is exactly one JSON object | ✅ | QA-010 (#179) |
 | *(cross-cutting)* | config precedence (flags > env > YAML > defaults) | ⬜ Go¹ | QA-011 (#181) |
-| *(cross-cutting)* | error handling (missing key, bad target/ports, timeouts) | ⬜ | QA-012 (#182) |
+| *(cross-cutting)* | error handling (missing key, bad target/ports, timeouts) | ✅ | QA-012 (#182) |
 | *(e2e)* | multi-device real mesh, bidirectional forwarding | 👤 | QA-013 (#183) |
 
 > ¹ **QA-011 landed in Go, not BATS** (`internal/config/precedence_test.go`).

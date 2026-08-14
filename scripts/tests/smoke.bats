@@ -297,7 +297,7 @@ TARGET="100.64.0.1:3389"
 @test "connect: with no target configured, fails asking for one" {
   run "${BIN}" connect
   assert_failure
-  assert_contains "target invalid format"
+  assert_contains "target is required"
 }
 
 @test "connect: with a target but no auth key, fails asking for one" {
@@ -523,3 +523,52 @@ TARGET="100.64.0.1:3389"
   refute_contains "\"tailscale_ip\""
   refute_contains "\"rdp_port\""
 }
+
+# ---------------------------------------------------------------------------
+# QA-012 (#182) — error handling
+# ---------------------------------------------------------------------------
+# The Go tests (cmd/cli/*_test.go) carry the full validation behavior matrix.
+# This section provides one representative BATS wiring check for each process
+# boundary, proving that errors exit non-zero and are written cleanly to
+# stderr, keeping stdout clean for composed commands.
+
+@test "error wiring: flag parse failures write to stderr and exit non-zero" {
+  run bash -c '"${BIN}" connect --timeout not-a-duration 2>stderr.log >stdout.log'
+  assert_failure
+  run cat stderr.log
+  assert_contains "invalid argument"
+  run cat stdout.log
+  [ -z "$output" ]
+}
+
+@test "error wiring: config validation failures write to stderr and exit non-zero" {
+  run bash -c '"${BIN}" connect --target no-port-here --auth-key tskey-x 2>stderr.log >stdout.log'
+  assert_failure
+  run cat stderr.log
+  assert_contains "target invalid format"
+  run cat stdout.log
+  [ -z "$output" ]
+}
+
+@test "error wiring: file open failures write to stderr and exit non-zero" {
+  run bash -c '"${BIN}" connect --config /does/not/exist.yaml 2>stderr.log >stdout.log'
+  assert_failure
+  run cat stderr.log
+  assert_contains "no such file or directory"
+  run cat stdout.log
+  [ -z "$output" ]
+}
+
+@test "error wiring: deterministic network errors write to stderr and exit non-zero" {
+  # We use the discover command hitting the Tailscale API with a dummy key.
+  # This deterministically returns an API token invalid error over the network
+  # without requiring real credentials, proving runtime network dial errors are
+  # routed cleanly to stderr without stack traces.
+  run bash -c '"${BIN}" discover --auth-key tskey-auth-dummy --tailnet hs 2>stderr.log >stdout.log'
+  assert_failure
+  run cat stderr.log
+  assert_contains "API token invalid"
+  run cat stdout.log
+  [ -z "$output" ]
+}
+

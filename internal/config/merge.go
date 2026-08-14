@@ -453,6 +453,9 @@ func applyAutoInstance(cfg *Config, flags FlagSet) {
 
 // validateTarget checks the target format.
 func validateTarget(target string) error {
+	if target == "" {
+		return nil // Handled by validateRequiredFields
+	}
 	host, portStr, err := net.SplitHostPort(target)
 	if err != nil {
 		return fmt.Errorf("target invalid format: %w", err)
@@ -477,9 +480,6 @@ func LoadYAMLConfig(path string) (PartialConfig, error) {
 	// #nosec G304 -- path is from --config flag (user-controlled) and validated non-empty above.
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return PartialConfig{}, nil
-		}
 		return PartialConfig{}, fmt.Errorf("read YAML config: %w", err)
 	}
 
