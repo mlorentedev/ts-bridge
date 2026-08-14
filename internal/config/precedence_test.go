@@ -635,8 +635,8 @@ func TestLoadYAMLConfigMissingFileIsAnError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for explicitly missing config file, got nil")
 	}
-	if !strings.Contains(err.Error(), "no such file or directory") {
-		t.Fatalf("expected file not found error, got: %v", err)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected os.ErrNotExist, got: %v", err)
 	}
 }
 
