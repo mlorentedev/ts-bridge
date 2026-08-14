@@ -513,31 +513,34 @@ func TestCheckJSONOutput_Structure(t *testing.T) {
 
 // TestHostInitCmd_Registered verifies the init subcommand is registered.
 func TestHostInitCmd_Registered(t *testing.T) {
-	// We verify the command structure is correct by checking the
-	// hostInitCmd is properly configured.
-	// The actual registration happens in init() which runs at package load.
-	// We verify the command's RunE is set by checking that a command
-	// with the same structure works.
-	c := &cobra.Command{
-		Use:   "host",
-		Short: "Host commands",
+	root := cmdpkg.NewRootCmd()
+
+	// Verify host command exists.
+	c, _, err := root.Find([]string{"host"})
+	if err != nil {
+		t.Fatalf("expected host command to be registered: %v", err)
 	}
-	if c.Use != "host" {
-		t.Errorf("expected host command Use='host', got %q", c.Use)
+	if c.Name() != "host" {
+		t.Errorf("expected host command name='host', got %q", c.Name())
+	}
+
+	// Verify host init command exists.
+	cInit, _, err := root.Find([]string{"host", "init"})
+	if err != nil {
+		t.Fatalf("expected host init command to be registered: %v", err)
+	}
+	if cInit.Name() != "init" {
+		t.Errorf("expected host init command name='init', got %q", cInit.Name())
 	}
 }
 
 // TestHostInitCmd_FlagsRegistered verifies all flags are registered.
 func TestHostInitCmd_FlagsRegistered(t *testing.T) {
-	// Create a command with the same flags as hostInitCmd.
-	c := &cobra.Command{
-		Use: "init",
-		Run: func(cmd *cobra.Command, args []string) {},
+	root := cmdpkg.NewRootCmd()
+	c, _, err := root.Find([]string{"host", "init"})
+	if err != nil {
+		t.Fatalf("failed to find host init cmd: %v", err)
 	}
-	c.Flags().Int("port", 0, "RDP port")
-	c.Flags().String("firewall-rule", "", "Firewall rule name")
-	c.Flags().Bool("no-sleep", false, "Disable sleep mode")
-	c.Flags().String("config", "", "Output .env file path")
 
 	// Verify flags are accessible.
 	port, _ := c.Flags().GetInt("port")
@@ -563,16 +566,11 @@ func TestHostInitCmd_FlagsRegistered(t *testing.T) {
 
 // TestHostSetupCmd_FlagsRegistered verifies setup flags are registered.
 func TestHostSetupCmd_FlagsRegistered(t *testing.T) {
-	c := &cobra.Command{
-		Use: "setup",
-		Run: func(cmd *cobra.Command, args []string) {},
+	root := cmdpkg.NewRootCmd()
+	c, _, err := root.Find([]string{"host", "setup"})
+	if err != nil {
+		t.Fatalf("failed to find host setup cmd: %v", err)
 	}
-	c.Flags().Bool("no-sleep", false, "Skip disabling sleep mode")
-	c.Flags().String("firewall-rule", "Tailscale-RDP-Ingress", "Custom firewall rule name")
-	c.Flags().Int("port", 0, "RDP port")
-	c.Flags().Bool("json", false, "Output in JSON format")
-	c.Flags().Bool("verbose", false, "Enable verbose logging")
-	c.Flags().String("log-format", "", "Log format")
 
 	// Verify all flags are accessible.
 	if _, err := c.Flags().GetBool("no-sleep"); err != nil {
@@ -597,13 +595,11 @@ func TestHostSetupCmd_FlagsRegistered(t *testing.T) {
 
 // TestHostCheckCmd_FlagsRegistered verifies check flags are registered.
 func TestHostCheckCmd_FlagsRegistered(t *testing.T) {
-	c := &cobra.Command{
-		Use: "check",
-		Run: func(cmd *cobra.Command, args []string) {},
+	root := cmdpkg.NewRootCmd()
+	c, _, err := root.Find([]string{"host", "check"})
+	if err != nil {
+		t.Fatalf("failed to find host check cmd: %v", err)
 	}
-	c.Flags().Bool("json", false, "Output in JSON format")
-	c.Flags().Bool("verbose", false, "Enable verbose logging")
-	c.Flags().String("log-format", "", "Log format")
 
 	if _, err := c.Flags().GetBool("json"); err != nil {
 		t.Error("expected --json flag")
