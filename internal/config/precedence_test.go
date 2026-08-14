@@ -665,3 +665,100 @@ func TestValidateDialRetriesRejectsNegativeButAllowsZero(t *testing.T) {
 		}
 	})
 }
+
+func TestPrecedenceAuthKey(t *testing.T) {
+	yaml := PartialConfig{}
+	env := map[string]string{"TS_AUTHKEY": "tskey-from-env"}
+	flags := FlagSet{AuthKey: "tskey-from-flag"}
+
+	t.Run("flag wins over env", func(t *testing.T) {
+		cfg := mergePrecedence(t, yaml, env, flags)
+		if cfg.AuthKey != "tskey-from-flag" {
+			t.Errorf("expected tskey-from-flag, got %q", cfg.AuthKey)
+		}
+	})
+
+	t.Run("env wins when flag is empty", func(t *testing.T) {
+		cfg := mergePrecedence(t, yaml, env, FlagSet{})
+		if cfg.AuthKey != "tskey-from-env" {
+			t.Errorf("expected tskey-from-env, got %q", cfg.AuthKey)
+		}
+	})
+}
+
+func TestPrecedenceAutoInstanceMode(t *testing.T) {
+	cases := []struct {
+		name       string
+		yaml       *bool
+		env        string
+		manualMode bool
+		want       bool
+	}{
+		{"default is true", nil, "", false, true},
+		{"yaml false wins over default", ptr(false), "", false, false},
+		{"yaml true wins over default", ptr(true), "", false, true},
+		{"env false wins over yaml true", ptr(true), "false", false, false},
+		{"env true wins over yaml false", ptr(false), "true", false, true},
+		{"flag manual mode (true) forces auto-instance false, winning over env true", ptr(false), "true", true, false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var yaml PartialConfig
+			if c.yaml != nil {
+				yaml.AutoInstance = c.yaml
+			}
+			env := map[string]string{}
+			if c.env != "" {
+				env["TS_AUTO_INSTANCE"] = c.env
+			}
+			flags := FlagSet{ManualMode: c.manualMode}
+			
+			cfg := mergePrecedence(t, yaml, env, flags)
+			if cfg.AutoInstance != c.want {
+				t.Errorf("expected AutoInstance=%v, got %v", c.want, cfg.AutoInstance)
+			}
+		})
+	}
+}
+
+func TestPrecedenceAutoInstanceDerivation(t *testing.T) {
+	t.Run("flags override env vars", func(t *testing.T) {
+		yaml := PartialConfig{}
+		env := map[string]string{
+			"TS_INSTANCE_NAME": "env-instance",
+			"TS_PORT_RANGE":    "61000-61010",
+		}
+		flags := FlagSet{
+			Instance:  "flag-instance",
+			PortRange: "62000-62010",
+		}
+
+		cfg := mergePrecedence(t, yaml, env, flags)
+		
+		if !strings.Contains(cfg.Hostname, "flag-instance") {
+			t.Errorf("expected hostname to contain flag-instance, got %q", cfg.Hostname)
+		}
+		if !strings.HasPrefix(cfg.LocalAddr, "127.0.0.1:620") {
+			t.Errorf("expected localAddr in 620xx range, got %q", cfg.LocalAddr)
+		}
+	})
+
+	t.Run("env vars override defaults", func(t *testing.T) {
+		yaml := PartialConfig{}
+		env := map[string]string{
+			"TS_INSTANCE_NAME": "env-instance",
+			"TS_PORT_RANGE":    "61000-61010",
+		}
+		flags := FlagSet{}
+
+		cfg := mergePrecedence(t, yaml, env, flags)
+		
+		if !strings.Contains(cfg.Hostname, "env-instance") {
+			t.Errorf("expected hostname to contain env-instance, got %q", cfg.Hostname)
+		}
+		if !strings.HasPrefix(cfg.LocalAddr, "127.0.0.1:610") {
+			t.Errorf("expected localAddr in 610xx range, got %q", cfg.LocalAddr)
+		}
+	})
+}

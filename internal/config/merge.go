@@ -424,9 +424,15 @@ func applyAutoInstance(cfg *Config, flags FlagSet) {
 	if cfg.LocalAddr == "" {
 		portRange := flags.PortRange
 		if portRange == "" {
+			portRange = os.Getenv("TS_PORT_RANGE")
+		}
+		if portRange == "" {
 			portRange = defaultAutoPortRange
 		}
 		instanceName := flags.Instance
+		if instanceName == "" {
+			instanceName = os.Getenv("TS_INSTANCE_NAME")
+		}
 		localAddr, err := deriveAutoLocalAddr(cfg.Target, instanceName, portRange)
 		if err == nil {
 			cfg.LocalAddr = localAddr
@@ -437,6 +443,9 @@ func applyAutoInstance(cfg *Config, flags FlagSet) {
 	// fall back to the default so MagicDNS works out of the box.
 	if cfg.Hostname == "" {
 		instanceName := flags.Instance
+		if instanceName == "" {
+			instanceName = os.Getenv("TS_INSTANCE_NAME")
+		}
 		if instanceName != "" {
 			cfg.Hostname = deriveAutoHostname(cfg.Target, instanceName)
 		}
