@@ -40,7 +40,7 @@ Then run the CLI:
 # Run with .env config
 ts-bridge connect
 
-# Or run with inline flags (overrides .env)
+# Secure alternative: read auth key from a 0600 file (avoids child-process env exposure)
 ts-bridge connect --target my-desktop:3389 --auth-key-file /path/to/authkey
 
 # Interactive setup wizard
@@ -49,6 +49,8 @@ ts-bridge init
 # See all options
 ts-bridge --help
 ```
+
+> **Security Note:** Keys in environment variables or `.env` files are readable by child processes, and `--auth-key` is visible in the process list. For production and hardened setups, `--auth-key-file` is recommended.
 
 **Using a named profile (recommended when the host uses a non-default port):**
 
@@ -183,7 +185,7 @@ and `ERROR` lines still print.
 
 | Variable | Default | Description |
 |---|---|---|
-| `TS_AUTHKEY` | — | **Required**. Tailscale/Headscale auth key (`tskey-*` or `hskey-*`). Consider `--auth-key-file` for better security. |
+| `TS_AUTHKEY` | — | **Required** (unless `--auth-key-file` is used). Tailscale/Headscale auth key (`tskey-*` or `hskey-*`). Plaintext in env; use `--auth-key-file` for hardened deployments. |
 | `TS_TARGET` | — | **Required** (unless `--profile` is used). Target host:port — supports both IPs and MagicDNS hostnames (e.g., `100.x.x.x:3389` or `my-desktop:3389`). |
 | `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local bind address. |
 | `TS_HOSTNAME` | — | Tailscale hostname (default: auto-derived from target). |
