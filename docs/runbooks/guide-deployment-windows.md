@@ -46,8 +46,8 @@ TS_TARGET=100.82.151.104:3389       # Host Tailscale IP + port
 # Run with verbose logging
 .\ts-bridge.exe connect -v
 
-# Run with all inline (overrides .env)
-.\ts-bridge.exe connect --target 100.82.151.104:3389 --auth-key tskey-auth-kXXXXXXXXX
+# Run with key file (secure alternative to plaintext .env / --auth-key)
+.\ts-bridge.exe connect --target 100.82.151.104:3389 --auth-key-file C:\path\to\authkey
 
 # Interactive setup wizard
 .\ts-bridge.exe init
