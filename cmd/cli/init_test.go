@@ -255,4 +255,17 @@ func TestWriteEnvConfig_CreatesFullConfig(t *testing.T) {
 	if !strings.Contains(content, "TS_PORT_RANGE=33389-34388") {
 		t.Error("should contain TS_PORT_RANGE")
 	}
+	if !strings.Contains(content, "--auth-key-file") {
+		t.Error("should contain security note promoting --auth-key-file")
+	}
+}
+
+func TestInit_SecurityGuidance(t *testing.T) {
+	cmd := newInitCmd()
+	if !strings.Contains(cmd.Long, "--auth-key-file") {
+		t.Error("init command help should mention --auth-key-file")
+	}
+	if !strings.Contains(cmd.Long, "child processes") {
+		t.Error("init command help should explain child processes visibility")
+	}
 }
