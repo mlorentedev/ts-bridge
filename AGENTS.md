@@ -62,6 +62,7 @@ gosec ./...
 - **ADR-010:** `cmd/cli` Cobra package layout — `main.go` stays a thin entry point
 - **ADR-012:** Named profile model for multi-tailnet configuration (current config model)
 - **ADR-013:** CLI coverage lives in Go tests under `cmd/cli/`, not a second native suite — `smoke.bats` is frozen as the Linux wiring check
+- **ADR-014:** SOCKS5 dynamic mesh proxy for multi-target connectivity (SSH and kubectl)
 - Full ADR index: [`docs/adr/`](docs/adr/) (project-bound knowledge, docs-as-code)
 
 ## Documentation
