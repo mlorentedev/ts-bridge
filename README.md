@@ -194,7 +194,7 @@ and `ERROR` lines still print.
 | `TS_VERBOSE` | `false` | Debug logging. |
 | `TS_LOG_FORMAT` | `text` | `text` (console) or `json` (file). |
 
-> **Minimal setup:** For most users, only `TS_AUTHKEY` and `TS_TARGET` are needed. Everything else has sensible defaults.
+> **Minimal setup:** For most users, only an auth key (via `--auth-key-file` or `TS_AUTHKEY`) and `TS_TARGET` are needed. Everything else has sensible defaults.
 
 For the full configuration reference (all env vars, YAML config, CLI flags), see the [Configuration](https://mlorentedev.github.io/ts-bridge/configuration/) and [CLI Reference](https://mlorentedev.github.io/ts-bridge/cli-reference/) pages.
 

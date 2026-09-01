@@ -26,11 +26,12 @@ Keep one inventory table in this runbook for all managed client aliases.
 
 ## Configuration Baseline
 
-Set only these values in `.env` on every client:
+Set only these values in `.env` on every client. To keep the key out of the environment, leave
+`TS_AUTHKEY` unset and pass `--auth-key-file` to `connect` at launch:
 
 ```env
 TS_TARGET=<tailscale-ip:port>
-TS_AUTHKEY=<tskey-auth-...>
+TS_AUTHKEY=<tskey-auth-...>       # Or omit this line and use: connect --auth-key-file <file>
 TS_INSTANCE_NAME=<device-alias>
 ```
 
@@ -47,33 +48,49 @@ Do not set `TS_LOCAL_ADDR`, `TS_HOSTNAME`, or `TS_STATE_DIR` unless you intentio
 ### Interactive setup
 
 ```bash
-# Linux / macOS
+# Linux / macOS — the auth key is prompted with masked input, so it never lands on the
+# command line or in shell history.
 ./ts-bridge init
 
-# Windows
+# Windows — same masked prompt
 .\ts-bridge.exe init
 ```
 
 ### Non-interactive (quick setup)
 
+`init` has no `--auth-key-file` (only `connect` registers it, #306), so unattended provisioning
+is the one case where the key must go on the command line:
+
 ```bash
 # Linux / macOS
 ./ts-bridge init \
-  --auth-key tskey-auth-... \
+  --auth-key "$(cat ~/.config/ts-bridge/authkey)" \
   --target 100.x.x.x:45000 \
   --instance office-laptop
+```
 
-# Windows
-.\ts-bridge.exe init ^
-  --auth-key tskey-auth-... ^
-  --target 100.x.x.x:45000 ^
+```powershell
+# Windows PowerShell
+.\ts-bridge.exe init `
+  --auth-key (Get-Content "$env:USERPROFILE\.ts-bridge\authkey") `
+  --target 100.x.x.x:45000 `
   --instance office-laptop
 ```
+
+This form is visible in the process table for the length of the call; prefer the interactive
+prompt wherever a human is present, and pass the key file to `connect` at launch instead — see
+Launch Commands below.
+
+> **Security Note:** `--auth-key` puts the key on the command line, where it is visible in the
+> process table (`ps`, Task Manager) to every local user, and `TS_AUTHKEY` is inherited by every
+> child process ts-bridge spawns. Prefer the interactive `init` prompt (masked, never echoed),
+> and supply the key to `connect` from a `0600` file with `--auth-key-file` rather than from the
+> environment.
 
 ## Launch Commands
 
 ```bash
-# All platforms — reads .env with TS_INSTANCE_NAME automatically
+# Linux / macOS — reads .env with TS_INSTANCE_NAME automatically
 ./ts-bridge connect
 
 # With explicit instance override
@@ -82,6 +99,25 @@ Do not set `TS_LOCAL_ADDR`, `TS_HOSTNAME`, or `TS_STATE_DIR` unless you intentio
 # With verbose logging
 ./ts-bridge connect -v
 ```
+
+On Windows, substitute `.\ts-bridge.exe` (PowerShell line continuations are `` ` ``).
+
+Key read from a file, so it never enters the environment or the process table. `--auth-key-file`
+beats a `TS_AUTHKEY` that is still set (flags > env), but delete the plaintext line rather than
+leaving it as a fallback: it stays readable to every child process while it exists.
+
+```bash
+# Linux / macOS — key file at 0600
+./ts-bridge connect --auth-key-file ~/.config/ts-bridge/authkey
+```
+
+```powershell
+# Windows — the 0600 equivalent is an ACL that grants only the owning user
+.\ts-bridge.exe connect --auth-key-file "$env:USERPROFILE\.ts-bridge\authkey"
+```
+
+On Windows the file's inheritance should be trimmed with `icacls <file> /inheritance:r`
+`/grant:r "$env:USERNAME:F"`; `chmod` has no effect on NTFS ACLs.
 
 ## Validation Workflow
 

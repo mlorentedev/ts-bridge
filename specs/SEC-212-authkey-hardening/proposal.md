@@ -31,7 +31,7 @@ Harden documentation, examples, and the `init` wizard to establish `--auth-key-f
    - Feature `--auth-key-file` prominently in Quick Start, examples, and configuration tables.
    - Explicitly document the risk model (process environment vs. process list vs. dedicated `0600` key file).
 3. **Runbooks and Documentation (`docs/`)**:
-   - Update deployment runbooks (`guide-deployment-windows.md`, `guide-deployment-linux.md`, `guide-multi-device-operations.md`, `security-audit.md`) to use `--auth-key-file` in command examples instead of inline `--auth-key`.
+   - Update deployment runbooks (`docs/runbooks/guide-deployment-windows.md`, `docs/runbooks/guide-deployment-linux.md`, `docs/runbooks/guide-multi-device-operations.md`, `docs/troubleshooting/security-audit.md`) to use `--auth-key-file` in command examples instead of inline `--auth-key`.
 4. **Tests (`cmd/cli/init_test.go`, etc.)**:
    - Ensure CLI tests verify updated help text, next-steps output, and error messages.
 
