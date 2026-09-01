@@ -5,7 +5,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 ## Tech Stack
 
 - **Language:** Go 1.26+
-- **Key dependency:** `tailscale.com/tsnet` v1.102.1
+- **Key dependency:** `tailscale.com/tsnet` (userspace networking) — version SSOT is `go.mod`, not this file (derived-fact drift)
 - **Architecture:** Single binary, multi-package — `cmd/ts-bridge/main.go` (~40 lines, thin entry point) delegates to the `cmd/cli` Cobra tree (ADR-010) over eight `internal/` packages (ADR-007).
 - **Config:** Flags, environment variables, and YAML config files, in that precedence order, plus named profiles (ADR-011/012). `.env.example` documents the env-var surface; `init` writes either format.
 - **Logging:** `log/slog` (structured, text or JSON)
@@ -27,7 +27,6 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `internal/profile/` | Shareable connection descriptor (`tsb://`) + profile store behind `connect --profile` (ADR-011/012) |
 | `specs/` (and `specs/archive/`) | Per-feature SDD folders (proposal + tasks + verification) — see §Workflow Rules |
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
-| `scripts/host/` | Host setup (`setup.ps1`, `ts-bridge.service`) |
 | `scripts/tests/` | CLI smoke tests (`smoke.bats`, BATS) exercising the built binary. Cross-platform CLI coverage belongs in Go tests under `cmd/cli/`, which the `test-windows` job already runs on Windows. |
 | `Makefile` | Dev task runner — mutation-testing targets (gremlins, install-only; see QA-014) |
 | `.github/workflows/ci.yml` | CI jobs: `test`, `test-windows`, `smoke` (bats), `build-matrix`, `lint`, `security` (gosec) |
@@ -49,9 +48,6 @@ golangci-lint run
 
 # Security scan
 gosec ./...
-
-# Run in dev mode
-./scripts/dev.sh
 ```
 
 ## Architecture Decisions
