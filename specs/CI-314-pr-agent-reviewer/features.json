@@ -1,0 +1,16 @@
+[
+  {
+    "id": "CI-314-pr-agent-reviewer-f1",
+    "behavior": "A non-draft PR (not dependabot, not release-please) gets a PR-Agent review; the guard step goes green when the marker comment exists.",
+    "verification": "python3 -c \"import yaml;w=yaml.safe_load(open('.github/workflows/pr-agent.yml'));s=[x['name'] for x in w['jobs']['review']['steps']];assert 'Fail if no review was published' in s and s[0]=='PR-Agent'\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-314-pr-agent-reviewer-f2",
+    "behavior": "Config and registry parse together; the guard marker is declared under github-actions.",
+    "verification": "python3 -c \"import tomllib,yaml,json;t=tomllib.load(open('.pr_agent.toml','rb'));d=json.load(open('harness/review-attestation.json'));assert 'mimo-v2.5' in t['config']['model'];assert [r['review_markers'][0] for r in d['reviewers'] if r['login']=='github-actions']==['## PR Reviewer Guide']\"",
+    "state": "pending",
+    "evidence": ""
+  }
+]
