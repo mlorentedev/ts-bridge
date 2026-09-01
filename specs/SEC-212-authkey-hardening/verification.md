@@ -20,8 +20,8 @@ template_version: "1.0"
 
 ## Follow-up evidence (issue #305, 2026-08-31)
 
-The remainder PR #298 left uncommitted was recovered from the dead branch's stash and re-verified
-against the built binary instead of trusted:
+The remainder PR #298 left uncommitted was recovered from the dead branch's stash, then
+re-verified against a binary built from `master` rather than trusted on the strength of the diff:
 
 - `go build ./...` clean; `go test ./...` green across all 10 packages
   (`cmd/cli`, `internal/{config,config/envfile,discover,health,host,logging,profile,proxy,telemetry}`).
@@ -34,3 +34,7 @@ against the built binary instead of trusted:
     documented path is the supported one.
 - Gap surfaced by that check filed as #306; the Linux runbook deferral and its reason are recorded
   in `tasks.md` and filed as #307.
+- Reviewer output on #310 was dispositioned under its `## Review triage` comment: five findings
+  applied (duplicated code fence, a "non-interactive" heading over a prompting example,
+  POSIX-only syntax in an "All platforms" block, AC3 ticked while deferred, an unfinished
+  verification sentence) and one Major declined as refuted by the code.
