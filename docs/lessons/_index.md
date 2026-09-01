@@ -40,3 +40,4 @@ tags: [ts-bridge, lessons, index]
 | 027 | 2026-05-18 | vault_health is project-scoped — cross-project wikilinks need markdown link form | [[docs/lessons/lesson-027-vault-health-is-project-scoped-cross-project-\|lesson-027-vault-health-is-project-scoped-cross-project-.md]] | `vault`, `obsidian`, `tooling`, `wikilinks`, `hive` |
 | 028 | 2026-08-13 | Windows file not found portable check | [[docs/lessons/lesson-028-windows-file-not-found-portable-check\|lesson-028-windows-file-not-found-portable-check.md]] |  |
 | 029 | 2026-08-13 | os.Chdir error check in tests | [[docs/lessons/lesson-029-os-chdir-error-check-in-tests\|lesson-029-os-chdir-error-check-in-tests.md]] |  |
+| 030 | 2026-08-31 | Gates that cannot answer, and the closed issue that absorbed an undone AC | [[docs/lessons/lesson-030-2026-08-31\|lesson-030-2026-08-31.md]] | `review-gate`, `sdd`, `documentation`, `process` |

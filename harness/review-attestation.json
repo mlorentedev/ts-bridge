@@ -1,0 +1,54 @@
+{
+  "$comment": [
+    "Reviewer registry for this repository — a port of dotfiles/harness/review-attestation.json,",
+    "trimmed to the reviewers that measurably act here. Precedent for a per-repo port: kubelab,",
+    "hive and web each carry their own copy; the SSOT of the SHAPE stays in dotfiles.",
+    "",
+    "Why the port was needed: this file did not exist, so `dotf pr triage-queue` could not answer",
+    "at all — `read reviewer registry: open harness/review-attestation.json: no such file or",
+    "directory`. Its exit status is 1 both when triage is pending AND when the question cannot be",
+    "computed, precisely so an unanswerable queue is never mistaken for a clear one. But a check",
+    "that reports the same thing every time it runs stops being read, which is how a gate degrades",
+    "into noise. Measured 2026-08-31, from the same reasoning kubelab recorded when it found its own",
+    "port had omitted `triage.marker`.",
+    "",
+    "What is deliberately NOT copied from the dotfiles registry: the `github-actions` entry that",
+    "attests PR-Agent's `## PR Reviewer Guide` comment. This repository has no PR-Agent. Measured on",
+    "the last 12 closed PRs (2026-08-31): every reviewer comment and every reviews[] entry belongs",
+    "to coderabbitai[bot]; #292/#302/#303/#304 carry no reviewer output of any kind. Declaring a",
+    "reviewer that never posts here would not widen the gate — it would fabricate attestation.",
+    "",
+    "The residual blind spot, stated so nobody reads the queue as stronger than it is:",
+    "`prtriage.reviewOutput` scans COMMENTS, so a CodeRabbit run that files only a formal review",
+    "(#293, #298, #301) with no marker-bearing comment reads as 'no reviewer output yet' and is",
+    "reported as clear. That limitation is shared with every other port, is a property of the tool",
+    "rather than of this file, and is why pr-stewardship still asks a human to read the diff."
+  ],
+  "reviewers": [
+    {
+      "login": "coderabbitai",
+      "declined_markers": ["rate limited by coderabbit.ai"],
+      "review_markers": ["No actionable comments were generated in the recent review"],
+      "advisory": true,
+      "why": "ADVISORY, same disposition as the dotfiles and kubelab registries: its REVIEW attests, its DECLINE does not refuse. CodeRabbit's quota is a third party's billing state rather than a property of the change, and this repo sees it routinely — the 2026-08-10 session recorded 'CodeRabbit returned a quota notice and did not perform a review' on #290. An advisory decline yields `pending`, which is the honest answer: a reviewer that could not run is not a reviewer that refused. The review marker is present because CodeRabbit opens a formal review only when it has something to say, so a clean run produced no reviews[] entry and the gate could attest from CodeRabbit only when it had complaints (dotfiles #1187, ported here). Logins are matched with a trailing `[bot]` stripped and case folded, because the two GitHub APIs disagree: `coderabbitai[bot]` via REST, `coderabbitai` via GraphQL."
+    }
+  ],
+  "triage": {
+    "marker": "## Review triage",
+    "why": "The heading the pr-review-triage skill records its dispositions under, matched at line start. Declared once here and read back by `dotf pr triage-queue`, so the writer and the reader are not a two-file agreement nobody checks. A disposition that lives only in a chat message evaporates, and the Definition of Done's Review item would then rest on a claim nobody can re-read. It is posted even when there was nothing to dispose of: 'CI green, no review findings' is a disposition, and leaving it unwritten is indistinguishable from nobody having looked."
+  },
+  "escape": {
+    "label": "merged-unreviewed",
+    "section": "## Unreviewed merge rationale",
+    "why": "Both are required, never one. Proceeding on an unreviewed PR is allowed; proceeding SILENTLY is not. The label plus the section is what forces the disclosure into the durable record instead of a chat message."
+  },
+  "exempt": {
+    "signatures": [
+      {
+        "name": "release-please",
+        "files": [".release-please-manifest.json", "CHANGELOG.md"],
+        "why": "Measured on #287: exactly these two paths. Matched by DIFF SIGNATURE with set equality, never by author or branch — release-please runs under a human PAT here, so an author rule would not fire, and a branch rule would let any branch named to match walk past the gate. The moment such a PR touches one more file the exemption stops applying, and it stops applying just as surely if one declared file is not touched. This is not 'small PRs need no review': a release commit mechanically restates commits that were each reviewed when they landed, and reporting `declined` on it says something false."
+      }
+    ]
+  }
+}
