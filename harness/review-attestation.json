@@ -12,25 +12,50 @@
     "into noise. Measured 2026-08-31, from the same reasoning kubelab recorded when it found its own",
     "port had omitted `triage.marker`.",
     "",
-    "What is deliberately NOT copied from the dotfiles registry: the `github-actions` entry that",
-    "attests PR-Agent's `## PR Reviewer Guide` comment. This repository has no PR-Agent. Measured on",
-    "the last 12 closed PRs (2026-08-31): every reviewer comment and every reviews[] entry belongs",
-    "to coderabbitai[bot]; #292/#302/#303/#304 carry no reviewer output of any kind. Declaring a",
-    "reviewer that never posts here would not widen the gate — it would fabricate attestation.",
+    "The `github-actions` entry below was ORIGINALLY omitted on the measurement that no",
+    "PR-Agent ran here. That measurement is superseded by this file's own history: the",
+    "workflow landed to end a 59 % decline rate on the vendor reviewer (17 of 29 recent PRs",
+    "carried `Review limit reached`), so the entry declares an actor that is about to exist",
+    "rather than one that was observed. Read the entry's own `why` for what has and has not",
+    "been verified, and treat the first run of pr-agent.yml as the check that makes it real.",
     "",
-    "The residual blind spot, stated so nobody reads the queue as stronger than it is:",
-    "`prtriage.reviewOutput` scans COMMENTS, so a CodeRabbit run that files only a formal review",
-    "(#293, #298, #301) with no marker-bearing comment reads as 'no reviewer output yet' and is",
-    "reported as clear. That limitation is shared with every other port, is a property of the tool",
-    "rather than of this file, and is why pr-stewardship still asks a human to read the diff."
+    "review_markers ARE MEASURED HERE, NOT COPIED. The first draft of this port carried dotfiles'",
+    "'No actionable comments were generated in the recent review', which is how a clean CodeRabbit run",
+    "attests over there. It appears in ZERO comments in this repository (searched across #293-#298,",
+    "#300, #301, #305, #306, #310, #311). A marker that never matches makes `prtriage.reviewOutput`",
+    "find no reviewer output, so the queue would report 'clear' on every PR forever -- the port would",
+    "have been silently dead, which is the exact failure this file exists to end. What CodeRabbit",
+    "actually emits in this repo, by PR:",
+    "  ## Walkthrough            -> #293 #298 #301 #310   (a review ran; this is the attesting marker)",
+    "  ## Review limit reached   -> #294 #295 #296 #300 #311  (also carries 'rate limited by coderabbit.ai')",
+    "  ## Review skipped         -> #297                  (nothing reviewable in the selected files)",
+    "  (no CodeRabbit output)    -> #292 #302 #303 #304   (dependabot; excluded from the workflow)",
+    "",
+    "Note the asymmetry that survives this: a CodeRabbit run that files ONLY a formal review with no",
+    "walkthrough comment still reads as 'no reviewer output yet'. That is a property of the tool, which",
+    "scans comments, and it is why pr-stewardship still asks a human to read the diff."
   ],
   "reviewers": [
     {
       "login": "coderabbitai",
-      "declined_markers": ["rate limited by coderabbit.ai"],
-      "review_markers": ["No actionable comments were generated in the recent review"],
+      "declined_markers": [
+        "## Review limit reached",
+        "rate limited by coderabbit.ai",
+        "## Review skipped"
+      ],
+      "review_markers": [
+        "## Walkthrough"
+      ],
       "advisory": true,
-      "why": "ADVISORY, same disposition as the dotfiles and kubelab registries: its REVIEW attests, its DECLINE does not refuse. CodeRabbit's quota is a third party's billing state rather than a property of the change, and this repo sees it routinely — the 2026-08-10 session recorded 'CodeRabbit returned a quota notice and did not perform a review' on #290. An advisory decline yields `pending`, which is the honest answer: a reviewer that could not run is not a reviewer that refused. The review marker is present because CodeRabbit opens a formal review only when it has something to say, so a clean run produced no reviews[] entry and the gate could attest from CodeRabbit only when it had complaints (dotfiles #1187, ported here). Logins are matched with a trailing `[bot]` stripped and case folded, because the two GitHub APIs disagree: `coderabbitai[bot]` via REST, `coderabbitai` via GraphQL."
+      "why": "ADVISORY, same disposition as the dotfiles and kubelab registries: its REVIEW attests, its DECLINE does not refuse. CodeRabbit's quota is a third party's billing state rather than a property of the change, and in this repo it is the normal case rather than the exception -- measured over #293..#311, five PRs (#294, #295, #296, #300, #311) drew 'Review limit reached' and one more (#297) drew 'Review skipped', so a decline that REFUSED would make the gate red more often than green and teach everyone to ignore it. An advisory decline yields `pending`, the honest answer: a reviewer that could not run is not a reviewer that refused. LOGINS MATCH WITH TRAILING '[bot]' STRIPPED AND CASE FOLDED, because the two GitHub APIs disagree: REST reports coderabbitai[bot], GraphQL reports coderabbitai. The dotfiles 'no complaints' review marker is deliberately NOT reused -- see the $comment on review_markers."
+    },
+    {
+      "login": "github-actions",
+      "declined_markers": [],
+      "review_markers": [
+        "## PR Reviewer Guide"
+      ],
+      "why": "PR-Agent (see .github/workflows/pr-agent.yml) runs under GITHUB_TOKEN and publishes through the COMMENTS api, so its reviews never enter reviews[] and a classifier that looked only at reviews would read every PR-Agent-reviewed PR as unattested. The marker is the `review` command's own heading. `## PR Code Suggestions` is deliberately NOT here — suggestions are not a review, which is also why auto_improve is off on the automatic path. MARKER PROVENANCE: verified in the sibling ports before being declared here — kubelab has 215 PR comments carrying '## PR Reviewer Guide' posted by github-actions[bot] (spot-checked on #1500, #1362) and dotfiles has 172. It has NEVER been observed in ts-bridge, because this workflow has not run here: the first green run of pr-agent on a ts-bridge PR is the verification, and until then this entry is a declaration of intent, not of an actor."
     }
   ],
   "triage": {
@@ -46,7 +71,10 @@
     "signatures": [
       {
         "name": "release-please",
-        "files": [".release-please-manifest.json", "CHANGELOG.md"],
+        "files": [
+          ".release-please-manifest.json",
+          "CHANGELOG.md"
+        ],
         "why": "Measured on #287: exactly these two paths. Matched by DIFF SIGNATURE with set equality, never by author or branch — release-please runs under a human PAT here, so an author rule would not fire, and a branch rule would let any branch named to match walk past the gate. The moment such a PR touches one more file the exemption stops applying, and it stops applying just as surely if one declared file is not touched. This is not 'small PRs need no review': a release commit mechanically restates commits that were each reviewed when they landed, and reporting `declined` on it says something false."
       }
     ]
