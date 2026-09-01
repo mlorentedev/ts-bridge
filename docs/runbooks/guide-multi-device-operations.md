@@ -26,11 +26,12 @@ Keep one inventory table in this runbook for all managed client aliases.
 
 ## Configuration Baseline
 
-Set only these values in `.env` on every client:
+Set only these values in `.env` on every client. If you keep the key out of the environment,
+`init` writes the rest and `connect` takes `--auth-key-file` at launch:
 
 ```env
 TS_TARGET=<tailscale-ip:port>
-TS_AUTHKEY=<tskey-auth-...>
+TS_AUTHKEY=<tskey-auth-...>       # Or omit this line and pass --auth-key-file /path/to/keyfile
 TS_INSTANCE_NAME=<device-alias>
 ```
 
@@ -57,24 +58,36 @@ Do not set `TS_LOCAL_ADDR`, `TS_HOSTNAME`, or `TS_STATE_DIR` unless you intentio
 ### Non-interactive (quick setup)
 
 ```bash
-# Linux / macOS
+```bash
+# Linux / macOS — interactive: the auth key is prompted with masked input, so it never
+# lands on the command line or in shell history.
 ./ts-bridge init \
-  --auth-key tskey-auth-... \
   --target 100.x.x.x:45000 \
   --instance office-laptop
 
-# Windows
+# Windows — same, masked prompt (drop the ^ line continuations if you type it on one line)
 .\ts-bridge.exe init ^
-  --auth-key tskey-auth-... ^
   --target 100.x.x.x:45000 ^
   --instance office-laptop
 ```
+
+`init` has no `--auth-key-file`: `--auth-key` exists only for non-interactive provisioning, and
+`connect` is where the key file is read from — see Launch Commands below.
+
+> **Security Note:** `--auth-key` puts the key on the command line, where it is visible in the
+> process table (`ps`, Task Manager) to every local user, and `TS_AUTHKEY` is inherited by every
+> child process ts-bridge spawns. Prefer the interactive `init` prompt (masked, never echoed),
+> and supply the key to `connect` from a `0600` file with `--auth-key-file` rather than from the
+> environment.
 
 ## Launch Commands
 
 ```bash
 # All platforms — reads .env with TS_INSTANCE_NAME automatically
 ./ts-bridge connect
+
+# Key read from a 0600 file, so it never enters the environment or the process table
+./ts-bridge connect --auth-key-file ~/.config/ts-bridge/authkey
 
 # With explicit instance override
 ./ts-bridge connect --instance office-laptop
