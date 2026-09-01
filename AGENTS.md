@@ -32,6 +32,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `Makefile` | Dev task runner — mutation-testing targets (gremlins, install-only; see QA-014) |
 | `.github/workflows/ci.yml` | CI jobs: `test`, `test-windows`, `smoke` (bats), `build-matrix`, `lint`, `security` (gosec) |
 | `.github/workflows/release.yml` | Automated releases via release-please (PAT-driven) |
+| `harness/` | Review gates read by `dotf`: `review-attestation.json` (which logins attest a review, the `## Review triage` marker, the release-please exemption signature) and `reviewer-pool.json` (models allowed to sign a `review.md`) |
 
 ## Commands
 
@@ -92,6 +93,22 @@ Read it once at session start and apply its §Spec-Driven Development +
 - **TDD inside the spec** — failing test first, then implementation. Already
   the project standard; SDD wraps it, does not replace it.
 - **Atomic PRs** — one logical change per PR, ~300 line hard cap (tests, lockfiles, generated files excluded).
+
+### Review gates are repo-owned config (`harness/`)
+
+Two doctrine mechanisms read `harness/` and answer *nothing* where it is absent, so they are
+wired here rather than assumed available:
+
+- **`dotf pr triage-queue`** — run at session start and before claiming any PR work complete.
+  Exit 0 is a clear queue; exit 1 means reviewer output awaits a disposition **or that the
+  question could not be answered** — the two share an exit status precisely so an unanswerable
+  queue never reads as clear, so read the message, not just the code.
+- **`dotf spec archive`** — refuses a `review.md` signed by a model outside
+  `harness/reviewer-pool.json`. The adversarial reviewer may never be the implementer, which is
+  why no Anthropic model is in the pool.
+
+The registry names only reviewers that measurably act in this repo. Adding one that never posts
+here does not widen the gate; it fabricates attestation.
 
 ## Conventions
 
