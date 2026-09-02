@@ -103,7 +103,7 @@ jobs:
       # NOT used here: this is the version the two sibling repos run, and a reviewer
       # bump is its own change with its own measurement.
       - name: PR-Agent
-        uses: The-PR-Agent/pr-agent@4ebd5c5333c6ef21509e7304d27969eb825e6f22  # v0.43.0
+        uses: The-PR-Agent/pr-agent@ab6ec54bfeb37933ddb74259338752e9272016c6  # v0.44.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI__KEY: ${{ secrets.NAN_API_KEY }}
