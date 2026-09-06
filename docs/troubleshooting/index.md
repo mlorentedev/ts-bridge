@@ -31,4 +31,4 @@ Quick reference for common errors and their fixes.
 
 ## General
 
-- [Multi-dimensional audit report](audit-2026-05-18-multi-dim.md) — Comprehensive codebase audit
+- [Multi-dimensional audit report](../runbooks/audit-2026-05-18-multi-dim.md) — Comprehensive codebase audit
