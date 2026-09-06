@@ -90,7 +90,7 @@ jobs:
           cd dist/artifacts && sha256sum * > ../checksums.txt
 
       - name: Upload Release Assets
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@v3.0.3
         with:
           tag_name: ${{ needs.release-please.outputs.tag_name }}
           files: |
