@@ -2,7 +2,7 @@
 id: lesson-021-gosec-standalone-vs-golangci-lint-nolint-gose
 type: lesson
 status: active
-created: "2026-05-01"
+created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, go, gosec, linter, ci, cross-tool-compatibility]
 ---

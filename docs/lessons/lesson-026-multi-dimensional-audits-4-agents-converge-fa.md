@@ -2,7 +2,7 @@
 id: lesson-026-multi-dimensional-audits-4-agents-converge-fa
 type: lesson
 status: active
-created: "2026-05-01"
+created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, audit, agents, process, code-quality]
 ---
