@@ -2,7 +2,7 @@
 id: lesson-024-half-close-idleconn-embedding-type-assertions
 type: lesson
 status: active
-created: "2026-05-01"
+created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, go, interfaces, embedding, net-conn]
 ---

@@ -2,7 +2,7 @@
 id: lesson-019-tsnet-server-up-partial-start-must-close-on-e
 type: lesson
 status: active
-created: "2026-05-01"
+created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, go, tsnet, windows, file-locking, error-handling]
 ---

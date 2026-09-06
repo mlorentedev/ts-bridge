@@ -2,7 +2,7 @@
 id: lesson-023-pinning-the-linter-version-surfaces-accumulat
 type: lesson
 status: active
-created: "2026-05-01"
+created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, linter, golangci-lint, technical-debt, ci]
 ---

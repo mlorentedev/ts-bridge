@@ -1,7 +1,7 @@
 ---
 id: "CI-314-pr-agent-reviewer"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived; implementation merged in #315 on 2026-09-01
 created: "2026-08-31"
 issue: "mlorentedev/ts-bridge#314"   # repo#NNN — GitHub issue / Project item that tracks this spec
 # Work-gate status: `--force-no-gate` was used at scaffold time because `gh issue view`
