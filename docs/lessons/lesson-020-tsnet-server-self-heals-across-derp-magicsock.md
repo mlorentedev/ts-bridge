@@ -2,7 +2,7 @@
 id: lesson-020-tsnet-server-self-heals-across-derp-magicsock
 type: lesson
 status: active
-created: "2026-05-01"
+created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, tsnet, tailscale, self-healing, design-investigation]
 ---

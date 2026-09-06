@@ -2,7 +2,7 @@
 id: lesson-025-toctou-on-atomic-counters-cas-loop-or-step-an
 type: lesson
 status: active
-created: "2026-05-01"
+created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, go, atomics, concurrency, toctou, race-conditions]
 ---
