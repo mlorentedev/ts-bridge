@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.3](https://github.com/mlorentedev/ts-bridge/compare/v1.17.2...v1.17.3) (2026-09-07)
+
+
+### Bug Fixes
+
+* **ci:** port the hardened PR-Agent guard from the dotfiles canon ([#323](https://github.com/mlorentedev/ts-bridge/issues/323)) ([6011bfd](https://github.com/mlorentedev/ts-bridge/commit/6011bfd9146c89bb1c1e7e068e88fed5fcfddb28))
+
 ## [1.17.2](https://github.com/mlorentedev/ts-bridge/compare/v1.17.1...v1.17.2) (2026-08-08)
 
 
