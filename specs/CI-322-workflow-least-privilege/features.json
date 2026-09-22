@@ -1,0 +1,37 @@
+[
+  {
+    "id": "CI-322-workflow-least-privilege-f1",
+    "behavior": "Every workflow under .github/workflows/ declares a top-level permissions: key and none declares write-all",
+    "verification": "bash scripts/check-workflow-permissions.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-322-workflow-least-privilege-f2",
+    "behavior": "Every actions/checkout step sets persist-credentials: false, or carries an inline opt-out the guard prints even on a clean run",
+    "verification": "c=$(grep -h -c 'uses: actions/checkout@' .github/workflows/*.yml | paste -sd+ | bc); p=$(grep -h -c 'persist-credentials: false' .github/workflows/*.yml | paste -sd+ | bc); echo \"checkouts=$c persisted=$p\"; [ \"$c\" = \"$p\" ]",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-322-workflow-least-privilege-f3",
+    "behavior": "The guard refuses each widening (missing key, persisted token, explicit true, write-all), passes the clean fixture, and behaves identically under bash and zsh",
+    "verification": "bash scripts/tests/test-workflow-permissions.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-322-workflow-least-privilege-f4",
+    "behavior": "The guard and its test suite run in the Repo hygiene job, so the posture cannot decay on a later PR",
+    "verification": "grep -q 'run: bash scripts/check-workflow-permissions.sh' .github/workflows/repo-hygiene.yml && grep -q 'run: bash scripts/tests/test-workflow-permissions.sh' .github/workflows/repo-hygiene.yml",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-322-workflow-least-privilege-f5",
+    "behavior": "No regression: build, vet, the Go suite and the two pre-existing hygiene guards stay green after the CI contract changes",
+    "verification": "go build ./... && go vet ./... && go test ./... && bash scripts/check-lessons.sh && bash scripts/check-actions-pinned.sh",
+    "state": "pending",
+    "evidence": ""
+  }
+]

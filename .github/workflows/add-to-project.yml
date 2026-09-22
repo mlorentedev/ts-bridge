@@ -10,6 +10,12 @@ on:
   pull_request:
     types: [opened, reopened]
 
+# The Projects v2 write goes through BITACORA_PAT, passed as an action input. This job reads
+# nothing from the repository, so the default token gets nothing: an empty grant, the same
+# shape bitacora-status.yml carries. Without the key the runner would hold read-write on every
+# scope for a job that never touches a repo file.
+permissions: {}
+
 # Note: dependabot PRs are intentionally excluded — they are automated
 # dependency updates that do not need project board tracking. The
 # `github.actor` check ensures only human-created PRs reach the board.
