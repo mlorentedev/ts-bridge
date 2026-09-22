@@ -71,6 +71,21 @@ Branch `ci/least-privilege-workflow-permissions`, worktree `../ts-bridge-wt-ci-p
 - CI on this PR is the remaining evidence: `Repo hygiene` and `CI` must go green with the new keys in
   place, which is the only way to falsify the under-granting risk at runtime.
 
+## Review window (PR #336)
+
+PR-Agent ran on this PR (the first repository-side firing of the reviewer wired by #314) and its
+`## PR Reviewer Guide` is dispositioned here rather than in chat:
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| **Fragile YAML parsing** — a comment containing `: write-all` is flagged; flow-style `- {uses: …}` checkout is missed | **Applied (first half), accepted (second half).** The comment case was a real false red, reproduced immediately: a valid workflow with a commented-out checkout step exited 1 on line 8. Comment-only lines are now skipped and trailing comments stripped before matching; the opt-out trailer is read from the raw line because it *is* a comment. Two fixtures pin the negative. Flow-style steps stay a documented limitation — the honest fix is a real parser, which is #334 option B, not a second regex in a shell guard. | `bash scripts/check-workflow-permissions.sh /tmp/fp` → exit 1 before, exit 0 after |
+| Ticket compliance: **#322 fully compliant** | No action — matches the acceptance criteria in `proposal.md`. | — |
+| Ticket compliance: **#333 / #335 "not compliant"** | **Declined, with a reason rather than silence.** PR-Agent inferred obligations from the issues this PR's body *names as out of scope*. Neither is claimable here: the identity model (#333) and the coverage upload (#335) are separate changes with their own work-gates, and satisfying them would break the atomic-PR cap this PR is already declaring a breakdown to respect. | Out-of-scope section of the PR body |
+| "PR contains tests", "No security concerns", effort 3/5 | Informational. | — |
+
+After the fix: 8 fixtures × 2 shells = **16/16 green**, and the real tree still reports
+`OK (8 workflows, 10 checkouts, 10 credential-less, 0 opted out with a reason)`.
+
 ## Decisions made during implementation
 
 - **The guard, not just the fix.** Repairing eight files without a check leaves the posture held by

@@ -6,7 +6,10 @@
 # way the posture can widen -- no permissions key, a checkout that persists the token, an
 # explicit true, and a `contents: write-all` that reads like hardening and is the opposite. The
 # clean fixture is the control that stops a guard which fails everything, and the opt-out fixture
-# proves the escape hatch stays visible rather than silent.
+# proves the escape hatch stays visible rather than silent. Two more fixtures say the negative of
+# that: a commented-out checkout and a comment that mentions `write-all` are prose, not structure,
+# and must not turn a clean repository red -- which the first version did, on line 8 of a valid
+# workflow (PR-Agent found it; reproduced before fixing).
 #
 # And why two shells: the first version of this guard passed under bash and died under zsh with
 # "cannot parse guard output" on a clean repository, because `set -- $sum` does not word-split
@@ -25,7 +28,9 @@ missing-key:1:no-perms
 persists-token:1:no-except
 explicit-true:1:enabled
 write-all:1:write-all
-named-opt-out:0:opt-out'
+named-opt-out:0:opt-out
+commented-checkout:0:OK
+commented-write-all:0:OK'
 
 # Each fixture is one workflow, written as data rather than as a mutation of another: the diff
 # between a passing and a failing case should be readable, not derivable.
@@ -105,6 +110,31 @@ jobs:
     steps:
       - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7  # persist-credentials-ok: the job pushes the release tag
       - run: git push --tags
+YAML
+    ;;
+    commented-checkout) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      # - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+      - run: echo hi
+YAML
+    ;;
+    commented-write-all) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read   # the sibling repos solved this as: write-all never, and this is prose
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: false
 YAML
     ;;
     *) echo "test-workflow-permissions: no fixture named $2" >&2; return 3 ;;

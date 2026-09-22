@@ -12,7 +12,8 @@
 #      workflow, so the credential is paid for and never spent.
 #
 # A checkout may opt out with an inline `# persist-credentials-ok: <reason>` trailer on the
-# `uses:` line. The exemption names itself and is echoed by the guard, so a widening shows up
+# `uses:` line -- read from the raw line, since it lives in the comment the matcher below strips.
+# The exemption names itself and is echoed by the guard, so a widening shows up
 # in the CI log instead of arriving as a deleted check. `write-all` is refused outright: a
 # declared `permissions: write-all` is the same ambient grant as no declaration at all, with a
 # comment that claims otherwise.
@@ -41,19 +42,26 @@ scan() {
     {
       line = $0
       if (FNR == 1) { top = 0 }
+      # A YAML comment is not structure. It grants nothing, checks out nothing, and must not be
+      # scanned as if it did: a commented-out checkout step used to be counted as a real one, so
+      # the guard reported `no-except` on a repository that was entirely clean -- a false red on
+      # the job that gates every PR, which is precisely how a useful check gets deleted.
+      if (line ~ /^[ \t]*#/) next
       n = indent(line)
       if (line ~ /^[ \t]*$/) next                       # blanks never close a step
-      if (line ~ /^permissions:/) top = 1
-      if (line ~ /:[ \t]*write-all/) { wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR }
+      code = line; cpos = index(code, " #")             # trailing comment: strip for matching,
+      if (cpos > 0) code = substr(code, 1, cpos - 1)    # keep it below for the opt-out trailer
+      if (code ~ /^permissions:/) top = 1
+      if (code ~ /:[ \t]*write-all/) { wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR }
       if (pending && n > pindent) {                     # still inside the checkout step
-        if (match(line, /persist-credentials:[ \t]*[^ \t#]+/)) {
-          persist = substr(line, RSTART, RLENGTH)
+        if (match(code, /persist-credentials:[ \t]*[^ \t#]+/)) {
+          persist = substr(code, RSTART, RLENGTH)
           sub(/persist-credentials:[ \t]*/, "", persist)
         }
         next
       }
       flush()
-      if (match(line, /uses:[ \t]*actions\/checkout@/)) {
+      if (match(code, /uses:[ \t]*actions\/checkout@/)) {
         pending = 1; pindent = n; plineno = FNR; persist = ""; optout = ""
         if (match(line, /#.*persist-credentials-ok:[ \t]*[^ \t]+/)) {
           optout = substr(line, RSTART, RLENGTH)
