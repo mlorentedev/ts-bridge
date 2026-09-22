@@ -4,9 +4,9 @@ go 1.26.6
 
 require (
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/term v0.45.0
+	golang.org/x/term v0.46.0
 	gopkg.in/yaml.v3 v3.0.1
-	tailscale.com v1.102.3
+	tailscale.com v1.102.4
 	tailscale.com/client/tailscale/v2 v2.10.1
 )
 
@@ -49,7 +49,7 @@ require (
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
