@@ -1,7 +1,7 @@
 name: Repo hygiene
 
-# Two guards that need no toolchain: lesson numbering/index integrity and
-# SHA-pinned actions. Both scripts run under bash and zsh and print what failed.
+# Three guards that need no toolchain: lesson numbering/index integrity, SHA-pinned actions,
+# and workflow credential posture. All three scripts run under bash and zsh and print what failed.
 
 on:
   pull_request:
@@ -23,3 +23,7 @@ jobs:
         run: bash scripts/check-lessons.sh
       - name: Actions pinned to commit SHAs
         run: bash scripts/check-actions-pinned.sh
+      - name: Workflows carry no default credential
+        run: bash scripts/check-workflow-permissions.sh
+      - name: That guard still refuses each way the posture can widen
+        run: bash scripts/tests/test-workflow-permissions.sh
