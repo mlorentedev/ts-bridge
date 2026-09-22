@@ -60,3 +60,15 @@ site/node_modules/
 # Scratch files for `gh pr/issue create --body-file` (never commit these)
 pr-body.md
 *-body.md
+
+# --- dotf spec review artifacts (machine logs, not spec contract) ---------------------
+# `dotf spec review` writes the reviewer transcript beside the spec it reviewed.
+# `review.md` stays tracked on purpose: it is the signed artifact the archive
+# gate reads. Everything below is reproducible noise, ~3.6 MB for two specs, and
+# a `git add -A` in a session that just ran a review would otherwise commit it.
+# .pr_agent.toml declares the same pattern under [ignore] for the same reason.
+# Found by the CI-314 adversarial review (Minor).
+specs/**/review-transcript.jsonl
+specs/**/review-transcript.jsonl.stderr
+specs/**/review-request.json
+mutation-report.json
