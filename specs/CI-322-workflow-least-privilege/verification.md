@@ -82,8 +82,14 @@ PR-Agent ran on this PR (the first repository-side firing of the reviewer wired 
 | Ticket compliance: **#322 fully compliant** | No action — matches the acceptance criteria in `proposal.md`. | — |
 | Ticket compliance: **#333 / #335 "not compliant"** | **Declined, with a reason rather than silence.** PR-Agent inferred obligations from the issues this PR's body *names as out of scope*. Neither is claimable here: the identity model (#333) and the coverage upload (#335) are separate changes with their own work-gates, and satisfying them would break the atomic-PR cap this PR is already declaring a breakdown to respect. | Out-of-scope section of the PR body |
 | "PR contains tests", "No security concerns", effort 3/5 | Informational. | — |
+| **CodeRabbit (Major, CWE-693) #1** — `permissions: "write-all"` is not matched, so the guard reports clean | **Applied.** Reproduced on a two-line fixture before touching the parser: the quoted declaration passed with `OK`. All three value matchers now share one optional-quote class, and `persist-credentials: "false"` is normalised so the fix cannot introduce the opposite error (a false red on a legitimate quoting). | `quoted-write-all` + `quoted-false` fixtures; `/tmp/qr` repro goes exit 0 → exit 1 |
+| **CodeRabbit (Major, CWE-693) #2** — `uses: "actions/checkout@<sha>"` is not counted, so no `persist-credentials` is required | **Applied**, and the finding understated it: the step was not merely unenforced, it was **invisible** — the summary printed `0 checkouts` for a workflow containing one. An uncounted step cannot be reported missing. | `quoted-checkout` fixture; same repro, second line |
+| CodeRabbit reached its own review here (unlike the `Review skipped` it returns on bot PRs) | Noted: this is the first CodeRabbit review of an agent-authored change in this repo, and both of its Majors were valid. Its walkthrough findings are dispositioned above, not summarised away. | — |
 
-After the fix: 8 fixtures × 2 shells = **16/16 green**, and the real tree still reports
+The two reviewers found different halves of the same defect class: **a text-matching guard enforces
+the spellings it knows**. Comment-as-structure (PR-Agent) and quoting (CodeRabbit) are the same
+bug wearing different clothes, and neither was visible from the eight cases that passed. After the
+fixes: 11 fixtures × 2 shells = **22/22 green**, and the real tree still reports
 `OK (8 workflows, 10 checkouts, 10 credential-less, 0 opted out with a reason)`.
 
 ## Decisions made during implementation
@@ -117,10 +123,12 @@ After the fix: 8 fixtures × 2 shells = **16/16 green**, and the real tree still
 
 ## Promotion candidates
 
-- [x] **Lesson for `docs/lessons/`?** Yes — two, both general and both evidenced above:
+- [x] **Lesson for `docs/lessons/`?** Yes — three, all evidenced above rather than inferred:
   (1) a hygiene guard that hides its own exemptions is the failure mode it was written to prevent;
-  (2) `set -- $var` is not a portable splitter — a guard that fails *differently* per shell gets
-  deleted, so both shells belong in the test matrix. Written in this PR, not after merge.
+  (2) a text matcher enforces only the spellings it knows — comment-as-structure (PR-Agent) and
+  quoted scalars (CodeRabbit) were the same hole twice, and no refusal-only fixture can see it;
+  (3) `set -- $var` is not a portable splitter, so a guard whose contract is "bash and zsh" needs
+  both shells in the test matrix. Written in this PR, not after merge.
 - [ ] **ADR-worthy?** No. Least privilege in CI is covered by the language standards and the
   security pattern; declaring `permissions:` keys is not an architecture decision for a userspace
   TCP bridge. If the identity model changes (GitHub App, #333 option A), that is the ADR.

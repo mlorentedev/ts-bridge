@@ -9,7 +9,10 @@
 # proves the escape hatch stays visible rather than silent. Two more fixtures say the negative of
 # that: a commented-out checkout and a comment that mentions `write-all` are prose, not structure,
 # and must not turn a clean repository red -- which the first version did, on line 8 of a valid
-# workflow (PR-Agent found it; reproduced before fixing).
+# workflow (PR-Agent found it; reproduced before fixing). Three more cover quoting, the other half
+# of the same lesson: a matcher that knows only the unquoted spelling is not a rule about
+# permissions, it is a rule about the spellings this file happens to recognise --
+# `permissions: "write-all"` walked through the first version too (CodeRabbit, #336).
 #
 # And why two shells: the first version of this guard passed under bash and died under zsh with
 # "cannot parse guard output" on a clean repository, because `set -- $sum` does not word-split
@@ -30,7 +33,10 @@ explicit-true:1:enabled
 write-all:1:write-all
 named-opt-out:0:opt-out
 commented-checkout:0:OK
-commented-write-all:0:OK'
+commented-write-all:0:OK
+quoted-write-all:1:write-all
+quoted-checkout:1:no-except
+quoted-false:0:OK'
 
 # Each fixture is one workflow, written as data rather than as a mutation of another: the diff
 # between a passing and a failing case should be readable, not derivable.
@@ -135,6 +141,43 @@ jobs:
       - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
         with:
           persist-credentials: false
+YAML
+    ;;
+    quoted-write-all) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions: "write-all"
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: false
+YAML
+    ;;
+    quoted-checkout) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - uses: "actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5" # v7
+      - run: echo hi
+YAML
+    ;;
+    quoted-false) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: "false"
 YAML
     ;;
     *) echo "test-workflow-permissions: no fixture named $2" >&2; return 3 ;;

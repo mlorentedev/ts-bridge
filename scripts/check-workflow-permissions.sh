@@ -38,7 +38,19 @@ scan() {
       else ok++
       pending = 0
     }
-    BEGIN { pending = 0 }
+    BEGIN {
+      pending = 0
+      # A YAML scalar may be quoted, and GitHub evaluates it the same way. A matcher that only
+      # knows the unquoted spelling is not a rule about permissions, it is a rule about the
+      # handful of spellings this file happens to recognise -- `permissions: "write-all"` and
+      # `uses: "actions/checkout@<sha>"` both walked straight through the first version (found by
+      # CodeRabbit on #336, reproduced before fixed). One shared class, used by every value match.
+      QC = "[\"\047]"                    # a quote character, single or double
+      QO = QC "?"                        # optional opening quote
+      R_WA   = ":[ \t]*" QO "write-all"
+      R_CK   = "uses:[ \t]*" QO "actions/checkout@"
+      R_PC   = "persist-credentials:[ \t]*" QO "[^ \t#\"]+"
+    }
     {
       line = $0
       if (FNR == 1) { top = 0 }
@@ -52,16 +64,17 @@ scan() {
       code = line; cpos = index(code, " #")             # trailing comment: strip for matching,
       if (cpos > 0) code = substr(code, 1, cpos - 1)    # keep it below for the opt-out trailer
       if (code ~ /^permissions:/) top = 1
-      if (code ~ /:[ \t]*write-all/) { wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR }
+      if (code ~ R_WA) { wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR }
       if (pending && n > pindent) {                     # still inside the checkout step
-        if (match(code, /persist-credentials:[ \t]*[^ \t#]+/)) {
+        if (match(code, R_PC)) {
           persist = substr(code, RSTART, RLENGTH)
-          sub(/persist-credentials:[ \t]*/, "", persist)
+          sub("persist-credentials:[ \\t]*", "", persist)
+          gsub(("^" QC "+|" QC "+$"), "", persist)      # `"false"` and false are the same input
         }
         next
       }
       flush()
-      if (match(code, /uses:[ \t]*actions\/checkout@/)) {
+      if (match(code, R_CK)) {
         pending = 1; pindent = n; plineno = FNR; persist = ""; optout = ""
         if (match(line, /#.*persist-credentials-ok:[ \t]*[^ \t]+/)) {
           optout = substr(line, RSTART, RLENGTH)
