@@ -55,13 +55,12 @@ jobs:
           name: coverage
           path: coverage.out
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
-        with:
-          files: ./coverage.out
-          flags: unittests
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+      # The floor lives here, not in a third-party dashboard. It used to be a Codecov upload
+      # against a `codecov.yml` that tuned a 70% patch target for a service this project left
+      # months ago -- a policy file silently decorative, with `fail_ci_if_error: false` making
+      # the dead upload undetectable. See #335.
+      - name: Coverage floor check
+        run: make cover-assert COVER_MIN=60
 
   # Native Windows job. The Linux `test` job above does not compile the
   # //go:build windows files, so a Windows-only build break (e.g. a stale
