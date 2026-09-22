@@ -67,10 +67,15 @@ cat > .env << 'EOF'
 TS_AUTHKEY=tskey-auth-kXXXXXXXXX
 TS_TARGET=100.82.151.104:3389
 EOF
+chmod 600 .env   # an auth key is a credential; the default umask is not 600
 
 # Run
 ./ts-bridge connect
 ```
+
+On a shared or hardened host, skip the plaintext step: put the key in its own file and pass
+`--auth-key-file ~/.config/ts-bridge/authkey` (mode `600`) instead of setting `TS_AUTHKEY`. See
+[Getting started](./getting-started/) for both forms.
 
 The binary prints the local port. Connect your RDP client to `127.0.0.1:<LOCAL_PORT>`.
 

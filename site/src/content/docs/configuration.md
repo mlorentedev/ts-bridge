@@ -18,7 +18,7 @@ Configuration is resolved in this order (highest to lowest):
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TS_AUTHKEY` | Auth key. Tailscale: `tskey-*`. Headscale: `hskey-*`. For better security, consider the `--auth-key-file` flag instead. | `tskey-auth-kXXXXXX` |
+| `TS_AUTHKEY` | Auth key. Tailscale: `tskey-*`. Headscale: `hskey-*`. Plaintext in the environment and readable by child processes — on a shared or hardened host, leave it unset and pass `--auth-key-file` (a `connect` flag; `init` has none, so use the interactive wizard there). | `tskey-auth-kXXXXXX` |
 | `TS_TARGET` | Host address on the mesh network | `100.82.151.104:3389` |
 
 ### Optional
@@ -96,5 +96,8 @@ TS_AUTHKEY=hskey-auth-xxxxx
 TS_TARGET=100.64.0.5:3389
 TS_CONTROL_URL=https://vpn.example.com
 ```
+
+Keep that file at `600`, or leave `TS_AUTHKEY` out of it entirely and start with
+`ts-bridge connect --auth-key-file /run/secrets/authkey --control-url https://vpn.example.com`.
 
 The `init` wizard supports both Tailscale and Headscale — it detects the key prefix and configures accordingly.
