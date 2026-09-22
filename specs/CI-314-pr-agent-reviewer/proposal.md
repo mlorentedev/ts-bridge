@@ -44,10 +44,11 @@ therefore no longer depends on CodeRabbit's availability.
 
 ## Risks / open questions
 
-- **Marker unproven here yet.** `## PR Reviewer Guide` is verified in the sibling repos (215
-  hits in kubelab, 172 in dotfiles, all posted by `github-actions[bot]`) but has never
-  appeared in ts-bridge because this workflow has not run here. The first green run is the
-  verification; until then the registry entry is a declaration of intent, not of an actor.
+- **Marker observed here since the first post-merge PR.** `## PR Reviewer Guide` was first
+  verified in the sibling repos (215 hits in kubelab, 172 in dotfiles, all posted by
+  `github-actions[bot]`). In ts-bridge it first appeared on #316 at `2026-09-01T02:54:49Z`
+  (run `33464237552`), and it is still posted on the current pin (v0.45.0): #336 at
+  `2026-09-22T03:23:31Z` (run `35682751703`). The registry entry now names an observed actor.
 - **NaN concurrency is shared.** The fallback chain exists because the limit is per-model
   (`mimo-v2.5` primary, `deepseek-v4-flash` fallback; inherited measurement from #1205/#1107).
 - **`issue:` was recorded by hand** because `dotf spec init --issue` needs GraphQL and the
@@ -55,13 +56,15 @@ therefore no longer depends on CodeRabbit's availability.
 
 ## Acceptance criteria
 
-- [ ] First non-draft PR after merge carries a `## PR Reviewer Guide` comment from
+- [x] First non-draft PR after merge carries a `## PR Reviewer Guide` comment from
       `github-actions[bot]`, and the `Fail if no review was published` step is green.
-- [ ] A Dependabot PR and a release-please PR produce no pr-agent run (observed, not inferred).
-- [ ] Pushing a fix re-triggers a review (`handle_push_trigger` + `push_commands`).
+- [x] A Dependabot PR and a release-please PR produce no pr-agent run (observed, not inferred).
+      Observed as a run record whose `review` job is `skipped`: no step executes and no comment
+      is posted. See `verification.md`.
+- [x] Pushing a fix re-triggers a review (`handle_push_trigger` + `push_commands`).
 - [ ] Reviewer coverage over the next 15 non-dependabot PRs is >= 90 %, counted the same way
       as the table in the issue. If not, the fall-through chain is the suspect, not the metric.
-- [ ] A PR that CodeRabbit declines still gets read (vendor quota no longer the constraint).
+- [x] A PR that CodeRabbit declines still gets read (vendor quota no longer the constraint).
 
 ## References
 

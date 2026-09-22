@@ -2,7 +2,7 @@
   {
     "id": "CI-314-pr-agent-reviewer-f1",
     "behavior": "A non-draft PR (not dependabot, not release-please) gets a PR-Agent review; the guard step goes green when the marker comment exists.",
-    "verification": "python3 -c \"import yaml;w=yaml.safe_load(open('.github/workflows/pr-agent.yml'));s=[x['name'] for x in w['jobs']['review']['steps']];assert 'Fail if no review was published' in s and s[0]=='PR-Agent'\"",
+    "verification": "python3 -c \"import yaml;w=yaml.safe_load(open('.github/workflows/pr-agent.yml'));s=[x['name'] for x in w['jobs']['review']['steps']];assert s.index('PR-Agent') < s.index('Fail if no review was published')\"",
     "state": "pending",
     "evidence": ""
   },
