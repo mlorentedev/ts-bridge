@@ -1,7 +1,7 @@
 ---
 id: "ts-bridge-multi-target-socks5"
 type: runbook
-status: active
+status: proposed # capability is not implemented: the binary rejects --socks5. See ADR-014 (proposed) and #186.
 tags: [runbook, socks5, ssh, kubectl, kubelab, headscale]
 created: "2026-08-14"
 owner: manu
@@ -9,11 +9,20 @@ owner: manu
 
 # Multi-Target Mesh Connectivity via SOCKS5
 
+> **Not implemented — this is a design, not a procedure.** `ts-bridge` has no SOCKS5 mode: the
+> flag below is unknown to the binary (`connect --socks5 …` exits with a usage error, verified
+> against a build of `master`). The proxy is specified in
+> [ADR-014](../adr/adr-014-socks5-dynamic-mesh-proxy.md) (`status: proposed`) and tracked as
+> [#186](https://github.com/mlorentedev/ts-bridge/issues/186); until that lands, nothing here is
+> runnable. The recipes in §2 are kept because they are the acceptance shape the implementation
+> has to satisfy, and because `ssh -J`/`ProxyCommand` and `kubectl --proxy-url` are real tools
+> waiting on it.
+
 > Operational guide for reaching an entire Tailscale/Headscale mesh from a non-admin workstation using `ts-bridge` in SOCKS5 proxy mode.
 
 ---
 
-## 1. Running the SOCKS5 Bridge
+## 1. Running the SOCKS5 Bridge *(not available yet)*
 
 Start `ts-bridge` pointing to your Headscale or Tailscale mesh in SOCKS5 proxy mode:
 

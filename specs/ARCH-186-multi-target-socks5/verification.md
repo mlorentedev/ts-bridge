@@ -12,6 +12,12 @@ template_version: "1.0"
 
 ## Evidence Checklist
 
+Scope of the four items below: **documentation deliverables only**. They are ticked because the ADR
+and the runbook exist, not because the proxy exists — `ts-bridge` has no SOCKS5 implementation
+(`connect --socks5` is rejected by the binary, measured 2026-09-21 on `master`), so issue #186 stays
+open and nothing here may be read as a delivered feature. See `docs/lessons/lesson-030-2026-08-31.md`
+on ticking a criterion against the artifact rather than the document that describes it.
+
 - [x] ADR-014 authored in `docs/adr/adr-014-socks5-dynamic-mesh-proxy.md`.
 - [x] SOCKS5 runbook with SSH and kubectl recipes documented in `docs/runbooks/guide-multi-target-socks5.md`.
 - [x] Headscale ACL contract documented.
