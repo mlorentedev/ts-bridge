@@ -115,6 +115,22 @@ TS_AUTHKEY=tskey-auth-kXXXXXXXXX   # From Tailscale admin console
 TS_TARGET=100.82.151.104:3389       # Host Tailscale IP + port
 ```
 
+Then restrict it, because an auth key is a credential and `.env` is world-readable by default:
+
+```bash
+chmod 600 .env
+```
+
+> **Security note:** A key in `.env` or in the environment is readable by any child process, and
+> `--auth-key` on the command line is visible in the process list to every user on the machine. For
+> a shared or hardened host, keep the key in its own file and pass `--auth-key-file` instead — the
+> binary never sees the value in the argument vector:
+>
+> ```bash
+> printf '%s' 'tskey-auth-kXXXXXXXXX' > ~/.config/ts-bridge/authkey && chmod 600 ~/.config/ts-bridge/authkey
+> ./ts-bridge connect --target 100.82.151.104:3389 --auth-key-file ~/.config/ts-bridge/authkey
+> ```
+
 For Headscale, use `hskey-auth-*` keys and set `TS_CONTROL_URL`:
 
 ```bash
@@ -128,7 +144,7 @@ TS_CONTROL_URL=https://vpn.example.com
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TS_AUTHKEY` | Auth key. Tailscale: [generate here](https://login.tailscale.com/admin/settings/keys). Headscale: `headscale preauthkeys create`. Prefix: `tskey-` or `hskey-`. | `tskey-auth-kXXXXXX` |
+| `TS_AUTHKEY` | Auth key. Tailscale: [generate here](https://login.tailscale.com/admin/settings/keys). Headscale: `headscale preauthkeys create`. Prefix: `tskey-` or `hskey-`. Plaintext in the environment — on a shared or hardened host, leave it unset and pass `--auth-key-file` (connect only). | `tskey-auth-kXXXXXX` |
 | `TS_TARGET` | Host address on the mesh network. Supports IP or MagicDNS hostname. | `100.82.151.104:3389` |
 
 ### Optional variables
@@ -167,8 +183,11 @@ TS_CONTROL_URL=https://vpn.example.com
 # Run with verbose logging
 ./ts-bridge connect -v
 
-# Run with all flags inline (overrides .env)
+# Run with all flags inline (overrides .env) — quick try only: the key is visible in `ps`
 ./ts-bridge connect --target 100.82.151.104:3389 --auth-key tskey-auth-kXXXXXXXXX
+
+# Preferred: same thing with the key kept out of the process list
+./ts-bridge connect --target 100.82.151.104:3389 --auth-key-file ~/.config/ts-bridge/authkey
 
 # Interactive setup wizard
 ./ts-bridge init
@@ -184,8 +203,11 @@ TS_CONTROL_URL=https://vpn.example.com
 # Run with verbose logging
 .\ts-bridge.exe connect -v
 
-# Run with all flags inline (overrides .env)
+# Run with all flags inline (overrides .env) — quick try only: the key is visible in Get-Process
 .\ts-bridge.exe connect --target 100.82.151.104:3389 --auth-key tskey-auth-kXXXXXXXXX
+
+# Preferred: same thing with the key kept out of the command line
+.\ts-bridge.exe connect --target 100.82.151.104:3389 --auth-key-file $env:USERPROFILE\.ts-bridge\authkey
 
 # Interactive setup wizard
 .\ts-bridge.exe init

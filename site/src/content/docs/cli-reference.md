@@ -61,14 +61,14 @@ ts-bridge connect [flags]
 # Run with .env config
 ts-bridge connect
 
-# Run with all flags inline
+# Secure: read auth key from file (the value never enters the process list)
+ts-bridge connect --auth-key-file /run/secrets/authkey
+
+# Run with all flags inline — quick try only: --auth-key is visible in `ps`
 ts-bridge connect --target 100.64.0.1:3389 --auth-key tskey-auth-xxxxx
 
 # Run with YAML config
 ts-bridge connect --config ts-bridge.yaml
-
-# Secure: read auth key from file
-ts-bridge connect --auth-key-file /run/secrets/authkey
 
 # Manual mode (persistent hostname)
 ts-bridge connect --manual-mode --instance my-laptop --local-addr 127.0.0.1:33389
@@ -99,7 +99,8 @@ ts-bridge init [flags]
 # Interactive wizard (prompts for all values)
 ts-bridge init
 
-# Non-interactive: .env output (default)
+# Non-interactive: .env output (default) — --auth-key is visible in `ps`; init has no
+# --auth-key-file, so on a shared host prefer the interactive wizard just above
 ts-bridge init --auth-key tskey-auth-xxxxx --target 100.64.0.1:3389
 
 # Non-interactive: YAML output
