@@ -34,8 +34,8 @@ created: "2026-08-31"
 - [x] [AC1] After merge: first non-draft PR carries `## PR Reviewer Guide` and the guard is
       green — #316, run `33464237552` (guide `2026-09-01T02:54:49Z`); on the v0.45.0 pin, #336,
       run `35682751703` (guide `2026-09-22T03:23:31Z`).
-- [x] [AC2] After merge: observe a Dependabot bump and a release-please PR produce no run —
-      job `review` `skipped` on release-please runs `34146702374`/`34081102575` and on all 17
+- [x] [AC2] After merge: observe that PR-Agent does not execute on a Dependabot bump or a
+      release-please PR — the run exists but job `review` is `skipped` on release-please runs `34146702374`/`34081102575` and on all 17
       dependabot runs in the latest 100.
 - [x] [AC3] After merge: push a fix and confirm a re-review — #316 push `540ca7a` → run
       `33464880724`; #325 pushes → runs `34098785105`, `34099871549`, `34101022805`.

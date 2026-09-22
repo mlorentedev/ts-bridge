@@ -58,9 +58,9 @@ therefore no longer depends on CodeRabbit's availability.
 
 - [x] First non-draft PR after merge carries a `## PR Reviewer Guide` comment from
       `github-actions[bot]`, and the `Fail if no review was published` step is green.
-- [x] A Dependabot PR and a release-please PR produce no pr-agent run (observed, not inferred).
-      Observed as a run record whose `review` job is `skipped`: no step executes and no comment
-      is posted. See `verification.md`.
+- [x] On a Dependabot PR and a release-please PR, PR-Agent does not execute and posts no
+      comment (observed, not inferred): the workflow run record exists, but its `review` job is
+      `skipped`. See `verification.md`.
 - [x] Pushing a fix re-triggers a review (`handle_push_trigger` + `push_commands`).
 - [ ] Reviewer coverage over the next 15 non-dependabot PRs is >= 90 %, counted the same way
       as the table in the issue. If not, the fall-through chain is the suspect, not the metric.

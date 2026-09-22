@@ -19,8 +19,8 @@ every run ID and timestamp is checkable with `gh api repos/mlorentedev/ts-bridge
 - [x] AC2 (dependabot/release excluded): the workflow still creates a run record, but the
       `review` job is `skipped`, so no PR-Agent step executes and no comment is posted.
       release-please: runs `34146702374`, `34081102575`. Dependabot: 17 of 17 dependabot runs in
-      the latest 100 are `skipped`. The AC's "no run" is looser than the mechanism; "job
-      skipped" is what is observed.
+      the latest 100 are `skipped`. The AC originally said "no run"; it now names the
+      skipped-job mechanism, which is what is observed (reworded after CodeRabbit on #346).
 - [x] AC3 (push re-review): #316 push of `540ca7a` → run `33464880724` (`2026-09-01T03:04:36Z`,
       guard `success`); #325 pushes → runs `34098785105`, `34099871549`, `34101022805`, each
       publishing a fresh review.
