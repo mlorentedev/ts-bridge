@@ -121,6 +121,40 @@ fixes: 11 fixtures × 2 shells = **22/22 green**, and the real tree still report
   slipped. Nothing here argues that is fine — it is recorded because "we'll add the spec after
   merge" is the pattern the standing orders ban, and the fix is to do it in the same session.
 
+## Adversarial review round 1 (FAIL, 2026-09-22) — dispositions
+
+Reviewer `agy/gemini-3.1-pro-high`, `reviewed_sha` `00c71b9`. Every finding was reproduced on a
+fixture before the parser changed; the reviewer graded two of them THEORETICAL, and all three were
+real.
+
+| Finding | Reproduction before the fix | Disposition |
+|---|---|---|
+| Blocker: `- name:` before `uses:` closes the step early → false `no-except` | `checkout-not-first` exit 1, wanted 0 | **Fixed.** Steps are delimited by their list dash and judged after they end. Also covers `with:` before `uses:` (`with-before-uses`, also red before) |
+| Major: `permissions: >-` + `write-all` on the next line passes | `block-scalar-write-all` exit 0, wanted 1 | **Fixed**, together with a sibling the review did not name: a bare `permissions:` followed by an indented plain scalar `write-all` also passed (`next-line-write-all`, exit 0 before) |
+| Minor: `persist-credentials: False` → false `enabled` | `persist-capital-false` exit 1, wanted 0 | **Fixed**: case-insensitive compare |
+
+Controls, green before and after: `name-first-persists` (a `name:`-first checkout with no
+`persist-credentials` must still be refused) and `block-scalar-read-all` (a block scalar that is not
+`write-all` must pass).
+
+Evidence on the fixed tree:
+
+```
+bash scripts/tests/test-workflow-permissions.sh   36/36 ok (18 fixtures x bash, zsh), exit 0
+bash scripts/check-workflow-permissions.sh        OK (8 workflows, 10 checkouts, 10 credential-less, 0 opted out)
+shellcheck (both scripts)                         clean
+```
+
+The checkout count on the real tree is unchanged at 10, so the new step logic neither lost nor
+invented a checkout. Also probed without adding fixtures: compact step lists (dash at the `steps:`
+column) with `- ` lines inside a `run: |` block pass; a second checkout lacking the setting is
+still refused; a job-level `permissions: |-` + `write-all` is refused.
+
+Known limits, stated rather than discovered: flow-style steps (`- {uses: …}`) and a
+`persist-credentials` key nested under something other than the step are matched textually, not
+structurally. The guard is a line scanner, not a YAML parser. That was a deliberate choice (no
+new dependency), and its blind spots are now enumerated here.
+
 ## Promotion candidates
 
 - [x] **Lesson for `docs/lessons/`?** Yes — three, all evidenced above rather than inferred:

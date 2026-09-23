@@ -29,17 +29,21 @@ WFDIR="${1:-$ROOT/.github/workflows}"
 scan() {
   awk '
     function indent(s) { if (match(s, /[^ ]/)) return RSTART - 1; return 999 }
+    # A step is judged once it has ended, from everything it contained: the checkout and its
+    # persist-credentials may appear in either order.
     function flush() {
-      if (!pending) return
+      if (!instep) return
+      instep = 0
+      if (!ck) return
       checkouts++
-      if (optout != "") { opted++; printf "  opt-out    %-28s line %-4d %s\n", FILENAME, plineno, optout; pending = 0; return }
+      if (optout != "") { opted++; printf "  opt-out    %-28s line %-4d %s\n", FILENAME, plineno, optout; return }
       if (persist == "")      { bad++; printf "  no-except  %-28s line %-4d checkout persists credentials\n", FILENAME, plineno }
-      else if (persist != "false") { bad++; printf "  enabled    %-28s line %-4d persist-credentials: %s\n", FILENAME, plineno, persist }
+      # YAML booleans are case-insensitive: False and FALSE are the same input as false.
+      else if (tolower(persist) != "false") { bad++; printf "  enabled    %-28s line %-4d persist-credentials: %s\n", FILENAME, plineno, persist }
       else ok++
-      pending = 0
     }
     BEGIN {
-      pending = 0
+      instep = 0; permblk = -1
       # A YAML scalar may be quoted, and GitHub evaluates it the same way. A matcher that only
       # knows the unquoted spelling is not a rule about permissions, it is a rule about the
       # handful of spellings this file happens to recognise -- `permissions: "write-all"` and
@@ -65,22 +69,40 @@ scan() {
       if (cpos > 0) code = substr(code, 1, cpos - 1)    # keep it below for the opt-out trailer
       if (code ~ /^permissions:/) top = 1
       if (code ~ R_WA) { wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR }
-      if (pending && n > pindent) {                     # still inside the checkout step
-        if (match(code, R_PC)) {
-          persist = substr(code, RSTART, RLENGTH)
-          sub("persist-credentials:[ \\t]*", "", persist)
-          gsub(("^" QC "+|" QC "+$"), "", persist)      # `"false"` and false are the same input
+      # A permissions value need not share the key line. `permissions: >-` (a block scalar) and a
+      # bare `permissions:` followed by an indented plain scalar both evaluate to the string on
+      # the next line, so `write-all` written that way passed a same-line match with OK (found by
+      # the CI-322 adversarial review, the plain-scalar form while fixing it). Lines indented
+      # under such a key that are not themselves `key:` entries are its value.
+      if (permblk >= 0) {
+        if (n <= permblk) permblk = -1
+        else if (code !~ /^[ \t]*[^ \t:]+:([ \t]|$)/ && code ~ /write-all/) {
+          wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR
         }
-        next
       }
-      flush()
+      if (code ~ /(^|[ \t])permissions:[ \t]*([>|][-+0-9]*)?[ \t]*$/) permblk = n
+      # Steps are delimited by their list dash, never by the `uses:` line. The first version took
+      # the step indent from `uses:`, which is the dash column only when `uses:` comes first; with
+      # `- name:` first, `with:` sat at the same indent, the step closed early and a correct
+      # checkout was reported as persisting credentials -- a false red on common YAML (CI-322
+      # adversarial review, Blocker). A dash nested deeper than the open step is content.
+      if (instep && n <= sindent) flush()
+      if (!instep && code ~ /^[ \t]*-([ \t]|$)/) { instep = 1; sindent = n; ck = 0; persist = ""; optout = "" }
+      # A checkout outside any list item is not valid Actions YAML, but it is still counted:
+      # a guard that reports 0 checkouts for a file that has one is announcing a blind spot.
+      if (!instep && match(code, R_CK)) { instep = 1; sindent = n - 1; ck = 0; persist = ""; optout = "" }
+      if (!instep) next
       if (match(code, R_CK)) {
-        pending = 1; pindent = n; plineno = FNR; persist = ""; optout = ""
+        ck = 1; plineno = FNR
         if (match(line, /#.*persist-credentials-ok:[ \t]*[^ \t]+/)) {
           optout = substr(line, RSTART, RLENGTH)
           sub(/^.*persist-credentials-ok:[ \t]*/, "", optout)
         }
-        next
+      }
+      if (match(code, R_PC)) {
+        persist = substr(code, RSTART, RLENGTH)
+        sub("persist-credentials:[ \\t]*", "", persist)
+        gsub(("^" QC "+|" QC "+$"), "", persist)        # `"false"` and false are the same input
       }
     }
     END {

@@ -14,6 +14,13 @@
 # permissions, it is a rule about the spellings this file happens to recognise --
 # `permissions: "write-all"` walked through the first version too (CodeRabbit, #336).
 #
+# The CI-322 adversarial review found the same lesson one level up, in structure rather than
+# quoting: a step whose `uses:` is not its first key (`checkout-not-first`, `with-before-uses`)
+# was a false red, and `write-all` written as a block scalar or on the line after its key
+# (`block-scalar-write-all`, `next-line-write-all`) was a false green. `persist-capital-false`
+# covers YAML's case-insensitive booleans. `name-first-persists` and `block-scalar-read-all` are
+# the controls that stop the new step and scalar handling from passing everything.
+#
 # And why two shells: the first version of this guard passed under bash and died under zsh with
 # "cannot parse guard output" on a clean repository, because `set -- $sum` does not word-split
 # where zsh is concerned. A guard that fails differently per shell is a guard that gets deleted,
@@ -36,7 +43,14 @@ commented-checkout:0:OK
 commented-write-all:0:OK
 quoted-write-all:1:write-all
 quoted-checkout:1:no-except
-quoted-false:0:OK'
+quoted-false:0:OK
+checkout-not-first:0:OK
+with-before-uses:0:OK
+name-first-persists:1:no-except
+block-scalar-write-all:1:write-all
+next-line-write-all:1:write-all
+block-scalar-read-all:0:OK
+persist-capital-false:0:OK'
 
 # Each fixture is one workflow, written as data rather than as a mutation of another: the diff
 # between a passing and a failing case should be readable, not derivable.
@@ -178,6 +192,102 @@ jobs:
       - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
         with:
           persist-credentials: "false"
+YAML
+    ;;
+    checkout-not-first) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - name: Checkout
+        uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: false
+      - run: echo hi
+YAML
+    ;;
+    with-before-uses) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - name: Checkout
+        with:
+          persist-credentials: false
+        uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+      - run: echo hi
+YAML
+    ;;
+    name-first-persists) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - name: Checkout
+        uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+      - name: Build
+        run: echo hi
+YAML
+    ;;
+    block-scalar-write-all) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions: >-
+  write-all
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: false
+YAML
+    ;;
+    next-line-write-all) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  write-all
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: false
+YAML
+    ;;
+    block-scalar-read-all) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions: >-
+  read-all
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: false
+YAML
+    ;;
+    persist-capital-false) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: False
 YAML
     ;;
     *) echo "test-workflow-permissions: no fixture named $2" >&2; return 3 ;;
