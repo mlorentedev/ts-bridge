@@ -1,7 +1,7 @@
 ---
 id: "SEC-212-authkey-hardening"
 type: spec
-status: verifying # draft | implementing | verifying | archived; implementation merged in #298 and #310
+status: archived # draft | implementing | verifying | archived; implementation merged in #298 and #310
 created: "2026-08-14"
 issue: "ts-bridge#212"
 tags: [spec, security, hardening, auth-key, docs, cli]

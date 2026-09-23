@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -142,6 +143,9 @@ func TestWriteYAMLConfig_CreatesYamlAndEnv(t *testing.T) {
 	if !strings.Contains(string(envData), "TS_AUTHKEY=tskey-test") {
 		t.Error(".env should contain TS_AUTHKEY")
 	}
+	if !strings.Contains(string(envData), "--auth-key-file") {
+		t.Error("YAML-mode .env sidecar should point to --auth-key-file as the secure alternative")
+	}
 }
 
 func TestRunInitProfile(t *testing.T) {
@@ -262,8 +266,13 @@ func TestWriteEnvConfig_CreatesFullConfig(t *testing.T) {
 
 func TestInit_SecurityGuidance(t *testing.T) {
 	cmd := newInitCmd()
-	if !strings.Contains(cmd.Long, "--auth-key-file") {
-		t.Error("init command help should mention --auth-key-file")
+	// init registers no --auth-key-file, so the help must send the key file to connect,
+	// where the flag exists, rather than suggest it as an init flag.
+	if !strings.Contains(cmd.Long, "ts-bridge connect --auth-key-file") {
+		t.Error("init command help should point to ts-bridge connect --auth-key-file")
+	}
+	if strings.Contains(cmd.Long, "consider using --auth-key-file") {
+		t.Error("init command help should not suggest --auth-key-file as an init flag")
 	}
 	if !strings.Contains(cmd.Long, "child processes") {
 		t.Error("init command help should explain child processes visibility")
@@ -274,5 +283,51 @@ func TestInit_SecurityGuidance(t *testing.T) {
 	}
 	if !strings.Contains(flag.Usage, "visible in process list") {
 		t.Errorf("--auth-key usage should warn that the key is visible in the process list, got %q", flag.Usage)
+	}
+}
+
+func TestPrintNextSteps_SecurityTip(t *testing.T) {
+	// captureStdoutStderr lives in package cmd_test; this file is package cmd, so pipe
+	// stdout here. The output is a few hundred bytes, well under the pipe buffer.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = w
+	printNextSteps(initFlags{Config: "ts-bridge.env", Format: "env"})
+	os.Stdout = oldStdout
+	w.Close()
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	stdout := string(out)
+	if !strings.Contains(stdout, "ts-bridge connect --auth-key-file") {
+		t.Errorf("next steps should show the connect --auth-key-file form, got:\n%s", stdout)
+	}
+}
+
+// Every command that accepts an inline --auth-key must warn that the value is
+// visible in the process list. Walking the whole tree instead of naming commands
+// is the point: discover took the flag without the warning because the check
+// named only init.
+func TestAuthKeyFlags_WarnProcessList(t *testing.T) {
+	var walk func(c *cobra.Command) int
+	walk = func(c *cobra.Command) int {
+		n := 0
+		if f := c.Flags().Lookup("auth-key"); f != nil {
+			n++
+			if !strings.Contains(f.Usage, "visible in process list") {
+				t.Errorf("%q: --auth-key usage lacks the process-list warning: %q", c.CommandPath(), f.Usage)
+			}
+		}
+		for _, sub := range c.Commands() {
+			n += walk(sub)
+		}
+		return n
+	}
+	if n := walk(NewRootCmd()); n < 3 {
+		t.Fatalf("found --auth-key on %d commands, want at least connect, init and discover", n)
 	}
 }
