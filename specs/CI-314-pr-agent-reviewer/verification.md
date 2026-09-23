@@ -79,6 +79,18 @@ Reviewer `nan/deepseek-v4-flash`, `reviewed_sha` `27a0838`.
 | Speculative: concurrent `pull_request` and `issue_comment` runs could let one bind to the other's comment edit | **Declined, surface only.** Not reproduced; the effect is benign, because the PR does hold a fresh review. No `issue_comment` run has ever executed here (51 of 51 skipped at review time, 64 of 64 on re-count) |
 | Question: the `issue_comment` trigger is not named in the contract | **Named** in `proposal.md` What, including that `.pr_agent.toml` does not apply on it |
 
+## Adversarial review round 6 (PASS-WITH-GAPS, 2026-09-22) — dispositions
+
+Reviewer `agy/gemini-3.1-pro-high`, `reviewed_sha` `bf53cf2`. It confirms the round-5 Major is
+fixed by the contract correction and advises archiving.
+
+| Finding | Disposition |
+|---|---|
+| Minor: `features.json` maps only AC1 (f1, f2); AC2–AC5 have no machine-readable feature | **Declined, with the reason.** AC2–AC5 are observations over live GitHub state: which runs were skipped, which PRs carry a bot comment, how many PRs fall in a window. A `verification` command for them would call the network and return a different answer as the window moves, which is not what the harness's exit-0 contract measures. Each has its counting method and its evidence here instead. Adding entries would also make this review stale by construction (same trade as SEC-212's F6) |
+| Minor: the guard's `jq` aborts on a `null` body | **Ticketed: #345** (fails closed) |
+| Minor: the guard has no automated test | **Ticketed: #345**, widened on 2026-09-22 with the seven fixture scenarios |
+| Speculative: concurrent `pull_request` / `issue_comment` runs | **Declined**, as in round 5: not reproduced, the effect is benign, and 64/64 `issue_comment` runs were skipped |
+
 ## Decisions made during implementation
 
 - `repo_context_files = ["AGENTS.md"]` only — no CLAUDE.md exists at root or under `.claude/`
