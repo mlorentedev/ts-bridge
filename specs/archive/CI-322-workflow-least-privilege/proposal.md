@@ -1,7 +1,7 @@
 ---
 id: "CI-322-workflow-least-privilege"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-21"
 issue: "mlorentedev/ts-bridge#322"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, ci, security, github-actions, least-privilege]
@@ -38,7 +38,10 @@ After this PR, an unauthorized grant is a **build failure** rather than a defaul
   it reads like a hardening declaration and grants the same ambient write scope as saying nothing.
 - `scripts/tests/test-workflow-permissions.sh` proves the guard still refuses each way the
   posture can widen, under **both bash and zsh**.
-- Both scripts run in the `Repo hygiene` job, so every PR and every push to `master` is gated.
+- Both scripts run in the `Repo hygiene` job on every PR and every push to `master`. That job's
+  `hygiene` check is a **required status check** on `master` (added 2026-09-22, after the CI-322
+  review found it was only advisory), so a red run blocks the merge instead of only reporting.
+  The job installs zsh, and the suite fails when either shell is missing.
 
 ## Out of scope
 
@@ -66,16 +69,21 @@ After this PR, an unauthorized grant is a **build failure** rather than a defaul
   `git rev-parse --short HEAD` after checkout. Read-only git operations do not need a stored
   credential; verified locally against a checkout built the same way.
 - **Guard correctness beats guard cleverness.** The parser is indentation-based awk, not a YAML
-  library: no new dependency (a zero-dep design goal here) and it runs anywhere CI runs. The cost
-  is that a checkout step written on one line (`- {uses: ...}`) would be missed; the fixture suite
-  is where that trade-off is visible, not in a comment nobody reads.
+  library: no new dependency (a zero-dep design goal here) and it runs anywhere CI runs (verified
+  under mawk and busybox awk as well as gawk). The cost is that it reads structure from lines, so
+  each YAML spelling it handles is a fixture: steps delimited by their dash in any key order,
+  one-line flow-style steps (`- {uses: ..., with: {persist-credentials: false}}`), quoted, anchored
+  and tagged values, block and next-line scalars, CRLF files, and block-scalar bodies skipped as
+  text. What it still cannot see (a checkout assembled through YAML aliases, a
+  `.github/workflows` directory that does not exist) is listed in `verification.md`, not left to
+  be discovered.
 
 ## Acceptance criteria
 
 - [ ] Every workflow under `.github/workflows/` declares a top-level `permissions:` key, and none declares `write-all`.
 - [ ] Every `actions/checkout` step in every workflow either sets `persist-credentials: false` or carries an inline opt-out naming a reason, and the guard reports the counts.
 - [ ] The guard refuses each widening (missing key, persisted token, explicit `true`, `write-all`), passes the clean case, and behaves identically under bash and zsh.
-- [ ] The guard and its test suite run in the `Repo hygiene` job, so the posture cannot decay on a later PR.
+- [ ] The guard and its test suite run in the `Repo hygiene` job, whose `hygiene` check is required on `master`, so a PR that widens the posture cannot merge green.
 - [ ] No regression in the existing suite: `go build ./...`, `go vet ./...`, `go test ./...`, and the two pre-existing hygiene guards stay green.
 
 ## References
@@ -84,3 +92,5 @@ After this PR, an unauthorized grant is a **build failure** rather than a defaul
 - Related issues: #333 (one human PAT identity behind CI automation — the root cause this deliberately leaves alone), #335 (a `CODECOV_TOKEN` reference to a secret the repo does not have).
 - Related pattern: `00_meta/patterns/pattern-security.md` (least privilege), `pattern-clean-as-you-go` (the guard, not just the fix).
 - Existing precedent in-repo: `.github/workflows/repo-hygiene.yml` (the only hardened workflow before this change), `scripts/check-lessons.sh` / `scripts/check-actions-pinned.sh` (house style for guards that need no toolchain).
+
+<!-- archived 2026-09-22 — PR: https://github.com/mlorentedev/ts-bridge/pull/350 -->

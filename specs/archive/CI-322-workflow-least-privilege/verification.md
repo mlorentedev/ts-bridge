@@ -52,12 +52,12 @@ Branch `ci/least-privilege-workflow-permissions`, worktree `../ts-bridge-wt-ci-p
   its test suite; the job triggers on `pull_request` and on `push: branches: [master]`.
 
 - [x] **AC5 — no regression** -> `go build ./...` (silent), `go vet ./...` (silent), `go test ./...`
-  all packages `ok`; `check-lessons.sh` → `OK (30 lessons)`; `check-actions-pinned.sh` →
+  all packages `ok`; `check-lessons.sh` → `OK (30 lessons)` at the time (32 on 2026-09-22); `check-actions-pinned.sh` →
   `OK (8 workflow files)`; `shellcheck -s bash` clean on both new scripts.
 
 ## Test status
 
-- Guard behavior: 6 fixtures × 2 shells = 12 assertions, all green (AC3 above).
+- Guard behavior: 6 fixtures × 2 shells = 12 assertions, all green (AC3 above). **Superseded:** 26 fixtures × 2 shells + the missing-shell self-test = 53 on 2026-09-22 (round 2 below). In CI, the zsh half never ran until round 2 (see there).
 - Go suite: unchanged by this PR, run anyway because `ci.yml` itself changed — `go test ./...` green,
   `cmd/cli` 41.4 %, `internal/config` 92.2 % (measured before the branch, no coverage surface touched here).
 - RED observed before GREEN: run against unmodified `master`, the guard exited 1 with 11 findings
@@ -121,6 +121,82 @@ fixes: 11 fixtures × 2 shells = **22/22 green**, and the real tree still report
   slipped. Nothing here argues that is fine — it is recorded because "we'll add the spec after
   merge" is the pattern the standing orders ban, and the fix is to do it in the same session.
 
+## Adversarial review round 1 (FAIL, 2026-09-22) — dispositions
+
+Reviewer `agy/gemini-3.1-pro-high`, `reviewed_sha` `00c71b9`. Every finding was reproduced on a
+fixture before the parser changed; the reviewer graded two of them THEORETICAL, and all three were
+real.
+
+| Finding | Reproduction before the fix | Disposition |
+|---|---|---|
+| Blocker: `- name:` before `uses:` closes the step early → false `no-except` | `checkout-not-first` exit 1, wanted 0 | **Fixed.** Steps are delimited by their list dash and judged after they end. Also covers `with:` before `uses:` (`with-before-uses`, also red before) |
+| Major: `permissions: >-` + `write-all` on the next line passes | `block-scalar-write-all` exit 0, wanted 1 | **Fixed**, together with a sibling the review did not name: a bare `permissions:` followed by an indented plain scalar `write-all` also passed (`next-line-write-all`, exit 0 before) |
+| Minor: `persist-credentials: False` → false `enabled` | `persist-capital-false` exit 1, wanted 0 | **Fixed**: case-insensitive compare |
+
+Controls, green before and after: `name-first-persists` (a `name:`-first checkout with no
+`persist-credentials` must still be refused) and `block-scalar-read-all` (a block scalar that is not
+`write-all` must pass).
+
+Evidence on the fixed tree:
+
+```
+bash scripts/tests/test-workflow-permissions.sh   36/36 ok (18 fixtures x bash, zsh), exit 0
+bash scripts/check-workflow-permissions.sh        OK (8 workflows, 10 checkouts, 10 credential-less, 0 opted out)
+shellcheck (both scripts)                         clean
+```
+
+The checkout count on the real tree is unchanged at 10, so the new step logic neither lost nor
+invented a checkout. Also probed without adding fixtures: compact step lists (dash at the `steps:`
+column) with plain `- ` lines inside a `run: |` block pass; a second checkout lacking the setting is
+still refused; a job-level `permissions: |-` + `write-all` is refused. **Corrected in round 2:**
+the `run: |` probe only covered lines without `uses: actions/checkout@`. A checkout-looking line
+inside a block scalar was a false red, and the reviewer reproduced it. Block-scalar bodies are now
+skipped as text, with a fixture.
+
+Known limits (round 1 wording, corrected in round 2 below): flow-style steps were listed here
+as matched textually. In fact a hardened flow-style step was a false red (`false}}`), and it now
+has a fixture.
+
+## Adversarial review round 2 (FAIL, 2026-09-22) — dispositions
+
+Reviewer `nan/deepseek-v4-flash`, `reviewed_sha` `67297da`. The guard was judged correct on this
+repository. The FAIL was for the mechanism meant to keep it correct.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | **Major**: CI has no zsh, so the suite ran 18 of 36 cases, printed `UNTESTED` and exited 0. A `set -- $sum` regression would pass green | **Fixed, both halves.** `repo-hygiene.yml` installs zsh, and the suite now fails when a required shell is absent (`TWP_SHELLS` can narrow the set, but only explicitly). The suite self-tests this: it re-runs itself with a missing shell and requires a non-zero exit. With zsh hidden from `PATH` it now exits 1; before, it exited 0. Confirmed on CI run `35807528455`: 0 `[zsh]` cases had run. Lesson 031 carried the false claim; it has a dated correction |
+| 2 | Minor: `proposal.md` says one-line flow-style steps "would be missed"; actually a hardened one was a false red | **Fixed** (contract edit, rides this round): `R_PC` stops at `,` and `}`; fixtures `flow-style-hardened` (red before) and `flow-style-persists` (control). The proposal paragraph now lists what is handled and what is not |
+| 3 | Minor: false reds on CRLF, on a checkout line inside a block scalar, and on `write-all` inside a string | **Fixed**, a fixture each, all red before: `crlf-hardened` (`\r` stripped), `checkout-text-in-run-block` (block-scalar bodies skipped), `write-all-inside-string` (the value must *be* `write-all`, not contain it). Control `run-block-then-sibling-key`: the key after a `run: \|` body is still read |
+| 4 | Minor: stale claims in this file (the `run: \|` probe, "12 assertions", "30 lessons") | **Corrected** above, marked in place instead of silently rewritten |
+| 5 | Minor: "gated" / "cannot decay" overstated. `Repo hygiene` was not a required check | **Fixed in settings:** `hygiene` added to `master`'s required status checks (2026-09-22). Read back: `["test","lint","security","hygiene"]`, `strict: true`. The runbook table is updated (it was also wrong about enforce-admins). Not codified as IaC; **#351** tracks that |
+| 6 | Speculative: `&anchor` / `!!tag` before `write-all`; a missing workflows directory exits 0 | **Anchors/tags fixed** (`anchored-write-all`, `tagged-write-all`, both red before). **Missing directory: declined.** A repository with no workflows has no posture to protect, and `repo-hygiene.yml` itself lives there, so the directory cannot vanish without the guard vanishing with it |
+| 7 | Minor: the awk program exceeded the size and branching law | **Applied:** split into `scan_permissions`, `scan_step`, `begin_step`, `report_wa`, `keycol` and `flush`; the main block is now a dispatcher |
+
+Evidence on the round-2 tree:
+
+```
+bash scripts/tests/test-workflow-permissions.sh        53 ok (26 fixtures x bash, zsh + missing-shell self-test), exit 0
+  same, zsh hidden from PATH                           exit 1, "FAIL [zsh] not installed"
+  same fixtures under mawk and busybox awk             52/52 each
+bash scripts/check-workflow-permissions.sh             OK (8 workflows, 10 checkouts, 10 credential-less, 0 opted out)
+actionlint .github/workflows/repo-hygiene.yml          clean
+shellcheck (both scripts)                              clean
+```
+
+Still not covered, stated here: a checkout assembled through a YAML alias (`- *checkout`) is invisible
+to a line scanner.
+
+## Adversarial review round 3 (PASS, 2026-09-22) — dispositions
+
+Reviewer `nan/mimo-v2.5`, `reviewed_sha` `3c12913`. No blockers and no majors. CI confirmed the
+round-2 fix on the same SHA: the hygiene job log shows 26 `ok [bash]`, 26 `ok [zsh]` and the
+missing-shell self-test. Before round 2 the log had no `[zsh]` lines at all.
+
+| Finding | Disposition |
+|---|---|
+| Minor: `scan_step` is 65 lines, over the 40-line function threshold | **Declined, documented exemption.** The function tracks one step's dash boundary, checkout, `persist-credentials` and opt-out trailer in a single pass. Those are awk globals with no seam between them, and splitting further would spread one state machine across helpers that only make sense together. The 26 fixtures under both shells cover it, and so do three awk implementations |
+| Minor (speculative): every `features.json` entry is still `state: pending` | **No action here, by rule.** `tasks.md` states that only the harness may write `passing`, after running each `verification` command; an author writing it would be the violation. The commands pass (f1–f4 exit 0 on this tree), and the archive gate reads `review.md`, not this state |
+
 ## Promotion candidates
 
 - [x] **Lesson for `docs/lessons/`?** Yes — three, all evidenced above rather than inferred:
@@ -141,5 +217,5 @@ fixes: 11 fixtures × 2 shells = **22/22 green**, and the real tree still report
 - [ ] `proposal.md` frontmatter set to `status: archived`
 - [ ] Folder moved: `specs/CI-322-workflow-least-privilege/` -> `specs/archive/CI-322-workflow-least-privilege/`
 - [ ] Bitácora board ticket moved to Done / issue #322 closed with the PR link (`Closes #322`)
-- [ ] Independent adversarial review recorded (`review.md`) by a model in `harness/reviewer-pool.json` — the implementer cannot sign it
+- [x] Independent adversarial review recorded (`review.md`) by a model in `harness/reviewer-pool.json`: round 3, `nan/mimo-v2.5`, **PASS**, `reviewed_sha` `3c12913`. Recorded here and not in `tasks.md`, because ticking a contract file would make the review stale
 - [ ] Promotions above executed (the two lessons)

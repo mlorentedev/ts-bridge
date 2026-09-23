@@ -33,6 +33,8 @@ created: "2026-09-21"
 - [x] [AC3] **Post-review fix (PR-Agent on #336):** the guard counted a commented-out `# - uses: actions/checkout@…` step as a real one and scanned comment prose for `write-all`, so a fully valid workflow went red on line 8. Reproduced on a minimal fixture before touching the parser; comment-only lines are now skipped and trailing comments stripped before matching, while the opt-out trailer is deliberately read from the raw line (it lives in the comment). Two fixtures added (`commented-checkout`, `commented-write-all`) asserting the **negative** — a guard that only tests its own refusals is one false red away from being deleted.
 - [x] [AC4] Wire guard + test suite into the `Repo hygiene` job so the posture is enforced on every PR and push
 - [x] Refactor for clarity: findings printed as `kind / file / line`, summary line separated from findings so the shell never parses prose
+- [x] [AC3] **Post-review fix (CI-322 adversarial review, FAIL 2026-09-22):** three parser gaps, all reproduced on fixtures before the change. (1) Blocker: the step boundary was inferred from the `uses:` line, so `- name:` before `uses:` closed the step early and a correct checkout read as persisting credentials. Steps are now delimited by their list dash and judged after they end, so key order no longer matters, including `with:` before `uses:`. (2) Major: `write-all` written as a block scalar (`permissions: >-`) or as a plain scalar on the line after `permissions:` passed with OK; the second form was found while fixing the first. (3) Minor: `persist-credentials: False` was a false red; the compare is now case-insensitive. Seven fixtures added (`checkout-not-first`, `with-before-uses`, `name-first-persists`, `block-scalar-write-all`, `next-line-write-all`, `block-scalar-read-all`, `persist-capital-false`): five red before the fix, two controls green throughout
+- [x] [AC3][AC4] **Round-2 fixes (CI-322 adversarial review, FAIL 2026-09-22):** the suite now fails when a required shell is missing (it had skipped zsh in CI since #336) and `repo-hygiene.yml` installs zsh; `hygiene` is a required status check on `master`; false reds on CRLF, block-scalar bodies, write-all inside strings and hardened flow-style steps fixed; anchored/tagged `write-all` refused; the awk scanner split into functions. Eight fixtures + a missing-shell self-test, six red before. Dispositions in `verification.md`
 
 ## Closing
 
@@ -43,8 +45,8 @@ created: "2026-09-21"
 - [x] All hygiene guards green — `check-lessons.sh`, `check-actions-pinned.sh`, `check-workflow-permissions.sh`
 - [x] No unrelated changes in the diff
 - [x] `verification.md` filled with executed evidence, not intentions
-- [ ] PR opened referencing this spec folder (`Closes #322`)
-- [ ] Reviewer output dispositioned and recorded under `## Review triage` on the PR
+- [x] PR opened referencing this spec folder (`Closes #322`): #336, merged 2026-09-22
+- [x] Reviewer output dispositioned and recorded under `## Review triage` on the PR (#336, two rounds)
 - [ ] Independent adversarial review before archive — the implementer cannot sign it (`harness/reviewer-pool.json` excludes Anthropic models for that reason)
 
 ## Machine-readable features
