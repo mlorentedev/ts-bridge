@@ -268,4 +268,11 @@ func TestInit_SecurityGuidance(t *testing.T) {
 	if !strings.Contains(cmd.Long, "child processes") {
 		t.Error("init command help should explain child processes visibility")
 	}
+	flag := cmd.Flags().Lookup("auth-key")
+	if flag == nil {
+		t.Fatal("init should register --auth-key")
+	}
+	if !strings.Contains(flag.Usage, "visible in process list") {
+		t.Errorf("--auth-key usage should warn that the key is visible in the process list, got %q", flag.Usage)
+	}
 }
