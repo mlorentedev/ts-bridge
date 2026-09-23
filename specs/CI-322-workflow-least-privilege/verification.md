@@ -186,6 +186,17 @@ shellcheck (both scripts)                              clean
 Still not covered, stated here: a checkout assembled through a YAML alias (`- *checkout`) is invisible
 to a line scanner.
 
+## Adversarial review round 3 (PASS, 2026-09-22) — dispositions
+
+Reviewer `nan/mimo-v2.5`, `reviewed_sha` `3c12913`. No blockers and no majors. CI confirmed the
+round-2 fix on the same SHA: the hygiene job log shows 26 `ok [bash]`, 26 `ok [zsh]` and the
+missing-shell self-test. Before round 2 the log had no `[zsh]` lines at all.
+
+| Finding | Disposition |
+|---|---|
+| Minor: `scan_step` is 65 lines, over the 40-line function threshold | **Declined, documented exemption.** The function tracks one step's dash boundary, checkout, `persist-credentials` and opt-out trailer in a single pass. Those are awk globals with no seam between them, and splitting further would spread one state machine across helpers that only make sense together. The 26 fixtures under both shells cover it, and so do three awk implementations |
+| Minor (speculative): every `features.json` entry is still `state: pending` | **No action here, by rule.** `tasks.md` states that only the harness may write `passing`, after running each `verification` command; an author writing it would be the violation. The commands pass (f1–f4 exit 0 on this tree), and the archive gate reads `review.md`, not this state |
+
 ## Promotion candidates
 
 - [x] **Lesson for `docs/lessons/`?** Yes — three, all evidenced above rather than inferred:
@@ -206,5 +217,5 @@ to a line scanner.
 - [ ] `proposal.md` frontmatter set to `status: archived`
 - [ ] Folder moved: `specs/CI-322-workflow-least-privilege/` -> `specs/archive/CI-322-workflow-least-privilege/`
 - [ ] Bitácora board ticket moved to Done / issue #322 closed with the PR link (`Closes #322`)
-- [ ] Independent adversarial review recorded (`review.md`) by a model in `harness/reviewer-pool.json` — the implementer cannot sign it
+- [x] Independent adversarial review recorded (`review.md`) by a model in `harness/reviewer-pool.json`: round 3, `nan/mimo-v2.5`, **PASS**, `reviewed_sha` `3c12913`. Recorded here and not in `tasks.md`, because ticking a contract file would make the review stale
 - [ ] Promotions above executed (the two lessons)
