@@ -115,7 +115,7 @@ fixed by the contract correction and advises archiving.
 
 ## Archive checklist
 
-- [ ] `status: archived` in `proposal.md`
-- [ ] Folder -> `specs/archive/CI-314-pr-agent-reviewer/`
-- [ ] Bitácora #314 -> Done with PR link
-- [ ] Promotions executed
+- [x] `status: archived` in `proposal.md` (`dotf spec archive`, 2026-09-22, round-6 review accepted as fresh)
+- [x] Folder -> `specs/archive/CI-314-pr-agent-reviewer/`
+- [x] Bitácora #314 -> Done with PR link (#314 closed by #315; board item set to Done with #353)
+- [x] Promotions executed: lesson-030 (reviewer silence) and lesson-033 (the exclusion described by the wrong field). The ADR is deferred to the attestation-gate spec, and the pattern is already covered

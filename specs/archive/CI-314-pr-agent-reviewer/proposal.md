@@ -1,7 +1,7 @@
 ---
 id: "CI-314-pr-agent-reviewer"
 type: spec
-status: verifying # draft | implementing | verifying | archived; implementation merged in #315 on 2026-09-01
+status: archived # draft | implementing | verifying | archived; implementation merged in #315 on 2026-09-01
 created: "2026-08-31"
 issue: "mlorentedev/ts-bridge#314"   # repo#NNN — GitHub issue / Project item that tracks this spec
 # Work-gate status: `--force-no-gate` was used at scaffold time because `gh issue view`
@@ -91,3 +91,5 @@ therefore no longer depends on CodeRabbit's availability.
 - Bitácora board: the GitHub issue / Project item tracking this spec (see the `issue:` frontmatter field)
 - Related ADR: `<repo>/docs/adr/adr-XXX.md` (if any)
 - Related patterns: `00_meta/patterns/<pattern>.md` (if any)
+
+<!-- archived 2026-09-22 — PR: https://github.com/mlorentedev/ts-bridge/pull/353 -->
