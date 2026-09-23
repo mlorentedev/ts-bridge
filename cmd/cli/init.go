@@ -36,13 +36,17 @@ Security notes:
   - Auth key input is masked in interactive mode (no echo).
   - In YAML mode the auth key is written to .env, NOT to the YAML file.
   - Plaintext keys in .env or environment variables are readable by child processes.
-  - For enhanced security, consider using --auth-key-file /path/to/key (chmod 0600).
+  - --auth-key on the command line is visible in the process list to every local user.
+  - For enhanced security, keep the key in its own file (chmod 0600) and pass it at launch:
+    ts-bridge connect --auth-key-file /path/to/key
+    init itself has no key-file flag; on a shared host use the interactive prompt.
   - A permission warning is shown if config files are world-readable.
 
 Examples:
   # Interactive wizard
   ts-bridge init
 
+  # Non-interactive examples below put the key in the process list while init runs.
   # Non-interactive: .env output (default)
   ts-bridge init --auth-key tskey-auth-xxx --target 100.64.0.1:3389
 
