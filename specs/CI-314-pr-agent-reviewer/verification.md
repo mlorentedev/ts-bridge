@@ -16,11 +16,15 @@ every run ID and timestamp is checkable with `gh api repos/mlorentedev/ts-bridge
       `## PR Reviewer Guide` at `02:54:49Z`. Reproduced on the current pin (v0.45.0): #336, run
       `35682751703`, every step `success` including `Fail if the reviewer has no credential`,
       guide posted `2026-09-22T03:23:31Z`.
-- [x] AC2 (dependabot/release excluded): the workflow still creates a run record, but the
-      `review` job is `skipped`, so no PR-Agent step executes and no comment is posted.
-      release-please: runs `34146702374`, `34081102575`. Dependabot: 17 of 17 dependabot runs in
-      the latest 100 are `skipped`. The AC originally said "no run"; it now names the
-      skipped-job mechanism, which is what is observed (reworded after CodeRabbit on #346).
+- [x] AC2 (Dependabot-triggered runs and release-please excluded): the workflow still creates a
+      run record, but the `review` job is `skipped`, so no PR-Agent step executes and no comment
+      is posted. release-please: runs `34146702374`, `34081102575`. Dependabot: every run
+      **triggered by `dependabot[bot]`** in the latest 100 is `skipped` (17 on 2026-09-21, 13 on
+      2026-09-22 as the window moved). **Runs a human triggers on a Dependabot branch execute**:
+      in the same window 3 succeeded and posted reviews (#327 `35677943007`, #328 `35679575404`,
+      #330 `35680277625`), 1 failed its guard (#331 `35681109538`) and 1 was cancelled. The first
+      wording of this AC ("a Dependabot PR produces no run") was PR-level while the `if:` keys on
+      `github.actor`. The contract was corrected after the round-5 review.
 - [x] AC3 (push re-review): #316 push of `540ca7a` → run `33464880724` (`2026-09-01T03:04:36Z`,
       guard `success`); #325 pushes → runs `34098785105`, `34099871549`, `34101022805`, each
       publishing a fresh review.
@@ -44,6 +48,12 @@ Known asymmetry: a manual `/review` (`issue_comment`) run does not apply `.pr_ag
 (upstream only calls `apply_repo_settings` when the payload has `pull_request.html_url`), so
 only settings duplicated as env survive on that path. No `issue_comment` run has executed here.
 
+Guard negative path, observed rather than simulated: `Fail if no review was published` went
+**red** on run `35681109538` (#331, human-triggered on a Dependabot branch) and on run
+`35685536231` (#340). In both, a PR-Agent run reported success without publishing a comment the
+run could bind to. #331's own triage comment said the job was skipped; a correction comment was
+posted on #331 on 2026-09-22.
+
 ## Test status
 
 - Config/CI parse: `python3 -c 'import yaml,tomllib,json; ...'` on all three files -> clean, no
@@ -54,6 +64,20 @@ only settings duplicated as env survive on that path. No `issue_comment` run has
 - `features.json`: f1 asserts `PR-Agent` runs before `Fail if no review was published` (order,
   not position — #323 inserted two steps ahead of `PR-Agent`); f1 and f2 both exit 0.
 - Existing test suite: untouched (no Go/bats change).
+
+## Adversarial review round 5 (FAIL, 2026-09-22) — dispositions
+
+Reviewer `nan/deepseek-v4-flash`, `reviewed_sha` `27a0838`.
+
+| Finding | Disposition |
+|---|---|
+| **Major**: the Dependabot exclusion is described per PR but implemented per actor; PR-Agent reviewed #327/#328/#330 and failed on #331 | **Contract corrected** (`proposal.md` What, Out of scope and AC2; `tasks.md` AC2) to describe the actor-keyed exclusion and name the human-triggered path. Evidence above. The #331 triage record was corrected on the PR |
+| Minor: "347 PRs" | **Corrected**: 221 PRs, 0 forks. 347 was the highest PR *number*, not the count; that mistake was the implementer's |
+| Minor: the required checks quoted as `[test, lint, security]` | **Corrected**: the text keeps the historical value and notes that CI-322 added `hygiene` on 2026-09-22 |
+| Minor: a `null` comment body makes the guard abort with a raw jq error | **Already ticketed: #345** (fails closed, no false green) |
+| Minor: the guard has no automated test in this repo | **Folded into #345**, which now also asks for a bash + zsh fixture suite for the guard (pass, stale stamp, non-bot author, no comment, head-registry bootstrap, second page, null body) |
+| Speculative: concurrent `pull_request` and `issue_comment` runs could let one bind to the other's comment edit | **Declined, surface only.** Not reproduced; the effect is benign, because the PR does hold a fresh review. No `issue_comment` run has ever executed here (51 of 51 skipped at review time, 64 of 64 on re-count) |
+| Question: the `issue_comment` trigger is not named in the contract | **Named** in `proposal.md` What, including that `.pr_agent.toml` does not apply on it |
 
 ## Decisions made during implementation
 
