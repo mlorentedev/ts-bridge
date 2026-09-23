@@ -29,6 +29,10 @@ WFDIR="${1:-$ROOT/.github/workflows}"
 scan() {
   awk '
     function indent(s) { if (match(s, /[^ ]/)) return RSTART - 1; return 999 }
+    # Column of the key on a line, past any list dash: the parent a block scalar is nested under.
+    function keycol(s) { if (match(s, /[^ \t-]/)) return RSTART - 1; return 999 }
+    function report_wa() { wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR }
+    function begin_step(col) { instep = 1; sindent = col; ck = 0; persist = ""; optout = "" }
     # A step is judged once it has ended, from everything it contained: the checkout and its
     # persist-credentials may appear in either order.
     function flush() {
@@ -42,56 +46,30 @@ scan() {
       else if (tolower(persist) != "false") { bad++; printf "  enabled    %-28s line %-4d persist-credentials: %s\n", FILENAME, plineno, persist }
       else ok++
     }
-    BEGIN {
-      instep = 0; permblk = -1
-      # A YAML scalar may be quoted, and GitHub evaluates it the same way. A matcher that only
-      # knows the unquoted spelling is not a rule about permissions, it is a rule about the
-      # handful of spellings this file happens to recognise -- `permissions: "write-all"` and
-      # `uses: "actions/checkout@<sha>"` both walked straight through the first version (found by
-      # CodeRabbit on #336, reproduced before fixed). One shared class, used by every value match.
-      QC = "[\"\047]"                    # a quote character, single or double
-      QO = QC "?"                        # optional opening quote
-      R_WA   = ":[ \t]*" QO "write-all"
-      R_CK   = "uses:[ \t]*" QO "actions/checkout@"
-      R_PC   = "persist-credentials:[ \t]*" QO "[^ \t#\"]+"
-    }
-    {
-      line = $0
-      if (FNR == 1) { top = 0 }
-      # A YAML comment is not structure. It grants nothing, checks out nothing, and must not be
-      # scanned as if it did: a commented-out checkout step used to be counted as a real one, so
-      # the guard reported `no-except` on a repository that was entirely clean -- a false red on
-      # the job that gates every PR, which is precisely how a useful check gets deleted.
-      if (line ~ /^[ \t]*#/) next
-      n = indent(line)
-      if (line ~ /^[ \t]*$/) next                       # blanks never close a step
-      code = line; cpos = index(code, " #")             # trailing comment: strip for matching,
-      if (cpos > 0) code = substr(code, 1, cpos - 1)    # keep it below for the opt-out trailer
-      if (code ~ /^permissions:/) top = 1
-      if (code ~ R_WA) { wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR }
-      # A permissions value need not share the key line. `permissions: >-` (a block scalar) and a
-      # bare `permissions:` followed by an indented plain scalar both evaluate to the string on
-      # the next line, so `write-all` written that way passed a same-line match with OK (found by
-      # the CI-322 adversarial review, the plain-scalar form while fixing it). Lines indented
-      # under such a key that are not themselves `key:` entries are its value.
+    # A permissions value need not share the key line. `permissions: >-` (a block scalar) and a
+    # bare `permissions:` followed by an indented plain scalar both evaluate to the string on the
+    # next line, so `write-all` written that way used to pass with OK (CI-322 adversarial review).
+    # The value must BE write-all -- optionally quoted, anchored or tagged -- not merely mention
+    # it: `MSG: "never grant contents: write-all"` is a string, and matching it was a false red.
+    function scan_permissions(code, n) {
+      if (code ~ R_WA) report_wa()
       if (permblk >= 0) {
         if (n <= permblk) permblk = -1
-        else if (code !~ /^[ \t]*[^ \t:]+:([ \t]|$)/ && code ~ /write-all/) {
-          wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR
-        }
+        else if (code ~ R_WAV) report_wa()
       }
-      if (code ~ /(^|[ \t])permissions:[ \t]*([>|][-+0-9]*)?[ \t]*$/) permblk = n
-      # Steps are delimited by their list dash, never by the `uses:` line. The first version took
-      # the step indent from `uses:`, which is the dash column only when `uses:` comes first; with
-      # `- name:` first, `with:` sat at the same indent, the step closed early and a correct
-      # checkout was reported as persisting credentials -- a false red on common YAML (CI-322
-      # adversarial review, Blocker). A dash nested deeper than the open step is content.
+      if (code ~ R_PKEY) permblk = keycol(code)
+    }
+    # Steps are delimited by their list dash, never by the `uses:` line. The first version took
+    # the step indent from `uses:`, which is the dash column only when `uses:` comes first; with
+    # `- name:` first, `with:` sat at the same indent, the step closed early and a correct
+    # checkout was reported as persisting credentials (CI-322 adversarial review, Blocker).
+    function scan_step(line, code, n) {
       if (instep && n <= sindent) flush()
-      if (!instep && code ~ /^[ \t]*-([ \t]|$)/) { instep = 1; sindent = n; ck = 0; persist = ""; optout = "" }
+      if (!instep && code ~ /^[ \t]*-([ \t]|$)/) begin_step(n)
       # A checkout outside any list item is not valid Actions YAML, but it is still counted:
       # a guard that reports 0 checkouts for a file that has one is announcing a blind spot.
-      if (!instep && match(code, R_CK)) { instep = 1; sindent = n - 1; ck = 0; persist = ""; optout = "" }
-      if (!instep) next
+      if (!instep && match(code, R_CK)) begin_step(n - 1)
+      if (!instep) return
       if (match(code, R_CK)) {
         ck = 1; plineno = FNR
         if (match(line, /#.*persist-credentials-ok:[ \t]*[^ \t]+/)) {
@@ -104,6 +82,46 @@ scan() {
         sub("persist-credentials:[ \\t]*", "", persist)
         gsub(("^" QC "+|" QC "+$"), "", persist)        # `"false"` and false are the same input
       }
+    }
+    BEGIN {
+      instep = 0; permblk = -1; blk = -1
+      # A YAML scalar may be quoted, and GitHub evaluates it the same way. A matcher that only
+      # knows the unquoted spelling is not a rule about permissions, it is a rule about the
+      # handful of spellings this file happens to recognise -- `permissions: "write-all"` and
+      # `uses: "actions/checkout@<sha>"` both walked straight through the first version (found by
+      # CodeRabbit on #336, reproduced before fixed). One shared class, used by every value match.
+      QC = "[\"\047]"                    # a quote character, single or double
+      QO = QC "?"                        # optional opening quote
+      PROPS = "([&!][^ \t]*[ \t]+)?([&!][^ \t]*[ \t]+)?"   # an anchor and/or a tag before a value
+      WAVAL = PROPS QO "write-all" QO "[ \t]*$"
+      R_WA   = "^[ \t]*(-[ \t]+)?[A-Za-z0-9_-]+:[ \t]*" WAVAL   # key: write-all, the whole value
+      R_WAV  = "^[ \t]*" WAVAL                                   # write-all on its own line
+      R_PKEY = "(^|[ \t])permissions:[ \t]*" PROPS "([>|][-+0-9]*)?[ \t]*$"
+      R_BLK  = ":[ \t]*" PROPS "[>|][-+0-9]*[ \t]*$"             # any key opening a block scalar
+      R_CK   = "uses:[ \t]*" QO "actions/checkout@"
+      # `,` and `}` end a value in flow style: `{persist-credentials: false}}` is false.
+      R_PC   = "persist-credentials:[ \t]*" QO "[^ \t#\",}\047]+"
+    }
+    {
+      line = $0
+      sub(/\r$/, "", line)               # CRLF: `false\r` is still false
+      if (FNR == 1) { top = 0 }
+      # A YAML comment is not structure. It grants nothing, checks out nothing, and must not be
+      # scanned as if it did: a commented-out checkout step used to be counted as a real one, so
+      # the guard reported `no-except` on a repository that was entirely clean -- a false red on
+      # the job that gates every PR, which is precisely how a useful check gets deleted.
+      if (line ~ /^[ \t]*#/) next
+      if (line ~ /^[ \t]*$/) next                       # blanks never close a step
+      n = indent(line)
+      # The body of a block scalar (`run: |`, a multi-line `with:` value) is text, not structure:
+      # a `- uses: actions/checkout@` line inside a script is not a step. Skipped like a comment.
+      if (blk >= 0) { if (n > blk) next; blk = -1 }
+      code = line; cpos = index(code, " #")             # trailing comment: strip for matching,
+      if (cpos > 0) code = substr(code, 1, cpos - 1)    # keep it below for the opt-out trailer
+      if (code ~ /^permissions:/) top = 1
+      scan_permissions(code, n)
+      scan_step(line, code, n)
+      if (code ~ R_BLK && code !~ R_PKEY) blk = keycol(code)
     }
     END {
       flush()

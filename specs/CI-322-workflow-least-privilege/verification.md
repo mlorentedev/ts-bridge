@@ -52,12 +52,12 @@ Branch `ci/least-privilege-workflow-permissions`, worktree `../ts-bridge-wt-ci-p
   its test suite; the job triggers on `pull_request` and on `push: branches: [master]`.
 
 - [x] **AC5 — no regression** -> `go build ./...` (silent), `go vet ./...` (silent), `go test ./...`
-  all packages `ok`; `check-lessons.sh` → `OK (30 lessons)`; `check-actions-pinned.sh` →
+  all packages `ok`; `check-lessons.sh` → `OK (30 lessons)` at the time (32 on 2026-09-22); `check-actions-pinned.sh` →
   `OK (8 workflow files)`; `shellcheck -s bash` clean on both new scripts.
 
 ## Test status
 
-- Guard behavior: 6 fixtures × 2 shells = 12 assertions, all green (AC3 above).
+- Guard behavior: 6 fixtures × 2 shells = 12 assertions, all green (AC3 above). **Superseded:** 26 fixtures × 2 shells + the missing-shell self-test = 53 on 2026-09-22 (round 2 below). In CI, the zsh half never ran until round 2 (see there).
 - Go suite: unchanged by this PR, run anyway because `ci.yml` itself changed — `go test ./...` green,
   `cmd/cli` 41.4 %, `internal/config` 92.2 % (measured before the branch, no coverage surface touched here).
 - RED observed before GREEN: run against unmodified `master`, the guard exited 1 with 11 findings
@@ -147,13 +147,44 @@ shellcheck (both scripts)                         clean
 
 The checkout count on the real tree is unchanged at 10, so the new step logic neither lost nor
 invented a checkout. Also probed without adding fixtures: compact step lists (dash at the `steps:`
-column) with `- ` lines inside a `run: |` block pass; a second checkout lacking the setting is
-still refused; a job-level `permissions: |-` + `write-all` is refused.
+column) with plain `- ` lines inside a `run: |` block pass; a second checkout lacking the setting is
+still refused; a job-level `permissions: |-` + `write-all` is refused. **Corrected in round 2:**
+the `run: |` probe only covered lines without `uses: actions/checkout@`. A checkout-looking line
+inside a block scalar was a false red, and the reviewer reproduced it. Block-scalar bodies are now
+skipped as text, with a fixture.
 
-Known limits, stated rather than discovered: flow-style steps (`- {uses: …}`) and a
-`persist-credentials` key nested under something other than the step are matched textually, not
-structurally. The guard is a line scanner, not a YAML parser. That was a deliberate choice (no
-new dependency), and its blind spots are now enumerated here.
+Known limits (round 1 wording, corrected in round 2 below): flow-style steps were listed here
+as matched textually. In fact a hardened flow-style step was a false red (`false}}`), and it now
+has a fixture.
+
+## Adversarial review round 2 (FAIL, 2026-09-22) — dispositions
+
+Reviewer `nan/deepseek-v4-flash`, `reviewed_sha` `67297da`. The guard was judged correct on this
+repository. The FAIL was for the mechanism meant to keep it correct.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | **Major**: CI has no zsh, so the suite ran 18 of 36 cases, printed `UNTESTED` and exited 0. A `set -- $sum` regression would pass green | **Fixed, both halves.** `repo-hygiene.yml` installs zsh, and the suite now fails when a required shell is absent (`TWP_SHELLS` can narrow the set, but only explicitly). The suite self-tests this: it re-runs itself with a missing shell and requires a non-zero exit. With zsh hidden from `PATH` it now exits 1; before, it exited 0. Confirmed on CI run `35807528455`: 0 `[zsh]` cases had run. Lesson 031 carried the false claim; it has a dated correction |
+| 2 | Minor: `proposal.md` says one-line flow-style steps "would be missed"; actually a hardened one was a false red | **Fixed** (contract edit, rides this round): `R_PC` stops at `,` and `}`; fixtures `flow-style-hardened` (red before) and `flow-style-persists` (control). The proposal paragraph now lists what is handled and what is not |
+| 3 | Minor: false reds on CRLF, on a checkout line inside a block scalar, and on `write-all` inside a string | **Fixed**, a fixture each, all red before: `crlf-hardened` (`\r` stripped), `checkout-text-in-run-block` (block-scalar bodies skipped), `write-all-inside-string` (the value must *be* `write-all`, not contain it). Control `run-block-then-sibling-key`: the key after a `run: \|` body is still read |
+| 4 | Minor: stale claims in this file (the `run: \|` probe, "12 assertions", "30 lessons") | **Corrected** above, marked in place instead of silently rewritten |
+| 5 | Minor: "gated" / "cannot decay" overstated. `Repo hygiene` was not a required check | **Fixed in settings:** `hygiene` added to `master`'s required status checks (2026-09-22). Read back: `["test","lint","security","hygiene"]`, `strict: true`. The runbook table is updated (it was also wrong about enforce-admins). Not codified as IaC; **#351** tracks that |
+| 6 | Speculative: `&anchor` / `!!tag` before `write-all`; a missing workflows directory exits 0 | **Anchors/tags fixed** (`anchored-write-all`, `tagged-write-all`, both red before). **Missing directory: declined.** A repository with no workflows has no posture to protect, and `repo-hygiene.yml` itself lives there, so the directory cannot vanish without the guard vanishing with it |
+| 7 | Minor: the awk program exceeded the size and branching law | **Applied:** split into `scan_permissions`, `scan_step`, `begin_step`, `report_wa`, `keycol` and `flush`; the main block is now a dispatcher |
+
+Evidence on the round-2 tree:
+
+```
+bash scripts/tests/test-workflow-permissions.sh        53 ok (26 fixtures x bash, zsh + missing-shell self-test), exit 0
+  same, zsh hidden from PATH                           exit 1, "FAIL [zsh] not installed"
+  same fixtures under mawk and busybox awk             52/52 each
+bash scripts/check-workflow-permissions.sh             OK (8 workflows, 10 checkouts, 10 credential-less, 0 opted out)
+actionlint .github/workflows/repo-hygiene.yml          clean
+shellcheck (both scripts)                              clean
+```
+
+Still not covered, stated here: a checkout assembled through a YAML alias (`- *checkout`) is invisible
+to a line scanner.
 
 ## Promotion candidates
 

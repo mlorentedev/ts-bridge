@@ -1,43 +1,72 @@
 ---
 spec: "CI-322-workflow-least-privilege"
 verdict: "FAIL"
-reviewed_sha: "00c71b92a904b4eaff0a717705d94afa2222ff05"
-reviewer: "agy/gemini-3.1-pro-high"
+reviewed_sha: "67297da31c43de361efc03296c1c2db2861c0978"
+reviewer: "nan/deepseek-v4-flash"
 date: "2026-09-22"
 ---
 ## Adversarial review
 
 **Scope**: CI-322-workflow-least-privilege
-**Sources**: `specs/CI-322-workflow-least-privilege/{proposal,tasks,verification}.md`, git diff `b0b1ec177e6938c6524b92bc6f8e15605b3580c3...HEAD`
+**Sources**: `specs/CI-322-workflow-least-privilege/{proposal,tasks,verification,features.json}`; `git diff b0b1ec177e6938c6524b92bc6f8e15605b3580c3...HEAD`; PR #350 (head `67297da`); CI runs 35807528452 / 35807528455 / 35807528582 of that sha.
 
 ### Spec and task alignment
-- `check-workflow-permissions.sh` correctly enforces top-level `permissions:` and `persist-credentials: false`.
-- The test suite correctly covers the expected happy paths and known refusals across both `bash` and `zsh`.
-- AC3 mandates that the guard refuses each widening. However, the guard fails to parse valid alternative YAML spellings, causing both a false positive (false red on common valid formatting) and a false negative (security bypass).
+
+**What the change is.** The reviewed range also carries five sibling merges (`#338` codecov removal, `#339` site auth-key docs, `#340` review transcripts, `#346` CI-314 evidence, `#347` SEC-212 scope) that belong to other specs. The CI-322-attributable delta is `27172fe` (#336, merged) plus `67297da` (the post-review parser fix on this branch). Scope is graded on that delta.
+
+**Verified independently, in this session** (not read off the spec's own tables):
+
+- **AC1** — `bash scripts/check-workflow-permissions.sh` → `OK (8 workflows, 10 checkouts, 10 credential-less, 0 opted out with a reason)`, exit 0. Independently counted: 10 `uses: actions/checkout@` lines and 10 `persist-credentials: false` lines across `.github/workflows/`.
+- **AC2** — the decay guard actually fires. On a copy of the real tree: dropping one `persist-credentials: false` → exit 1 (`no-except release.yml line 37`); dropping `ci.yml`'s top-level key → exit 1 (`no-perms`); a job-level `permissions: write-all` → exit 1; a top-level `permissions: write-all` → exit 1; restoring the tree → `OK`, exit 0. So the parser fix did not buy its precision by losing any of the four refusal classes.
+- **AC3** — `bash scripts/tests/test-workflow-permissions.sh` → 36/36 `ok` (18 fixtures × bash and zsh), exit 0, on a machine that has zsh. The suite can fail: a mutated expectation exits 1, and a guard stubbed to always print `OK` exits 1. **The gate, however, runs only half of it — see finding 1.**
+- **AC5/features.json** — all five commands in `features.json` executed verbatim, all exit 0; `go build ./...`, `go vet ./...`, `go test ./...` green; `check-lessons.sh` `OK (32 lessons)`; `check-actions-pinned.sh` `OK (8 workflow files)`; `shellcheck -s bash` clean on both new scripts. (The `32` vs the `30` pasted in `verification.md` is drift, not a defect — other PRs added lessons after that paste.)
+- **The under-granting risk, at runtime** — all four workflows are green at `67297da`: CI (3m26s), Repo hygiene, Add to bitácora, pr-agent. `permissions: {}` did not break the PAT-based board automation (`Add to bitácora` green, run 35807528582). The two intervening `Add to bitácora` failures on 2026-09-22 are annotated `API rate limit already exceeded for user ID 13562150` — that id is `mlorentedev`, i.e. the PAT path of #333, not the grant. Ruled out rather than ignored.
+- **Contract hygiene** — no unresolved agent-draft tags in the spec folder. Every implementation box in `tasks.md` is ticked and the one open box is the independent review this file constitutes. The unticked acceptance criteria in `proposal.md` are **not** a finding: 22 of the 24 archived specs in `specs/archive/` leave their ACs unticked, so this follows repo convention.
+
+**What the change is missing.** The one thing the spec claims that its mechanism does not deliver is the two-shell contract (finding 1), and the guard's stated limitation is written backwards (finding 2).
 
 ### Findings
 
-| Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
-|----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Blocker | REAL | YAML Parsing | The awk parser assumes `uses:` is the first key in a step (and thus dictates the step's indentation). If `uses:` is preceded by another key like `name:` or `if:`, `uses:` shares the same indentation as `with:`, causing `n > pindent` to evaluate to false. The guard prematurely flushes the step and reports a false red (`no-except checkout persists credentials`). This breaks CI on perfectly valid and common GitHub Actions syntax. | Reproduced via local manual test: a step with `- name: Checkout` on line 1 and `uses: actions/checkout@v4` on line 2 fails the check. | UNTESTED | code + tests |
-| Major | THEORETICAL | Security Bypass | The `write-all` refusal regex (`:[ \t]*" QO "write-all"`) only matches values on the same line. A malicious actor could bypass the guard using a YAML block scalar (e.g., `permissions: >- \n write-all`), bypassing the guard while still granting ambient write scope. | Reproduced via local manual test: `permissions: >- \n  write-all` returns `OK`. | UNTESTED | code + tests |
-| Minor | THEORETICAL | YAML Parsing | YAML booleans are case-insensitive (`False`, `FALSE`), but the script checks strictly for `"false"`. `persist-credentials: False` will be incorrectly reported as `enabled` (a false red). | Code read: `else if (persist != "false")` in `check-workflow-permissions.sh`. | UNTESTED | code + tests |
+| Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location |
+|----------|---------|------|---------|----------|---------------------------|--------------|
+| Major | REAL | Verification mechanism / CI | The `Repo hygiene` job that is supposed to prove "bash and zsh behave identically" runs on a runner with no zsh: the suite prints `zsh not installed, that shell is UNTESTED` and **exits 0** with 18 of 36 assertions run, and the job reports success. Nothing guards the shell contract this repo already broke once. Reintroducing the historical `set -- $sum` split (the exact bug lesson-031 was written about) passes the gate green. | Run 35807528455 (`repo-hygiene.yml`, PR #350, sha `67297da`): 18 × `ok   [bash]`, **0** × `ok   [zsh]`, then `test-workflow-permissions: zsh not installed, that shell is UNTESTED`; job conclusion `success`. Mutation: guard patched back to `set -- $sum`, suite run with the runner's PATH → `ok [bash]` ×18, `UNTESTED`, **exit 0**; the same suite with zsh present → `FAIL [zsh] clean: exit 1, wanted 0`, exit 1. | UNTESTED — `test-workflow-permissions.sh` has no case for the missing-shell path; it skips it by design and returns success (`exit "$failed"`, `failed` never incremented). | tests + CI: install the shell in `repo-hygiene.yml` (`sudo apt-get install -y zsh`) **and** make the suite fail closed when a required shell is absent |
+| Minor | REAL | Spec vs code (contract file) | `proposal.md` states that a one-line flow-style checkout `- {uses: ...}` "would be missed". It is not missed — it is counted. The real cost is the opposite direction: an *unhardened* flow-style step is refused correctly, but a *hardened* one is a false red, reported as `persist-credentials: false}}`. The documented limitation therefore hides the defect that exists and claims one that does not. | Probes: `- {uses: actions/checkout@x}` → exit 1, `no-except` (correct); `- {uses: actions/checkout@x, with: {persist-credentials: false}}` → exit 1, `enabled ... persist-credentials: false}}` (false red on a correct step). | UNTESTED | spec (`proposal.md`, Risks bullet) + tests — contract-set, so it rides the re-review this FAIL already requires |
+| Minor | REAL | False reds on valid workflows | Three legitimate spellings red the guard, none with a fixture: (a) a CRLF file, where `persist-credentials: false\r` is reported as `enabled` — `.gitattributes` pins `*.sh` to LF but says nothing about `*.yml`; (b) a checkout-looking `- uses:` line inside a block scalar, such as a `run:` script body or a multi-line `with:` value, reported as `no-except`; (c) any quoted string mentioning the phrase, e.g. `MSG: "grant is contents: write-all"`, reported as `write-all`. All three are the safe direction (red, never green), but each fails the job that gates every PR on a file that grants nothing. | Probes: `crlf-okm` → exit 1 `enabled`; `runblock-dash-content` → exit 1 `no-except line 14`; `env-write-all-string` → exit 1 `write-all line 13`. Control: `crlf` file *without* a permissions key also flags `no-perms`, so only the boolean compare is CRLF-fragile. | UNTESTED | code + tests |
+| Minor | REAL | Verification accuracy | `verification.md` records as a known limit that "`- ` lines inside a `run:` block scalar pass" — reproduction says the opposite. Its "Test status" section also still reports "6 fixtures × 2 shells = 12 assertions" (the suite is 18 × 2 = 36) and `check-lessons.sh → OK (30 lessons)` (now 32). Evidence that has drifted is normal; a probe stated as a known limit that reproduces the other way is not. | Probe `runblock-dash-content` exit 1; `bash scripts/tests/test-workflow-permissions.sh` prints 36 `ok` lines; `bash scripts/check-lessons.sh` prints `OK (32 lessons)`. | UNTESTED (the claim has no test — which is how it drifted) | `verification.md` (outside the contract set) — and the finding-3 fixture is what would pin it |
+| Minor | REAL | Enforcement claim | `proposal.md` says an unauthorized grant becomes "a build failure" and that both scripts running in `Repo hygiene` mean "every PR and every push to `master` is gated" / the posture "cannot decay on a later PR". `Repo hygiene` is not a required status check, so a red run does not block a merge — the guard is post-hoc detection on the push-to-master run. Same enforcement status as the two pre-existing guards, and the repo's merge doctrine ("every PR merges … after CI is green") is the practical gate, so this is a claim-accuracy issue rather than a hole this change dug. | `gh api repos/mlorentedev/ts-bridge/branches/master/protection` → `required_status_checks: ["test","lint","security"]`, `strict: true`. | UNTESTED — a settings fact, no test can cover it | repo settings (add the `Repo hygiene` context), or the contract's wording |
+| Minor | SPECULATIVE | Missed grant spellings | `write-all` written with a YAML anchor or tag — `permissions: &p write-all`, `permissions: !!str write-all` — passes with `OK`, and a missing `.github/workflows` directory exits 0 by design (the directory-presence test short-circuits to "not present, nothing to check" before any scan). Both are evasion-shaped rather than decay-shaped, which is the threat this guard exists for, so they are surfaced and explicitly not gating. | Probes `anchor-write-all` → exit 0 `OK`; `tag-write-all` → exit 0 `OK`; guard source: the directory-presence short-circuit that follows the `WFDIR` assignment exits 0 before any scan. | UNTESTED | code (optional) or leave documented as a limit |
+| Minor | REAL | Maintainability | The awk scanner is 59 executable lines carrying 29 conditional/boolean decision tokens (each `if`, `else if` and boolean operator counted) — over the repo's Law (<40 lines, cyclomatic complexity <10). The file already defines awk helpers (`indent`, `flush`), so the remaining branches are splittable. Non-gating: the branch density *is* the specification of a line scanner, and rejecting a YAML library (no new dependency) is a deliberate, disclosed trade. | Counted over the `awk '...' "$1"` program in `scripts/check-workflow-permissions.sh`; `scan()` is 61 executable lines in total. | n/a (static measurement); behaviour is covered by the 18 fixtures | code (split into awk functions), or record the exemption |
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | C | Criteria met on happy path, but substantial negative-path gaps (false reds on valid YAML, block scalar bypass). |
-| Verification       | B | Evidence covers criteria and edge cases discovered, but misses tests for valid step property ordering (`name:` before `uses:`). |
-| Scope              | A | Diff matches proposal exactly; no scope creep. |
-| Reliability        | C | Brittle awk parser fails on common YAML structures, making the guard unreliable in practice. |
-| Maintainability    | B | Clear script structure and exhaustive test suite for the handled cases. |
-| Handoff-readiness  | A | Spec updates included, lessons captured in `docs/lessons`, and execution decisions clearly documented. |
+| Correctness        | B | Every AC verified at `67297da` and all four refusal classes still fire on the real tree; gaps are low-frequency false reds (finding 3) and two missable `write-all` spellings (finding 6). |
+| Verification       | B | Every printed command and all five `features.json` commands reproduce here, and the decay claims are falsifiable; but the two-shell headline is local-only (the gate runs one shell), one supplementary probe is false as written, and two counts are stale. |
+| Scope              | A | The CI-322 commits contain nothing outside the proposal (workflow grants, guard, fixtures, hygiene wiring, lesson); the unrelated content in the range is five sibling merges under their own specs. |
+| Reliability        | B | Fail-closed on parse errors (exit 2), on every decay mutation built against the real tree, and on a guard that cannot see checkouts; the one fail-open path is the harness's missing shell — finding 1. |
+| Maintainability    | B | Clear naming, documented line by line, 18 fixtures, no new dependency; the awk scanner exceeds the Law's line and complexity thresholds (finding 7). |
+| Handoff-readiness  | A | `lesson-033` written in-PR with its index row, both automated reviewers and the round-1 review dispositioned in `verification.md`, next steps explicit. |
 
 ### Verdict
+
 FAIL
 
+Not for the guard's behaviour on this repository: at `67297da` it is correct, it refuses every widening I could build on the real tree, and it is green under both shells on a machine that has both. It fails because the mechanism the spec leans on to keep that true does not run: the gate certifies a two-shell contract with one shell, and the exact regression that motivated the two-shell matrix walks through it green. Fix is small and lands outside the contract set; finding 2 rides that same round.
+
+**Archive is not advisable now**: `dotf spec archive` calls `Verdict.Blocks()` on the frontmatter above, refuses a non-passing verdict, and would otherwise accept this review as fresh (`reviewed_sha` = `67297da`, contract files untouched by this review).
+
 ### Recommended next steps
-- **Fix the parser indentation logic:** Update `check-workflow-permissions.sh` to track indentation of the step block (e.g., the `-`) rather than relying on the `uses:` key to dictate the `pindent`. Add a regression test fixture (`checkout-not-first`) to `test-workflow-permissions.sh` where `name:` precedes `uses:`.
-- **Close the block scalar bypass:** Update the script state machine or regex to detect `write-all` on subsequent lines if block scalars (`>` or `>-`) are used. Add a regression test fixture (`block-scalar-write-all`).
-- **Make boolean check case-insensitive:** Convert the `persist` variable to lowercase before checking `!= "false"` to prevent false reds on `False` or `FALSE`. Add a regression test fixture for case insensitivity.
+
+Routed by set. `proposal.md` / `tasks.md` / `features.json` are the contract set; editing any of them after a review invalidates it, which is why the two contract items below are the ones that make the next round a round rather than a formality.
+
+- **Outside the contract set — apply now, then re-review (three of these are what flip the verdict):**
+  1. Make the two-shell claim true where it is enforced: install zsh in the `Repo hygiene` job (`sudo apt-get install -y zsh`) **and** make `scripts/tests/test-workflow-permissions.sh` exit non-zero when a required shell is missing, so a future runner without it cannot report green. Add the fixture for the missing-shell path. This is the flip condition.
+  2. Add fixtures for the false-red family in finding 3 (`crlf`, `checkout-dash-in-block-scalar`, `phrase-in-quoted-string`) and make the parser skip block-scalar/`run:` content the way it already skips comment lines, or make each a printed, named limit rather than a red.
+  3. Correct `verification.md`: the `run:` block-scalar probe claim, the "6 fixtures × 2 shells" line, and the lesson count. Non-contract, so it does not affect the archive gate.
+  4. If the enforcement claim (finding 5) is to be kept, add `Repo hygiene` to master's required status checks — a settings action, no commit. Otherwise let the wording be softened in the same round.
+  5. Optional, non-gating: split the awk scanner into helpers (finding 7), and correct the flow-style limitation wording in `verification.md` and the guard's comments (the contract half of that wording is listed under the contract set below).
+- **Contract set — needs the re-review this verdict already mandates:**
+  - `proposal.md`: the flow-style sentence (finding 2) currently claims a limitation that does not exist while hiding the false red that does; and the "gated" / "cannot decay" wording in What/AC4 (finding 5) exceeds what branch protection enforces.
+  - `tasks.md`: **do not tick the last box ("Independent adversarial review before archive") after a review signs.** `gitStaleness.Stale` diffs `reviewed_sha..HEAD` for `proposal.md`, `tasks.md`, `features.json` *and* checks them for uncommitted edits, so ticking that box invalidates the fresh review and the archive refuses. Record the review's completion in `verification.md` (excluded from the staleness set, and its archive checklist exists for exactly this), or accept the extra round.
+- **Disposition**: each item above should be applied, ticketed, or declined with a reason in `verification.md` — not left in this file's table. Findings 6 and 7 are candidates for a `wontfix`-with-reason disposition; findings 1–3 are not.

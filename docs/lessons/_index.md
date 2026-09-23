@@ -42,4 +42,4 @@ tags: [ts-bridge, lessons, index]
 | 029 | 2026-08-13 | os.Chdir error check in tests | [lesson-029-os-chdir-error-check-in-tests.md](lesson-029-os-chdir-error-check-in-tests.md) |  |
 | 030 | 2026-08-31 | Gates that cannot answer, and the closed issue that absorbed an undone AC | [lesson-030-2026-08-31.md](lesson-030-2026-08-31.md) | `review-gate`, `sdd`, `documentation`, `process` |
 | 031 | 2026-09-21 | Guards that hide exemptions, matchers that know only one spelling, and `set --` not splitting under zsh | [lesson-031-2026-09-21.md](lesson-031-2026-09-21.md) | `ci`, `guards`, `security`, `bash`, `zsh`, `portability`, `testing` |
-| 033 | 2026-09-22 | Position is not structure, fixing one spelling reveals its siblings, and a reviewer's THEORETICAL is a claim to test | [lesson-033-2026-09-22.md](lesson-033-2026-09-22.md) | `ci`, `guards`, `yaml`, `testing`, `review` |
+| 033 | 2026-09-22 | Position is not structure, fixing one spelling reveals its siblings, a reviewer's THEORETICAL is a claim to test, and a skip that exits 0 is an unearned pass | [lesson-033-2026-09-22.md](lesson-033-2026-09-22.md) | `ci`, `guards`, `yaml`, `testing`, `review` |

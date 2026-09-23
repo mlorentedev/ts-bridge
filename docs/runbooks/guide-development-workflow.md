@@ -11,17 +11,21 @@ owner: manu
 
 > How to contribute to ts-bridge using the protected `master` branch workflow.
 
-## Branch Protection Rules (active since 2026-02-27)
+## Branch Protection Rules (active since 2026-02-27, last verified 2026-09-22)
 
 | Rule | Setting |
 |------|---------|
 | Require PR before merge | Yes |
-| Required status checks | `test`, `lint`, `security` |
+| Required status checks | `test`, `lint`, `security`, `hygiene` (`hygiene` added 2026-09-22, CI-322) |
 | Branch must be up to date | Yes |
 | Required reviewers | 0 (solo project) |
 | Allow force push | No |
 | Allow deletion | No |
-| Enforce for admins | No |
+| Enforce for admins | Yes |
+
+These settings live in GitHub, not in this repository, so this table is a record of them, not
+their source. Re-read before trusting it:
+`gh api repos/mlorentedev/ts-bridge/branches/master/protection --jq '{checks:.required_status_checks.contexts, strict:.required_status_checks.strict, admins:.enforce_admins.enabled}'`.
 
 ## Standard Workflow
 

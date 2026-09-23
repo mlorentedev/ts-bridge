@@ -25,5 +25,9 @@ jobs:
         run: bash scripts/check-actions-pinned.sh
       - name: Workflows carry no default credential
         run: bash scripts/check-workflow-permissions.sh
+      # The fixture suite runs every case under bash AND zsh, and fails when either is missing.
+      # ubuntu-latest ships no zsh, so without this step the second shell was silently skipped.
+      - name: Install zsh for the two-shell fixture suite
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
       - name: That guard still refuses each way the posture can widen
         run: bash scripts/tests/test-workflow-permissions.sh

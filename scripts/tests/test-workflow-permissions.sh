@@ -50,7 +50,15 @@ name-first-persists:1:no-except
 block-scalar-write-all:1:write-all
 next-line-write-all:1:write-all
 block-scalar-read-all:0:OK
-persist-capital-false:0:OK'
+persist-capital-false:0:OK
+crlf-hardened:0:OK
+checkout-text-in-run-block:0:OK
+write-all-inside-string:0:OK
+flow-style-hardened:0:OK
+flow-style-persists:1:no-except
+anchored-write-all:1:write-all
+tagged-write-all:1:write-all
+run-block-then-sibling-key:1:no-except'
 
 # Each fixture is one workflow, written as data rather than as a mutation of another: the diff
 # between a passing and a failing case should be readable, not derivable.
@@ -290,14 +298,112 @@ jobs:
           persist-credentials: False
 YAML
     ;;
+    crlf-hardened) printf '%s\r\n' 'name: t' 'on: push' 'permissions:' '  contents: read' 'jobs:' '  a:' '    steps:' '      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7' '        with:' '          persist-credentials: false' > "$1/w.yml"
+    ;;
+    checkout-text-in-run-block) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: false
+      - run: |
+          cat <<EOF
+          - uses: actions/checkout@v4
+          EOF
+YAML
+    ;;
+    write-all-inside-string) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+          persist-credentials: false
+      - run: echo "$MSG"
+        env:
+          MSG: "never grant contents: write-all"
+YAML
+    ;;
+    flow-style-hardened) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - {uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5, with: {persist-credentials: false}}
+YAML
+    ;;
+    flow-style-persists) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - {uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5}
+YAML
+    ;;
+    anchored-write-all) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions: &p write-all
+jobs:
+  a:
+    steps:
+      - run: echo
+YAML
+    ;;
+    tagged-write-all) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions: !!str write-all
+jobs:
+  a:
+    steps:
+      - run: echo
+YAML
+    ;;
+    run-block-then-sibling-key) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - name: Checkout
+        run: |
+          echo before
+        uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+YAML
+    ;;
     *) echo "test-workflow-permissions: no fixture named $2" >&2; return 3 ;;
   esac
 }
 
+# The shells are a contract, so a missing one is a failure, not a skip. The first version
+# printed "zsh not installed, that shell is UNTESTED" and exited 0 -- and the CI runner has no
+# zsh, so from #336 on the job certified a two-shell guard with one shell, and the exact
+# `set -- $sum` regression this matrix exists for would have passed green (CI-322 adversarial
+# review, Major). TWP_SHELLS narrows the set on purpose, visibly; it never happens by absence.
+SHELLS="${TWP_SHELLS:-bash zsh}"
 failed=0
-for sh_name in bash zsh; do
+for sh_name in $SHELLS; do
   if ! command -v "$sh_name" >/dev/null 2>&1; then
-    echo "test-workflow-permissions: $sh_name not installed, that shell is UNTESTED"
+    echo "  FAIL [$sh_name] not installed: the guard is contracted to run under it, so it cannot be certified here" >&2
+    failed=1
     continue
   fi
   printf '%s\n' "$SPECS" | while IFS= read -r spec; do
@@ -317,4 +423,12 @@ for sh_name in bash zsh; do
     echo "  ok   [$sh_name] $name -> exit $rc, mentions \"$want_sub\""
   done
 done
+# Self-test of the rule above: with a required shell absent, this suite must not exit 0.
+if [ -z "${TWP_NESTED:-}" ]; then
+  if TWP_NESTED=1 TWP_SHELLS="bash no-such-shell-for-test" bash "$0" >/dev/null 2>&1; then
+    echo "  FAIL missing-shell: the suite exited 0 with a required shell absent"; failed=1
+  else
+    echo "  ok   missing-shell -> non-zero when a required shell is absent"
+  fi
+fi
 exit "$failed"
