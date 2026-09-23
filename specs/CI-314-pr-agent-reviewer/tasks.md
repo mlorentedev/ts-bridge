@@ -43,7 +43,7 @@ created: "2026-08-31"
 ## Closing
 
 - [x] Every acceptance criterion mapped (AC1-AC5 in `proposal.md`).
-- [x] `verification.md` filled with post-merge evidence (AC4 still counting: 11/15 PRs).
+- [x] `verification.md` filled with post-merge evidence (AC4 closed 2026-09-22: 15/15 eligible PRs reviewed).
 - [x] No Go change; no new dependency; diff is CI/config/spec only.
 - [x] PR opened referencing this spec folder and `Closes #314`.
 

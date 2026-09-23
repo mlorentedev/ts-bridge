@@ -24,11 +24,12 @@ every run ID and timestamp is checkable with `gh api repos/mlorentedev/ts-bridge
 - [x] AC3 (push re-review): #316 push of `540ca7a` → run `33464880724` (`2026-09-01T03:04:36Z`,
       guard `success`); #325 pushes → runs `34098785105`, `34099871549`, `34101022805`, each
       publishing a fresh review.
-- [ ] AC4 (coverage >= 90 % over 15 non-dependabot PRs): **11/11 reviewed so far, window 11/15.**
-      Method: PRs created on or after `2026-09-01T02:49:11Z`, excluding `dependabot[bot]`
-      authors, `release-please--*` heads and drafts; a PR counts as reviewed when any
-      `github-actions[bot]` issue comment contains `## PR Reviewer Guide`. Counted: #316, #319,
-      #320, #321, #323, #325, #336, #337, #338, #339, #340. Stays open until 15 PRs exist.
+- [x] AC4 (coverage >= 90 % over 15 non-dependabot PRs): **15/15 reviewed (100 %), window closed
+      2026-09-22.** Method: PRs created on or after `2026-09-01T02:49:11Z`, excluding
+      `dependabot[bot]` authors, `release-please--*` heads and drafts; a PR counts as reviewed when
+      any `github-actions[bot]` issue comment contains `## PR Reviewer Guide`. Counted: #316, #319,
+      #320, #321, #323, #325, #336, #337, #338, #339, #340, #346, #347, #349, #350 (re-counted over
+      REST on 2026-09-22; none unreviewed), so the criterion's fallback clause (suspect the model fall-through chain) did not apply.
 - [x] AC5 (a PR CodeRabbit declines still gets read): CodeRabbit posted only `Review limit
       reached` on #337 and #339, and declined a later push on #340; all three carry a PR-Agent
       `## PR Reviewer Guide` comment.

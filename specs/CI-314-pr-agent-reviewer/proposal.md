@@ -71,7 +71,7 @@ therefore no longer depends on CodeRabbit's availability.
       comment (observed, not inferred): the workflow run record exists, but its `review` job is
       `skipped`. See `verification.md`.
 - [x] Pushing a fix re-triggers a review (`handle_push_trigger` + `push_commands`).
-- [ ] Reviewer coverage over the next 15 non-dependabot PRs is >= 90 %, counted the same way
+- [x] Reviewer coverage over the next 15 non-dependabot PRs is >= 90 %, counted the same way
       as the table in the issue. If not, the fall-through chain is the suspect, not the metric.
 - [x] A PR that CodeRabbit declines still gets read (vendor quota no longer the constraint).
 
