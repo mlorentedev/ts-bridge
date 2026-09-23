@@ -1,7 +1,7 @@
 ---
 id: "CI-314-pr-agent-reviewer"
 type: spec
-status: verifying # draft | implementing | verifying | archived; implementation merged in #315 on 2026-09-01
+status: archived # draft | implementing | verifying | archived; implementation merged in #315 on 2026-09-01
 created: "2026-08-31"
 issue: "mlorentedev/ts-bridge#314"   # repo#NNN — GitHub issue / Project item that tracks this spec
 # Work-gate status: `--force-no-gate` was used at scaffold time because `gh issue view`
@@ -20,14 +20,19 @@ template_version: "1.0"
 This repo's only machine reviewer is CodeRabbit, and it is a vendor's quota. Measured over
 the 29 most recent non-dependabot PRs (2026-08-31): 17 (59 %) carried `Review limit reached`
 and 2 more were skipped, so **two thirds of PRs merge read by no machine**, and because
-CodeRabbit publishes no check-run here (`required checks = [test, lint, security]`) nothing in
+CodeRabbit publishes no check-run here (`required checks = [test, lint, security]` at the time; `hygiene`
+was added on 2026-09-22 by CI-322) nothing in
 CI says so. This feature adds a reviewer whose capacity is ours rather than a vendor's, so a
 spent quota elsewhere stops meaning "no review".
 
 ## What
 
-After this PR, on every non-draft, non-dependabot, non-release PR a second reviewer
-(PR-Agent on NaN inference) runs and posts its review as a `github-actions[bot]` comment. If
+After this PR, every non-draft `pull_request` run on a PR opened from a branch of this repository
+(not from a fork) that `dependabot[bot]` did not trigger, and whose head is not a
+`release-please--*` branch, runs a second reviewer (PR-Agent on NaN inference), which posts its
+review as a `github-actions[bot]` comment. An owner, member or collaborator can also request a
+review with a `/` command comment on the PR (`issue_comment`). That path is narrower: `.pr_agent.toml`
+is not applied there, see `verification.md`. If
 that reviewer reports success but publishes no review, the `Fail if no review was published`
 step goes RED — a silent absence is impossible to mistake for a pass. The reviewer capability
 therefore no longer depends on CodeRabbit's availability.
@@ -38,9 +43,23 @@ therefore no longer depends on CodeRabbit's availability.
   is its own change (planned as `dotf pr attestation`; see the harness/ note in AGENTS.md)
   and deliberately lands after this reviewer is measured in this repo.
 - Replacing or retiring CodeRabbit. It stays `advisory`, opportunistic.
-- Changing required status checks (`test`,`lint`,`security` stay the merge gate).
+- Changing required status checks. This spec added none (`test`, `lint`, `security` at the time; CI-322
+  later added `hygiene`).
 - Any Go code change or new project dependency.
-- Reviewing Dependabot or release-please PRs — both excluded, for reasons measured in the issue.
+- Runs triggered by Dependabot, and release-please PRs, both excluded for reasons measured in the
+  issue. The Dependabot exclusion keys on **`github.actor`, not on the PR**: that is the field
+  GitHub uses to select the (empty) Dependabot secret store, so a run Dependabot triggers could
+  never authenticate. A run a human triggers on a Dependabot branch (a branch update, say) does
+  execute and review. Observed on #327, #328, #330 and #331; see `verification.md`. release-please
+  is excluded by head ref, because its PRs are authored through a human PAT.
+- Reviewing PRs from forks (`head.repo.fork == false` in the workflow's `if:`). A `pull_request`
+  run from a fork gets no repository secrets, so PR-Agent would have no `NAN_API_KEY` and the
+  credential check would fail the job. Switching to `pull_request_target` would supply the secret,
+  but that trigger runs with the base repository's credentials while the PR's code is unreviewed.
+  That is the "pwn request" pattern GitHub Security Lab documents as unsafe. Fork PRs
+  therefore rely on CodeRabbit and human review. None of the 221 PRs to date came from a fork
+  (measured 2026-09-22 over REST), so the gap has had no effect yet; it becomes real on the first
+  outside contribution.
 
 ## Risks / open questions
 
@@ -58,11 +77,12 @@ therefore no longer depends on CodeRabbit's availability.
 
 - [x] First non-draft PR after merge carries a `## PR Reviewer Guide` comment from
       `github-actions[bot]`, and the `Fail if no review was published` step is green.
-- [x] On a Dependabot PR and a release-please PR, PR-Agent does not execute and posts no
-      comment (observed, not inferred): the workflow run record exists, but its `review` job is
-      `skipped`. See `verification.md`.
+- [x] On a run triggered by `dependabot[bot]`, and on a release-please PR, PR-Agent does not
+      execute and posts no comment (observed, not inferred): the workflow run record exists, but
+      its `review` job is `skipped`. A human-triggered run on a Dependabot branch is not excluded.
+      See `verification.md`.
 - [x] Pushing a fix re-triggers a review (`handle_push_trigger` + `push_commands`).
-- [ ] Reviewer coverage over the next 15 non-dependabot PRs is >= 90 %, counted the same way
+- [x] Reviewer coverage over the next 15 non-dependabot PRs is >= 90 %, counted the same way
       as the table in the issue. If not, the fall-through chain is the suspect, not the metric.
 - [x] A PR that CodeRabbit declines still gets read (vendor quota no longer the constraint).
 
@@ -71,3 +91,5 @@ therefore no longer depends on CodeRabbit's availability.
 - Bitácora board: the GitHub issue / Project item tracking this spec (see the `issue:` frontmatter field)
 - Related ADR: `<repo>/docs/adr/adr-XXX.md` (if any)
 - Related patterns: `00_meta/patterns/<pattern>.md` (if any)
+
+<!-- archived 2026-09-22 — PR: https://github.com/mlorentedev/ts-bridge/pull/353 -->
