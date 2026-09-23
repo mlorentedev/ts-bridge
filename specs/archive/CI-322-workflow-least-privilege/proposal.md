@@ -1,7 +1,7 @@
 ---
 id: "CI-322-workflow-least-privilege"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-21"
 issue: "mlorentedev/ts-bridge#322"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, ci, security, github-actions, least-privilege]
@@ -92,3 +92,5 @@ After this PR, an unauthorized grant is a **build failure** rather than a defaul
 - Related issues: #333 (one human PAT identity behind CI automation — the root cause this deliberately leaves alone), #335 (a `CODECOV_TOKEN` reference to a secret the repo does not have).
 - Related pattern: `00_meta/patterns/pattern-security.md` (least privilege), `pattern-clean-as-you-go` (the guard, not just the fix).
 - Existing precedent in-repo: `.github/workflows/repo-hygiene.yml` (the only hardened workflow before this change), `scripts/check-lessons.sh` / `scripts/check-actions-pinned.sh` (house style for guards that need no toolchain).
+
+<!-- archived 2026-09-22 — PR: https://github.com/mlorentedev/ts-bridge/pull/350 -->
