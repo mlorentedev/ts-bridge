@@ -51,3 +51,29 @@ Evidence for the rescoped AC3, from `grep -rnE -- '--auth-key[ =]' docs README.m
 `auth-key-file`: exactly two hits, `guide-multi-device-operations.md:67` (POSIX) and `:75`
 (PowerShell), both unattended `init` calls under the process-table warning. No `connect`
 example uses inline `--auth-key`.
+
+## Adversarial review round 2 (PASS-WITH-GAPS, 2026-09-22) — dispositions
+
+Reviewer `nan/deepseek-v4-flash`, `reviewed_sha` `00c71b9`. Every finding sat outside the contract
+set (`proposal.md`, `tasks.md`, `features.json`), so dispositioning them here keeps the verdict fresh.
+
+| Finding | Disposition |
+|---|---|
+| F1 (Minor): `init --help` said "consider using `--auth-key-file`", a flag `init` does not register | **Applied.** The security note now names `ts-bridge connect --auth-key-file /path/to/key`, states that `init` has no key-file flag, and warns that inline `--auth-key` is visible in the process list. The examples block says the non-interactive forms expose the key. `TestInit_SecurityGuidance` asserts the `connect` form and refuses the old wording. It failed before the fix |
+| F2 (Minor): `discover` takes an inline `--auth-key` with no process-list warning | **Applied (warning) + ticketed (key file).** `discover`'s usage now carries the warning. The new `TestAuthKeyFlags_WarnProcessList` walks the whole command tree, so any command registering `--auth-key` must carry it (it went red on `discover` before the fix). The key-file flag for `discover` was folded into #306 |
+| F3 (Minor): the `printNextSteps` tip and the YAML-mode `.env` sidecar note were unpinned | **Applied.** `TestPrintNextSteps_SecurityTip` captures stdout; `TestWriteYAMLConfig_CreatesYamlAndEnv` asserts the sidecar note |
+| F4 (Minor): AC3's invariant is a manual grep, not a guard | **Ticketed: #348** (`check-doc-authkey.sh` in `repo-hygiene.yml`) |
+| F5 (Minor): the Linux runbook's `cp scripts/host/ts-bridge.service` step is dangling | **Already recorded in #307**, whose body cites that exact line and its deletion in #156 |
+| F6 (Question): no `features.json` | **Left absent, deliberately.** Backfilling adds a fourth contract file, which makes this review stale by construction and forces another round for no behaviour change |
+
+Mutation evidence for this round. Each new assertion failed once the string it guards was removed:
+
+```
+[next-steps-tip]     removing the connect --auth-key-file tip          -> FAIL
+[yaml-sidecar-note]  removing the .env "Secure alternative" line       -> FAIL
+[help-connect-line]  removing "ts-bridge connect --auth-key-file" help -> FAIL
+[discover-warning]   discover usage without the warning                -> FAIL (before the fix)
+```
+
+`go test -race ./...` green across all packages; `golangci-lint run ./...` 0 issues after
+`golangci-lint cache clean` (the reviewer hit a stale cache shared with a sibling worktree).

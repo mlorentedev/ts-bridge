@@ -50,7 +50,7 @@ Examples:
 	cmd.Flags().String("filter", "", "Filter by hostname or IP substring")
 	cmd.Flags().Bool("auto", false, "Auto-select first matching host and update .env")
 	cmd.Flags().Int("port", 3389, "RDP port to use with --auto")
-	cmd.Flags().String("auth-key", "", "Tailscale auth key (overrides TS_AUTHKEY)")
+	cmd.Flags().String("auth-key", "", "Tailscale auth key (overrides TS_AUTHKEY) — WARNING: visible in process list")
 	cmd.Flags().String("tailnet", "", "Tailscale tailnet name (e.g. mycompany.ts.net)")
 	return cmd
 }
