@@ -21,10 +21,12 @@ template_version: "1.0"
 
 - [x] [AC2] [AC4] Update `cmd/cli/init.go` and `cmd/cli/init_test.go` to promote `--auth-key-file`, document process list and child-process visibility warnings, and update `printNextSteps`.
 - [x] [AC1] Update `README.md` and `.env.example` to prominently feature `--auth-key-file` and document security risks of plaintext keys.
-- [ ] [AC3] Update `docs/runbooks/` and `docs/troubleshooting/` examples to recommend `--auth-key-file` instead of bare `--auth-key`.
-  - **Partial.** Delivered by PR #298: `docs/runbooks/guide-deployment-windows.md`, `docs/troubleshooting/security-audit.md`, `cmd/cli/init.go`, `.env.example`.
+- [x] [AC3] Update `docs/runbooks/` and `docs/troubleshooting/` examples to recommend `--auth-key-file` instead of bare `--auth-key`.
+  - Delivered by PR #298: `docs/runbooks/guide-deployment-windows.md`, `docs/troubleshooting/security-audit.md`, `cmd/cli/init.go`, `.env.example`.
   - Delivered by #310: `README.md` minimal-setup line, `docs/runbooks/guide-multi-device-operations.md` (masked `init` prompt + `connect --auth-key-file`, POSIX and Windows).
-  - **Not delivered:** `docs/runbooks/guide-deployment-linux.md`. Its systemd path authenticates through `EnvironmentFile`, and `--auth-key-file` is a `connect` flag with no unit in-tree to pass it — the unit the runbook copies was deleted in #156. Left open on purpose so the spec cannot archive as if the criterion were met; #307 owns the rest.
+  - **Rescoped out (2026-09-22, after the adversarial review's FAIL):** `docs/runbooks/guide-deployment-linux.md`. Its systemd path authenticates through `EnvironmentFile`, and `--auth-key-file` is a `connect` flag with no unit in-tree to pass it — the unit the runbook copies was deleted in #156. AC3 now names this exclusion instead of leaving the box unticked; #307 owns the conversion.
+  - Remaining inline `--auth-key` in `docs/`: exactly the two unattended `init` examples in `guide-multi-device-operations.md` (POSIX and PowerShell), labelled as process-table-visible; they wait on #306.
+- [x] [AC2] [AC4] Assert the `--auth-key` flag usage carries the process-list warning (`TestInit_SecurityGuidance`); proven by mutation — removing the warning from `init.go` fails the test.
 
 ## Verification & Closing
 

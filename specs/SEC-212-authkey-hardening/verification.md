@@ -38,3 +38,16 @@ re-verified against a binary built from `master` rather than trusted on the stre
   applied (duplicated code fence, a "non-interactive" heading over a prompting example,
   POSIX-only syntax in an "All platforms" block, AC3 ticked while deferred, an unfinished
   verification sentence) and one Major declined as refuted by the code.
+
+## Adversarial review round 1 (FAIL, 2026-09-21) — dispositions
+
+| Finding | Disposition |
+|---|---|
+| **Major**: AC3 required every runbook to use `--auth-key-file`, but `guide-deployment-linux.md` was skipped | **Contract rescoped**, as the review's first recommendation proposed. The Linux runbook has no CLI auth-key example to convert: it uses a `0600` `EnvironmentFile`. Converting it needs a restored systemd unit with `ExecStart --auth-key-file` (#307). AC3 now names that exclusion and the `init` exception (#306) |
+| Minor: `TestInit_SecurityGuidance` did not check the `--auth-key` flag's process-list warning | **Applied**: the test now asserts that `Flags().Lookup("auth-key").Usage` contains `visible in process list`. Mutation check: removing the warning from `init.go` makes the test fail (`init_test.go:276`) |
+| Minor: the multi-device quick setup passes `Get-Content` (and `$(cat …)`) to `--auth-key` | **Declined for this spec**: `init` registers no `--auth-key-file`, so an unattended `init` has no key-file form yet. The example is labelled as process-table-visible and points to `connect --auth-key-file` for launch. Fixed by #306 |
+
+Evidence for the rescoped AC3, from `grep -rnE -- '--auth-key[ =]' docs README.md .env.example` excluding
+`auth-key-file`: exactly two hits, `guide-multi-device-operations.md:67` (POSIX) and `:75`
+(PowerShell), both unattended `init` calls under the process-table warning. No `connect`
+example uses inline `--auth-key`.
