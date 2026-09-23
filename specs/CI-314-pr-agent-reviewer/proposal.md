@@ -26,8 +26,9 @@ spent quota elsewhere stops meaning "no review".
 
 ## What
 
-After this PR, on every non-draft, non-dependabot, non-release PR a second reviewer
-(PR-Agent on NaN inference) runs and posts its review as a `github-actions[bot]` comment. If
+After this PR, on every non-draft, non-dependabot, non-release PR opened from a branch of this
+repository (not from a fork), a second reviewer (PR-Agent on NaN inference) runs and posts its
+review as a `github-actions[bot]` comment. If
 that reviewer reports success but publishes no review, the `Fail if no review was published`
 step goes RED — a silent absence is impossible to mistake for a pass. The reviewer capability
 therefore no longer depends on CodeRabbit's availability.
@@ -41,6 +42,14 @@ therefore no longer depends on CodeRabbit's availability.
 - Changing required status checks (`test`,`lint`,`security` stay the merge gate).
 - Any Go code change or new project dependency.
 - Reviewing Dependabot or release-please PRs — both excluded, for reasons measured in the issue.
+- Reviewing PRs from forks (`head.repo.fork == false` in the workflow's `if:`). A `pull_request`
+  run from a fork gets no repository secrets, so PR-Agent would have no `NAN_API_KEY` and the
+  credential check would fail the job. Switching to `pull_request_target` would supply the secret,
+  but that trigger runs with the base repository's credentials while the PR's code is unreviewed.
+  That is the "pwn request" pattern GitHub Security Lab documents as unsafe. Fork PRs
+  therefore rely on CodeRabbit and human review. None of the 347 PRs to date came from a fork
+  (measured 2026-09-22 over REST), so the gap has had no effect yet; it becomes real on the first
+  outside contribution.
 
 ## Risks / open questions
 
