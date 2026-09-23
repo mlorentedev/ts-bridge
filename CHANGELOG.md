@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.4](https://github.com/mlorentedev/ts-bridge/compare/v1.17.3...v1.17.4) (2026-09-23)
+
+
+### Bug Fixes
+
+* **ci:** delimit workflow steps by their dash and read permissions values on later lines ([#350](https://github.com/mlorentedev/ts-bridge/issues/350)) ([752b2cb](https://github.com/mlorentedev/ts-bridge/commit/752b2cbd6652fa3cde01b1ecac30ef237e9bf619)), closes [#322](https://github.com/mlorentedev/ts-bridge/issues/322)
+* **cli:** point init key-file advice at connect, warn on every inline auth key, archive SEC-212 ([#349](https://github.com/mlorentedev/ts-bridge/issues/349)) ([794b39b](https://github.com/mlorentedev/ts-bridge/commit/794b39b9e50441814a74795c66a62353065e139c))
+
 ## [1.17.3](https://github.com/mlorentedev/ts-bridge/compare/v1.17.2...v1.17.3) (2026-09-07)
 
 
