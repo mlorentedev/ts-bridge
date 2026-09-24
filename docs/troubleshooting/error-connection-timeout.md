@@ -52,6 +52,7 @@ Run the bridge with verbose logging and inspect the log file:
 | `connection refused` | The mesh peer is reachable, but the target port is closed or wrong. |
 | `context deadline exceeded` | No connection reached the target service; continue with the WireGuard/peer checks below. |
 | `Handshake did not complete` plus `DERP ... does not know about peer` | The target node is not currently connected to Tailscale, even if the machine has Internet access or remains listed in the admin console. |
+| `fetch control key ... x509: certificate signed by unknown authority` | TLS inspection is presenting a CA that the target host or Tailscale service does not trust. See [lesson-014](../lessons/lesson-014-corporate-tls-inspection-breaks-headscale-tcp.md). |
 
 On the target Windows host:
 
@@ -119,5 +120,6 @@ export TS_MAX_CONNECTIONS=2000
 | RDP error `0x4` | Confirm the local bridge is still listening before diagnosing the target |
 | `dial failed: context deadline exceeded` | Check the target's live Tailscale service/session, not only its saved device entry |
 | `DERP ... does not know about peer` | Start/reconnect Tailscale on the target host |
+| `x509: certificate signed by unknown authority` | Move the host to a non-inspected network or have IT install the authorized CA in the Local Machine trust store |
 | `Connection reset by peer` | Host service down or network issue |
 | Slow connection | DERP relay active; normal for restricted networks |

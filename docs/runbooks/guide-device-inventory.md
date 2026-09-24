@@ -17,9 +17,15 @@ owner: manu
 
 ## Control Plane
 
-All Windows hosts use **Tailscale SaaS** (not Headscale). Corporate networks have transparent TLS inspection that blocks the Headscale Noise protocol. Tailscale SaaS relay IPs are trusted by corporate firewalls.
+All Windows hosts use **Tailscale SaaS** (not Headscale). Corporate networks
+have transparent TLS inspection that blocks the Headscale Noise protocol.
+Managed machines can trust the corporate inspection CA, but unmanaged hosts on
+the same Wi-Fi or an Internet Connection Sharing path may fail Tailscale SaaS
+login with `x509: certificate signed by unknown authority`.
 
-See `90-lessons.md` (2026-03-16 entry) and kubelab ADR-013 Addendum for the full rationale.
+See
+[lesson-014](../lessons/lesson-014-corporate-tls-inspection-breaks-headscale-tcp.md)
+and kubelab ADR-013 Addendum for the full rationale.
 
 | Parameter | Value |
 |-----------|-------|
