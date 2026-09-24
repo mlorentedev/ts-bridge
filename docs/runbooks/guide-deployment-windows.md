@@ -51,6 +51,9 @@ TS_TARGET=100.82.151.104:3389       # Host Tailscale IP + port
 
 # Interactive setup wizard
 .\ts-bridge.exe init
+
+# Secure non-interactive setup
+.\ts-bridge.exe init --auth-key-file C:\path\to\authkey --target 100.82.151.104:3389
 ```
 
 ### 4. Connect

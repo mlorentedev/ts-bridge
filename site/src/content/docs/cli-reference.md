@@ -87,6 +87,7 @@ ts-bridge init [flags]
 | Flag | Type | Description |
 |------|------|-------------|
 | `--auth-key` | string | Auth key (non-interactive mode) — WARNING: visible in process list |
+| `--auth-key-file` | string | Read auth key from file (secure non-interactive mode) |
 | `--config` | string | Output config file path (default: `./ts-bridge.yaml` for yaml, `./.env` for env) |
 | `--format` | string | Output format: `yaml` or `env` (default `env`) |
 | `--instance` | string | Instance name for auto-mode |
@@ -99,18 +100,19 @@ ts-bridge init [flags]
 # Interactive wizard (prompts for all values)
 ts-bridge init
 
-# Non-interactive: .env output (default) — --auth-key is visible in `ps`; init has no
-# --auth-key-file, so on a shared host prefer the interactive wizard just above
-ts-bridge init --auth-key tskey-auth-xxxxx --target 100.64.0.1:3389
+# Secure non-interactive: .env output (default)
+ts-bridge init --auth-key-file /run/secrets/authkey --target 100.64.0.1:3389
 
 # Non-interactive: YAML output
-ts-bridge init --auth-key tskey-auth-xxxxx --target 100.64.0.1:3389 --format yaml
+ts-bridge init --auth-key-file /run/secrets/authkey --target 100.64.0.1:3389 --format yaml
 ```
 
 ### Security notes
 
 - Auth key input is masked in interactive mode (no echo).
 - In YAML mode the auth key is written to `.env`, NOT to the YAML file.
+- `--auth-key-file` takes precedence over `--auth-key`.
+- An explicitly passed `--auth-key` remains visible in the process list and emits a warning.
 - A permission warning is shown if config files are world-readable.
 
 ## `ts-bridge status`

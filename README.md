@@ -45,11 +45,14 @@ ts-bridge connect --target my-desktop:3389 --auth-key-file /path/to/authkey
 # Interactive setup wizard
 ts-bridge init
 
+# Secure non-interactive setup
+ts-bridge init --auth-key-file /path/to/authkey --target my-desktop:3389
+
 # See all options
 ts-bridge --help
 ```
 
-> **Security Note:** Keys in environment variables or `.env` files are readable by child processes, and `--auth-key` is visible in the process list. For production and hardened setups, `--auth-key-file` is recommended.
+> **Security Note:** Keys in environment variables or `.env` files are readable by child processes, and `--auth-key` is visible in the process list. For production, automation, and hardened setups, use `--auth-key-file` with either `init` or `connect`.
 
 **Using a named profile (recommended when the host uses a non-default port):**
 

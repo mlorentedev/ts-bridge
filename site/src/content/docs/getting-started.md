@@ -144,7 +144,7 @@ TS_CONTROL_URL=https://vpn.example.com
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TS_AUTHKEY` | Auth key. Tailscale: [generate here](https://login.tailscale.com/admin/settings/keys). Headscale: `headscale preauthkeys create`. Prefix: `tskey-` or `hskey-`. Plaintext in the environment — on a shared or hardened host, leave it unset and pass `--auth-key-file` (connect only). | `tskey-auth-kXXXXXX` |
+| `TS_AUTHKEY` | Auth key. Tailscale: [generate here](https://login.tailscale.com/admin/settings/keys). Headscale: `headscale preauthkeys create`. Prefix: `tskey-` or `hskey-`. Plaintext in the environment — on a shared or hardened host, leave it unset and pass `--auth-key-file` to `init` or `connect`. | `tskey-auth-kXXXXXX` |
 | `TS_TARGET` | Host address on the mesh network. Supports IP or MagicDNS hostname. | `100.82.151.104:3389` |
 
 ### Optional variables
