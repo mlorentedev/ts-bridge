@@ -291,6 +291,7 @@ func TestInitAuthKeyFile(t *testing.T) {
 	tests := []struct {
 		name           string
 		keyFileContent *string
+		emptyKeyPath   bool
 		includeInline  bool
 		profile        string
 		wantErr        string
@@ -314,9 +315,19 @@ func TestInitAuthKeyFile(t *testing.T) {
 			wantErr: "read auth key file: stat auth key file",
 		},
 		{
+			name:         "explicit empty file path returns clear error",
+			emptyKeyPath: true,
+			wantErr:      "--auth-key-file cannot be empty",
+		},
+		{
 			name:           "empty file returns clear error",
 			keyFileContent: stringPtr(""),
 			wantErr:        "auth key file is empty",
+		},
+		{
+			name:           "embedded newline returns clear error",
+			keyFileContent: stringPtr("tskey-from-file\nTS_LOCAL_ADDR=0.0.0.0:33389"),
+			wantErr:        "auth key file contains embedded line break",
 		},
 		{
 			name:           "malformed key returns validation error",
@@ -345,6 +356,9 @@ func TestInitAuthKeyFile(t *testing.T) {
 				"--auth-key-file", keyPath,
 				"--target", "100.64.0.1:3389",
 				"--config", filepath.Join(tmpDir, ".env"),
+			}
+			if tt.emptyKeyPath {
+				args[1] = ""
 			}
 			if tt.includeInline {
 				args = append(args, "--auth-key", "tskey-from-inline")

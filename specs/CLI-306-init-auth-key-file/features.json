@@ -23,7 +23,7 @@
   {
     "id": "CLI-306-init-auth-key-file-f4",
     "behavior": "the complete Go suite, vet, lint, and Windows build remain green",
-    "verification": "go test ./... && go vet ./... && go build ./cmd/ts-bridge/",
+    "verification": "go test ./... && go vet ./... && golangci-lint run && GOOS=windows go build ./cmd/ts-bridge/",
     "state": "pending",
     "evidence": ""
   }

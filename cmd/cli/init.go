@@ -100,6 +100,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if cmd.Flags().Changed("auth-key-file") && strings.TrimSpace(f.AuthKeyFile) == "" {
+		return fmt.Errorf("--auth-key-file cannot be empty")
+	}
+
 	// Profile mode: write a named profile to the store; no .env or YAML file.
 	if f.Profile != "" {
 		if err := validateProfileModeFlags(cmd, f); err != nil {
