@@ -59,20 +59,6 @@ TS_TARGET=100.103.27.100:3389
 TS_INSTANCE_NAME=acemagic-lab-2
 ```
 
-### Named connection profiles
-
-Import each non-default target once so operators do not need to remember its
-hostname or port:
-
-```powershell
-.\ts-bridge.exe import office "tsb://acemagic-office:45000?cp=saas"
-.\ts-bridge.exe connect --profile office --auth-key-file "$HOME\.ts-bridge\authkey"
-```
-
-The profile stores only the target and control-plane selection. It does not
-contain the auth key. Secure automatic credential discovery is tracked by
-[#355](https://github.com/mlorentedev/ts-bridge/issues/355).
-
 ---
 
 ## Client Machine

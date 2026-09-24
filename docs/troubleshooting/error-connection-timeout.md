@@ -80,6 +80,9 @@ mstsc /v:<lan-ip>:<rdp-port> /admin
 
 If direct LAN RDP succeeds while the ts-bridge dial times out, RDP and the host
 are healthy; the fault is isolated to the target's Tailscale service/session.
+For a persistent split between local high-speed management and a separate
+Internet/Tailscale uplink, see
+[Dual-homed Windows host](../runbooks/guide-dual-homed-windows-host.md).
 
 ## Related: Slow Performance
 
