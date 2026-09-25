@@ -109,13 +109,13 @@ func TestWriteYAMLConfig_CreatesYamlAndEnv(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey:  "tskey-test",
-		Target:   "100.64.0.1:3389",
-		Format:   "yaml",
-		Config:   yamlPath,
-		Instance: "my-server",
+		AuthKey:   "tskey-test",
+		Target:    "100.64.0.1:3389",
+		Format:    "yaml",
+		Config:    yamlPath,
+		Instance:  "my-server",
 		PortRange: "33389-34388",
-		Force:    true,
+		Force:     true,
 	}
 
 	err := writeYAMLConfig(cmd, f)
@@ -150,11 +150,11 @@ func TestWriteYAMLConfig_CreatesYamlAndEnv(t *testing.T) {
 
 func TestRunInitProfile(t *testing.T) {
 	cases := []struct {
-		name          string
-		flags         initFlags
-		preExisting   string // if non-empty, pre-write this target under f.Profile name
-		wantErr       string // substring expected in error; empty = no error
-		wantTarget    string
+		name           string
+		flags          initFlags
+		preExisting    string // if non-empty, pre-write this target under f.Profile name
+		wantErr        string // substring expected in error; empty = no error
+		wantTarget     string
 		wantControlURL string
 	}{
 		{
@@ -266,24 +266,182 @@ func TestWriteEnvConfig_CreatesFullConfig(t *testing.T) {
 
 func TestInit_SecurityGuidance(t *testing.T) {
 	cmd := newInitCmd()
-	// init registers no --auth-key-file, so the help must send the key file to connect,
-	// where the flag exists, rather than suggest it as an init flag.
-	if !strings.Contains(cmd.Long, "ts-bridge connect --auth-key-file") {
-		t.Error("init command help should point to ts-bridge connect --auth-key-file")
+	if !strings.Contains(cmd.Long, "ts-bridge init --auth-key-file") {
+		t.Error("init command help should show the secure non-interactive key-file workflow")
 	}
-	if strings.Contains(cmd.Long, "consider using --auth-key-file") {
-		t.Error("init command help should not suggest --auth-key-file as an init flag")
+	if strings.Contains(cmd.Long, "init itself has no key-file flag") {
+		t.Error("init command help should not claim the key-file flag is unavailable")
 	}
 	if !strings.Contains(cmd.Long, "child processes") {
 		t.Error("init command help should explain child processes visibility")
 	}
-	flag := cmd.Flags().Lookup("auth-key")
-	if flag == nil {
+	authKeyFlag := cmd.Flags().Lookup("auth-key")
+	if authKeyFlag == nil {
 		t.Fatal("init should register --auth-key")
 	}
-	if !strings.Contains(flag.Usage, "visible in process list") {
-		t.Errorf("--auth-key usage should warn that the key is visible in the process list, got %q", flag.Usage)
+	if !strings.Contains(authKeyFlag.Usage, "visible in process list") {
+		t.Errorf("--auth-key usage should warn that the key is visible in the process list, got %q", authKeyFlag.Usage)
 	}
+	if cmd.Flags().Lookup("auth-key-file") == nil {
+		t.Fatal("init should register --auth-key-file")
+	}
+}
+
+func TestInitAuthKeyFile(t *testing.T) {
+	tests := []struct {
+		name           string
+		keyFileContent *string
+		emptyKeyPath   bool
+		includeInline  bool
+		profile        string
+		wantErr        string
+		wantKey        string
+		wantWarning    bool
+	}{
+		{
+			name:           "reads key from file",
+			keyFileContent: stringPtr("tskey-from-file\r\n"),
+			wantKey:        "tskey-from-file",
+		},
+		{
+			name:           "file takes precedence over inline key",
+			keyFileContent: stringPtr("tskey-from-file"),
+			includeInline:  true,
+			wantKey:        "tskey-from-file",
+			wantWarning:    true,
+		},
+		{
+			name:    "missing file returns clear error",
+			wantErr: "read auth key file: stat auth key file",
+		},
+		{
+			name:         "explicit empty file path returns clear error",
+			emptyKeyPath: true,
+			wantErr:      "--auth-key-file cannot be empty",
+		},
+		{
+			name:           "empty file returns clear error",
+			keyFileContent: stringPtr(""),
+			wantErr:        "auth key file is empty",
+		},
+		{
+			name:           "embedded newline returns clear error",
+			keyFileContent: stringPtr("tskey-from-file\nTS_LOCAL_ADDR=0.0.0.0:33389"),
+			wantErr:        "auth key file contains embedded line break",
+		},
+		{
+			name:           "malformed key returns validation error",
+			keyFileContent: stringPtr("not-a-key"),
+			wantErr:        "auth key invalid format",
+		},
+		{
+			name:           "profile mode rejects auth key file",
+			keyFileContent: stringPtr("tskey-from-file"),
+			profile:        "work",
+			wantErr:        "--auth-key-file is not compatible with --profile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			keyPath := filepath.Join(tmpDir, "authkey")
+			if tt.keyFileContent != nil {
+				if err := os.WriteFile(keyPath, []byte(*tt.keyFileContent), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			args := []string{
+				"--auth-key-file", keyPath,
+				"--target", "100.64.0.1:3389",
+				"--config", filepath.Join(tmpDir, ".env"),
+			}
+			if tt.emptyKeyPath {
+				args[1] = ""
+			}
+			if tt.includeInline {
+				args = append(args, "--auth-key", "tskey-from-inline")
+			}
+			if tt.profile != "" {
+				args = append(args, "--profile", tt.profile)
+			}
+
+			cmd := newInitCmd()
+			cmd.SetArgs(args)
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+
+			var runErr error
+			_, stderr := captureInitOutput(t, func() {
+				runErr = cmd.Execute()
+			})
+
+			if tt.wantErr != "" {
+				if runErr == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !strings.Contains(runErr.Error(), tt.wantErr) {
+					t.Fatalf("error = %q, want substring %q", runErr, tt.wantErr)
+				}
+				return
+			}
+			if runErr != nil {
+				t.Fatalf("unexpected error: %v", runErr)
+			}
+
+			data, err := os.ReadFile(filepath.Join(tmpDir, ".env"))
+			if err != nil {
+				t.Fatalf("read generated config: %v", err)
+			}
+			if !strings.Contains(string(data), "TS_AUTHKEY="+tt.wantKey) {
+				t.Errorf("generated config does not contain file key %q:\n%s", tt.wantKey, data)
+			}
+			if tt.includeInline && strings.Contains(string(data), "tskey-from-inline") {
+				t.Errorf("generated config contains lower-precedence inline key:\n%s", data)
+			}
+			if tt.wantWarning && !strings.Contains(stderr, "--auth-key is visible in the process list") {
+				t.Errorf("stderr does not contain process-table warning:\n%s", stderr)
+			}
+		})
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func captureInitOutput(t *testing.T, fn func()) (stdout, stderr string) {
+	t.Helper()
+
+	oldStdout, oldStderr := os.Stdout, os.Stderr
+	rOut, wOut, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+	rErr, wErr, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stderr: %v", err)
+	}
+	os.Stdout, os.Stderr = wOut, wErr
+
+	defer func() {
+		os.Stdout, os.Stderr = oldStdout, oldStderr
+	}()
+
+	fn()
+
+	wOut.Close()
+	wErr.Close()
+	out, err := io.ReadAll(rOut)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	errOut, err := io.ReadAll(rErr)
+	if err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	return string(out), string(errOut)
 }
 
 func TestPrintNextSteps_SecurityTip(t *testing.T) {

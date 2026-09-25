@@ -58,13 +58,13 @@ Do not set `TS_LOCAL_ADDR`, `TS_HOSTNAME`, or `TS_STATE_DIR` unless you intentio
 
 ### Non-interactive (quick setup)
 
-`init` has no `--auth-key-file` (only `connect` registers it, #306), so unattended provisioning
-is the one case where the key must go on the command line:
+Use `--auth-key-file` for unattended provisioning so the credential never enters the process
+table:
 
 ```bash
 # Linux / macOS
 ./ts-bridge init \
-  --auth-key "$(cat ~/.config/ts-bridge/authkey)" \
+  --auth-key-file ~/.config/ts-bridge/authkey \
   --target 100.x.x.x:45000 \
   --instance office-laptop
 ```
@@ -72,20 +72,15 @@ is the one case where the key must go on the command line:
 ```powershell
 # Windows PowerShell
 .\ts-bridge.exe init `
-  --auth-key (Get-Content "$env:USERPROFILE\.ts-bridge\authkey") `
+  --auth-key-file "$env:USERPROFILE\.ts-bridge\authkey" `
   --target 100.x.x.x:45000 `
   --instance office-laptop
 ```
 
-This form is visible in the process table for the length of the call; prefer the interactive
-prompt wherever a human is present, and pass the key file to `connect` at launch instead — see
-Launch Commands below.
-
 > **Security Note:** `--auth-key` puts the key on the command line, where it is visible in the
 > process table (`ps`, Task Manager) to every local user, and `TS_AUTHKEY` is inherited by every
-> child process ts-bridge spawns. Prefer the interactive `init` prompt (masked, never echoed),
-> and supply the key to `connect` from a `0600` file with `--auth-key-file` rather than from the
-> environment.
+> child process ts-bridge spawns. Prefer the interactive `init` prompt (masked, never echoed) or
+> supply the key to `init` and `connect` from a restricted file with `--auth-key-file`.
 
 ## Launch Commands
 

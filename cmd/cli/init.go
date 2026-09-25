@@ -29,37 +29,39 @@ func newInitCmd() *cobra.Command {
 Interactive mode (no flags): prompts for auth key (masked), target, instance
 name, and config format (YAML or .env).
 
-Non-interactive mode (with --auth-key and --target): writes config silently,
-useful for automation or CI.
+Non-interactive mode (with --auth-key-file or --auth-key, plus --target):
+writes config silently, useful for automation or CI.
 
 Security notes:
   - Auth key input is masked in interactive mode (no echo).
   - In YAML mode the auth key is written to .env, NOT to the YAML file.
   - Plaintext keys in .env or environment variables are readable by child processes.
   - --auth-key on the command line is visible in the process list to every local user.
-  - For enhanced security, keep the key in its own file (chmod 0600) and pass it at launch:
-    ts-bridge connect --auth-key-file /path/to/key
-    init itself has no key-file flag; on a shared host use the interactive prompt.
+  - For enhanced security, keep the key in its own restricted file:
+    ts-bridge init --auth-key-file /path/to/key --target host:port
   - A permission warning is shown if config files are world-readable.
 
 Examples:
   # Interactive wizard
   ts-bridge init
 
-  # Non-interactive examples below put the key in the process list while init runs.
-  # Non-interactive: .env output (default)
+  # Secure non-interactive: .env output (default)
+  ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389
+
+  # Inline keys are visible in the process list while init runs.
   ts-bridge init --auth-key tskey-auth-xxx --target 100.64.0.1:3389
 
   # Non-interactive: YAML output
-  ts-bridge init --auth-key tskey-auth-xxx --target 100.64.0.1:3389 --format yaml
+  ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389 --format yaml
 
   # Custom output path
-  ts-bridge init --auth-key tskey-auth-xxx --target 100.64.0.1:3389 --config /etc/ts-bridge.yaml
+  ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389 --config /etc/ts-bridge.yaml
 `,
 		RunE: runInit,
 	}
 
 	cmd.Flags().String("auth-key", "", "Auth key (non-interactive mode) — WARNING: visible in process list")
+	cmd.Flags().String("auth-key-file", "", "Read auth key from file (secure non-interactive mode)")
 	cmd.Flags().String("target", "", "Target address HOST:PORT (non-interactive mode)")
 	cmd.Flags().String("instance", "", "Instance name for auto-mode")
 	cmd.Flags().String("port-range", "", "Port range for auto mode (e.g. 33389-34388)")
@@ -73,15 +75,16 @@ Examples:
 
 // initFlags holds values parsed from CLI flags for the init command.
 type initFlags struct {
-	AuthKey    string // #nosec G117 -- CLI flag value, not a secret in source code
-	Target     string
-	Instance   string
-	PortRange  string
-	Format     string
-	Config     string
-	Force      bool
-	Profile    string
-	ControlURL string
+	AuthKey     string // #nosec G117 -- CLI flag value, not a secret in source code
+	AuthKeyFile string
+	Target      string
+	Instance    string
+	PortRange   string
+	Format      string
+	Config      string
+	Force       bool
+	Profile     string
+	ControlURL  string
 }
 
 const (
@@ -97,12 +100,28 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if cmd.Flags().Changed("auth-key-file") && strings.TrimSpace(f.AuthKeyFile) == "" {
+		return fmt.Errorf("--auth-key-file cannot be empty")
+	}
+
 	// Profile mode: write a named profile to the store; no .env or YAML file.
 	if f.Profile != "" {
 		if err := validateProfileModeFlags(cmd, f); err != nil {
 			return err
 		}
 		return runInitProfile(defaultProfileStorePath, f)
+	}
+
+	authKeyFlagProvided := cmd.Flags().Changed("auth-key")
+	if f.AuthKeyFile != "" {
+		key, err := readAuthKeyFile(f.AuthKeyFile)
+		if err != nil {
+			return fmt.Errorf("read auth key file: %w", err)
+		}
+		f.AuthKey = key
+	}
+	if authKeyFlagProvided {
+		fmt.Fprintln(os.Stderr, "WARNING: --auth-key is visible in the process list; use --auth-key-file instead")
 	}
 
 	// Determine mode.
@@ -122,6 +141,7 @@ func validateProfileModeFlags(cmd *cobra.Command, f initFlags) error {
 		value string
 	}{
 		{"auth-key", f.AuthKey},
+		{"auth-key-file", f.AuthKeyFile},
 		{"instance", f.Instance},
 		{"port-range", f.PortRange},
 		{"config", f.Config},
@@ -168,6 +188,7 @@ func parseInitFlags(cmd *cobra.Command) (initFlags, error) {
 	var f initFlags
 
 	f.AuthKey, _ = cmd.Flags().GetString("auth-key")
+	f.AuthKeyFile, _ = cmd.Flags().GetString("auth-key-file")
 	f.Target, _ = cmd.Flags().GetString("target")
 	f.Instance, _ = cmd.Flags().GetString("instance")
 	f.PortRange, _ = cmd.Flags().GetString("port-range")

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "CLI-306-init-auth-key-file-f1",
+    "behavior": "init reads a valid auth key file and reports missing, empty, or malformed files clearly",
+    "verification": "go test ./cmd/cli -run TestInitAuthKeyFile",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CLI-306-init-auth-key-file-f2",
+    "behavior": "auth-key-file takes precedence while an explicit auth-key still emits the process-table warning",
+    "verification": "go test ./cmd/cli -run TestInitAuthKeyFile",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CLI-306-init-auth-key-file-f3",
+    "behavior": "help and user documentation describe init auth-key-file without stale connect-only guidance",
+    "verification": "go test ./cmd/cli -run TestInit_SecurityGuidance",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CLI-306-init-auth-key-file-f4",
+    "behavior": "the complete Go suite, vet, lint, and Windows build remain green",
+    "verification": "go test ./... && go vet ./... && golangci-lint run && GOOS=windows go build ./cmd/ts-bridge/",
+    "state": "pending",
+    "evidence": ""
+  }
+]

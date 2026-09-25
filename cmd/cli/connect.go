@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -237,6 +238,9 @@ func readAuthKeyFile(path string) (string, error) {
 	key = trimTrailingNewline(key)
 	if key == "" {
 		return "", fmt.Errorf("auth key file is empty: %s", absPath)
+	}
+	if strings.ContainsAny(key, "\r\n") {
+		return "", fmt.Errorf("auth key file contains embedded line break: %s", absPath)
 	}
 
 	return key, nil
