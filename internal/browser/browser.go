@@ -96,6 +96,7 @@ func FindEdge(explicitPath string) (string, error) {
 			continue
 		}
 		path := filepath.Join(root, "Microsoft", "Edge", "Application", "msedge.exe")
+		// #nosec G703 -- root comes from OS-owned Program Files variables and the suffix is fixed.
 		if info, err := os.Stat(path); err == nil && !info.IsDir() {
 			return path, nil
 		}

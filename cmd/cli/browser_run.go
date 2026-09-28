@@ -21,7 +21,7 @@ func RunBrowser(cfg config.Config, options BrowserOptions) error {
 	if err != nil {
 		return err
 	}
-	defer pacServer.Shutdown(context.Background())
+	defer func() { _ = pacServer.Shutdown(context.Background()) }()
 
 	edgePath, err := browser.FindEdge(options.EdgePath)
 	if err != nil {
