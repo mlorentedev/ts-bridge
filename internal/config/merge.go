@@ -72,14 +72,8 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	if err := validateYAMLAuthKey(yamlCfg); err != nil {
 		return Config{}, err
 	}
-	if err := validateModeLayer(yamlCfg.Target, yamlCfg.SOCKS5Addr); err != nil {
-		return Config{}, fmt.Errorf("YAML config: %w", err)
-	}
-	if err := validateModeLayer(os.Getenv("TS_TARGET"), os.Getenv("TS_SOCKS5_ADDR")); err != nil {
-		return Config{}, fmt.Errorf("environment: %w", err)
-	}
-	if err := validateModeLayer(flags.Target, flags.SOCKS5Addr); err != nil {
-		return Config{}, fmt.Errorf("flags: %w", err)
+	if err := validateModeInputs(yamlCfg, flags); err != nil {
+		return Config{}, err
 	}
 
 	cfg := defaults()
@@ -87,21 +81,7 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	applyEnv(&cfg)
 	applyFlags(&cfg, flags)
 
-	// Validate target format first so a malformed target doesn't get
-	// masked by a later auth-key error (BUG-005).
-	if err := validateTarget(cfg.Target); err != nil {
-		return Config{}, err
-	}
-	if err := validateSOCKS5Addr(cfg.SOCKS5Addr); err != nil {
-		return Config{}, err
-	}
-	if err := validateSOCKS5Routes(cfg.SOCKS5Routes); err != nil {
-		return Config{}, err
-	}
-	if cfg.Target != "" && len(cfg.SOCKS5Routes) > 0 {
-		return Config{}, fmt.Errorf("SOCKS5 routes require SOCKS5 mode")
-	}
-	if err := validateRequiredFields(cfg); err != nil {
+	if err := validateMergedProxyConfig(cfg); err != nil {
 		return Config{}, err
 	}
 	// Normalize before validating so the value we check is the value we persist
@@ -160,6 +140,42 @@ func validateModeLayer(target, socks5Addr string) error {
 		return fmt.Errorf("target and SOCKS5 listener cannot both be set at the same precedence level")
 	}
 	return nil
+}
+
+func validateModeInputs(yamlCfg PartialConfig, flags FlagSet) error {
+	layers := []struct {
+		name   string
+		target string
+		socks  string
+	}{
+		{name: "YAML config", target: yamlCfg.Target, socks: yamlCfg.SOCKS5Addr},
+		{name: "environment", target: os.Getenv("TS_TARGET"), socks: os.Getenv("TS_SOCKS5_ADDR")},
+		{name: "flags", target: flags.Target, socks: flags.SOCKS5Addr},
+	}
+	for _, layer := range layers {
+		if err := validateModeLayer(layer.target, layer.socks); err != nil {
+			return fmt.Errorf("%s: %w", layer.name, err)
+		}
+	}
+	return nil
+}
+
+func validateMergedProxyConfig(cfg Config) error {
+	// Validate target format first so a malformed target doesn't get
+	// masked by a later auth-key error (BUG-005).
+	if err := validateTarget(cfg.Target); err != nil {
+		return err
+	}
+	if err := validateSOCKS5Addr(cfg.SOCKS5Addr); err != nil {
+		return err
+	}
+	if err := validateSOCKS5Routes(cfg.SOCKS5Routes); err != nil {
+		return err
+	}
+	if cfg.Target != "" && len(cfg.SOCKS5Routes) > 0 {
+		return fmt.Errorf("SOCKS5 routes require SOCKS5 mode")
+	}
+	return validateRequiredFields(cfg)
 }
 
 // validateRequiredFields checks that required config fields are present and valid.

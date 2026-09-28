@@ -464,10 +464,10 @@ func TestLoadConfig(t *testing.T) {
 				"TS_AUTO_INSTANCE", "TS_INSTANCE_NAME", "TS_PORT_RANGE", "TS_MANUAL_MODE",
 				"TS_DRAIN_TIMEOUT", "TS_IDLE_TIMEOUT", "TS_DIAL_TIMEOUT",
 				"TS_DIAL_RETRIES", "TS_DIAL_BACKOFF_BASE", "TS_DIAL_BACKOFF_MAX"} {
-				os.Unsetenv(key)
+				t.Setenv(key, "")
 			}
 			for k, v := range tt.env {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			cfg, err := LoadConfig(tt.verbose)

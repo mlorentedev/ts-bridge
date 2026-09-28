@@ -113,18 +113,9 @@ type Config struct {
 
 // LoadConfig parses environment variables into a Config struct.
 func LoadConfig(verboseFlag bool) (Config, error) {
-	targetValue := os.Getenv("TS_TARGET")
-	socks5Addr := os.Getenv("TS_SOCKS5_ADDR")
-	if err := validateModeLayer(targetValue, socks5Addr); err != nil {
-		return Config{}, fmt.Errorf("environment: %w", err)
-	}
-	target := ""
-	if socks5Addr == "" {
-		var err error
-		target, err = parseTarget()
-		if err != nil {
-			return Config{}, err
-		}
+	target, socks5Addr, err := loadProxyModeFromEnv()
+	if err != nil {
+		return Config{}, err
 	}
 
 	authKey, err := parseAuthKey()
@@ -204,6 +195,19 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func loadProxyModeFromEnv() (string, string, error) {
+	targetValue := os.Getenv("TS_TARGET")
+	socks5Addr := os.Getenv("TS_SOCKS5_ADDR")
+	if err := validateModeLayer(targetValue, socks5Addr); err != nil {
+		return "", "", fmt.Errorf("environment: %w", err)
+	}
+	if socks5Addr != "" {
+		return "", socks5Addr, nil
+	}
+	target, err := parseTarget()
+	return target, "", err
 }
 
 func parseDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
