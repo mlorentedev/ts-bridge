@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.0](https://github.com/mlorentedev/ts-bridge/compare/v1.17.4...v1.18.0) (2026-09-25)
+
+
+### Features
+
+* **cli:** add init auth key file support ([#356](https://github.com/mlorentedev/ts-bridge/issues/356)) ([9d256e9](https://github.com/mlorentedev/ts-bridge/commit/9d256e93498c284902d3c7cf9d60108f65a5fb09))
+
 ## [1.17.4](https://github.com/mlorentedev/ts-bridge/compare/v1.17.3...v1.17.4) (2026-09-23)
 
 
