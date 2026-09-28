@@ -46,6 +46,12 @@ created: "2026-09-28"
       dev machine, confirmed CI installs it), `test-check-review-published.sh`
 - [x] No unrelated changes in the diff
 - [x] `verification.md` filled with executed evidence, not intentions
-- [ ] PR opened referencing this spec folder (`Closes #345`)
-- [ ] Reviewer output dispositioned and recorded under `## Review triage` on the PR
+- [x] PR opened referencing this spec folder (Closes #345): #359
+- [x] Post-review fix (CodeRabbit on #359, Security Architecture, High): the added checkout
+      read the guard script from the PR head, so a same-repo PR editing
+      scripts/check-review-published.sh could report a false "review published" using the
+      guard step's write-capable token. Pinned the checkout to the repository's default branch
+      so the guard always runs the trusted master copy; re-verified actionlint -shellcheck=shellcheck
+      clean. Full disposition table in verification.md
+- [x] Reviewer output dispositioned and recorded (verification.md -> "Review window (PR #359)")
 - [ ] Independent adversarial review before archive (implementer cannot sign it)

@@ -121,6 +121,27 @@ scripts run via Git Bash (`C:\Program Files\Git\bin\bash.exe`) since they are ba
 - **Scope discipline.** Left every other CI-314 review finding (#341, #348, #351, #333) untouched,
   matching the issue body's own "kept out on purpose" framing.
 
+## Review window (PR #359)
+
+CodeRabbit ran on this PR and posted a Security Architecture review, dispositioned here rather
+than in chat:
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| **High - security - inferred:** the review-publication verdict now depends on an executable from the checked-out repository; a same-repo PR editing `scripts/check-review-published.sh` could bypass the comment check or use the guard step's write-capable token | **Applied.** The checkout was pinned to `ref: ${{ github.event.repository.default_branch }}` instead of the PR head/merge ref, so the guard always runs the trusted `master` copy of the script regardless of what a PR proposes. The guard's logic is generic marker-matching, never specific to the PR under review, so nothing is lost -- and this mirrors the trust reasoning already governing `BASE_REF` (the registry lookup) elsewhere in the same workflow. | `.github/workflows/pr-agent.yml` checkout step, `ref:` line; `actionlint -shellcheck=shellcheck` re-run clean after the change |
+| Docstring Coverage pre-merge check (40% vs. 80% threshold) | **Declined.** The threshold is a generic doc-coverage heuristic applied to `scripts/tests/test-check-review-published.sh`'s bash helper functions (`registry_json`, `write_comments`, etc.), which already carry inline comments explaining their fixture role; bash has no docstring convention this repo follows, and none of its other guard scripts (`check-workflow-permissions.sh`, `check-actions-pinned.sh`) carry one either. | -- |
+| "Merge Risk: Minimal", "No outstanding issue blocks merging" | Informational -- recorded, no action needed. | -- |
+| Ticket compliance: `#345` fully compliant | No action -- matches the acceptance criteria in `proposal.md`. | -- |
+
+PR-Agent (`review` job) itself did not complete on this PR: two consecutive runs each hung for
+~12 minutes inside `retry_with_fallback_models` (`openai/mimo-v2.5` then
+`openai/deepseek-v4-flash`) against the NaN/LiteLLM backend before the job's own 15-minute
+timeout cancelled it -- an external-service degradation, not a defect in this PR's diff (the guard
+step, unreached in both runs, is unaffected; its own regression suite is the evidence for AC1).
+Matches the exact failure mode `pr-agent.yml`'s own comments already document ("NaN concurrency
+exhaustion - the cluster allows 5 simultaneous requests, shared with pi, qq and hive embeddings").
+Out of scope for this PR to fix (external dependency); tracked for a human decision on whether it
+warrants its own ticket if it recurs.
 ## Promotion candidates
 
 - [ ] **Lesson for `docs/lessons/`?** Candidate, not written here: "a text-matching guard is only

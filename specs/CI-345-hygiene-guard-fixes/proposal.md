@@ -51,11 +51,15 @@ spec verifies needs its own review.
 ## Risks / open questions
 
 - **Adding a checkout to `pr-agent.yml`'s `review` job.** The job previously ran with no checkout
-  at all (deliberate, per its own comments). Mitigated the same way CI-322 did: read-only,
-  `persist-credentials: false`, and the job's own `if:` gate already excludes forks and Dependabot,
-  so nothing new is exposed to an untrusted diff — the checkout happens on `pull_request` (base
-  ref semantics for privileged workflows do not apply here since this workflow only ever runs for
-  same-repo, non-fork PRs) and reads only `scripts/check-review-published.sh` from that checkout.
+  at all (deliberate, per its own comments). Read-only (`persist-credentials: false`), and pinned
+  to `ref: ${{ github.event.repository.default_branch }}` rather than the PR head/merge ref
+  (CodeRabbit finding on PR #359, Security Architecture review, High): the job carries
+  `pull-requests: write` / `issues: write`, so a same-repo PR that could edit the checked-out
+  script would otherwise decide, with that write-capable token, whether its own review
+  requirement was satisfied. Reading the guard from the base ref closes that without losing
+  coverage — the guard is generic marker-matching logic, never specific to the PR under review,
+  and the same trust reasoning already governs `BASE_REF` (the registry lookup) elsewhere in this
+  workflow. See `verification.md` for the full disposition.
 - **`go install`-based actionlint has no SHA pin the way `uses:` actions do.** Pinned to an exact
   version tag (`v1.7.12`) instead, consistent with `golangci-lint`'s and `gosec`'s existing
   `go install ...@version` / `@latest` pattern in `ci.yml`.
