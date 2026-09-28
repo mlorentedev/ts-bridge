@@ -437,6 +437,25 @@ func TestMergeHigherPrecedenceSOCKSModePreservesYAMLAllowlist(t *testing.T) {
 	}
 }
 
+func TestMergeRejectsSOCKS5RoutesInStaticMode(t *testing.T) {
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_SOCKS5_ADDR", "")
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	_, err := Merge(
+		PartialConfig{},
+		FlagSet{
+			Target:       "mesh-host:22",
+			SOCKS5Routes: []string{"forge.example:443=apps:443"},
+			AuthKey:      "tskey-auth-test123",
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "SOCKS5 routes require SOCKS5 mode") {
+		t.Fatalf("Merge error = %v", err)
+	}
+}
+
 // --- BUG-009: default hostname in manual-mode ---
 
 func TestMergeDefaultHostnameInManualMode(t *testing.T) {

@@ -98,6 +98,9 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	if err := validateSOCKS5Routes(cfg.SOCKS5Routes); err != nil {
 		return Config{}, err
 	}
+	if cfg.Target != "" && len(cfg.SOCKS5Routes) > 0 {
+		return Config{}, fmt.Errorf("SOCKS5 routes require SOCKS5 mode")
+	}
 	if err := validateRequiredFields(cfg); err != nil {
 		return Config{}, err
 	}

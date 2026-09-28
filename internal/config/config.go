@@ -113,9 +113,18 @@ type Config struct {
 
 // LoadConfig parses environment variables into a Config struct.
 func LoadConfig(verboseFlag bool) (Config, error) {
-	target, err := parseTarget()
-	if err != nil {
-		return Config{}, err
+	targetValue := os.Getenv("TS_TARGET")
+	socks5Addr := os.Getenv("TS_SOCKS5_ADDR")
+	if err := validateModeLayer(targetValue, socks5Addr); err != nil {
+		return Config{}, fmt.Errorf("environment: %w", err)
+	}
+	target := ""
+	if socks5Addr == "" {
+		var err error
+		target, err = parseTarget()
+		if err != nil {
+			return Config{}, err
+		}
 	}
 
 	authKey, err := parseAuthKey()
@@ -150,7 +159,7 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 
 	cfg := Config{
 		LocalAddr:       os.Getenv("TS_LOCAL_ADDR"),
-		SOCKS5Addr:      os.Getenv("TS_SOCKS5_ADDR"),
+		SOCKS5Addr:      socks5Addr,
 		Target:          target,
 		AuthKey:         authKey,
 		Hostname:        os.Getenv("TS_HOSTNAME"),
@@ -187,6 +196,9 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 	// Normalize before validating so the value we check is the value we persist
 	// and hand to tsnet (#209 review).
 	cfg.ControlURL = strings.TrimSpace(cfg.ControlURL)
+	if err := validateSOCKS5Addr(cfg.SOCKS5Addr); err != nil {
+		return Config{}, err
+	}
 	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
 		return Config{}, err
 	}
