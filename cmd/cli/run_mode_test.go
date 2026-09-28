@@ -38,3 +38,25 @@ func TestProxyModeAddresses(t *testing.T) {
 		})
 	}
 }
+
+func TestSOCKSTargetResolverRequiresExplicitMode(t *testing.T) {
+	direct, err := socksTargetResolver(config.Config{})
+	if err != nil {
+		t.Fatalf("direct resolver: %v", err)
+	}
+	target, err := direct("mesh-host", 22)
+	if err != nil || target != "mesh-host:22" {
+		t.Fatalf("direct target = %q, err = %v", target, err)
+	}
+
+	allowlisted, err := socksTargetResolver(config.Config{
+		SOCKS5Routes: map[string]string{"forge.example:443": "apps:443"},
+	})
+	if err != nil {
+		t.Fatalf("allow-list resolver: %v", err)
+	}
+	target, err = allowlisted("forge.example", 443)
+	if err != nil || target != "apps:443" {
+		t.Fatalf("allow-listed target = %q, err = %v", target, err)
+	}
+}

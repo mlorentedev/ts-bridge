@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -203,6 +204,28 @@ func TestAcceptSOCKS5Loop_AcceptsAndForwardsConnection(t *testing.T) {
 	}
 }
 
+func TestAcceptSOCKS5LoopRejectsNilResolver(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	var wg sync.WaitGroup
+	err = AcceptSOCKS5Loop(
+		listener,
+		&mockDialer{},
+		config.Config{MaxConnections: 1},
+		nil,
+		&wg,
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	if err == nil || !strings.Contains(err.Error(), "resolver is required") {
+		t.Fatalf("AcceptSOCKS5Loop error = %v", err)
+	}
+}
+
 func TestNewAllowlistSOCKSTarget(t *testing.T) {
 	resolve, err := NewAllowlistSOCKSTarget(map[string]string{
 		"Forge.Example.Internal:443": "apps:443",
@@ -243,7 +266,7 @@ func TestNewAllowlistSOCKSTargetRejectsInvalidRoutes(t *testing.T) {
 	}
 }
 
-func TestSOCKS5AllowlistPreservesTLSClientHelloSNI(t *testing.T) {
+func TestSOCKS5AllowlistMapsDialTargetWithoutChangingTLSClientHelloSNI(t *testing.T) {
 	certificate := testTLSCertificate(t)
 	client, server := net.Pipe()
 	remote, remotePeer := net.Pipe()

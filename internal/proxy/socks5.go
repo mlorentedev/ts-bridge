@@ -42,6 +42,10 @@ func directSOCKSTarget(host string, port uint16) (string, error) {
 	return net.JoinHostPort(host, strconv.Itoa(int(port))), nil
 }
 
+func DirectSOCKSTarget() SOCKSTargetResolver {
+	return directSOCKSTarget
+}
+
 func NewAllowlistSOCKSTarget(routes map[string]string) (SOCKSTargetResolver, error) {
 	normalized := make(map[string]string, len(routes))
 	for source, destination := range routes {
@@ -89,7 +93,7 @@ func AcceptSOCKS5Loop(
 	logger *slog.Logger,
 ) error {
 	if resolve == nil {
-		resolve = directSOCKSTarget
+		return fmt.Errorf("SOCKS5 target resolver is required")
 	}
 	for {
 		conn, err := listener.Accept()

@@ -188,14 +188,11 @@ func Run(cfg config.Config) error {
 	}
 	var errAccept error
 	if cfg.SOCKS5Addr != "" {
-		var resolver proxy.SOCKSTargetResolver
-		if len(cfg.SOCKS5Routes) > 0 {
-			resolver, err = proxy.NewAllowlistSOCKSTarget(cfg.SOCKS5Routes)
-			if err != nil {
-				_ = listener.Close()
-				_ = server.Close()
-				return fmt.Errorf("configure SOCKS5 routes: %w", err)
-			}
+		resolver, resolveErr := socksTargetResolver(cfg)
+		if resolveErr != nil {
+			_ = listener.Close()
+			_ = server.Close()
+			return fmt.Errorf("configure SOCKS5 routes: %w", resolveErr)
 		}
 		errAccept = proxy.AcceptSOCKS5Loop(listener, dialer, cfg, resolver, &activeConns, cancelWithCause, logger)
 	} else {
@@ -209,6 +206,13 @@ func Run(cfg config.Config) error {
 	}
 
 	return errAccept
+}
+
+func socksTargetResolver(cfg config.Config) (proxy.SOCKSTargetResolver, error) {
+	if len(cfg.SOCKS5Routes) == 0 {
+		return proxy.DirectSOCKSTarget(), nil
+	}
+	return proxy.NewAllowlistSOCKSTarget(cfg.SOCKS5Routes)
 }
 
 func proxyListenerAddr(cfg config.Config) string {
