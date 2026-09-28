@@ -1,7 +1,7 @@
 ---
 id: "adr-014"
 type: adr
-status: proposed
+status: accepted
 date: "2026-08-14"
 tags: [architecture, networking, socks5, multi-target, kubelab, ssh, kubectl]
 owner: manu

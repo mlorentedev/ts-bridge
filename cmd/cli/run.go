@@ -25,10 +25,10 @@ import (
 )
 
 const (
-	cleanupMaxAttempts   = 5
-	cleanupRetryDelay    = 150 * time.Millisecond
-	stateDirPerms        = 0700
-	defaultControlURL    = "https://control.tailscale.com"
+	cleanupMaxAttempts = 5
+	cleanupRetryDelay  = 150 * time.Millisecond
+	stateDirPerms      = 0700
+	defaultControlURL  = "https://control.tailscale.com"
 )
 
 // Logger is the global structured logger (console).
@@ -139,10 +139,11 @@ func Run(cfg config.Config) error {
 		return err
 	}
 
-	listener, err := net.Listen("tcp", cfg.LocalAddr)
+	listenAddr := proxyListenerAddr(cfg)
+	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		_ = server.Close()
-		return fmt.Errorf("bind %s: %w", cfg.LocalAddr, err)
+		return fmt.Errorf("bind %s: %w", listenAddr, err)
 	}
 
 	// Print banner BEFORE starting the health server to avoid concurrent
@@ -155,7 +156,7 @@ func Run(cfg config.Config) error {
 	// (the OS queues connections until AcceptLoop runs), so "READY" is
 	// accurate at this point.
 	writeStartupBanner(os.Stdout, cfg)
-	emitReady(os.Stdout, listener.Addr().String(), cfg.Target)
+	emitReady(os.Stdout, listener.Addr().String(), readyTarget(cfg))
 
 	var tunnelStatus health.TunnelStatus
 	var healthServer *http.Server
@@ -185,7 +186,21 @@ func Run(cfg config.Config) error {
 		MaxBackoff:  cfg.DialBackoffMax,
 		Logger:      logger,
 	}
-	errAccept := proxy.AcceptLoop(listener, dialer, cfg, &activeConns, cancelWithCause, logger)
+	var errAccept error
+	if cfg.SOCKS5Addr != "" {
+		var resolver proxy.SOCKSTargetResolver
+		if len(cfg.SOCKS5Routes) > 0 {
+			resolver, err = proxy.NewAllowlistSOCKSTarget(cfg.SOCKS5Routes)
+			if err != nil {
+				_ = listener.Close()
+				_ = server.Close()
+				return fmt.Errorf("configure SOCKS5 routes: %w", err)
+			}
+		}
+		errAccept = proxy.AcceptSOCKS5Loop(listener, dialer, cfg, resolver, &activeConns, cancelWithCause, logger)
+	} else {
+		errAccept = proxy.AcceptLoop(listener, dialer, cfg, &activeConns, cancelWithCause, logger)
+	}
 
 	drainActiveConnections(cfg, &activeConns)
 
@@ -194,6 +209,20 @@ func Run(cfg config.Config) error {
 	}
 
 	return errAccept
+}
+
+func proxyListenerAddr(cfg config.Config) string {
+	if cfg.SOCKS5Addr != "" {
+		return cfg.SOCKS5Addr
+	}
+	return cfg.LocalAddr
+}
+
+func readyTarget(cfg config.Config) string {
+	if cfg.SOCKS5Addr != "" {
+		return "dynamic-socks5"
+	}
+	return cfg.Target
 }
 
 //nolint:unused // wired into Runner = Run
