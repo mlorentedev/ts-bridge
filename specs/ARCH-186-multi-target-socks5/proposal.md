@@ -52,5 +52,7 @@ Currently, `ts-bridge` forwards a single TCP target per instance (`connect --tar
 - [AC6] A dedicated browser profile reaches a configured private-forge URL
   through its local PAC/SOCKS configuration without changing Windows hosts,
   DNS, system proxy settings, or the user's normal browser profile.
-- [AC7] An unlisted browser origin is not forwarded through the mesh and
-  produces an actionable denial.
+- [AC7] An unlisted browser origin is not forwarded through the mesh. The
+  browser command rejects an unlisted start URL with an actionable error;
+  later unlisted navigation remains direct and receives ordinary browser
+  network handling rather than a command-generated denial.

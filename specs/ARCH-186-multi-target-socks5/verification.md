@@ -31,7 +31,8 @@ artifact rather than the document that describes it.
 - [x] A local TLS integration test confirms the remote endpoint receives the
   original canonical hostname in ClientHello SNI after mesh-target mapping.
 - [x] PAC generation directs only allow-listed origins through the loopback
-  SOCKS proxy; an unlisted origin is denied.
+  SOCKS proxy. An unlisted start URL returns an actionable allow-list error;
+  later unlisted navigation remains direct and cannot use the mesh route.
 - [x] Edge launch arguments use an isolated profile, local PAC, and resolver
   rules without changing Windows hosts, DNS, or system proxy.
 - [ ] A live Apps/private-forge smoke runs using an auth-key file and records

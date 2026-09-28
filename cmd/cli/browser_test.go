@@ -65,7 +65,7 @@ func TestBrowserCommandResolvesBridgeAndLaunchOptions(t *testing.T) {
 	}
 }
 
-func TestBrowserCommandPreservesYAMLSOCKS5Address(t *testing.T) {
+func TestBrowserCommandPreservesYAMLSOCKS5Config(t *testing.T) {
 	t.Setenv("TS_TARGET", "")
 	t.Setenv("TS_AUTHKEY", "")
 	t.Setenv("TS_CONTROL_URL", "")
@@ -101,6 +101,9 @@ func TestBrowserCommandPreservesYAMLSOCKS5Address(t *testing.T) {
 	}
 	if captured.SOCKS5Addr != "127.0.0.1:1090" {
 		t.Fatalf("SOCKS5Addr = %q, want YAML value 127.0.0.1:1090", captured.SOCKS5Addr)
+	}
+	if captured.SOCKS5Routes["forge.example.internal:443"] != "apps:443" {
+		t.Fatalf("SOCKS5Routes = %#v, want YAML route", captured.SOCKS5Routes)
 	}
 }
 

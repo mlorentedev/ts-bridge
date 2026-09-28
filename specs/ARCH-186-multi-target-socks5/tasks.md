@@ -40,8 +40,9 @@ template_version: "1.0"
   arguments using an isolated user-data directory.
 - [x] [AC6] Implement a browser-profile command that exposes the loopback PAC
   endpoint and launches Edge with only the configured origins proxied.
-- [x] [AC7] Add tests and structured errors for origins absent from the
-  allow-list; confirm no route enables a global proxy or hosts-file mutation.
+- [x] [AC7] Add tests proving an unlisted start URL returns a structured error
+  and later unlisted navigation is not forwarded through the mesh; confirm no
+  route enables a global proxy or hosts-file mutation.
 - [x] [AC4] [AC5] [AC6] [AC7] Run deterministic Go tests and an isolated
   local TLS integration test before the live Apps/Gitea smoke test.
 
