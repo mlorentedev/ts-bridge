@@ -24,4 +24,29 @@ proof of a live tailnet session. Check `tailscale status`; use a network without
 TLS interception, or have IT install the authorized enterprise CA in the
 Local Machine trust store. Do not bypass certificate validation.
 
+**2026-09-28 addendum:** A second, earlier-stage symptom of the same corporate
+boundary, found while diagnosing a `ts-bridge connect` failure against
+`vpn.kubelab.live` from a "Teledyne-Guest" Wi-Fi network. This time the
+connection never got far enough to hit the TLS handshake: `nslookup`/
+`Resolve-DnsName` for `vpn.kubelab.live` (and even the bare `kubelab.live`
+apex) returned a `sinkhole.paloaltonetworks.com` CNAME -- from every resolver
+tried, including public ones explicitly queried by IP (`1.1.1.1`, `8.8.8.8`).
+That looked like a DNS record problem on the domain itself until the same
+network sinkholed `google.com`'s and `tailscale.com`'s DNS-over-HTTPS
+endpoints too (empty response, not even a TLS alert) while their plain-DNS
+answers came back correctly -- proof the filtering happens transparently at
+the network layer (any query for `1.1.1.1:443`/`dns.google:443` from this
+Wi-Fi is intercepted or dropped), not by poisoning one specific domain.
+Palo Alto's DNS Security subscription commonly auto-sinkholes newly
+registered or "uncategorized" domains by policy default, which a personal
+`.live` apex is likely to be classified as. **Diagnostic fingerprint:** a
+domain resolves to `sinkhole.paloaltonetworks.com` from every DNS path
+including DoH, while well-known domains on the same network resolve fine.
+**Rule:** before assuming a Headscale domain's DNS records are broken, repeat
+the resolution from a network without corporate DNS filtering (mobile
+hotspot, home Wi-Fi) -- a network-level sinkhole and a real DNS misconfiguration
+produce an identical-looking CNAME answer. Regenerating the Tailscale/Headscale
+auth key does nothing for this failure mode; the request never reaches the
+control plane.
+
 **Tags:** `#headscale` `#tailscale` `#corporate-firewall` `#tls-inspection` `#networking` `#traefik` `#tcp-passthrough`

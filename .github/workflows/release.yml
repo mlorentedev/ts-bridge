@@ -89,7 +89,9 @@ jobs:
           done
 
           # Generate checksums for the final archives
-          cd dist/artifacts && sha256sum * > ../checksums.txt
+          # ` -- * ` (SC2035): a filename that happened to start with ` - ` would otherwise be
+          # parsed as an option.
+          cd dist/artifacts && sha256sum -- * > ../checksums.txt
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3

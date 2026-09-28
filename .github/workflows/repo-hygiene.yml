@@ -1,7 +1,9 @@
 name: Repo hygiene
 
-# Three guards that need no toolchain: lesson numbering/index integrity, SHA-pinned actions,
-# and workflow credential posture. All three scripts run under bash and zsh and print what failed.
+# Guards that need no toolchain (lesson numbering/index integrity, SHA-pinned actions,
+# workflow credential posture, PR-Agent review-published parsing) run under bash and zsh and
+# print what failed, plus a toolchain-backed lint pass (actionlint + shellcheck, #345) over
+# every workflow's YAML shape and embedded shell.
 
 on:
   pull_request:
@@ -31,3 +33,16 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
       - name: That guard still refuses each way the posture can widen
         run: bash scripts/tests/test-workflow-permissions.sh
+      - name: That guard tolerates a null comment body (#345 regression)
+        run: bash scripts/tests/test-check-review-published.sh
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26'
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      # ubuntu-latest ships shellcheck preinstalled; actionlint shells out to it to lint
+      # every embedded `run:` block, not just the workflow YAML shape.
+      - name: Lint workflows and their shell (actionlint + shellcheck)
+        run: |
+          gopath_bin="$(go env GOPATH)/bin"
+          "${gopath_bin}/actionlint" -shellcheck=shellcheck

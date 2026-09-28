@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/binary"
 	"errors"
 	"io"
 	"log/slog"
@@ -56,9 +57,7 @@ func TestHandleSOCKS5Conn_DialsRequestedDomainAndProxiesBytes(t *testing.T) {
 	assertBytes(t, client, []byte{0x05, 0x00})
 
 	host := "forge.example.internal"
-	request := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))}
-	request = append(request, []byte(host)...)
-	request = append(request, 0x01, 0xbb)
+	request := domainSOCKSRequest(0x01, host, 443)
 	writeAll(t, client, request)
 	assertBytes(t, client, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
@@ -173,9 +172,7 @@ func TestAcceptSOCKS5Loop_AcceptsAndForwardsConnection(t *testing.T) {
 	assertBytes(t, client, []byte{0x05, 0x00})
 
 	host := "mesh-host"
-	request := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))}
-	request = append(request, []byte(host)...)
-	request = append(request, 0x00, 0x16)
+	request := domainSOCKSRequest(0x01, host, 22)
 	writeAll(t, client, request)
 	assertBytes(t, client, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
@@ -283,9 +280,7 @@ func TestSOCKS5AllowlistPreservesTLSClientHelloSNI(t *testing.T) {
 	writeAll(t, client, []byte{0x05, 0x01, 0x00})
 	assertBytes(t, client, []byte{0x05, 0x00})
 	host := "forge.example.internal"
-	request := []byte{0x05, 0x01, 0x00, 0x03, byte(len(host))}
-	request = append(request, []byte(host)...)
-	request = append(request, 0x01, 0xbb)
+	request := domainSOCKSRequest(0x01, host, 443)
 	writeAll(t, client, request)
 	assertBytes(t, client, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
@@ -391,8 +386,8 @@ func TestHandleSOCKS5Conn_AppliesDialTimeoutAndTerminalCancel(t *testing.T) {
 	client, server := net.Pipe()
 	t.Cleanup(func() { _ = client.Close() })
 
-	cancelled := make(chan error, 1)
-	cancel := func(err error) { cancelled <- err }
+	canceled := make(chan error, 1)
+	cancel := func(err error) { canceled <- err }
 	dialer := &mockDialer{
 		dialFunc: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			<-ctx.Done()
@@ -423,7 +418,7 @@ func TestHandleSOCKS5Conn_AppliesDialTimeoutAndTerminalCancel(t *testing.T) {
 		t.Fatalf("SOCKS REP = %#x, want connection-refused %#x", reply[1], byte(0x05))
 	}
 	select {
-	case <-cancelled:
+	case <-canceled:
 	case <-time.After(time.Second):
 		t.Fatal("terminal dial failure did not cancel the bridge")
 	}
@@ -433,9 +428,14 @@ func TestHandleSOCKS5Conn_AppliesDialTimeoutAndTerminalCancel(t *testing.T) {
 }
 
 func domainSOCKSRequest(command byte, host string, port uint16) []byte {
-	request := []byte{0x05, command, 0x00, 0x03, byte(len(host))}
+	if len(host) > 255 {
+		panic("SOCKS5 test host exceeds domain-length limit")
+	}
+	request := []byte{0x05, command, 0x00, 0x03, byte(len(host))} // #nosec G115 -- length is bounded above.
 	request = append(request, []byte(host)...)
-	return append(request, byte(port>>8), byte(port))
+	portBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(portBytes, port)
+	return append(request, portBytes...)
 }
 
 func testTLSCertificate(t *testing.T) tls.Certificate {

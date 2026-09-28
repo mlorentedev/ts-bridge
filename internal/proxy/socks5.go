@@ -128,7 +128,7 @@ func handleSOCKS5Conn(
 	defer client.Close()
 	if cfg.DialTimeout > 0 {
 		_ = client.SetDeadline(time.Now().Add(cfg.DialTimeout))
-		defer client.SetDeadline(time.Time{})
+		defer func() { _ = client.SetDeadline(time.Time{}) }()
 	}
 	if err := negotiateSOCKS5(client); err != nil {
 		return err
