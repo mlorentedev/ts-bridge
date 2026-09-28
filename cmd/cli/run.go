@@ -379,8 +379,8 @@ func writeStartupBanner(w io.Writer, cfg config.Config) {
 	fmt.Fprintf(w, "  |      TAILSCALE BRIDGE %-*s  |\n", bannerWidth, v)
 	fmt.Fprintln(w, "  +---------------------------------------+")
 	fmt.Fprintf(w, "  |  Host:   %-26s  |\n", cfg.Hostname)
-	fmt.Fprintf(w, "  |  Local:  %-26s  |\n", cfg.LocalAddr)
-	fmt.Fprintf(w, "  |  Target: %-26s  |\n", cfg.Target)
+	fmt.Fprintf(w, "  |  Local:  %-26s  |\n", proxyListenerAddr(cfg))
+	fmt.Fprintf(w, "  |  Target: %-26s  |\n", readyTarget(cfg))
 	if cfg.ControlURL != "" && cfg.ControlURL != defaultControlURL {
 		fmt.Fprintf(w, "  |  Control: %-25s  |\n", cfg.ControlURL)
 	}

@@ -128,3 +128,23 @@ func TestWriteStartupBanner_QuietSuppresses(t *testing.T) {
 		t.Errorf("non-quiet banner missing header: %q", loud.String())
 	}
 }
+
+func TestWriteStartupBannerUsesSOCKSModeValues(t *testing.T) {
+	cfg := config.Config{
+		Hostname:   "browser-client",
+		LocalAddr:  "127.0.0.1:33389",
+		Target:     "",
+		SOCKS5Addr: "127.0.0.1:1080",
+	}
+
+	var output bytes.Buffer
+	writeStartupBanner(&output, cfg)
+
+	banner := output.String()
+	if !strings.Contains(banner, "Local:  127.0.0.1:1080") {
+		t.Errorf("SOCKS banner missing listener address: %q", banner)
+	}
+	if !strings.Contains(banner, "Target: dynamic-socks5") {
+		t.Errorf("SOCKS banner missing dynamic target: %q", banner)
+	}
+}
