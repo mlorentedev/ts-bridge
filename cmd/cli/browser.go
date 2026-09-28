@@ -1,0 +1,123 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/spf13/cobra"
+
+	"ts-bridge/internal/config"
+	"ts-bridge/internal/config/envfile"
+)
+
+type BrowserOptions struct {
+	StartURL    string
+	UserDataDir string
+	EdgePath    string
+	PACAddr     string
+}
+
+var BrowserRunner func(config.Config, BrowserOptions) error
+
+func newBrowserCmd() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "browser",
+		Short: "Open an isolated browser through an allow-listed mesh proxy",
+		RunE:  runBrowser,
+	}
+	command.Flags().String("url", "", "Private HTTPS URL to open")
+	command.Flags().String("user-data-dir", defaultBrowserUserDataDir(), "Isolated Edge user-data directory")
+	command.Flags().String("edge-path", "", "Path to msedge.exe (auto-detected when omitted)")
+	command.Flags().String("pac-addr", "127.0.0.1:0", "Loopback address for the local PAC server")
+	command.Flags().String("socks5", "127.0.0.1:1080", "Loopback SOCKS5 listener address")
+	command.Flags().StringArray("route", nil, "Allow-listed route SOURCE_HOST:PORT=MESH_HOST:PORT (repeatable)")
+	command.Flags().String("auth-key", "", "Auth key — WARNING: visible in process list")
+	command.Flags().String("auth-key-file", "", "Read auth key from a local file")
+	command.Flags().String("control-url", "", "Custom Headscale control plane URL")
+	command.Flags().String("hostname", "", "Tailscale hostname")
+	command.Flags().String("state-dir", "", "State directory")
+	command.Flags().Duration("timeout", 0, "Connect timeout for tsnet init")
+	command.Flags().Duration("dial-timeout", 0, "Per-dial timeout")
+	command.Flags().String("config", "", "Path to YAML config file")
+	return command
+}
+
+func runBrowser(command *cobra.Command, _ []string) error {
+	authKeyFile, _ := command.Flags().GetString("auth-key-file")
+	if authKeyFile == "" {
+		return fmt.Errorf("browser requires --auth-key-file")
+	}
+	flags, err := collectBrowserFlags(command)
+	if err != nil {
+		return err
+	}
+	if err := envfile.Load(".env"); err != nil {
+		return fmt.Errorf("load .env: %w", err)
+	}
+	yamlConfig, err := config.LoadYAMLConfig(flags.Config)
+	if err != nil {
+		return fmt.Errorf("load YAML config: %w", err)
+	}
+	if flags.SOCKS5Addr == "" && yamlConfig.SOCKS5Addr == "" && os.Getenv("TS_SOCKS5_ADDR") == "" {
+		flags.SOCKS5Addr = "127.0.0.1:1080"
+	}
+	cfg, err := config.Merge(yamlConfig, flags)
+	if err != nil {
+		return err
+	}
+	if cfg.SOCKS5Addr == "" || len(cfg.SOCKS5Routes) == 0 {
+		return fmt.Errorf("browser requires --socks5 and at least one --route")
+	}
+
+	options := BrowserOptions{}
+	options.StartURL, _ = command.Flags().GetString("url")
+	options.UserDataDir, _ = command.Flags().GetString("user-data-dir")
+	options.EdgePath, _ = command.Flags().GetString("edge-path")
+	options.PACAddr, _ = command.Flags().GetString("pac-addr")
+	if options.StartURL == "" {
+		return fmt.Errorf("browser URL is required (provide --url)")
+	}
+	if LoggerInit != nil {
+		LoggerInit(cfg)
+	}
+	if BrowserRunner == nil {
+		return fmt.Errorf("browser runner not initialized")
+	}
+	return BrowserRunner(cfg, options)
+}
+
+func collectBrowserFlags(command *cobra.Command) (config.FlagSet, error) {
+	var flags config.FlagSet
+	if command.Flags().Changed("socks5") {
+		flags.SOCKS5Addr, _ = command.Flags().GetString("socks5")
+	}
+	flags.SOCKS5Routes, _ = command.Flags().GetStringArray("route")
+	flags.AuthKey, _ = command.Flags().GetString("auth-key")
+	flags.AuthKeyFile, _ = command.Flags().GetString("auth-key-file")
+	flags.ControlURL, _ = command.Flags().GetString("control-url")
+	flags.Hostname, _ = command.Flags().GetString("hostname")
+	flags.StateDir, _ = command.Flags().GetString("state-dir")
+	flags.Timeout, _ = command.Flags().GetDuration("timeout")
+	flags.DialTimeout, _ = command.Flags().GetDuration("dial-timeout")
+	flags.Config, _ = command.Flags().GetString("config")
+
+	if flags.AuthKeyFile != "" {
+		key, err := readAuthKeyFile(flags.AuthKeyFile)
+		if err != nil {
+			return config.FlagSet{}, fmt.Errorf("read auth key file: %w", err)
+		}
+		flags.AuthKey = key
+	}
+	if command.Flags().Changed("auth-key") {
+		fmt.Fprintln(os.Stderr, "WARNING: --auth-key is visible in the process list; use --auth-key-file instead")
+	}
+	return flags, nil
+}
+
+func defaultBrowserUserDataDir() string {
+	if root := os.Getenv("LOCALAPPDATA"); root != "" {
+		return filepath.Join(root, "ts-bridge", "browser")
+	}
+	return filepath.Join(os.TempDir(), "ts-bridge-browser")
+}

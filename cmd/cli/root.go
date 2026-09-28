@@ -30,6 +30,7 @@ target host through the encrypted Tailscale network.`,
 	root.PersistentFlags().String("config", "", "Config file path (reserved for future use)")
 	configureUsageOnErrors(root)
 	root.AddCommand(
+		newBrowserCmd(),
 		newConnectCmd(),
 		newInitCmd(),
 		newStatusCmd(),

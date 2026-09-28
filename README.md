@@ -54,7 +54,7 @@ ts-bridge --help
 
 > **Security Note:** Keys in environment variables or `.env` files are readable by child processes, and `--auth-key` is visible in the process list. For production, automation, and hardened setups, use `--auth-key-file` with either `init` or `connect`.
 
-### Dynamic mesh access
+### Dynamic mesh and private browser access
 
 Use one loopback SOCKS5 listener for SSH, kubectl, curl, or other clients that
 need multiple mesh destinations:
@@ -65,9 +65,20 @@ need multiple mesh destinations:
   --socks5 127.0.0.1:1080
 ```
 
-See
-[`docs/runbooks/guide-multi-target-socks5.md`](docs/runbooks/guide-multi-target-socks5.md)
-for SSH, kubectl, curl, and allow-listed route examples.
+For a private HTTPS service whose public DNS is unavailable or blocked, use an
+allow-listed route and an isolated Edge profile:
+
+```powershell
+.\ts-bridge.exe browser `
+  --config C:\Users\user\.ts-bridge\apps-browser.yml `
+  --auth-key-file C:\Users\user\.ts-bridge\authkey `
+  --url https://forge.example.internal/
+```
+
+Browser mode preserves the original TLS SNI/Host, proxies only configured
+origins, and leaves Windows hosts, DNS, system proxy, and the normal browser
+profile unchanged. See
+[`docs/runbooks/guide-multi-target-socks5.md`](docs/runbooks/guide-multi-target-socks5.md).
 
 **Using a named profile (recommended when the host uses a non-default port):**
 
@@ -112,8 +123,9 @@ For automation, use `--json`: `ts-bridge host setup --json` and `ts-bridge host 
 | Feature | Description |
 |---|---|
 | **Zero-Admin VPN** | Connect from heavily restricted laptops without filing an IT ticket. |
-| **Professional CLI** | Cobra-based subcommands: `connect`, `import`, `discover`, `init`, `status`, `host`. Full `--help` and autocomplete. |
+| **Professional CLI** | Cobra-based subcommands: `browser`, `connect`, `import`, `discover`, `init`, `status`, `host`. Full `--help` and autocomplete. |
 | **Dynamic Mesh Proxy** | One loopback SOCKS5 listener reaches multiple permitted mesh destinations without a TUN adapter. |
+| **Private Browser Profile** | Launches isolated Edge with a local PAC and allow-listed origin-to-mesh routes. |
 | **Headscale Support** | Compatible with open-source control planes (via `TS_CONTROL_URL`). |
 | **Multi-Instance** | Run multiple bridges concurrently to connect to different machines. |
 | **Ephemeral by Default** | Leaves no trace. The node is automatically removed from the network when the bridge closes. |
