@@ -325,7 +325,6 @@ func applyEnvProxyMode(cfg *Config) {
 	if target := os.Getenv("TS_TARGET"); target != "" {
 		cfg.Target = target
 		cfg.SOCKS5Addr = ""
-		cfg.SOCKS5Routes = make(map[string]string)
 		return
 	}
 	if socks5Addr := os.Getenv("TS_SOCKS5_ADDR"); socks5Addr != "" {
@@ -433,7 +432,6 @@ func applyFlagProxyMode(cfg *Config, flags FlagSet) {
 	if flags.Target != "" {
 		cfg.Target = flags.Target
 		cfg.SOCKS5Addr = ""
-		cfg.SOCKS5Routes = make(map[string]string)
 		return
 	}
 	if flags.SOCKS5Addr != "" {

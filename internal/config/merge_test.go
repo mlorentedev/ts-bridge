@@ -408,6 +408,35 @@ func TestMergeProxyModePrecedence(t *testing.T) {
 	}
 }
 
+func TestMergeHigherPrecedenceSOCKSModePreservesYAMLAllowlist(t *testing.T) {
+	t.Setenv("TS_TARGET", "stale-static-target:22")
+	t.Setenv("TS_SOCKS5_ADDR", "")
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	cfg, err := Merge(
+		PartialConfig{
+			SOCKS5Addr: "127.0.0.1:1090",
+			SOCKS5Routes: map[string]string{
+				"forge.example:443": "apps:443",
+			},
+		},
+		FlagSet{
+			SOCKS5Addr: "127.0.0.1:1080",
+			AuthKey:    "tskey-auth-test123",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Merge returned error: %v", err)
+	}
+	if cfg.Target != "" || cfg.SOCKS5Addr != "127.0.0.1:1080" {
+		t.Fatalf("mode = target %q SOCKS %q", cfg.Target, cfg.SOCKS5Addr)
+	}
+	if cfg.SOCKS5Routes["forge.example:443"] != "apps:443" {
+		t.Fatalf("SOCKS5 routes were dropped: %#v", cfg.SOCKS5Routes)
+	}
+}
+
 // --- BUG-009: default hostname in manual-mode ---
 
 func TestMergeDefaultHostnameInManualMode(t *testing.T) {
