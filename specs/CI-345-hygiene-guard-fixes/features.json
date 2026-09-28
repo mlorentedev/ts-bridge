@@ -1,0 +1,23 @@
+{
+  "feature_id": "CI-345-hygiene-guard-fixes",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "description": "The guard's jq tolerates body: null, backed by a test that replays the reviewer's null-body scenario",
+      "verification": "bash scripts/tests/test-check-review-published.sh",
+      "state": "passing"
+    },
+    {
+      "id": "AC2",
+      "description": "repo-hygiene.yml runs actionlint (with shellcheck) on every PR, and it is green on master",
+      "verification": "actionlint -shellcheck=shellcheck",
+      "state": "passing"
+    },
+    {
+      "id": "AC3",
+      "description": "No regression: go build/vet and the pre-existing hygiene guards stay green",
+      "verification": "go build ./... && go vet ./... && bash scripts/check-lessons.sh && bash scripts/check-actions-pinned.sh && bash scripts/check-workflow-permissions.sh",
+      "state": "passing"
+    }
+  ]
+}
