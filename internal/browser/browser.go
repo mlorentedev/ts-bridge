@@ -28,17 +28,23 @@ func BuildPAC(proxyAddr string, routes map[string]string) (string, error) {
 	if err := validateLoopbackAddress(proxyAddr); err != nil {
 		return "", err
 	}
-	hosts, err := routeHosts(routes)
+	origins, err := AllowedOrigins(routes)
 	if err != nil {
 		return "", err
 	}
 
 	var conditions []string
-	for _, host := range hosts {
-		conditions = append(conditions, "host === "+strconv.Quote(host))
+	for _, origin := range origins {
+		conditions = append(conditions, "origin === "+strconv.Quote(origin))
 	}
-	return "function FindProxyForURL(url, host) {\n" +
+	return "function effectivePort(url) {\n" +
+		"  var match = url.match(/^https?:\\/\\/(?:\\[[^\\]]+\\]|[^\\/:]+):([0-9]+)(?:\\/|$)/i);\n" +
+		"  if (match) { return match[1]; }\n" +
+		"  return url.toLowerCase().indexOf(\"https://\") === 0 ? \"443\" : \"80\";\n" +
+		"}\n" +
+		"function FindProxyForURL(url, host) {\n" +
 		"  host = host.toLowerCase();\n" +
+		"  var origin = host + \":\" + effectivePort(url);\n" +
 		"  if (" + strings.Join(conditions, " || ") + ") {\n" +
 		"    return " + strconv.Quote("SOCKS5 "+proxyAddr) + ";\n" +
 		"  }\n" +

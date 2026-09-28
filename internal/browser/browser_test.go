@@ -17,10 +17,13 @@ func TestBuildPACRoutesOnlyAllowlistedHosts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildPAC returned error: %v", err)
 	}
-	for _, host := range []string{"forge.example.internal", "docs.example.internal"} {
-		if !strings.Contains(pac, `host === "`+host+`"`) {
-			t.Errorf("PAC does not contain allow-listed host %q:\n%s", host, pac)
+	for _, origin := range []string{"forge.example.internal:443", "docs.example.internal:443"} {
+		if !strings.Contains(pac, `origin === "`+origin+`"`) {
+			t.Errorf("PAC does not contain allow-listed origin %q:\n%s", origin, pac)
 		}
+	}
+	if !strings.Contains(pac, `var origin = host + ":" + effectivePort(url)`) {
+		t.Errorf("PAC does not derive the effective origin port:\n%s", pac)
 	}
 	if !strings.Contains(pac, `return "SOCKS5 127.0.0.1:1080"`) {
 		t.Errorf("PAC does not use the loopback SOCKS5 proxy:\n%s", pac)

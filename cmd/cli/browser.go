@@ -32,7 +32,6 @@ func newBrowserCmd() *cobra.Command {
 	command.Flags().String("pac-addr", "127.0.0.1:0", "Loopback address for the local PAC server")
 	command.Flags().String("socks5", "127.0.0.1:1080", "Loopback SOCKS5 listener address")
 	command.Flags().StringArray("route", nil, "Allow-listed route SOURCE_HOST:PORT=MESH_HOST:PORT (repeatable)")
-	command.Flags().String("auth-key", "", "Auth key — WARNING: visible in process list")
 	command.Flags().String("auth-key-file", "", "Read auth key from a local file")
 	command.Flags().String("control-url", "", "Custom Headscale control plane URL")
 	command.Flags().String("hostname", "", "Tailscale hostname")
@@ -93,7 +92,6 @@ func collectBrowserFlags(command *cobra.Command) (config.FlagSet, error) {
 		flags.SOCKS5Addr, _ = command.Flags().GetString("socks5")
 	}
 	flags.SOCKS5Routes, _ = command.Flags().GetStringArray("route")
-	flags.AuthKey, _ = command.Flags().GetString("auth-key")
 	flags.AuthKeyFile, _ = command.Flags().GetString("auth-key-file")
 	flags.ControlURL, _ = command.Flags().GetString("control-url")
 	flags.Hostname, _ = command.Flags().GetString("hostname")
@@ -108,9 +106,6 @@ func collectBrowserFlags(command *cobra.Command) (config.FlagSet, error) {
 			return config.FlagSet{}, fmt.Errorf("read auth key file: %w", err)
 		}
 		flags.AuthKey = key
-	}
-	if command.Flags().Changed("auth-key") {
-		fmt.Fprintln(os.Stderr, "WARNING: --auth-key is visible in the process list; use --auth-key-file instead")
 	}
 	return flags, nil
 }
