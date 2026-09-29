@@ -200,10 +200,21 @@ func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
 			},
 			wantErr: "conflicts with health listener",
 		},
+		{
+			name: "equivalent zero-padded health port",
+			flags: FlagSet{
+				BootstrapSOCKSAddr: "127.0.0.1:01055",
+				HealthAddr:         "127.0.0.1:1055",
+			},
+			wantErr: "conflicts with health listener",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.wantErr == "" {
+				t.Fatal("test case must declare the expected collision error")
+			}
 			t.Setenv("TS_BOOTSTRAP_SSH", "")
 			t.Setenv("TS_BOOTSTRAP_SOCKS_ADDR", "")
 			t.Setenv("TS_TARGET", "")
