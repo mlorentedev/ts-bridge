@@ -101,7 +101,10 @@ the SSH server.
 This mode remains opt-in and fail-loud. It does not edit the hosts file, disable
 TLS verification, weaken SSH host-key checking, bundle an SSH implementation,
 or automatically switch routes after a failure. The SSH process is monitored
-and terminated with ts-bridge.
+and terminated with ts-bridge. The SOCKS listener is unauthenticated: loopback
+binding prevents remote access, but other processes or users on the same machine
+can use it while the bridge is running. Run this mode only on a trusted client
+host and choose a dedicated local port.
 
 ## Related
 

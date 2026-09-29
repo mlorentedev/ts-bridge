@@ -160,6 +160,26 @@ func TestMergeRejectsInvalidBootstrapConfig(t *testing.T) {
 	}
 }
 
+func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
+	t.Setenv("TS_BOOTSTRAP_SSH", "")
+	t.Setenv("TS_BOOTSTRAP_SOCKS_ADDR", "")
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	_, err := Merge(PartialConfig{}, FlagSet{
+		Target:             "mesh-host:22",
+		AuthKey:            "tskey-auth-test",
+		ControlURL:         "https://vpn.example.com",
+		LocalAddr:          "127.0.0.1:1055",
+		BootstrapSSH:       "deployer@bastion.example.com",
+		BootstrapSOCKSAddr: "127.0.0.1:1055",
+	})
+	if err == nil || !strings.Contains(err.Error(), "conflicts with bridge listener") {
+		t.Fatalf("Merge() error = %v, want listener collision", err)
+	}
+}
+
 func TestDecodeYAMLBootstrapSSH(t *testing.T) {
 	var cfg PartialConfig
 	err := decodeYAML([]byte(`

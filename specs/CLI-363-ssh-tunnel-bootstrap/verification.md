@@ -34,6 +34,15 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - The Tailscale proxy hook is configured before `tsnet.Server.Up` and selects only the configured control-plane hostname. Existing environment/system proxy handling remains the fallback for all other URLs.
 - OpenSSH owns authentication and host-key verification. ts-bridge does not add password flags, disable verification, or shell-interpret the endpoint.
 
+## Adversarial review round 1
+
+- **F1 — proxy installation seam (REAL Major): applied.** `TestStartConfiguredBootstrapConfiguresControlProxy` injects the SSH starter and proxy configurer and fails if the production seam stops installing the control-plane proxy.
+- **F2 — shutdown closer (REAL Major): applied.** `TestStartBootstrapLifecycleCloserClosesTunnel` fails if the lifecycle cleanup stops closing the SSH child.
+- **SOCKS listener collision (Minor): applied.** `TestMergeRejectsBootstrapListenerCollision` rejects overlap with the bridge listener.
+- **Shutdown ordering (Minor): applied.** The run context is canceled before the deferred SSH close, preventing a normal cleanup from being classified as an unexpected exit.
+- **Unauthenticated local SOCKS pivot (Minor): documented.** ADR-005 now states the local-user/process exposure and trusted-host requirement.
+- **Hostname-only proxy selection, process-global hook, TLS wording, and separate-ADR suggestion:** declined for this change. Hostname-only selection is the documented contract; the binary is single-run; the TLS statement remains accurate; ADR-005 is the accepted home for Headscale control-plane reachability.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.

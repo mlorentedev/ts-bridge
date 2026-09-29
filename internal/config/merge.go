@@ -615,7 +615,13 @@ func normalizeBootstrapConfig(cfg *Config) error {
 	if cfg.BootstrapSOCKSAddr == "" {
 		cfg.BootstrapSOCKSAddr = defaultBootstrapSOCKS
 	}
-	return validateLoopbackListener(cfg.BootstrapSOCKSAddr, "bootstrap SOCKS")
+	if err := validateLoopbackListener(cfg.BootstrapSOCKSAddr, "bootstrap SOCKS"); err != nil {
+		return err
+	}
+	if cfg.BootstrapSOCKSAddr == cfg.LocalAddr || cfg.BootstrapSOCKSAddr == cfg.SOCKS5Addr {
+		return fmt.Errorf("bootstrap SOCKS listener %q conflicts with bridge listener", cfg.BootstrapSOCKSAddr)
+	}
+	return nil
 }
 
 func validateSOCKS5Routes(routes map[string]string) error {

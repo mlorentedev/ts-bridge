@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"ts-bridge/internal/bootstrapssh"
 	"ts-bridge/internal/config"
 )
 
@@ -91,6 +92,65 @@ func TestMonitorBootstrapIgnoresExitDuringShutdown(t *testing.T) {
 
 	if cause := context.Cause(ctx); !errors.Is(cause, context.Canceled) {
 		t.Fatalf("context cause = %v, want context canceled", cause)
+	}
+}
+
+func TestStartConfiguredBootstrapConfiguresControlProxy(t *testing.T) {
+	originalStarter := sshTunnelStarter
+	originalConfigurer := controlProxyConfigurer
+	originalLogger := logger
+	t.Cleanup(func() {
+		sshTunnelStarter = originalStarter
+		controlProxyConfigurer = originalConfigurer
+		logger = originalLogger
+	})
+
+	tunnel := &fakeControlBootstrap{done: make(chan struct{})}
+	sshTunnelStarter = func(context.Context, bootstrapssh.Config) (controlBootstrap, error) {
+		return tunnel, nil
+	}
+	var gotControlURL, gotSOCKSAddr string
+	controlProxyConfigurer = func(controlURL, socksAddr string) error {
+		gotControlURL = controlURL
+		gotSOCKSAddr = socksAddr
+		return nil
+	}
+	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	got, err := startConfiguredBootstrap(context.Background(), config.Config{
+		BootstrapSSH:       "deployer@bastion.example.com",
+		BootstrapSOCKSAddr: "127.0.0.1:1055",
+		ControlURL:         "https://vpn.example.com",
+		ConnectTimeout:     time.Second,
+	})
+	if err != nil {
+		t.Fatalf("startConfiguredBootstrap() error = %v", err)
+	}
+	if got != tunnel {
+		t.Fatal("startConfiguredBootstrap() did not return the started tunnel")
+	}
+	if gotControlURL != "https://vpn.example.com" || gotSOCKSAddr != "127.0.0.1:1055" {
+		t.Fatalf("proxy config = (%q, %q)", gotControlURL, gotSOCKSAddr)
+	}
+}
+
+func TestStartBootstrapLifecycleCloserClosesTunnel(t *testing.T) {
+	originalStarter := bootstrapStarter
+	t.Cleanup(func() { bootstrapStarter = originalStarter })
+
+	tunnel := &fakeControlBootstrap{done: make(chan struct{})}
+	bootstrapStarter = func(context.Context, config.Config) (controlBootstrap, error) {
+		return tunnel, nil
+	}
+	ctx, cancel := context.WithCancelCause(context.Background())
+
+	closeBootstrap, err := startBootstrapLifecycle(ctx, cancel, config.Config{})
+	if err != nil {
+		t.Fatalf("startBootstrapLifecycle() error = %v", err)
+	}
+	closeBootstrap()
+	if !tunnel.closed {
+		t.Fatal("bootstrap closer did not close the SSH tunnel")
 	}
 }
 
