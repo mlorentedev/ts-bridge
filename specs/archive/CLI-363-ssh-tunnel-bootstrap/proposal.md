@@ -53,3 +53,5 @@ Observable outcomes. Each must be testable.
 - Bitácora board: `mlorentedev/ts-bridge#363`
 - Related ADRs: `docs/adr/adr-001-tsnet-userspace.md`, `docs/adr/adr-005-headscale-compat.md`, `docs/adr/adr-008-cli-architecture.md`, `docs/adr/adr-010-cli-package-layout.md`, `docs/adr/adr-013-cli-tests-in-go.md`, `docs/adr/adr-014-socks5-dynamic-mesh-proxy.md`
 - Related lesson: `docs/lessons/lesson-014-corporate-tls-inspection-breaks-headscale-tcp.md`
+
+<!-- archived 2026-09-29 — PR: https://github.com/mlorentedev/ts-bridge/pull/375 -->
