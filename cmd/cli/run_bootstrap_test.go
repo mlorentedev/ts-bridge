@@ -154,6 +154,28 @@ func TestStartBootstrapLifecycleCloserClosesTunnel(t *testing.T) {
 	}
 }
 
+func TestWithBootstrapLifecycleClosesTunnelAfterRun(t *testing.T) {
+	originalStarter := bootstrapStarter
+	t.Cleanup(func() { bootstrapStarter = originalStarter })
+
+	tunnel := &fakeControlBootstrap{done: make(chan struct{})}
+	bootstrapStarter = func(context.Context, config.Config) (controlBootstrap, error) {
+		return tunnel, nil
+	}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	want := errors.New("bridge stopped")
+
+	err := withBootstrapLifecycle(ctx, cancel, config.Config{}, func() error {
+		return want
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("withBootstrapLifecycle() error = %v, want %v", err, want)
+	}
+	if !tunnel.closed {
+		t.Fatal("production lifecycle wrapper did not close the SSH tunnel")
+	}
+}
+
 func closedChannel() chan struct{} {
 	ch := make(chan struct{})
 	close(ch)

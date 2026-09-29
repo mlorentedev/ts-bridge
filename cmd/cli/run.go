@@ -164,16 +164,35 @@ func run(cfg config.Config, onReady func() error) error {
 		defer cleanupEphemeralStateDir(cfg.StateDir)
 	}
 
-	closeBootstrap, err := startBootstrapLifecycle(ctx, cancelWithCause, cfg)
+	return withBootstrapLifecycle(ctx, cancelWithCause, cfg, func() error {
+		return runBridge(ctx, cancelWithCause, cfg, onReady)
+	})
+}
+
+func withBootstrapLifecycle(
+	ctx context.Context,
+	cancel context.CancelCauseFunc,
+	cfg config.Config,
+	runBridge func() error,
+) error {
+	closeBootstrap, err := startBootstrapLifecycle(ctx, cancel, cfg)
 	if err != nil {
 		emitError(os.Stderr, reasonSSHBootstrapFailed, err.Error())
 		return err
 	}
 	defer func() {
-		cancelWithCause(nil)
+		cancel(nil)
 		closeBootstrap()
 	}()
+	return runBridge()
+}
 
+func runBridge(
+	ctx context.Context,
+	cancelWithCause context.CancelCauseFunc,
+	cfg config.Config,
+	onReady func() error,
+) error {
 	server, err := initTailscale(ctx, cfg)
 	if err != nil {
 		if runErr := emitRunCause(ctx, os.Stderr); runErr != nil {
@@ -200,7 +219,7 @@ func run(cfg config.Config, onReady func() error) error {
 		healthServer = health.StartServer(cfg.HealthAddr, &tunnelStatus, logger)
 	}
 
-	go handleShutdown(ctx, &tunnelStatus, listener, healthServer)
+	go handleShutdown(ctx, &tunnelStatus, listener, healthServer) //nolint:gosec // ctx is the run-scoped cancellation context.
 
 	tunnelStatus.MarkReady()
 	var activeConns sync.WaitGroup

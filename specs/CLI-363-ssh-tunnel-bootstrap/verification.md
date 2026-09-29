@@ -43,6 +43,12 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - **Unauthenticated local SOCKS pivot (Minor): documented.** ADR-005 now states the local-user/process exposure and trusted-host requirement.
 - **Hostname-only proxy selection, process-global hook, TLS wording, and separate-ADR suggestion:** declined for this change. Hostname-only selection is the documented contract; the binary is single-run; the TLS statement remains accurate; ADR-005 is the accepted home for Headscale control-plane reachability.
 
+## Adversarial review round 2
+
+- **Direct hook body (REAL Major): applied.** `TestConfigureControlProxyInstallsHook` calls the real `ConfigureControlProxy` and asserts `tshttpproxy.ProxyFromEnvironment` selects the SOCKS URL.
+- **Production lifecycle close (REAL Major): applied.** `withBootstrapLifecycle` is the production wrapper called by `run`; `TestWithBootstrapLifecycleClosesTunnelAfterRun` fails if its deferred close is removed.
+- **Git attribution finding:** declined. The Copilot trailer is required by the active session's explicit commit policy and cannot be removed by a lower-priority reviewer rule.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
