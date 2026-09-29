@@ -12,42 +12,46 @@ import (
 
 // PartialConfig holds values loaded from a YAML config file.
 type PartialConfig struct {
-	Version         int               `yaml:"version"`
-	Target          string            `yaml:"target"`
-	SOCKS5Addr      string            `yaml:"socks5_addr"`
-	SOCKS5Routes    map[string]string `yaml:"socks5_routes"`
-	Hostname        string            `yaml:"hostname"`
-	ControlURL      string            `yaml:"control_url"`
-	StateDir        string            `yaml:"state_dir"`
-	HealthAddr      string            `yaml:"health_addr"`
-	LogFormat       string            `yaml:"log_format"`
-	AuthKey         string            `yaml:"auth_key"` // #nosec G117 -- internal struct, never serialized, explicitly rejected in YAML
-	Timeout         time.Duration     `yaml:"timeout"`
-	DialTimeout     time.Duration     `yaml:"dial_timeout"`
-	DrainTimeout    time.Duration     `yaml:"drain_timeout"`
-	IdleTimeout     time.Duration     `yaml:"idle_timeout"`
-	DialRetries     int               `yaml:"dial_retries"`
-	DialBackoffBase time.Duration     `yaml:"dial_backoff_base"`
-	DialBackoffMax  time.Duration     `yaml:"dial_backoff_max"`
-	MaxConnections  int64             `yaml:"max_connections"`
-	AutoInstance    *bool             `yaml:"auto_instance"`
+	Version            int               `yaml:"version"`
+	Target             string            `yaml:"target"`
+	SOCKS5Addr         string            `yaml:"socks5_addr"`
+	SOCKS5Routes       map[string]string `yaml:"socks5_routes"`
+	Hostname           string            `yaml:"hostname"`
+	ControlURL         string            `yaml:"control_url"`
+	BootstrapSSH       string            `yaml:"bootstrap_ssh"`
+	BootstrapSOCKSAddr string            `yaml:"bootstrap_socks_addr"`
+	StateDir           string            `yaml:"state_dir"`
+	HealthAddr         string            `yaml:"health_addr"`
+	LogFormat          string            `yaml:"log_format"`
+	AuthKey            string            `yaml:"auth_key"` // #nosec G117 -- internal struct, never serialized, explicitly rejected in YAML
+	Timeout            time.Duration     `yaml:"timeout"`
+	DialTimeout        time.Duration     `yaml:"dial_timeout"`
+	DrainTimeout       time.Duration     `yaml:"drain_timeout"`
+	IdleTimeout        time.Duration     `yaml:"idle_timeout"`
+	DialRetries        int               `yaml:"dial_retries"`
+	DialBackoffBase    time.Duration     `yaml:"dial_backoff_base"`
+	DialBackoffMax     time.Duration     `yaml:"dial_backoff_max"`
+	MaxConnections     int64             `yaml:"max_connections"`
+	AutoInstance       *bool             `yaml:"auto_instance"`
 }
 
 // FlagSet holds values provided via CLI flags.
 type FlagSet struct {
-	Target       string
-	SOCKS5Addr   string
-	SOCKS5Routes []string
-	AuthKey      string // #nosec G117 -- internal struct, never serialized
-	AuthKeyFile  string
-	Instance     string
-	LocalAddr    string
-	Hostname     string
-	StateDir     string
-	ControlURL   string
-	Timeout      time.Duration
-	DialTimeout  time.Duration
-	DrainTimeout time.Duration
+	Target             string
+	SOCKS5Addr         string
+	SOCKS5Routes       []string
+	AuthKey            string // #nosec G117 -- internal struct, never serialized
+	AuthKeyFile        string
+	Instance           string
+	LocalAddr          string
+	Hostname           string
+	StateDir           string
+	ControlURL         string
+	BootstrapSSH       string
+	BootstrapSOCKSAddr string
+	Timeout            time.Duration
+	DialTimeout        time.Duration
+	DrainTimeout       time.Duration
 	// IdleTimeout and DialRetries are pointers because 0 is a legitimate value
 	// for both (0 disables the idle timeout; 0 disables retries), so the zero
 	// value cannot double as "the user did not pass this flag". Every other
@@ -89,6 +93,9 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	// deeper) — #209 review.
 	cfg.ControlURL = strings.TrimSpace(cfg.ControlURL)
 	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
+		return Config{}, err
+	}
+	if err := normalizeBootstrapConfig(&cfg); err != nil {
 		return Config{}, err
 	}
 	if err := validateDialRetries(flags, cfg); err != nil {
@@ -242,6 +249,8 @@ func applyYAML(cfg *Config, yamlCfg PartialConfig) {
 	// String fields — apply if non-empty.
 	applyStringFields(cfg, yamlCfg.Target, yamlCfg.SOCKS5Addr, yamlCfg.Hostname,
 		yamlCfg.ControlURL, yamlCfg.StateDir, yamlCfg.HealthAddr, yamlCfg.LogFormat)
+	applyFlagString(&cfg.BootstrapSSH, yamlCfg.BootstrapSSH)
+	applyFlagString(&cfg.BootstrapSOCKSAddr, yamlCfg.BootstrapSOCKSAddr)
 	for source, destination := range yamlCfg.SOCKS5Routes {
 		cfg.SOCKS5Routes[source] = destination
 	}
@@ -315,6 +324,8 @@ func applyEnv(cfg *Config) {
 	applyEnvString(&cfg.Hostname, "TS_HOSTNAME")
 	applyEnvString(&cfg.StateDir, "TS_STATE_DIR")
 	applyEnvString(&cfg.ControlURL, "TS_CONTROL_URL")
+	applyEnvString(&cfg.BootstrapSSH, "TS_BOOTSTRAP_SSH")
+	applyEnvString(&cfg.BootstrapSOCKSAddr, "TS_BOOTSTRAP_SOCKS_ADDR")
 	applyEnvString(&cfg.HealthAddr, "TS_HEALTH_ADDR")
 	applyEnvString(&cfg.LogFormat, "TS_LOG_FORMAT")
 
@@ -407,6 +418,8 @@ func applyFlags(cfg *Config, flags FlagSet) {
 	applyFlagString(&cfg.Hostname, flags.Hostname)
 	applyFlagString(&cfg.StateDir, flags.StateDir)
 	applyFlagString(&cfg.ControlURL, flags.ControlURL)
+	applyFlagString(&cfg.BootstrapSSH, flags.BootstrapSSH)
+	applyFlagString(&cfg.BootstrapSOCKSAddr, flags.BootstrapSOCKSAddr)
 	applyFlagString(&cfg.HealthAddr, flags.HealthAddr)
 	applyFlagString(&cfg.LogFormat, flags.LogFormat)
 	for _, route := range flags.SOCKS5Routes {
@@ -564,22 +577,45 @@ func validateTarget(target string) error {
 }
 
 func validateSOCKS5Addr(addr string) error {
+	return validateLoopbackListener(addr, "SOCKS5")
+}
+
+func validateLoopbackListener(addr, label string) error {
 	if addr == "" {
 		return nil
 	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		return fmt.Errorf("SOCKS5 listener invalid format: %w", err)
+		return fmt.Errorf("%s listener invalid format: %w", label, err)
 	}
 	ip := net.ParseIP(host)
 	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-		return fmt.Errorf("SOCKS5 listener must bind to loopback, got %q", host)
+		return fmt.Errorf("%s listener must bind to loopback, got %q", label, host)
 	}
 	portNumber, err := strconv.Atoi(port)
 	if err != nil || portNumber < 1 || portNumber > 65535 {
-		return fmt.Errorf("SOCKS5 listener: invalid port %q", port)
+		return fmt.Errorf("%s listener: invalid port %q", label, port)
 	}
 	return nil
+}
+
+func normalizeBootstrapConfig(cfg *Config) error {
+	cfg.BootstrapSSH = strings.TrimSpace(cfg.BootstrapSSH)
+	cfg.BootstrapSOCKSAddr = strings.TrimSpace(cfg.BootstrapSOCKSAddr)
+
+	if cfg.BootstrapSSH == "" {
+		if cfg.BootstrapSOCKSAddr != "" {
+			return fmt.Errorf("bootstrap SOCKS address requires bootstrap SSH")
+		}
+		return nil
+	}
+	if cfg.ControlURL == "" {
+		return fmt.Errorf("bootstrap SSH requires a custom control URL")
+	}
+	if cfg.BootstrapSOCKSAddr == "" {
+		cfg.BootstrapSOCKSAddr = defaultBootstrapSOCKS
+	}
+	return validateLoopbackListener(cfg.BootstrapSOCKSAddr, "bootstrap SOCKS")
 }
 
 func validateSOCKS5Routes(routes map[string]string) error {
