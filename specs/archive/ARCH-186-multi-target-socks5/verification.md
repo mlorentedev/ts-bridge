@@ -12,8 +12,8 @@ template_version: "1.0"
 
 ## Evidence Checklist
 
-The implementation evidence below is local to the feature worktree until the
-change is reviewed and merged. Browser access is an explicit extension of the
+The implementation and live-verification evidence below was merged through
+#365, #366, #367, and #369. Browser access is an explicit extension of the
 SOCKS5 implementation, not a manual hosts-file workaround. See
 `docs/lessons/lesson-030-2026-08-31.md` on ticking a criterion against the
 artifact rather than the document that describes it.
@@ -57,3 +57,9 @@ Date: 2026-09-28
   `0`; response content was discarded.
 - Independent adversarial review: waived by the operator on 2026-09-28 because
   no approved reviewer was operationally available.
+
+## Promotion candidates
+
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/lesson-030-2026-08-31.md`
+- [x] ADR-worthy decision for the repo's `docs/adr/`? yes: `docs/adr/adr-014-socks5-dynamic-mesh-proxy.md`
+- [x] New pattern candidate for `00_meta/patterns/`? no: SOCKS5-to-tsnet browser routing remains project-specific.
