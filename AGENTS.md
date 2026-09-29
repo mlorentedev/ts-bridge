@@ -16,7 +16,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | Path | Purpose |
 |------|---------|
 | `cmd/ts-bridge/main.go` | Thin entry point — wires flags/logger/signals and delegates to `cmd/cli` (ADR-010). No business logic. |
-| `cmd/cli/` | Cobra command tree (`root`, `connect`, `init`, `status`, `host`, `discover`, `import`, `version`) + `args`/`run`/`signal` helpers, with per-command `*_test.go`. |
+| `cmd/cli/` | Cobra command tree (`root`, `browser`, `connect`, `init`, `status`, `host`, `discover`, `import`, `version`) + `args`/`run`/`signal` helpers, with per-command `*_test.go`. |
 | `internal/config/` | Env-var parsing + `Config` struct + validation |
 | `internal/proxy/` | `Dialer` interface, `AcceptLoop`, `handleConn`, `proxyConnections`, `idleConn`, `ReconnectDialer` |
 | `internal/health/` | `/health/live`, `/health/ready`, `/metrics` HTTP server |
@@ -25,6 +25,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `internal/host/` | Platform-specific host setup/check (firewall, RDP/xrdp, service) — `*_linux.go` / `*_windows.go` / `*_darwin.go` |
 | `internal/logging/` | Structured slog logging: text to console + JSON to a rotating log file |
 | `internal/profile/` | Shareable connection descriptor (`tsb://`) + profile store behind `connect --profile` (ADR-011/012) |
+| `internal/browser/` | Loopback PAC generation/server plus isolated Edge discovery and launch arguments for allow-listed private origins. |
 | `specs/` (and `specs/archive/`) | Per-feature SDD folders (proposal + tasks + verification) — see §Workflow Rules |
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
 | `scripts/tests/` | CLI smoke tests (`smoke.bats`, BATS) exercising the built binary. Cross-platform CLI coverage belongs in Go tests under `cmd/cli/`, which the `test-windows` job already runs on Windows. |
@@ -59,7 +60,7 @@ gosec ./...
 - **ADR-010:** `cmd/cli` Cobra package layout — `main.go` stays a thin entry point
 - **ADR-012:** Named profile model for multi-tailnet configuration (current config model)
 - **ADR-013:** CLI coverage lives in Go tests under `cmd/cli/`, not a second native suite — `smoke.bats` is frozen as the Linux wiring check
-- **ADR-014:** SOCKS5 dynamic mesh proxy for multi-target connectivity — protocol core implemented; CLI/config wiring and operational docs are delivered by stacked PR #366. Tracked as #186.
+- **ADR-014:** SOCKS5 dynamic mesh proxy for multi-target connectivity (SSH, kubectl, curl, and isolated private-browser access) — implemented via `connect --socks5` and `browser`, with allow-listed origin-to-mesh routes. Tracked as #186; live mesh validation remains open.
 - Full ADR index: [`docs/adr/`](docs/adr/) (project-bound knowledge, docs-as-code)
 
 ## Documentation

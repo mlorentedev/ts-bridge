@@ -59,6 +59,20 @@ Running N separate `ts-bridge` processes or configuring static port ranges per n
    - The ephemeral `ts-bridge` node connects with an auth key carrying a dedicated tag (e.g. `tag:operator-bridge`).
    - The Headscale/Tailscale ACL policy explicitly permits `tag:operator-bridge` to access `tag:cluster-node` on `:22` and `:6443`.
 
+4. **Private Browser Access:**
+   - Browser mode uses an allow-listed route map from canonical
+     `host:port` origins to mesh `host:port` destinations.
+   - The browser sends the original TLS stream through SOCKS5, preserving
+     SNI and HTTP Host while `ts-bridge` selects the mesh destination.
+   - A PAC server binds only to loopback and sends only allow-listed hosts to
+     SOCKS5. All other browser traffic remains direct.
+   - Edge launches with a dedicated user-data directory and host-resolver
+     rules for the allow-listed hosts. The command never modifies the Windows
+     hosts file, system DNS, system proxy, or the user's normal browser
+     profile.
+   - Browser mode requires an auth-key file. It does not accept a key from
+     CLI arguments or environment configuration.
+
 ---
 
 ## Options Evaluated and Rejected
@@ -78,7 +92,11 @@ Running N separate `ts-bridge` processes or configuring static port ranges per n
 - No local administrative privileges required.
 - Seamless compatibility with `~/.ssh/config` and `kubectl` cluster definitions.
 - Automatic support for new nodes joining the mesh without restarting the bridge.
+- Canonical private HTTPS URLs remain valid in the browser, including their
+  TLS certificates, without local DNS or hosts-file workarounds.
 
 ### Negative / Trade-offs
 - Client applications must support SOCKS5 (or proxy commands). Applications lacking proxy support cannot route traffic through the bridge.
 - Control plane ACLs must be maintained to grant the bridge node necessary destination permissions.
+- Private browser origins require explicit allow-list entries; they never gain
+  implicit access to the full mesh.
