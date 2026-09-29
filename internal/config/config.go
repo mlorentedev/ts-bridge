@@ -83,32 +83,35 @@ const (
 	defaultDialBackoffBase = 1 * time.Second
 	defaultDialBackoffMax  = 30 * time.Second
 	defaultDialTimeout     = 5 * time.Second
+	defaultBootstrapSOCKS  = "127.0.0.1:1055"
 )
 
 // Config holds the bridge configuration.
 type Config struct {
-	LocalAddr       string
-	SOCKS5Addr      string
-	SOCKS5Routes    map[string]string
-	Target          string
-	AuthKey         string // #nosec G117 -- internal struct, never serialized
-	Hostname        string
-	StateDir        string
-	ControlURL      string
-	ConnectTimeout  time.Duration
-	DialTimeout     time.Duration
-	DrainTimeout    time.Duration
-	IdleTimeout     time.Duration
-	DialRetries     int
-	DialBackoffBase time.Duration
-	DialBackoffMax  time.Duration
-	MaxConnections  int64
-	HealthAddr      string
-	Verbose         bool
-	Quiet           bool
-	LogFormat       string
-	AutoInstance    bool
-	EphemeralState  bool
+	LocalAddr          string
+	SOCKS5Addr         string
+	SOCKS5Routes       map[string]string
+	Target             string
+	AuthKey            string // #nosec G117 -- internal struct, never serialized
+	Hostname           string
+	StateDir           string
+	ControlURL         string
+	BootstrapSSH       string
+	BootstrapSOCKSAddr string
+	ConnectTimeout     time.Duration
+	DialTimeout        time.Duration
+	DrainTimeout       time.Duration
+	IdleTimeout        time.Duration
+	DialRetries        int
+	DialBackoffBase    time.Duration
+	DialBackoffMax     time.Duration
+	MaxConnections     int64
+	HealthAddr         string
+	Verbose            bool
+	Quiet              bool
+	LogFormat          string
+	AutoInstance       bool
+	EphemeralState     bool
 }
 
 // LoadConfig parses environment variables into a Config struct.
@@ -149,24 +152,26 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 	}
 
 	cfg := Config{
-		LocalAddr:       os.Getenv("TS_LOCAL_ADDR"),
-		SOCKS5Addr:      socks5Addr,
-		Target:          target,
-		AuthKey:         authKey,
-		Hostname:        os.Getenv("TS_HOSTNAME"),
-		StateDir:        os.Getenv("TS_STATE_DIR"),
-		ControlURL:      os.Getenv("TS_CONTROL_URL"),
-		ConnectTimeout:  timeout,
-		DialTimeout:     dialTimeout,
-		DrainTimeout:    drainTimeout,
-		IdleTimeout:     idleTimeout,
-		DialRetries:     dialRetries,
-		DialBackoffBase: dialBackoffBase,
-		DialBackoffMax:  dialBackoffMax,
-		MaxConnections:  maxConns,
-		HealthAddr:      os.Getenv("TS_HEALTH_ADDR"),
-		Verbose:         verboseFlag || parseBoolEnv(os.Getenv("TS_VERBOSE")),
-		LogFormat:       EnvOr("TS_LOG_FORMAT", "text"),
+		LocalAddr:          os.Getenv("TS_LOCAL_ADDR"),
+		SOCKS5Addr:         socks5Addr,
+		Target:             target,
+		AuthKey:            authKey,
+		Hostname:           os.Getenv("TS_HOSTNAME"),
+		StateDir:           os.Getenv("TS_STATE_DIR"),
+		ControlURL:         os.Getenv("TS_CONTROL_URL"),
+		BootstrapSSH:       os.Getenv("TS_BOOTSTRAP_SSH"),
+		BootstrapSOCKSAddr: os.Getenv("TS_BOOTSTRAP_SOCKS_ADDR"),
+		ConnectTimeout:     timeout,
+		DialTimeout:        dialTimeout,
+		DrainTimeout:       drainTimeout,
+		IdleTimeout:        idleTimeout,
+		DialRetries:        dialRetries,
+		DialBackoffBase:    dialBackoffBase,
+		DialBackoffMax:     dialBackoffMax,
+		MaxConnections:     maxConns,
+		HealthAddr:         os.Getenv("TS_HEALTH_ADDR"),
+		Verbose:            verboseFlag || parseBoolEnv(os.Getenv("TS_VERBOSE")),
+		LogFormat:          EnvOr("TS_LOG_FORMAT", "text"),
 	}
 
 	if err := applyAutoInstanceConfig(&cfg); err != nil {
@@ -187,14 +192,21 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 	// Normalize before validating so the value we check is the value we persist
 	// and hand to tsnet (#209 review).
 	cfg.ControlURL = strings.TrimSpace(cfg.ControlURL)
-	if err := validateSOCKS5Addr(cfg.SOCKS5Addr); err != nil {
-		return Config{}, err
-	}
-	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
+	if err := validateLoadedConfig(&cfg); err != nil {
 		return Config{}, err
 	}
 
 	return cfg, nil
+}
+
+func validateLoadedConfig(cfg *Config) error {
+	if err := validateSOCKS5Addr(cfg.SOCKS5Addr); err != nil {
+		return err
+	}
+	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
+		return err
+	}
+	return normalizeBootstrapConfig(cfg)
 }
 
 func loadProxyModeFromEnv() (string, string, error) {
