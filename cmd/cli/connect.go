@@ -128,15 +128,23 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load YAML config: %w", err)
 	}
 
-	// Merge: flags > env > yaml > defaults.
-	cfg, err := config.Merge(yamlCfg, flags)
-	if err != nil {
+	// Profiles are the lowest configuration source above defaults. Load the
+	// selected profile before Merge validates required and control-plane fields.
+	profileName, _ := cmd.Flags().GetString("profile")
+	var profileCfg config.Config
+	if err := applyProfile(&profileCfg, profileName, defaultProfileStorePath); err != nil {
 		return err
 	}
+	if yamlCfg.Target == "" {
+		yamlCfg.Target = profileCfg.Target
+	}
+	if yamlCfg.ControlURL == "" {
+		yamlCfg.ControlURL = profileCfg.ControlURL
+	}
 
-	// Resolve --profile after Merge so explicit --target / TS_TARGET still wins.
-	profileName, _ := cmd.Flags().GetString("profile")
-	if err := applyProfile(&cfg, profileName, defaultProfileStorePath); err != nil {
+	// Merge: flags > env > yaml > profile > defaults.
+	cfg, err := config.Merge(yamlCfg, flags)
+	if err != nil {
 		return err
 	}
 

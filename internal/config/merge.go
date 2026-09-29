@@ -629,6 +629,9 @@ func validateBootstrapListenerCollision(cfg Config) error {
 		sameListenerEndpoint(cfg.BootstrapSOCKSAddr, cfg.SOCKS5Addr) {
 		return fmt.Errorf("bootstrap SOCKS listener %q conflicts with bridge listener", cfg.BootstrapSOCKSAddr)
 	}
+	if sameListenerEndpoint(cfg.BootstrapSOCKSAddr, cfg.HealthAddr) {
+		return fmt.Errorf("bootstrap SOCKS listener %q conflicts with health listener", cfg.BootstrapSOCKSAddr)
+	}
 	return nil
 }
 
@@ -638,7 +641,15 @@ func sameListenerEndpoint(left, right string) bool {
 	}
 	leftHost, leftPort, leftErr := net.SplitHostPort(left)
 	rightHost, rightPort, rightErr := net.SplitHostPort(right)
-	if leftErr != nil || rightErr != nil || leftPort != rightPort {
+	if leftErr != nil || rightErr != nil {
+		return false
+	}
+	leftPortNumber, leftPortErr := strconv.Atoi(leftPort)
+	rightPortNumber, rightPortErr := strconv.Atoi(rightPort)
+	if leftPortErr != nil || rightPortErr != nil ||
+		leftPortNumber < 1 || leftPortNumber > 65535 ||
+		rightPortNumber < 1 || rightPortNumber > 65535 ||
+		leftPortNumber != rightPortNumber {
 		return false
 	}
 	if strings.EqualFold(leftHost, rightHost) {
