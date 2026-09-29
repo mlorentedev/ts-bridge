@@ -24,6 +24,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - Simulated smoke: `TestControlProxyPreservesHostnameThroughSOCKS` proves the SOCKS peer receives `vpn.example.com`, not a locally resolved address, while the request URL remains HTTPS.
 - Real filtered-network smoke: not run in this environment; issue #363 accepts a simulated equivalent. Re-run #183 from the affected or an unrestricted network after merge.
 - No regressions in existing test suite: yes.
+- Pull requests: #372 (OpenSSH core), #373 (configuration), #374 (CLI wiring/docs; closes #363).
 
 ## Decisions made during implementation
 
