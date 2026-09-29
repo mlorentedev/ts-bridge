@@ -424,20 +424,50 @@ func TestLoadConfig(t *testing.T) {
 			env:     map[string]string{"TS_TARGET": "100.64.0.1:-1", "TS_AUTHKEY": "tskey-auth-test123"},
 			wantErr: true,
 		},
+		{
+			name: "SOCKS5 env mode without static target",
+			env: map[string]string{
+				"TS_SOCKS5_ADDR": "127.0.0.1:1080",
+				"TS_AUTHKEY":     "tskey-auth-test123",
+			},
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Target != "" || cfg.SOCKS5Addr != "127.0.0.1:1080" {
+					t.Fatalf("mode = target %q SOCKS %q", cfg.Target, cfg.SOCKS5Addr)
+				}
+			},
+		},
+		{
+			name: "SOCKS5 env mode rejects non-loopback listener",
+			env: map[string]string{
+				"TS_SOCKS5_ADDR": "0.0.0.0:1080",
+				"TS_AUTHKEY":     "tskey-auth-test123",
+			},
+			wantErr: true,
+		},
+		{
+			name: "env mode rejects target and SOCKS5 together",
+			env: map[string]string{
+				"TS_TARGET":      "mesh-host:22",
+				"TS_SOCKS5_ADDR": "127.0.0.1:1080",
+				"TS_AUTHKEY":     "tskey-auth-test123",
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, key := range []string{"TS_TARGET", "TS_AUTHKEY", "TS_TIMEOUT", "TS_VERBOSE",
+				"TS_SOCKS5_ADDR",
 				"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
 				"TS_MAX_CONNECTIONS", "TS_HEALTH_ADDR", "TS_LOG_FORMAT",
 				"TS_AUTO_INSTANCE", "TS_INSTANCE_NAME", "TS_PORT_RANGE", "TS_MANUAL_MODE",
 				"TS_DRAIN_TIMEOUT", "TS_IDLE_TIMEOUT", "TS_DIAL_TIMEOUT",
 				"TS_DIAL_RETRIES", "TS_DIAL_BACKOFF_BASE", "TS_DIAL_BACKOFF_MAX"} {
-				os.Unsetenv(key)
+				t.Setenv(key, "")
 			}
 			for k, v := range tt.env {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			cfg, err := LoadConfig(tt.verbose)

@@ -278,6 +278,184 @@ func TestFlagSetEmptyByDefault(t *testing.T) {
 	}
 }
 
+func TestMergeAllowsSOCKS5WithoutStaticTarget(t *testing.T) {
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_AUTHKEY", "tskey-auth-test123")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	cfg, err := Merge(PartialConfig{}, FlagSet{SOCKS5Addr: "127.0.0.1:1080"})
+	if err != nil {
+		t.Fatalf("Merge returned error: %v", err)
+	}
+	if cfg.Target != "" {
+		t.Fatalf("Target = %q, want empty in SOCKS5 mode", cfg.Target)
+	}
+	if cfg.SOCKS5Addr != "127.0.0.1:1080" {
+		t.Fatalf("SOCKS5Addr = %q, want 127.0.0.1:1080", cfg.SOCKS5Addr)
+	}
+}
+
+func TestMergeRejectsNonLoopbackSOCKS5Listener(t *testing.T) {
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_AUTHKEY", "tskey-auth-test123")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	_, err := Merge(PartialConfig{}, FlagSet{SOCKS5Addr: "0.0.0.0:1080"})
+	if err == nil || !strings.Contains(err.Error(), "SOCKS5 listener must bind to loopback") {
+		t.Fatalf("Merge error = %v, want loopback validation error", err)
+	}
+}
+
+func TestMergeSOCKS5Routes(t *testing.T) {
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_AUTHKEY", "tskey-auth-test123")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	cfg, err := Merge(
+		PartialConfig{
+			SOCKS5Addr: "127.0.0.1:1080",
+			SOCKS5Routes: map[string]string{
+				"yaml.example:443": "yaml-mesh:443",
+			},
+		},
+		FlagSet{
+			SOCKS5Routes: []string{"forge.example:443=apps:443"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Merge returned error: %v", err)
+	}
+	if cfg.SOCKS5Routes["yaml.example:443"] != "yaml-mesh:443" {
+		t.Fatalf("YAML route missing: %#v", cfg.SOCKS5Routes)
+	}
+	if cfg.SOCKS5Routes["forge.example:443"] != "apps:443" {
+		t.Fatalf("flag route missing: %#v", cfg.SOCKS5Routes)
+	}
+}
+
+func TestMergeRejectsInvalidSOCKS5Route(t *testing.T) {
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_AUTHKEY", "tskey-auth-test123")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	_, err := Merge(
+		PartialConfig{SOCKS5Addr: "127.0.0.1:1080"},
+		FlagSet{SOCKS5Routes: []string{"missing-separator"}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "invalid SOCKS5 route") {
+		t.Fatalf("Merge error = %v, want invalid route error", err)
+	}
+}
+
+func TestMergeProxyModePrecedence(t *testing.T) {
+	tests := []struct {
+		name       string
+		envTarget  string
+		envSOCKS   string
+		flags      FlagSet
+		wantTarget string
+		wantSOCKS  string
+		wantError  string
+	}{
+		{
+			name:       "flag target overrides environment SOCKS",
+			envSOCKS:   "127.0.0.1:1080",
+			flags:      FlagSet{Target: "mesh-host:22", AuthKey: "tskey-auth-test123"},
+			wantTarget: "mesh-host:22",
+		},
+		{
+			name:      "flag SOCKS overrides environment target",
+			envTarget: "mesh-host:22",
+			flags:     FlagSet{SOCKS5Addr: "127.0.0.1:1080", AuthKey: "tskey-auth-test123"},
+			wantSOCKS: "127.0.0.1:1080",
+		},
+		{
+			name:      "same layer cannot select both modes",
+			flags:     FlagSet{Target: "mesh-host:22", SOCKS5Addr: "127.0.0.1:1080", AuthKey: "tskey-auth-test123"},
+			wantError: "target and SOCKS5 listener cannot both be set at the same precedence level",
+		},
+		{
+			name:      "environment cannot select both modes",
+			envTarget: "mesh-host:22",
+			envSOCKS:  "127.0.0.1:1080",
+			flags:     FlagSet{AuthKey: "tskey-auth-test123"},
+			wantError: "target and SOCKS5 listener cannot both be set at the same precedence level",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TS_TARGET", tt.envTarget)
+			t.Setenv("TS_SOCKS5_ADDR", tt.envSOCKS)
+			t.Setenv("TS_AUTHKEY", "")
+			t.Setenv("TS_CONTROL_URL", "")
+
+			cfg, err := Merge(PartialConfig{}, tt.flags)
+			if tt.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+					t.Fatalf("Merge error = %v, want %q", err, tt.wantError)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Merge returned error: %v", err)
+			}
+			if cfg.Target != tt.wantTarget || cfg.SOCKS5Addr != tt.wantSOCKS {
+				t.Fatalf("modes = target %q SOCKS %q, want target %q SOCKS %q",
+					cfg.Target, cfg.SOCKS5Addr, tt.wantTarget, tt.wantSOCKS)
+			}
+		})
+	}
+}
+
+func TestMergeHigherPrecedenceSOCKSModePreservesYAMLAllowlist(t *testing.T) {
+	t.Setenv("TS_TARGET", "stale-static-target:22")
+	t.Setenv("TS_SOCKS5_ADDR", "")
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	cfg, err := Merge(
+		PartialConfig{
+			SOCKS5Addr: "127.0.0.1:1090",
+			SOCKS5Routes: map[string]string{
+				"forge.example:443": "apps:443",
+			},
+		},
+		FlagSet{
+			SOCKS5Addr: "127.0.0.1:1080",
+			AuthKey:    "tskey-auth-test123",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Merge returned error: %v", err)
+	}
+	if cfg.Target != "" || cfg.SOCKS5Addr != "127.0.0.1:1080" {
+		t.Fatalf("mode = target %q SOCKS %q", cfg.Target, cfg.SOCKS5Addr)
+	}
+	if cfg.SOCKS5Routes["forge.example:443"] != "apps:443" {
+		t.Fatalf("SOCKS5 routes were dropped: %#v", cfg.SOCKS5Routes)
+	}
+}
+
+func TestMergeRejectsSOCKS5RoutesInStaticMode(t *testing.T) {
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_SOCKS5_ADDR", "")
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	_, err := Merge(
+		PartialConfig{},
+		FlagSet{
+			Target:       "mesh-host:22",
+			SOCKS5Routes: []string{"forge.example:443=apps:443"},
+			AuthKey:      "tskey-auth-test123",
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "SOCKS5 routes require SOCKS5 mode") {
+		t.Fatalf("Merge error = %v", err)
+	}
+}
+
 // --- BUG-009: default hostname in manual-mode ---
 
 func TestMergeDefaultHostnameInManualMode(t *testing.T) {

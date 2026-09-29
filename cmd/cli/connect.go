@@ -41,6 +41,8 @@ Examples:
 
 	// Required-like flags (one of: flag, env, or YAML).
 	cmd.Flags().String("target", "", "Target address HOST:PORT (overrides TS_TARGET)")
+	cmd.Flags().String("socks5", "", "Loopback SOCKS5 listener address for dynamic mesh targets")
+	cmd.Flags().StringArray("route", nil, "Allow-listed SOCKS5 route SOURCE_HOST:PORT=MESH_HOST:PORT (repeatable)")
 	cmd.Flags().String("auth-key", "", "Auth key (overrides TS_AUTHKEY) — WARNING: visible in process list")
 	cmd.Flags().String("auth-key-file", "", "Read auth key from file (secure alternative to --auth-key)")
 
@@ -159,6 +161,8 @@ func collectFlags(cmd *cobra.Command) config.FlagSet {
 	var fs config.FlagSet
 
 	fs.Target, _ = cmd.Flags().GetString("target")
+	fs.SOCKS5Addr, _ = cmd.Flags().GetString("socks5")
+	fs.SOCKS5Routes, _ = cmd.Flags().GetStringArray("route")
 	fs.AuthKey, _ = cmd.Flags().GetString("auth-key")
 	fs.AuthKeyFile, _ = cmd.Flags().GetString("auth-key-file")
 	fs.Instance, _ = cmd.Flags().GetString("instance")

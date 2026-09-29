@@ -91,6 +91,23 @@ func TestCollectFlagsUnsetNumericFlags(t *testing.T) {
 	}
 }
 
+func TestCollectFlagsSOCKS5(t *testing.T) {
+	cmd := newConnectCmd()
+	if err := cmd.Flags().Set("socks5", "127.0.0.1:1080"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("route", "forge.example:443=apps:443"); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := collectFlags(cmd)
+	if fs.SOCKS5Addr != "127.0.0.1:1080" {
+		t.Fatalf("SOCKS5Addr = %q, want 127.0.0.1:1080", fs.SOCKS5Addr)
+	}
+	if len(fs.SOCKS5Routes) != 1 || fs.SOCKS5Routes[0] != "forge.example:443=apps:443" {
+		t.Fatalf("SOCKS5Routes = %#v", fs.SOCKS5Routes)
+	}
+}
 
 func TestAuthKeyFilePrecedence(t *testing.T) {
 	tmpDir := t.TempDir()

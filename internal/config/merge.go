@@ -12,28 +12,32 @@ import (
 
 // PartialConfig holds values loaded from a YAML config file.
 type PartialConfig struct {
-	Version         int           `yaml:"version"`
-	Target          string        `yaml:"target"`
-	Hostname        string        `yaml:"hostname"`
-	ControlURL      string        `yaml:"control_url"`
-	StateDir        string        `yaml:"state_dir"`
-	HealthAddr      string        `yaml:"health_addr"`
-	LogFormat       string        `yaml:"log_format"`
-	AuthKey         string        `yaml:"auth_key"` // #nosec G117 -- internal struct, never serialized, explicitly rejected in YAML
-	Timeout         time.Duration `yaml:"timeout"`
-	DialTimeout     time.Duration `yaml:"dial_timeout"`
-	DrainTimeout    time.Duration `yaml:"drain_timeout"`
-	IdleTimeout     time.Duration `yaml:"idle_timeout"`
-	DialRetries     int           `yaml:"dial_retries"`
-	DialBackoffBase time.Duration `yaml:"dial_backoff_base"`
-	DialBackoffMax  time.Duration `yaml:"dial_backoff_max"`
-	MaxConnections  int64         `yaml:"max_connections"`
-	AutoInstance    *bool         `yaml:"auto_instance"`
+	Version         int               `yaml:"version"`
+	Target          string            `yaml:"target"`
+	SOCKS5Addr      string            `yaml:"socks5_addr"`
+	SOCKS5Routes    map[string]string `yaml:"socks5_routes"`
+	Hostname        string            `yaml:"hostname"`
+	ControlURL      string            `yaml:"control_url"`
+	StateDir        string            `yaml:"state_dir"`
+	HealthAddr      string            `yaml:"health_addr"`
+	LogFormat       string            `yaml:"log_format"`
+	AuthKey         string            `yaml:"auth_key"` // #nosec G117 -- internal struct, never serialized, explicitly rejected in YAML
+	Timeout         time.Duration     `yaml:"timeout"`
+	DialTimeout     time.Duration     `yaml:"dial_timeout"`
+	DrainTimeout    time.Duration     `yaml:"drain_timeout"`
+	IdleTimeout     time.Duration     `yaml:"idle_timeout"`
+	DialRetries     int               `yaml:"dial_retries"`
+	DialBackoffBase time.Duration     `yaml:"dial_backoff_base"`
+	DialBackoffMax  time.Duration     `yaml:"dial_backoff_max"`
+	MaxConnections  int64             `yaml:"max_connections"`
+	AutoInstance    *bool             `yaml:"auto_instance"`
 }
 
 // FlagSet holds values provided via CLI flags.
 type FlagSet struct {
 	Target       string
+	SOCKS5Addr   string
+	SOCKS5Routes []string
 	AuthKey      string // #nosec G117 -- internal struct, never serialized
 	AuthKeyFile  string
 	Instance     string
@@ -68,18 +72,16 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	if err := validateYAMLAuthKey(yamlCfg); err != nil {
 		return Config{}, err
 	}
+	if err := validateModeInputs(yamlCfg, flags); err != nil {
+		return Config{}, err
+	}
 
 	cfg := defaults()
 	applyYAML(&cfg, yamlCfg)
 	applyEnv(&cfg)
 	applyFlags(&cfg, flags)
 
-	// Validate target format first so a malformed target doesn't get
-	// masked by a later auth-key error (BUG-005).
-	if err := validateTarget(cfg.Target); err != nil {
-		return Config{}, err
-	}
-	if err := validateRequiredFields(cfg); err != nil {
+	if err := validateMergedProxyConfig(cfg); err != nil {
 		return Config{}, err
 	}
 	// Normalize before validating so the value we check is the value we persist
@@ -133,10 +135,53 @@ func validateYAMLAuthKey(yamlCfg PartialConfig) error {
 	return nil
 }
 
+func validateModeLayer(target, socks5Addr string) error {
+	if target != "" && socks5Addr != "" {
+		return fmt.Errorf("target and SOCKS5 listener cannot both be set at the same precedence level")
+	}
+	return nil
+}
+
+func validateModeInputs(yamlCfg PartialConfig, flags FlagSet) error {
+	layers := []struct {
+		name   string
+		target string
+		socks  string
+	}{
+		{name: "YAML config", target: yamlCfg.Target, socks: yamlCfg.SOCKS5Addr},
+		{name: "environment", target: os.Getenv("TS_TARGET"), socks: os.Getenv("TS_SOCKS5_ADDR")},
+		{name: "flags", target: flags.Target, socks: flags.SOCKS5Addr},
+	}
+	for _, layer := range layers {
+		if err := validateModeLayer(layer.target, layer.socks); err != nil {
+			return fmt.Errorf("%s: %w", layer.name, err)
+		}
+	}
+	return nil
+}
+
+func validateMergedProxyConfig(cfg Config) error {
+	// Validate target format first so a malformed target doesn't get
+	// masked by a later auth-key error (BUG-005).
+	if err := validateTarget(cfg.Target); err != nil {
+		return err
+	}
+	if err := validateSOCKS5Addr(cfg.SOCKS5Addr); err != nil {
+		return err
+	}
+	if err := validateSOCKS5Routes(cfg.SOCKS5Routes); err != nil {
+		return err
+	}
+	if cfg.Target != "" && len(cfg.SOCKS5Routes) > 0 {
+		return fmt.Errorf("SOCKS5 routes require SOCKS5 mode")
+	}
+	return validateRequiredFields(cfg)
+}
+
 // validateRequiredFields checks that required config fields are present and valid.
 func validateRequiredFields(cfg Config) error {
-	if cfg.Target == "" {
-		return fmt.Errorf("target is required (provide --target flag, TS_TARGET env var, or YAML config)")
+	if cfg.Target == "" && cfg.SOCKS5Addr == "" {
+		return fmt.Errorf("target is required unless a SOCKS5 listener is provided (use --target or --socks5)")
 	}
 	if cfg.AuthKey == "" {
 		return fmt.Errorf("auth key is required (provide TS_AUTHKEY env var or --auth-key-file flag)")
@@ -189,13 +234,17 @@ func defaults() Config {
 		MaxConnections:  defaultMaxConnections,
 		LogFormat:       "text",
 		AutoInstance:    true,
+		SOCKS5Routes:    make(map[string]string),
 	}
 }
 
 func applyYAML(cfg *Config, yamlCfg PartialConfig) {
 	// String fields — apply if non-empty.
-	applyStringFields(cfg, yamlCfg.Target, yamlCfg.Hostname, yamlCfg.ControlURL,
-		yamlCfg.StateDir, yamlCfg.HealthAddr, yamlCfg.LogFormat)
+	applyStringFields(cfg, yamlCfg.Target, yamlCfg.SOCKS5Addr, yamlCfg.Hostname,
+		yamlCfg.ControlURL, yamlCfg.StateDir, yamlCfg.HealthAddr, yamlCfg.LogFormat)
+	for source, destination := range yamlCfg.SOCKS5Routes {
+		cfg.SOCKS5Routes[source] = destination
+	}
 
 	// Duration fields — apply if positive.
 	applyDurationFields(cfg, yamlCfg.Timeout, yamlCfg.DialTimeout,
@@ -213,9 +262,12 @@ func applyYAML(cfg *Config, yamlCfg PartialConfig) {
 	}
 }
 
-func applyStringFields(cfg *Config, target, hostname, controlURL, stateDir, healthAddr, logFormat string) {
+func applyStringFields(cfg *Config, target, socks5Addr, hostname, controlURL, stateDir, healthAddr, logFormat string) {
 	if target != "" {
 		cfg.Target = target
+	}
+	if socks5Addr != "" {
+		cfg.SOCKS5Addr = socks5Addr
 	}
 	if hostname != "" {
 		cfg.Hostname = hostname
@@ -257,7 +309,7 @@ func applyDurationFields(cfg *Config, timeout, dialTimeout, drainTimeout, idleTi
 
 func applyEnv(cfg *Config) {
 	// String fields.
-	applyEnvString(&cfg.Target, "TS_TARGET")
+	applyEnvProxyMode(cfg)
 	applyEnvString(&cfg.AuthKey, "TS_AUTHKEY")
 	applyEnvString(&cfg.LocalAddr, "TS_LOCAL_ADDR")
 	applyEnvString(&cfg.Hostname, "TS_HOSTNAME")
@@ -286,6 +338,18 @@ func applyEnv(cfg *Config) {
 	// Integer fields.
 	applyEnvInt(&cfg.DialRetries, "TS_DIAL_RETRIES", nonNegativeInt)
 	applyEnvInt64(&cfg.MaxConnections, "TS_MAX_CONNECTIONS", positiveInt64)
+}
+
+func applyEnvProxyMode(cfg *Config) {
+	if target := os.Getenv("TS_TARGET"); target != "" {
+		cfg.Target = target
+		cfg.SOCKS5Addr = ""
+		return
+	}
+	if socks5Addr := os.Getenv("TS_SOCKS5_ADDR"); socks5Addr != "" {
+		cfg.SOCKS5Addr = socks5Addr
+		cfg.Target = ""
+	}
 }
 
 func applyEnvString(dst *string, key string) {
@@ -337,7 +401,7 @@ func positiveInt64(n int64) bool               { return n > 0 }
 
 func applyFlags(cfg *Config, flags FlagSet) {
 	// String fields.
-	applyFlagString(&cfg.Target, flags.Target)
+	applyFlagProxyMode(cfg, flags)
 	applyFlagString(&cfg.AuthKey, flags.AuthKey)
 	applyFlagString(&cfg.LocalAddr, flags.LocalAddr)
 	applyFlagString(&cfg.Hostname, flags.Hostname)
@@ -345,6 +409,14 @@ func applyFlags(cfg *Config, flags FlagSet) {
 	applyFlagString(&cfg.ControlURL, flags.ControlURL)
 	applyFlagString(&cfg.HealthAddr, flags.HealthAddr)
 	applyFlagString(&cfg.LogFormat, flags.LogFormat)
+	for _, route := range flags.SOCKS5Routes {
+		source, destination, ok := strings.Cut(route, "=")
+		if !ok {
+			cfg.SOCKS5Routes[route] = ""
+			continue
+		}
+		cfg.SOCKS5Routes[source] = destination
+	}
 
 	// Duration fields — apply only if positive.
 	if flags.Timeout > 0 {
@@ -372,6 +444,18 @@ func applyFlags(cfg *Config, flags FlagSet) {
 	}
 	if flags.DialRetries != nil {
 		cfg.DialRetries = *flags.DialRetries
+	}
+}
+
+func applyFlagProxyMode(cfg *Config, flags FlagSet) {
+	if flags.Target != "" {
+		cfg.Target = flags.Target
+		cfg.SOCKS5Addr = ""
+		return
+	}
+	if flags.SOCKS5Addr != "" {
+		cfg.SOCKS5Addr = flags.SOCKS5Addr
+		cfg.Target = ""
 	}
 }
 
@@ -475,6 +559,52 @@ func validateTarget(target string) error {
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("target: invalid port %q", portStr)
+	}
+	return nil
+}
+
+func validateSOCKS5Addr(addr string) error {
+	if addr == "" {
+		return nil
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("SOCKS5 listener invalid format: %w", err)
+	}
+	ip := net.ParseIP(host)
+	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return fmt.Errorf("SOCKS5 listener must bind to loopback, got %q", host)
+	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return fmt.Errorf("SOCKS5 listener: invalid port %q", port)
+	}
+	return nil
+}
+
+func validateSOCKS5Routes(routes map[string]string) error {
+	for source, destination := range routes {
+		if err := validateRouteAddress(source); err != nil {
+			return fmt.Errorf("invalid SOCKS5 route source %q: %w", source, err)
+		}
+		if err := validateRouteAddress(destination); err != nil {
+			return fmt.Errorf("invalid SOCKS5 route destination %q: %w", destination, err)
+		}
+	}
+	return nil
+}
+
+func validateRouteAddress(address string) error {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	if host == "" {
+		return fmt.Errorf("host cannot be empty")
+	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return fmt.Errorf("invalid port %q", port)
 	}
 	return nil
 }

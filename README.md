@@ -54,6 +54,21 @@ ts-bridge --help
 
 > **Security Note:** Keys in environment variables or `.env` files are readable by child processes, and `--auth-key` is visible in the process list. For production, automation, and hardened setups, use `--auth-key-file` with either `init` or `connect`.
 
+### Dynamic mesh access
+
+Use one loopback SOCKS5 listener for SSH, kubectl, curl, or other clients that
+need multiple mesh destinations:
+
+```powershell
+.\ts-bridge.exe connect `
+  --auth-key-file C:\Users\user\.ts-bridge\authkey `
+  --socks5 127.0.0.1:1080
+```
+
+See
+[`docs/runbooks/guide-multi-target-socks5.md`](docs/runbooks/guide-multi-target-socks5.md)
+for SSH, kubectl, curl, and allow-listed route examples.
+
 **Using a named profile (recommended when the host uses a non-default port):**
 
 When the host runs `ts-bridge host setup` or `ts-bridge host check`, the output includes a shareable descriptor:
@@ -98,6 +113,7 @@ For automation, use `--json`: `ts-bridge host setup --json` and `ts-bridge host 
 |---|---|
 | **Zero-Admin VPN** | Connect from heavily restricted laptops without filing an IT ticket. |
 | **Professional CLI** | Cobra-based subcommands: `connect`, `import`, `discover`, `init`, `status`, `host`. Full `--help` and autocomplete. |
+| **Dynamic Mesh Proxy** | One loopback SOCKS5 listener reaches multiple permitted mesh destinations without a TUN adapter. |
 | **Headscale Support** | Compatible with open-source control planes (via `TS_CONTROL_URL`). |
 | **Multi-Instance** | Run multiple bridges concurrently to connect to different machines. |
 | **Ephemeral by Default** | Leaves no trace. The node is automatically removed from the network when the bridge closes. |

@@ -73,12 +73,12 @@ func warnEnvVar(key, value, reason string) {
 
 const (
 	// Default runtime values.
-	defaultLocalAddr     = "127.0.0.1:33389"
-	defaultHostname      = "ts-bridge"
-	defaultAutoPortRange = "33389-34388"
-	defaultTimeout       = 30 * time.Second
-	defaultDrainTimeout  = 15 * time.Second
-	defaultMaxConnections = 1000
+	defaultLocalAddr       = "127.0.0.1:33389"
+	defaultHostname        = "ts-bridge"
+	defaultAutoPortRange   = "33389-34388"
+	defaultTimeout         = 30 * time.Second
+	defaultDrainTimeout    = 15 * time.Second
+	defaultMaxConnections  = 1000
 	defaultDialRetries     = 3
 	defaultDialBackoffBase = 1 * time.Second
 	defaultDialBackoffMax  = 30 * time.Second
@@ -87,12 +87,14 @@ const (
 
 // Config holds the bridge configuration.
 type Config struct {
-	LocalAddr      string
-	Target         string
-	AuthKey        string // #nosec G117 -- internal struct, never serialized
-	Hostname       string
-	StateDir       string
-	ControlURL     string
+	LocalAddr       string
+	SOCKS5Addr      string
+	SOCKS5Routes    map[string]string
+	Target          string
+	AuthKey         string // #nosec G117 -- internal struct, never serialized
+	Hostname        string
+	StateDir        string
+	ControlURL      string
 	ConnectTimeout  time.Duration
 	DialTimeout     time.Duration
 	DrainTimeout    time.Duration
@@ -101,17 +103,17 @@ type Config struct {
 	DialBackoffBase time.Duration
 	DialBackoffMax  time.Duration
 	MaxConnections  int64
-	HealthAddr     string
-	Verbose        bool
-	Quiet          bool
-	LogFormat      string
-	AutoInstance   bool
-	EphemeralState bool
+	HealthAddr      string
+	Verbose         bool
+	Quiet           bool
+	LogFormat       string
+	AutoInstance    bool
+	EphemeralState  bool
 }
 
 // LoadConfig parses environment variables into a Config struct.
 func LoadConfig(verboseFlag bool) (Config, error) {
-	target, err := parseTarget()
+	target, socks5Addr, err := loadProxyModeFromEnv()
 	if err != nil {
 		return Config{}, err
 	}
@@ -147,12 +149,13 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 	}
 
 	cfg := Config{
-		LocalAddr:      os.Getenv("TS_LOCAL_ADDR"),
-		Target:         target,
-		AuthKey:        authKey,
-		Hostname:       os.Getenv("TS_HOSTNAME"),
-		StateDir:       os.Getenv("TS_STATE_DIR"),
-		ControlURL:     os.Getenv("TS_CONTROL_URL"),
+		LocalAddr:       os.Getenv("TS_LOCAL_ADDR"),
+		SOCKS5Addr:      socks5Addr,
+		Target:          target,
+		AuthKey:         authKey,
+		Hostname:        os.Getenv("TS_HOSTNAME"),
+		StateDir:        os.Getenv("TS_STATE_DIR"),
+		ControlURL:      os.Getenv("TS_CONTROL_URL"),
 		ConnectTimeout:  timeout,
 		DialTimeout:     dialTimeout,
 		DrainTimeout:    drainTimeout,
@@ -161,9 +164,9 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 		DialBackoffBase: dialBackoffBase,
 		DialBackoffMax:  dialBackoffMax,
 		MaxConnections:  maxConns,
-		HealthAddr:     os.Getenv("TS_HEALTH_ADDR"),
-		Verbose:        verboseFlag || parseBoolEnv(os.Getenv("TS_VERBOSE")),
-		LogFormat:      EnvOr("TS_LOG_FORMAT", "text"),
+		HealthAddr:      os.Getenv("TS_HEALTH_ADDR"),
+		Verbose:         verboseFlag || parseBoolEnv(os.Getenv("TS_VERBOSE")),
+		LogFormat:       EnvOr("TS_LOG_FORMAT", "text"),
 	}
 
 	if err := applyAutoInstanceConfig(&cfg); err != nil {
@@ -184,11 +187,27 @@ func LoadConfig(verboseFlag bool) (Config, error) {
 	// Normalize before validating so the value we check is the value we persist
 	// and hand to tsnet (#209 review).
 	cfg.ControlURL = strings.TrimSpace(cfg.ControlURL)
+	if err := validateSOCKS5Addr(cfg.SOCKS5Addr); err != nil {
+		return Config{}, err
+	}
 	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
 		return Config{}, err
 	}
 
 	return cfg, nil
+}
+
+func loadProxyModeFromEnv() (string, string, error) {
+	targetValue := os.Getenv("TS_TARGET")
+	socks5Addr := os.Getenv("TS_SOCKS5_ADDR")
+	if err := validateModeLayer(targetValue, socks5Addr); err != nil {
+		return "", "", fmt.Errorf("environment: %w", err)
+	}
+	if socks5Addr != "" {
+		return "", socks5Addr, nil
+	}
+	target, err := parseTarget()
+	return target, "", err
 }
 
 func parseDurationEnv(key string, fallback time.Duration) (time.Duration, error) {
@@ -284,8 +303,6 @@ func parseDialConfig() (retries int, base, maxBackoff time.Duration, err error) 
 
 	return retries, base, maxBackoff, nil
 }
-
-
 
 func parseTarget() (string, error) {
 	target := os.Getenv("TS_TARGET")
