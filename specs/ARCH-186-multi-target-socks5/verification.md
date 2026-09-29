@@ -35,5 +35,25 @@ artifact rather than the document that describes it.
   later unlisted navigation remains direct and cannot use the mesh route.
 - [x] Edge launch arguments use an isolated profile, local PAC, and resolver
   rules without changing Windows hosts, DNS, or system proxy.
-- [ ] A live Apps/private-forge smoke runs using an auth-key file and records
+- [x] A live Apps/private-forge smoke runs using an auth-key file and records
   no credentials or confidential forge content.
+
+## Live KubeLab Browser Smoke
+
+Date: 2026-09-28
+
+- Control plane: `https://vpn.kubelab.live`
+- Browser origin: `gitea.kubelab.live:443`
+- Mesh target: `kubelab-vps:443`
+- Credential handling: a freshly generated Headscale key was supplied only
+  through a local auth-key file; its value was never read or printed.
+- Browser result: the isolated Edge profile launched and the operator confirmed
+  the private forge was reachable.
+- Bridge result:
+  `READY local=127.0.0.1:1080 target=dynamic-socks5`.
+- Independent route probe:
+  `curl --socks5-hostname 127.0.0.1:1080 --output NUL --write-out "%{http_code}"`
+  `https://gitea.kubelab.live/api/healthz` returned HTTP `200` with exit code
+  `0`; response content was discarded.
+- Independent adversarial review: waived by the operator on 2026-09-28 because
+  no approved reviewer was operationally available.

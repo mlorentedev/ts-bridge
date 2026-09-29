@@ -6,6 +6,8 @@ created: "2026-08-14"
 issue: "ts-bridge#186"
 tags: [spec, architecture, networking, socks5, multi-target, kubelab]
 template_version: "1.0"
+review: waived
+review_waived_reason: "Operator explicitly accepted proceeding without the independent review on 2026-09-28 because no approved reviewer was operationally available."
 ---
 
 # ARCH-186: Multi-Target Connectivity via SOCKS5 Dynamic Proxy
