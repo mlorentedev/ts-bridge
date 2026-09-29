@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 WORKFLOW="$ROOT/.github/workflows/site-pr.yml"
+PAGES_ACTION_RE='actions/(upload|deploy)-pages([-@]|$)'
 
 fail() {
   echo "test-site-pr-workflow: $*" >&2
@@ -18,6 +19,11 @@ reject() {
 }
 
 [ -f "$WORKFLOW" ] || fail "workflow not found at $WORKFLOW"
+
+for action in 'actions/upload-pages-artifact@sha' 'actions/deploy-pages@sha'; do
+  grep -qE -- "$PAGES_ACTION_RE" <<<"$action" ||
+    fail "Pages action matcher does not recognize $action"
+done
 
 require '^[[:space:]]*pull_request:' 'pull_request trigger'
 require "^[[:space:]]*- 'site/\\*\\*'" 'site path filter'
@@ -35,6 +41,6 @@ require 'run:[[:space:]]*npm run build' 'site build'
 
 reject 'pages:[[:space:]]*write' 'Pages write permission'
 reject 'id-token:[[:space:]]*write' 'OIDC write permission'
-reject 'actions/(upload|deploy)-pages-' 'Pages upload or deployment action'
+reject "$PAGES_ACTION_RE" 'Pages upload or deployment action'
 
 echo "test-site-pr-workflow: OK"

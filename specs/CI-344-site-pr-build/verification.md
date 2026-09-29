@@ -23,6 +23,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - Live PR proof: #381 added `site-build`; the valid workflow revision passed.
 - Negative CI proof: commit `c6f548a` added an unclosed MDX element and `site-build` failed as required ([run 36612632616, job 109557629253](https://github.com/mlorentedev/ts-bridge/actions/runs/36612632616/job/109557629253)).
 - Recovery proof: commit `c270a38` removed only the deliberate MDX break and the same local production build returned to green.
+- CodeRabbit review: applied the deploy-action matcher fix and added a self-test for both `actions/upload-pages-artifact@…` and `actions/deploy-pages@…`.
 - Two-shell permission fixtures: bash cases passed; local Windows lacks zsh, which `repo-hygiene.yml` installs before running the suite in CI.
 - No regressions in existing test suite: yes for the directly affected workflow guards.
 
