@@ -161,22 +161,52 @@ func TestMergeRejectsInvalidBootstrapConfig(t *testing.T) {
 }
 
 func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
-	t.Setenv("TS_BOOTSTRAP_SSH", "")
-	t.Setenv("TS_BOOTSTRAP_SOCKS_ADDR", "")
-	t.Setenv("TS_TARGET", "")
-	t.Setenv("TS_AUTHKEY", "")
-	t.Setenv("TS_CONTROL_URL", "")
+	tests := []struct {
+		name  string
+		flags FlagSet
+	}{
+		{
+			name: "exact local address",
+			flags: FlagSet{
+				LocalAddr:          "127.0.0.1:1055",
+				BootstrapSOCKSAddr: "127.0.0.1:1055",
+				ManualMode:         true,
+			},
+		},
+		{
+			name: "equivalent IPv6 address",
+			flags: FlagSet{
+				LocalAddr:          "[0:0:0:0:0:0:0:1]:1055",
+				BootstrapSOCKSAddr: "[::1]:1055",
+				ManualMode:         true,
+			},
+		},
+		{
+			name: "auto-derived local address",
+			flags: FlagSet{
+				BootstrapSOCKSAddr: "127.0.0.1:1055",
+				PortRange:          "1055-1055",
+			},
+		},
+	}
 
-	_, err := Merge(PartialConfig{}, FlagSet{
-		Target:             "mesh-host:22",
-		AuthKey:            "tskey-auth-test",
-		ControlURL:         "https://vpn.example.com",
-		LocalAddr:          "127.0.0.1:1055",
-		BootstrapSSH:       "deployer@bastion.example.com",
-		BootstrapSOCKSAddr: "127.0.0.1:1055",
-	})
-	if err == nil || !strings.Contains(err.Error(), "conflicts with bridge listener") {
-		t.Fatalf("Merge() error = %v, want listener collision", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TS_BOOTSTRAP_SSH", "")
+			t.Setenv("TS_BOOTSTRAP_SOCKS_ADDR", "")
+			t.Setenv("TS_TARGET", "")
+			t.Setenv("TS_AUTHKEY", "")
+			t.Setenv("TS_CONTROL_URL", "")
+			tt.flags.Target = "mesh-host:22"
+			tt.flags.AuthKey = "tskey-auth-test"
+			tt.flags.ControlURL = "https://vpn.example.com"
+			tt.flags.BootstrapSSH = "deployer@bastion.example.com"
+
+			_, err := Merge(PartialConfig{}, tt.flags)
+			if err == nil || !strings.Contains(err.Error(), "conflicts with bridge listener") {
+				t.Fatalf("Merge() error = %v, want listener collision", err)
+			}
+		})
 	}
 }
 

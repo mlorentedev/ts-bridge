@@ -219,7 +219,8 @@ func runBridge(
 		healthServer = health.StartServer(cfg.HealthAddr, &tunnelStatus, logger)
 	}
 
-	go handleShutdown(ctx, &tunnelStatus, listener, healthServer) //nolint:gosec // ctx is the run-scoped cancellation context.
+	// #nosec G118 -- ctx is the run-scoped cancellation context, not Background/TODO.
+	go handleShutdown(ctx, &tunnelStatus, listener, healthServer)
 
 	tunnelStatus.MarkReady()
 	var activeConns sync.WaitGroup

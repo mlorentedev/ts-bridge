@@ -114,6 +114,9 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	// Derive auto-instance values (LocalAddr, Hostname, StateDir) only
 	// when auto-mode is active (BUG-020).
 	applyAutoInstance(&cfg, flags)
+	if err := validateBootstrapListenerCollision(cfg); err != nil {
+		return Config{}, err
+	}
 
 	// Apply default hostname as a final fallback — after auto-instance
 	// derivation so that deriveAutoHostname can still fire when
@@ -618,10 +621,31 @@ func normalizeBootstrapConfig(cfg *Config) error {
 	if err := validateLoopbackListener(cfg.BootstrapSOCKSAddr, "bootstrap SOCKS"); err != nil {
 		return err
 	}
-	if cfg.BootstrapSOCKSAddr == cfg.LocalAddr || cfg.BootstrapSOCKSAddr == cfg.SOCKS5Addr {
+	return nil
+}
+
+func validateBootstrapListenerCollision(cfg Config) error {
+	if sameListenerEndpoint(cfg.BootstrapSOCKSAddr, cfg.LocalAddr) ||
+		sameListenerEndpoint(cfg.BootstrapSOCKSAddr, cfg.SOCKS5Addr) {
 		return fmt.Errorf("bootstrap SOCKS listener %q conflicts with bridge listener", cfg.BootstrapSOCKSAddr)
 	}
 	return nil
+}
+
+func sameListenerEndpoint(left, right string) bool {
+	if left == "" || right == "" {
+		return false
+	}
+	leftHost, leftPort, leftErr := net.SplitHostPort(left)
+	rightHost, rightPort, rightErr := net.SplitHostPort(right)
+	if leftErr != nil || rightErr != nil || leftPort != rightPort {
+		return false
+	}
+	if strings.EqualFold(leftHost, rightHost) {
+		return true
+	}
+	leftIP, rightIP := net.ParseIP(leftHost), net.ParseIP(rightHost)
+	return leftIP != nil && rightIP != nil && leftIP.Equal(rightIP)
 }
 
 func validateSOCKS5Routes(routes map[string]string) error {
