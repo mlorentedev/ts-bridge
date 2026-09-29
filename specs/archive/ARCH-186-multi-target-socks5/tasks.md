@@ -48,7 +48,7 @@ template_version: "1.0"
 
 ## Phase 3: Live Evidence (Manual, No Secrets)
 
-- [ ] [AC6] With a fresh key stored in an auth-key file, use the approved
+- [x] [AC6] With a fresh key stored in an auth-key file, use the approved
   Apps descriptor to verify the canonical Gitea URL in the isolated browser
   profile. Record only the command result and URL, never the key, endpoint
   credential, or Gitea content.
