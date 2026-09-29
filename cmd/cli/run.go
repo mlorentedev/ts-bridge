@@ -18,6 +18,7 @@ import (
 
 	"tailscale.com/tsnet"
 
+	"ts-bridge/internal/bootstrapssh"
 	"ts-bridge/internal/config"
 	"ts-bridge/internal/health"
 	"ts-bridge/internal/logging"
@@ -39,6 +40,14 @@ var logDir string
 
 // logging is the dual-output logger instance.
 var loggingInstance *logging.Logger
+
+type controlBootstrap interface {
+	Done() <-chan struct{}
+	Err() error
+	Close() error
+}
+
+var bootstrapStarter = startConfiguredBootstrap
 
 // InitLogger initializes the dual structured logger (console + file).
 func InitLogger(cfg config.Config) {
@@ -130,11 +139,29 @@ func Run(cfg config.Config) error {
 		return err
 	}
 
+	sigCtx, sigCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancelWithCause := context.WithCancelCause(sigCtx)
+	defer func() {
+		cancelWithCause(nil)
+		sigCancel()
+		if loggingInstance != nil {
+			// #nosec G104 // cleanup: ignore close errors.
+			loggingInstance.Close()
+		}
+	}()
+
 	if cfg.EphemeralState {
 		defer cleanupEphemeralStateDir(cfg.StateDir)
 	}
 
-	server, err := initTailscale(cfg)
+	closeBootstrap, err := startBootstrapLifecycle(ctx, cancelWithCause, cfg)
+	if err != nil {
+		emitError(os.Stderr, reasonSSHBootstrapFailed, err.Error())
+		return err
+	}
+	defer closeBootstrap()
+
+	server, err := initTailscale(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -144,6 +171,11 @@ func Run(cfg config.Config) error {
 	if err != nil {
 		_ = server.Close()
 		return fmt.Errorf("bind %s: %w", listenAddr, err)
+	}
+	if cause := context.Cause(ctx); cause != nil {
+		_ = listener.Close()
+		_ = server.Close()
+		return cause
 	}
 
 	// Print banner BEFORE starting the health server to avoid concurrent
@@ -156,24 +188,17 @@ func Run(cfg config.Config) error {
 	// (the OS queues connections until AcceptLoop runs), so "READY" is
 	// accurate at this point.
 	writeStartupBanner(os.Stdout, cfg)
-	emitReady(os.Stdout, listener.Addr().String(), readyTarget(cfg))
+	if err := emitReadyIfActive(ctx, os.Stdout, listener.Addr().String(), readyTarget(cfg)); err != nil {
+		_ = listener.Close()
+		_ = server.Close()
+		return err
+	}
 
 	var tunnelStatus health.TunnelStatus
 	var healthServer *http.Server
 	if cfg.HealthAddr != "" {
 		healthServer = health.StartServer(cfg.HealthAddr, &tunnelStatus, logger)
 	}
-
-	sigCtx, sigCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	ctx, cancelWithCause := context.WithCancelCause(sigCtx)
-	defer func() {
-		cancelWithCause(nil)
-		sigCancel()
-		if loggingInstance != nil {
-			// #nosec G104 // cleanup: ignore close errors.
-			loggingInstance.Close()
-		}
-	}()
 
 	go handleShutdown(ctx, &tunnelStatus, listener, healthServer)
 
@@ -205,7 +230,72 @@ func Run(cfg config.Config) error {
 		logger.Error("error closing tsnet server", "error", err)
 	}
 
+	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
+		return cause
+	}
 	return errAccept
+}
+
+func startBootstrapLifecycle(
+	ctx context.Context,
+	cancel context.CancelCauseFunc,
+	cfg config.Config,
+) (func(), error) {
+	bootstrap, err := bootstrapStarter(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if bootstrap == nil {
+		return func() {}, nil
+	}
+	go monitorBootstrap(ctx, bootstrap, cancel)
+	return func() {
+		_ = bootstrap.Close()
+	}, nil
+}
+
+func startConfiguredBootstrap(ctx context.Context, cfg config.Config) (controlBootstrap, error) {
+	if cfg.BootstrapSSH == "" {
+		return nil, nil
+	}
+
+	tunnel, err := bootstrapssh.Start(ctx, bootstrapssh.Config{
+		Endpoint:     cfg.BootstrapSSH,
+		SOCKSAddr:    cfg.BootstrapSOCKSAddr,
+		ReadyTimeout: cfg.ConnectTimeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("start SSH control-plane bootstrap: %w", err)
+	}
+	if err := bootstrapssh.ConfigureControlProxy(cfg.ControlURL, cfg.BootstrapSOCKSAddr); err != nil {
+		_ = tunnel.Close()
+		return nil, fmt.Errorf("configure SSH control-plane bootstrap: %w", err)
+	}
+	logger.Info("SSH control-plane bootstrap ready",
+		"endpoint", cfg.BootstrapSSH,
+		"socks_addr", cfg.BootstrapSOCKSAddr,
+		"control_url", cfg.ControlURL)
+	return tunnel, nil
+}
+
+func monitorBootstrap(
+	ctx context.Context,
+	tunnel controlBootstrap,
+	cancel context.CancelCauseFunc,
+) {
+	select {
+	case <-ctx.Done():
+		return
+	case <-tunnel.Done():
+		if ctx.Err() != nil {
+			return
+		}
+		err := tunnel.Err()
+		if err == nil {
+			err = errors.New("process exited without an error")
+		}
+		cancel(fmt.Errorf("SSH bootstrap exited: %w", err))
+	}
 }
 
 func socksTargetResolver(cfg config.Config) (proxy.SOCKSTargetResolver, error) {
@@ -230,7 +320,7 @@ func readyTarget(cfg config.Config) string {
 }
 
 //nolint:unused // wired into Runner = Run
-func initTailscale(cfg config.Config) (*tsnet.Server, error) {
+func initTailscale(parentCtx context.Context, cfg config.Config) (*tsnet.Server, error) {
 	var tsnetLogf func(string, ...any)
 	if loggingInstance != nil {
 		tsnetLogf = func(format string, args ...any) {
@@ -249,11 +339,15 @@ func initTailscale(cfg config.Config) (*tsnet.Server, error) {
 		Logf:       tsnetLogf,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.ConnectTimeout)
+	ctx, cancel := context.WithTimeout(parentCtx, cfg.ConnectTimeout)
 	defer cancel()
 
 	status, err := server.Up(ctx)
 	if err != nil {
+		if cause := context.Cause(parentCtx); cause != nil {
+			_ = server.Close()
+			return nil, cause
+		}
 		reason, hint, remediation := diagnoseTailscaleInitError(err)
 		// Machine-readable startup-failure signal for programmatic callers
 		// (#204) — always emitted (reason falls back to "unknown"), before

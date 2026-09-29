@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -18,6 +19,7 @@ import (
 const (
 	reasonBadAuthKey              = "bad_authkey"
 	reasonControlPlaneUnreachable = "control_plane_unreachable"
+	reasonSSHBootstrapFailed      = "ssh_bootstrap_failed"
 	reasonUnknown                 = "unknown"
 )
 
@@ -56,6 +58,14 @@ func escapeSignalDetail(s string) string {
 // emitReady writes the READY line to w (stdout in production).
 func emitReady(w io.Writer, localAddr, target string) {
 	fmt.Fprintln(w, formatReadyLine(localAddr, target))
+}
+
+func emitReadyIfActive(ctx context.Context, w io.Writer, localAddr, target string) error {
+	if cause := context.Cause(ctx); cause != nil {
+		return cause
+	}
+	emitReady(w, localAddr, target)
+	return nil
 }
 
 // emitError writes the ERROR line to w (stderr in production). detail is

@@ -145,6 +145,25 @@ TS_TARGET=100.82.151.104:3389
 
 When using a self-hosted Headscale instance, MagicDNS must be explicitly enabled in the Headscale configuration. Without it, fall back to IP-based targets.
 
+### Headscale control plane blocked by the local network
+
+If the local network DNS-sinkholes or TLS-inspects the Headscale control plane
+but an SSH bastion can reach it, bootstrap the control connection through the
+system OpenSSH client:
+
+```bash
+ts-bridge connect \
+  --control-url https://vpn.example.com \
+  --bootstrap-ssh deployer@bastion.example.com \
+  --auth-key-file /path/to/headscale-authkey \
+  --target mesh-host:3389
+```
+
+ts-bridge starts a loopback SOCKS proxy, resolves the control-plane hostname
+from the SSH server, and preserves the original hostname for TLS verification
+without editing the hosts file. SSH host-key verification remains enabled.
+Use `--bootstrap-socks-addr` only when the default `127.0.0.1:1055` is occupied.
+
 ## Before/After (The Workflow)
 
 ### Before (Native Tailscale on locked-down PC)
@@ -194,10 +213,10 @@ ERROR reason=bad_authkey detail="invalid key: unable to validate API key"
 ```
 
 `reason` is one of a stable set: `bad_authkey`, `control_plane_unreachable`,
-`unknown`. Read stdout line-by-line and react on the `READY ` prefix; on early
-exit, read the `reason` token instead of guessing from the exit code (which stays
-a generic `1`). Pass `--quiet` to suppress the decorative banner — the `READY`
-and `ERROR` lines still print.
+`ssh_bootstrap_failed`, `unknown`. Read stdout line-by-line and react on the
+`READY ` prefix; on early exit, read the `reason` token instead of guessing from
+the exit code (which stays a generic `1`). Pass `--quiet` to suppress the
+decorative banner — the `READY` and `ERROR` lines still print.
 
 ## Configuration
 
@@ -208,6 +227,8 @@ and `ERROR` lines still print.
 | `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local bind address. |
 | `TS_HOSTNAME` | — | Tailscale hostname (default: auto-derived from target). |
 | `TS_CONTROL_URL` | — | Custom control plane URL for Headscale. |
+| `TS_BOOTSTRAP_SSH` | — | OpenSSH endpoint (`user@host[:port]`) used to reach a blocked custom control plane. |
+| `TS_BOOTSTRAP_SOCKS_ADDR` | `127.0.0.1:1055` | Loopback SOCKS listener created by the SSH bootstrap. |
 | `TS_HEALTH_ADDR` | — | Enable health/metrics HTTP server. |
 | `TS_VERBOSE` | `false` | Debug logging. |
 | `TS_LOG_FORMAT` | `text` | `text` (console) or `json` (file). |

@@ -109,6 +109,24 @@ func TestCollectFlagsSOCKS5(t *testing.T) {
 	}
 }
 
+func TestCollectFlagsBootstrapSSH(t *testing.T) {
+	cmd := newConnectCmd()
+	if err := cmd.Flags().Set("bootstrap-ssh", "deployer@bastion.example.com:2222"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("bootstrap-socks-addr", "127.0.0.1:1101"); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := collectFlags(cmd)
+	if fs.BootstrapSSH != "deployer@bastion.example.com:2222" {
+		t.Fatalf("BootstrapSSH = %q", fs.BootstrapSSH)
+	}
+	if fs.BootstrapSOCKSAddr != "127.0.0.1:1101" {
+		t.Fatalf("BootstrapSOCKSAddr = %q", fs.BootstrapSOCKSAddr)
+	}
+}
+
 func TestAuthKeyFilePrecedence(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyFile := tmpDir + "/auth.key"

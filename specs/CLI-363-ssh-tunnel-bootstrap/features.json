@@ -1,0 +1,30 @@
+[
+  {
+    "id": "CLI-363-ssh-tunnel-bootstrap-f1",
+    "behavior": "bootstrap SSH configuration follows flags over environment over YAML and rejects unsafe inputs",
+    "verification": "go test ./internal/config ./cmd/cli -run 'Test.*Bootstrap'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CLI-363-ssh-tunnel-bootstrap-f2",
+    "behavior": "OpenSSH dynamic forwarding routes only the original control-plane hostname through SOCKS without a hosts-file change",
+    "verification": "go test ./internal/bootstrapssh -run 'Test(Start|Proxy)'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CLI-363-ssh-tunnel-bootstrap-f3",
+    "behavior": "SSH startup and runtime failures are actionable and shutdown terminates the child process without a false READY signal",
+    "verification": "go test ./internal/bootstrapssh ./cmd/cli -run 'Test.*Bootstrap.*(Failure|Exit|Shutdown|Ready)'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CLI-363-ssh-tunnel-bootstrap-f4",
+    "behavior": "operator documentation and ADR-005 describe the supported SSH bootstrap mode and security boundaries",
+    "verification": "go test ./cmd/cli -run 'Test.*Bootstrap.*Documentation'",
+    "state": "pending",
+    "evidence": ""
+  }
+]

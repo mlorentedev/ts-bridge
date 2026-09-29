@@ -52,6 +52,8 @@ Examples:
 	cmd.Flags().String("hostname", "", "Tailscale hostname")
 	cmd.Flags().String("state-dir", "", "State directory")
 	cmd.Flags().String("control-url", "", "Custom control plane URL")
+	cmd.Flags().String("bootstrap-ssh", "", "Reach the control plane through OpenSSH user@host[:port]")
+	cmd.Flags().String("bootstrap-socks-addr", "", "Loopback SOCKS address used by SSH bootstrap")
 
 	// Timeouts.
 	cmd.Flags().Duration("timeout", 0, "Connect timeout for tsnet init")
@@ -170,6 +172,8 @@ func collectFlags(cmd *cobra.Command) config.FlagSet {
 	fs.Hostname, _ = cmd.Flags().GetString("hostname")
 	fs.StateDir, _ = cmd.Flags().GetString("state-dir")
 	fs.ControlURL, _ = cmd.Flags().GetString("control-url")
+	fs.BootstrapSSH, _ = cmd.Flags().GetString("bootstrap-ssh")
+	fs.BootstrapSOCKSAddr, _ = cmd.Flags().GetString("bootstrap-socks-addr")
 	fs.HealthAddr, _ = cmd.Flags().GetString("health-addr")
 	fs.LogFormat, _ = cmd.Flags().GetString("log-format")
 	fs.PortRange, _ = cmd.Flags().GetString("port-range")

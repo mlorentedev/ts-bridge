@@ -554,6 +554,8 @@ func buildEnvConfigContent(f initFlags) string {
 	sb.WriteString("#\n")
 	sb.WriteString("# TS_LOCAL_ADDR=127.0.0.1:33389   # Local bind address\n")
 	sb.WriteString("# TS_CONTROL_URL=                  # Custom control plane\n")
+	sb.WriteString("# TS_BOOTSTRAP_SSH=                # OpenSSH endpoint for blocked control plane\n")
+	sb.WriteString("# TS_BOOTSTRAP_SOCKS_ADDR=127.0.0.1:1055 # Loopback SOCKS listener\n")
 	sb.WriteString("# TS_IDLE_TIMEOUT=                 # Close idle conns after this duration\n")
 	sb.WriteString("# TS_DIAL_TIMEOUT=5s               # Per-connection target dial timeout\n")
 	sb.WriteString("# TS_DIAL_RETRIES=3                # Max retries for transient dial failures\n")
@@ -604,6 +606,7 @@ func buildEnvContent(authKey, envPath string) string {
 	// Write preserved vars in a stable order.
 	for _, key := range []string{"TS_TARGET", "TS_INSTANCE_NAME", "TS_PORT_RANGE",
 		"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
+		"TS_BOOTSTRAP_SSH", "TS_BOOTSTRAP_SOCKS_ADDR",
 		"TS_HEALTH_ADDR", "TS_LOG_FORMAT", "TS_IDLE_TIMEOUT", "TS_DIAL_TIMEOUT",
 		"TS_DIAL_RETRIES", "TS_DIAL_BACKOFF_BASE", "TS_DIAL_BACKOFF_MAX",
 		"TS_MAX_CONNECTIONS", "TS_TIMEOUT", "TS_DRAIN_TIMEOUT", "TS_VERBOSE"} {
@@ -620,6 +623,7 @@ func buildEnvContent(authKey, envPath string) string {
 		found := false
 		for _, known := range []string{"TS_TARGET", "TS_INSTANCE_NAME", "TS_PORT_RANGE",
 			"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
+			"TS_BOOTSTRAP_SSH", "TS_BOOTSTRAP_SOCKS_ADDR",
 			"TS_HEALTH_ADDR", "TS_LOG_FORMAT", "TS_IDLE_TIMEOUT", "TS_DIAL_TIMEOUT",
 			"TS_DIAL_RETRIES", "TS_DIAL_BACKOFF_BASE", "TS_DIAL_BACKOFF_MAX",
 			"TS_MAX_CONNECTIONS", "TS_TIMEOUT", "TS_DRAIN_TIMEOUT", "TS_VERBOSE"} {
