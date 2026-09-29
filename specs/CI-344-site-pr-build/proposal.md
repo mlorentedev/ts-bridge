@@ -48,9 +48,9 @@ Failure modes, dependencies, and unknowns to clarify before implementation. If a
 
 Observable outcomes. Each must be testable.
 
-- [ ] A pull request changing `site/**` or the site PR workflow receives a `site-build` job that checks out the proposed revision.
-- [ ] `site-build` uses Node 22, `npm ci`, and `npm run build` under `site/`, with checkout credentials disabled and only `contents: read`.
-- [ ] Pull requests cannot upload or deploy a Pages artifact; the existing push-only Pages deployment remains unchanged.
+- [x] A pull request changing `site/**` or the site PR workflow receives a `site-build` job that checks out the proposed revision.
+- [x] `site-build` uses Node 22, `npm ci`, and `npm run build` under `site/`, with checkout credentials disabled and only `contents: read`.
+- [x] Pull requests cannot upload or deploy a Pages artifact; the existing push-only Pages deployment remains unchanged.
 
 ## References
 

@@ -20,6 +20,9 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - Workflow guards: `check-actions-pinned.sh` -> 9 workflows OK; `check-workflow-permissions.sh` -> 12/12 checkouts credential-less.
 - Lint: `actionlint -shellcheck=shellcheck` -> exit 0.
 - Site build: `npm ci --ignore-scripts && npm run build` -> 5 pages, Pagefind and sitemap generated; existing i18n/404 warnings only.
+- Live PR proof: #381 added `site-build`; the valid workflow revision passed.
+- Negative CI proof: commit `c6f548a` added an unclosed MDX element and `site-build` failed as required ([run 36612632616, job 109557629253](https://github.com/mlorentedev/ts-bridge/actions/runs/36612632616/job/109557629253)).
+- Recovery proof: commit `c270a38` removed only the deliberate MDX break and the same local production build returned to green.
 - Two-shell permission fixtures: bash cases passed; local Windows lacks zsh, which `repo-hygiene.yml` installs before running the suite in CI.
 - No regressions in existing test suite: yes for the directly affected workflow guards.
 
