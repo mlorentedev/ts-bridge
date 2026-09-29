@@ -16,10 +16,8 @@ import (
 	"tailscale.com/net/tshttpproxy"
 )
 
-const (
-	defaultReadyTimeout = 30 * time.Second
-	defaultPollInterval = 50 * time.Millisecond
-)
+const defaultReadyTimeout = 30 * time.Second
+const defaultPollInterval = 50 * time.Millisecond
 
 type Config struct {
 	Endpoint     string
@@ -41,11 +39,10 @@ type Tunnel struct {
 }
 
 func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
-	var dialer net.Dialer
 	return start(ctx, cfg, dependencies{
 		lookPath:       exec.LookPath,
 		commandContext: exec.CommandContext,
-		dialContext:    dialer.DialContext,
+		dialContext:    new(net.Dialer).DialContext,
 		pollInterval:   defaultPollInterval,
 	})
 }
@@ -101,13 +98,13 @@ func waitUntilReady(ctx context.Context, tunnel *Tunnel, cfg Config, deps depend
 		pollInterval = defaultPollInterval
 	}
 
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
+	readyCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
-		conn, err := deps.dialContext(ctx, "tcp", cfg.SOCKSAddr)
+		conn, err := deps.dialContext(readyCtx, "tcp", cfg.SOCKSAddr)
 		if err == nil {
 			_ = conn.Close()
 			select {
@@ -119,12 +116,13 @@ func waitUntilReady(ctx context.Context, tunnel *Tunnel, cfg Config, deps depend
 		}
 
 		select {
-		case <-ctx.Done():
-			return fmt.Errorf("wait for OpenSSH bootstrap: %w", ctx.Err())
+		case <-readyCtx.Done():
+			if ctx.Err() != nil {
+				return fmt.Errorf("wait for OpenSSH bootstrap: %w", ctx.Err())
+			}
+			return fmt.Errorf("OpenSSH bootstrap SOCKS listener %s was not ready within %s", cfg.SOCKSAddr, timeout)
 		case <-tunnel.Done():
 			return exitBeforeReadyError(tunnel.Err())
-		case <-timer.C:
-			return fmt.Errorf("OpenSSH bootstrap SOCKS listener %s was not ready within %s", cfg.SOCKSAddr, timeout)
 		case <-ticker.C:
 		}
 	}
@@ -149,8 +147,13 @@ func buildSSHArgs(endpoint, socksAddr string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, _, err := net.SplitHostPort(socksAddr); err != nil {
+	socksHost, _, err := net.SplitHostPort(socksAddr)
+	if err != nil {
 		return nil, fmt.Errorf("invalid bootstrap SOCKS address %q: %w", socksAddr, err)
+	}
+	ip := net.ParseIP(socksHost)
+	if socksHost != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return nil, fmt.Errorf("bootstrap SOCKS listener must bind to loopback, got %q", socksHost)
 	}
 
 	args := []string{
@@ -281,9 +284,6 @@ func controlProxyFunc(
 	}, nil
 }
 
-// ConfigureControlProxy routes only the configured control-plane hostname
-// through the SSH SOCKS listener and preserves existing proxy behavior for all
-// other URLs.
 func ConfigureControlProxy(controlURL, socksAddr string) error {
 	fallback := func(requestURL *url.URL) (*url.URL, error) {
 		return http.ProxyFromEnvironment(&http.Request{URL: requestURL})

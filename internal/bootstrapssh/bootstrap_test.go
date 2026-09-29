@@ -81,6 +81,13 @@ func TestBuildSSHArgs(t *testing.T) {
 	}
 }
 
+func TestBuildSSHArgsRejectsNonLoopbackSOCKSAddress(t *testing.T) {
+	_, err := buildSSHArgs("bastion.example.com", "0.0.0.0:1055")
+	if err == nil || !strings.Contains(err.Error(), "must bind to loopback") {
+		t.Fatalf("buildSSHArgs() error = %v", err)
+	}
+}
+
 func TestStartWaitsForSOCKSAndClosesProcess(t *testing.T) {
 	started := make(chan struct{})
 	deps := dependencies{
@@ -218,6 +225,45 @@ func TestStartReportsMissingOpenSSH(t *testing.T) {
 	}, deps)
 	if err == nil || !strings.Contains(err.Error(), "OpenSSH executable") {
 		t.Fatalf("start() error = %v", err)
+	}
+}
+
+func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := listener.Addr().String()
+	_ = listener.Close()
+
+	deps := dependencies{
+		lookPath: func(string) (string, error) { return "ssh", nil },
+		commandContext: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+			//nolint:gosec // os.Args[0] and the test selector are fixed test-process inputs.
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestSSHHelperProcess")
+			cmd.Env = append(os.Environ(), "TS_BRIDGE_SSH_HELPER=wait")
+			return cmd
+		},
+		dialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+		pollInterval: time.Millisecond,
+	}
+
+	startedAt := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	_, err = start(ctx, Config{
+		Endpoint:     "bastion.example.com",
+		SOCKSAddr:    addr,
+		ReadyTimeout: 20 * time.Millisecond,
+	}, deps)
+	if err == nil || !strings.Contains(err.Error(), "was not ready within 20ms") {
+		t.Fatalf("start() error = %v", err)
+	}
+	if elapsed := time.Since(startedAt); elapsed > 200*time.Millisecond {
+		t.Fatalf("readiness timeout took %s, want <= 200ms", elapsed)
 	}
 }
 
