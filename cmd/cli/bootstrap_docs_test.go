@@ -32,6 +32,7 @@ func TestBootstrapSSHDocumentation(t *testing.T) {
 		},
 		"docs/lessons/lesson-014-corporate-tls-inspection-breaks-headscale-tcp.md": {
 			"--bootstrap-ssh",
+			"For this DNS-sinkhole case",
 		},
 	}
 

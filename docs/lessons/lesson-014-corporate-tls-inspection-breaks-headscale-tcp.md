@@ -42,6 +42,10 @@ registered or "uncategorized" domains by policy default, which a personal
 `.live` apex is likely to be classified as. **Diagnostic fingerprint:** a
 domain resolves to `sinkhole.paloaltonetworks.com` from every DNS path
 including DoH, while well-known domains on the same network resolve fine.
+For this DNS-sinkhole case, use the supported
+`ts-bridge connect --bootstrap-ssh deployer@VPS_IP` mode so DNS resolution and
+control-plane TCP establishment occur from the SSH server without changing the
+local hosts file.
 **Rule:** before assuming a Headscale domain's DNS records are broken, repeat
 the resolution from a network without corporate DNS filtering (mobile
 hotspot, home Wi-Fi) -- a network-level sinkhole and a real DNS misconfiguration

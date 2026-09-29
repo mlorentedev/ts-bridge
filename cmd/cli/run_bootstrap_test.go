@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -72,6 +74,9 @@ func TestMonitorBootstrapExitCancelsRun(t *testing.T) {
 	if cause == nil || !strings.Contains(cause.Error(), "SSH bootstrap exited") {
 		t.Fatalf("context cause = %v", cause)
 	}
+	if !errors.Is(cause, errSSHBootstrapExited) {
+		t.Fatalf("context cause = %v, want errSSHBootstrapExited", cause)
+	}
 }
 
 func TestMonitorBootstrapIgnoresExitDuringShutdown(t *testing.T) {
@@ -93,4 +98,18 @@ func closedChannel() chan struct{} {
 	ch := make(chan struct{})
 	close(ch)
 	return ch
+}
+
+func TestEmitRunCauseClassifiesBootstrapExit(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(fmt.Errorf("%w: connection lost", errSSHBootstrapExited))
+
+	var stderr bytes.Buffer
+	err := emitRunCause(ctx, &stderr)
+	if !errors.Is(err, errSSHBootstrapExited) {
+		t.Fatalf("emitRunCause() error = %v", err)
+	}
+	if !strings.Contains(stderr.String(), "ERROR reason=ssh_bootstrap_failed") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
 }

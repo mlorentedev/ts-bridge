@@ -41,6 +41,8 @@ var logDir string
 // logging is the dual-output logger instance.
 var loggingInstance *logging.Logger
 
+var errSSHBootstrapExited = errors.New("SSH bootstrap exited")
+
 type controlBootstrap interface {
 	Done() <-chan struct{}
 	Err() error
@@ -163,6 +165,9 @@ func Run(cfg config.Config) error {
 
 	server, err := initTailscale(ctx, cfg)
 	if err != nil {
+		if runErr := emitRunCause(ctx, os.Stderr); runErr != nil {
+			return runErr
+		}
 		return err
 	}
 
@@ -172,7 +177,7 @@ func Run(cfg config.Config) error {
 		_ = server.Close()
 		return fmt.Errorf("bind %s: %w", listenAddr, err)
 	}
-	if cause := context.Cause(ctx); cause != nil {
+	if cause := emitRunCause(ctx, os.Stderr); cause != nil {
 		_ = listener.Close()
 		_ = server.Close()
 		return cause
@@ -191,6 +196,7 @@ func Run(cfg config.Config) error {
 	if err := emitReadyIfActive(ctx, os.Stdout, listener.Addr().String(), readyTarget(cfg)); err != nil {
 		_ = listener.Close()
 		_ = server.Close()
+		_ = emitRunCause(ctx, os.Stderr)
 		return err
 	}
 
@@ -230,7 +236,7 @@ func Run(cfg config.Config) error {
 		logger.Error("error closing tsnet server", "error", err)
 	}
 
-	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
+	if cause := emitRunCause(ctx, os.Stderr); cause != nil && !errors.Is(cause, context.Canceled) {
 		return cause
 	}
 	return errAccept
@@ -294,8 +300,19 @@ func monitorBootstrap(
 		if err == nil {
 			err = errors.New("process exited without an error")
 		}
-		cancel(fmt.Errorf("SSH bootstrap exited: %w", err))
+		cancel(fmt.Errorf("%w: %v", errSSHBootstrapExited, err))
 	}
+}
+
+func emitRunCause(ctx context.Context, stderr io.Writer) error {
+	cause := context.Cause(ctx)
+	if cause == nil {
+		return nil
+	}
+	if errors.Is(cause, errSSHBootstrapExited) {
+		emitError(stderr, reasonSSHBootstrapFailed, cause.Error())
+	}
+	return cause
 }
 
 func socksTargetResolver(cfg config.Config) (proxy.SOCKSTargetResolver, error) {

@@ -9,14 +9,14 @@
   {
     "id": "CLI-363-ssh-tunnel-bootstrap-f2",
     "behavior": "OpenSSH dynamic forwarding routes only the original control-plane hostname through SOCKS without a hosts-file change",
-    "verification": "go test ./internal/bootstrapssh -run 'Test(Start|Proxy)'",
+    "verification": "go test ./internal/bootstrapssh -run 'Test(BuildSSHArgs|Start|ControlProxy)'",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CLI-363-ssh-tunnel-bootstrap-f3",
     "behavior": "SSH startup and runtime failures are actionable and shutdown terminates the child process without a false READY signal",
-    "verification": "go test ./internal/bootstrapssh ./cmd/cli -run 'Test.*Bootstrap.*(Failure|Exit|Shutdown|Ready)'",
+    "verification": "go test ./internal/bootstrapssh ./cmd/cli -run 'Test(Start|RunBootstrap|MonitorBootstrap|EmitReadyIfActive|EmitRunCause)'",
     "state": "pending",
     "evidence": ""
   },
