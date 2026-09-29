@@ -109,6 +109,61 @@ func TestCollectFlagsSOCKS5(t *testing.T) {
 	}
 }
 
+func TestCollectFlagsBootstrapSSH(t *testing.T) {
+	cmd := newConnectCmd()
+	if err := cmd.Flags().Set("bootstrap-ssh", "deployer@bastion.example.com:2222"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("bootstrap-socks-addr", "127.0.0.1:1101"); err != nil {
+		t.Fatal(err)
+	}
+
+	fs := collectFlags(cmd)
+	if fs.BootstrapSSH != "deployer@bastion.example.com:2222" {
+		t.Fatalf("BootstrapSSH = %q", fs.BootstrapSSH)
+	}
+	if fs.BootstrapSOCKSAddr != "127.0.0.1:1101" {
+		t.Fatalf("BootstrapSOCKSAddr = %q", fs.BootstrapSOCKSAddr)
+	}
+}
+
+func TestBootstrapSSHFlagsReachRunner(t *testing.T) {
+	cmd := newConnectCmd()
+	cmd.SetArgs([]string{
+		"--target", "mesh-host:22",
+		"--auth-key", "tskey-auth-test",
+		"--control-url", "https://vpn.example.com",
+		"--bootstrap-ssh", "deployer@bastion.example.com:2222",
+		"--bootstrap-socks-addr", "127.0.0.1:1101",
+	})
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+
+	originalRunner := Runner
+	originalLoggerInit := LoggerInit
+	t.Cleanup(func() {
+		Runner = originalRunner
+		LoggerInit = originalLoggerInit
+	})
+	LoggerInit = nil
+
+	var captured config.Config
+	Runner = func(cfg config.Config) error {
+		captured = cfg
+		return nil
+	}
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if captured.BootstrapSSH != "deployer@bastion.example.com:2222" {
+		t.Fatalf("BootstrapSSH = %q", captured.BootstrapSSH)
+	}
+	if captured.BootstrapSOCKSAddr != "127.0.0.1:1101" {
+		t.Fatalf("BootstrapSOCKSAddr = %q", captured.BootstrapSOCKSAddr)
+	}
+}
+
 func TestAuthKeyFilePrecedence(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyFile := tmpDir + "/auth.key"

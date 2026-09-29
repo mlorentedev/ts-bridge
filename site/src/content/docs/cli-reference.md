@@ -34,6 +34,8 @@ ts-bridge connect [flags]
 |------|------|-------------|
 | `--auth-key` | string | Auth key (overrides `TS_AUTHKEY`) — WARNING: visible in process list |
 | `--auth-key-file` | string | Read auth key from file (secure alternative to `--auth-key`) |
+| `--bootstrap-socks-addr` | string | Loopback SOCKS listener used by SSH bootstrap (default `127.0.0.1:1055`) |
+| `--bootstrap-ssh` | string | Reach the custom control plane through OpenSSH `user@host[:port]` |
 | `--config` | string | Path to YAML config file |
 | `--control-url` | string | Custom control plane URL |
 | `--dial-backoff-base` | duration | Dial backoff base (default `1s`) |
@@ -72,6 +74,12 @@ ts-bridge connect --config ts-bridge.yaml
 
 # Manual mode (persistent hostname)
 ts-bridge connect --manual-mode --instance my-laptop --local-addr 127.0.0.1:33389
+
+# Reach a DNS/TLS-filtered Headscale control plane without editing hosts
+ts-bridge connect --control-url https://vpn.example.com \
+  --bootstrap-ssh deployer@bastion.example.com \
+  --auth-key-file /run/secrets/headscale-authkey \
+  --target mesh-host:3389
 ```
 
 ## `ts-bridge init`

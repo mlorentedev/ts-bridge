@@ -27,6 +27,8 @@ Configuration is resolved in this order (highest to lowest):
 |----------|---------|-------------|
 | `TS_LOCAL_ADDR` | `127.0.0.1:33389` | Local bind address. Auto-derived in auto mode when unset. |
 | `TS_CONTROL_URL` | _(Tailscale default)_ | Custom control plane URL for self-hosted Headscale. **Required for `hskey-` keys** — they are rejected without it (a `tskey-` key routes to Tailscale SaaS by default). Must be an `http(s)://` URL. |
+| `TS_BOOTSTRAP_SSH` | _(disabled)_ | OpenSSH endpoint (`user@host[:port]`) used to reach a custom control plane through dynamic SOCKS forwarding. Requires `TS_CONTROL_URL`. |
+| `TS_BOOTSTRAP_SOCKS_ADDR` | `127.0.0.1:1055` | Loopback-only SOCKS listener for SSH bootstrap. It is valid only when `TS_BOOTSTRAP_SSH` is set. |
 | `TS_HOSTNAME` | `ts-bridge` | Node name in the admin console. Auto-generated per run in auto mode. |
 | `TS_STATE_DIR` | _(per-user)_ | Directory for node state (holds the private node identity). Default is a fixed per-user dir: Windows `%LOCALAPPDATA%\ts-bridge\state`, macOS `~/Library/Application Support/ts-bridge/state`, Linux `$XDG_STATE_HOME/ts-bridge/state` (→ `~/.local/state/ts-bridge/state`). Created with `0700` permissions. Ephemeral temp dir in auto mode with an instance. A relative override is warned about. |
 | `TS_AUTO_INSTANCE` | `true` | Auto mode toggle. Set `false` to disable auto behavior. |
@@ -68,13 +70,17 @@ YAML config is optional and supports non-sensitive settings only. The auth key *
 ```yaml
 # ts-bridge.yaml
 target: "100.82.151.104:3389"
-localAddr: "127.0.0.1:33389"
-instanceName: "office-laptop"
-portRange: "33389-34388"
-healthAddr: "127.0.0.1:9090"
-maxConnections: 1000
-idleTimeout: "30m"
-logFormat: "json"
+local_addr: "127.0.0.1:33389"
+hostname: "office-laptop"
+health_addr: "127.0.0.1:9090"
+max_connections: 1000
+idle_timeout: "30m"
+log_format: "json"
+
+# Optional: reach a blocked Headscale control plane through OpenSSH.
+control_url: "https://vpn.example.com"
+bootstrap_ssh: "deployer@bastion.example.com"
+bootstrap_socks_addr: "127.0.0.1:1055"
 ```
 
 ### Loading
@@ -104,3 +110,23 @@ Keep that file at `600`, or leave `TS_AUTHKEY` out of it entirely and start with
 `ts-bridge connect --auth-key-file /run/secrets/authkey --control-url https://vpn.example.com`.
 
 The `init` wizard supports both Tailscale and Headscale — it detects the key prefix and configures accordingly.
+
+### SSH bootstrap for filtered networks
+
+When the local network blocks or sinkholes the Headscale hostname, but SSH to a
+bastion remains available:
+
+```bash
+ts-bridge connect \
+  --control-url https://vpn.example.com \
+  --bootstrap-ssh deployer@bastion.example.com \
+  --auth-key-file /run/secrets/headscale-authkey \
+  --target mesh-host:3389
+```
+
+The system `ssh` binary opens a loopback dynamic SOCKS proxy. Only requests to
+the configured control-plane hostname are selected for that proxy; unrelated
+HTTP traffic keeps its existing proxy behavior. DNS resolution happens through
+the SSH server while the original URL hostname is retained for TLS SNI and
+certificate checks. The feature never edits the hosts file or disables
+certificate or SSH host-key verification.

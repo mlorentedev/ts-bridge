@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net"
 	"strings"
@@ -54,6 +55,21 @@ func TestEmitReady(t *testing.T) {
 	emitReady(&buf, "127.0.0.1:16443", "t:6443")
 	if got := buf.String(); got != "READY local=127.0.0.1:16443 target=t:6443\n" {
 		t.Errorf("emitReady wrote %q", got)
+	}
+}
+
+func TestEmitReadyIfActiveSuppressesCanceledStartup(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	want := errors.New("SSH bootstrap exited")
+	cancel(want)
+
+	var buf bytes.Buffer
+	err := emitReadyIfActive(ctx, &buf, "127.0.0.1:16443", "t:6443")
+	if !errors.Is(err, want) {
+		t.Fatalf("emitReadyIfActive() error = %v, want %v", err, want)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("emitReadyIfActive() wrote a false READY signal: %q", buf.String())
 	}
 }
 

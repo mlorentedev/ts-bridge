@@ -84,6 +84,25 @@ Update bootstrap scripts to include the variable.
 - **Negative:** Headscale pre-auth keys have different semantics than Tailscale auth keys (shorter expiry, reusable flag). Users must understand their control plane's key management.
 - **Testing:** Requires manual testing against Headscale instance. Unit tests can verify the env var is read but cannot test actual Headscale connectivity.
 
+## 2026-09-28 amendment: SSH bootstrap for filtered networks
+
+Some corporate networks DNS-sinkhole the Headscale hostname or terminate
+non-HTTP traffic after transparent TLS inspection. Direct `ControlURL` support
+does not solve that path because tsnet still resolves and dials the blocked
+endpoint from the local network.
+
+When explicitly configured with `--bootstrap-ssh` / `TS_BOOTSTRAP_SSH`,
+ts-bridge starts the system OpenSSH client with dynamic SOCKS forwarding before
+`tsnet.Server.Up`. Only requests for the configured control-plane hostname use
+the dynamic SOCKS proxy. This preserves the original URL, TLS SNI, and
+certificate verification while moving DNS resolution and TCP establishment to
+the SSH server.
+
+This mode remains opt-in and fail-loud. It does not edit the hosts file, disable
+TLS verification, weaken SSH host-key checking, bundle an SSH implementation,
+or automatically switch routes after a failure. The SSH process is monitored
+and terminated with ts-bridge.
+
 ## Related
 
 - [adr-001-tsnet-userspace.md](adr-001-tsnet-userspace.md) — tsnet is the foundation that makes this possible
