@@ -137,6 +137,10 @@ func isRetryableCleanupError(err error) bool {
 
 //nolint:unused // wired into Runner = Run
 func Run(cfg config.Config) error {
+	return run(cfg, nil)
+}
+
+func run(cfg config.Config, onReady func() error) error {
 	if err := ensureStateDir(cfg.StateDir); err != nil {
 		return err
 	}
@@ -198,6 +202,13 @@ func Run(cfg config.Config) error {
 		_ = server.Close()
 		_ = emitRunCause(ctx, os.Stderr)
 		return err
+	}
+	if onReady != nil {
+		if err := onReady(); err != nil {
+			_ = listener.Close()
+			_ = server.Close()
+			return fmt.Errorf("ready callback: %w", err)
+		}
 	}
 
 	var tunnelStatus health.TunnelStatus

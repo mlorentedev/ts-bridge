@@ -117,7 +117,35 @@ curl --socks5-hostname 127.0.0.1:1080 http://100.64.0.25:8080/health
 
 ---
 
-## 3. Headscale / Tailscale ACL Policy Contract
+## 3. Private Browser Profile
+
+Store the non-secret route and control-plane settings in a local YAML file:
+
+```yaml
+version: 1
+socks5_addr: 127.0.0.1:1080
+control_url: https://vpn.example.internal
+socks5_routes:
+  "forge.example.internal:443": "apps:443"
+```
+
+Launch an isolated Edge profile with the canonical private URL:
+
+```powershell
+.\ts-bridge.exe browser `
+  --config C:\Users\user\.ts-bridge\apps-browser.yml `
+  --auth-key-file C:\Users\user\.ts-bridge\authkey `
+  --url https://forge.example.internal/
+```
+
+The command starts the SOCKS5 bridge, serves a loopback PAC file, and launches
+Edge with a separate user-data directory. It does not change the hosts file,
+system DNS, system proxy, or the normal Edge profile. The real route file and
+auth key remain local and unversioned.
+
+---
+
+## 4. Headscale / Tailscale ACL Policy Contract
 
 Ensure your control-plane ACL policy grants the bridge tag access to required ports on cluster nodes:
 
