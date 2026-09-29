@@ -58,3 +58,5 @@ Currently, `ts-bridge` forwards a single TCP target per instance (`connect --tar
   browser command rejects an unlisted start URL with an actionable error;
   later unlisted navigation remains direct and receives ordinary browser
   network handling rather than a command-generated denial.
+
+<!-- archived 2026-09-29 — PR: https://github.com/mlorentedev/ts-bridge/pull/369 -->

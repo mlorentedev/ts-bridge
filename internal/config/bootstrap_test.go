@@ -162,8 +162,9 @@ func TestMergeRejectsInvalidBootstrapConfig(t *testing.T) {
 
 func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
 	tests := []struct {
-		name  string
-		flags FlagSet
+		name    string
+		flags   FlagSet
+		wantErr string
 	}{
 		{
 			name: "exact local address",
@@ -172,6 +173,7 @@ func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
 				BootstrapSOCKSAddr: "127.0.0.1:1055",
 				ManualMode:         true,
 			},
+			wantErr: "conflicts with bridge listener",
 		},
 		{
 			name: "equivalent IPv6 address",
@@ -180,6 +182,7 @@ func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
 				BootstrapSOCKSAddr: "[::1]:1055",
 				ManualMode:         true,
 			},
+			wantErr: "conflicts with bridge listener",
 		},
 		{
 			name: "auto-derived local address",
@@ -187,11 +190,31 @@ func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
 				BootstrapSOCKSAddr: "127.0.0.1:1055",
 				PortRange:          "1055-1055",
 			},
+			wantErr: "conflicts with bridge listener",
+		},
+		{
+			name: "health listener",
+			flags: FlagSet{
+				BootstrapSOCKSAddr: "127.0.0.1:1055",
+				HealthAddr:         "127.0.0.1:1055",
+			},
+			wantErr: "conflicts with health listener",
+		},
+		{
+			name: "equivalent zero-padded health port",
+			flags: FlagSet{
+				BootstrapSOCKSAddr: "127.0.0.1:01055",
+				HealthAddr:         "127.0.0.1:1055",
+			},
+			wantErr: "conflicts with health listener",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.wantErr == "" {
+				t.Fatal("test case must declare the expected collision error")
+			}
 			t.Setenv("TS_BOOTSTRAP_SSH", "")
 			t.Setenv("TS_BOOTSTRAP_SOCKS_ADDR", "")
 			t.Setenv("TS_TARGET", "")
@@ -203,8 +226,8 @@ func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
 			tt.flags.BootstrapSSH = "deployer@bastion.example.com"
 
 			_, err := Merge(PartialConfig{}, tt.flags)
-			if err == nil || !strings.Contains(err.Error(), "conflicts with bridge listener") {
-				t.Fatalf("Merge() error = %v, want listener collision", err)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Merge() error = %v, want substring %q", err, tt.wantErr)
 			}
 		})
 	}
