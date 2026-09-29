@@ -181,34 +181,10 @@ func run(cfg config.Config, onReady func() error) error {
 		_ = server.Close()
 		return fmt.Errorf("bind %s: %w", listenAddr, err)
 	}
-	if cause := emitRunCause(ctx, os.Stderr); cause != nil {
+	if err := announceReady(ctx, listener, cfg, onReady); err != nil {
 		_ = listener.Close()
 		_ = server.Close()
-		return cause
-	}
-
-	// Print banner BEFORE starting the health server to avoid concurrent
-	// log output corrupting the banner (BUG-010). The health server's
-	// goroutine logs "health server starting" which races with the
-	// banner's stdout writes. The READY signal (#203) is emitted here for
-	// the same reason — grouped with the banner, before the health server's
-	// concurrent stdout logging — and uses the actual bound address so
-	// auto-port mode reports the real port. The listener already accepts
-	// (the OS queues connections until AcceptLoop runs), so "READY" is
-	// accurate at this point.
-	writeStartupBanner(os.Stdout, cfg)
-	if err := emitReadyIfActive(ctx, os.Stdout, listener.Addr().String(), readyTarget(cfg)); err != nil {
-		_ = listener.Close()
-		_ = server.Close()
-		_ = emitRunCause(ctx, os.Stderr)
 		return err
-	}
-	if onReady != nil {
-		if err := onReady(); err != nil {
-			_ = listener.Close()
-			_ = server.Close()
-			return fmt.Errorf("ready callback: %w", err)
-		}
 	}
 
 	var tunnelStatus health.TunnelStatus
@@ -251,6 +227,25 @@ func run(cfg config.Config, onReady func() error) error {
 		return cause
 	}
 	return errAccept
+}
+
+func announceReady(ctx context.Context, listener net.Listener, cfg config.Config, onReady func() error) error {
+	if cause := emitRunCause(ctx, os.Stderr); cause != nil {
+		return cause
+	}
+
+	// Keep human and machine startup output together before concurrent health logs.
+	writeStartupBanner(os.Stdout, cfg)
+	if err := emitReadyIfActive(ctx, os.Stdout, listener.Addr().String(), readyTarget(cfg)); err != nil {
+		_ = emitRunCause(ctx, os.Stderr)
+		return err
+	}
+	if onReady != nil {
+		if err := onReady(); err != nil {
+			return fmt.Errorf("ready callback: %w", err)
+		}
+	}
+	return nil
 }
 
 func startBootstrapLifecycle(
