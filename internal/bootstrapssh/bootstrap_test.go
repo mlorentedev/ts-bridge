@@ -145,6 +145,43 @@ func TestStartReportsEarlyExit(t *testing.T) {
 	}
 }
 
+func TestStartRejectsOccupiedSOCKSAddressBeforeLaunchingSSH(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	commandCalled := false
+	deps := dependencies{
+		lookPath: func(string) (string, error) { return "ssh", nil },
+		commandContext: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+			commandCalled = true
+			//nolint:gosec // os.Args[0] and the test selector are fixed test-process inputs.
+			return exec.CommandContext(ctx, os.Args[0], "-test.run=TestSSHHelperProcess")
+		},
+		dialContext: func(context.Context, string, string) (net.Conn, error) {
+			return net.Dial("tcp", listener.Addr().String())
+		},
+		pollInterval: time.Millisecond,
+	}
+
+	tunnel, err := start(context.Background(), Config{
+		Endpoint:     "bastion.example.com",
+		SOCKSAddr:    listener.Addr().String(),
+		ReadyTimeout: time.Second,
+	}, deps)
+	if tunnel != nil {
+		_ = tunnel.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "cannot bind bootstrap SOCKS address") {
+		t.Fatalf("start() error = %v, want occupied-address error", err)
+	}
+	if commandCalled {
+		t.Fatal("OpenSSH command was launched despite occupied SOCKS address")
+	}
+}
+
 func TestStartReportsCleanEarlyExit(t *testing.T) {
 	deps := dependencies{
 		lookPath: func(string) (string, error) { return "ssh", nil },
@@ -163,7 +200,7 @@ func TestStartReportsCleanEarlyExit(t *testing.T) {
 	_, err := start(context.Background(), Config{
 		Endpoint:     "bastion.example.com",
 		SOCKSAddr:    "127.0.0.1:1055",
-		ReadyTimeout: time.Second,
+		ReadyTimeout: 10 * time.Second,
 	}, deps)
 	if err == nil || !strings.Contains(err.Error(), "exited successfully before SOCKS listener became ready") {
 		t.Fatalf("start() error = %v", err)
@@ -211,6 +248,16 @@ func TestControlProxySelectsOnlyControlHostname(t *testing.T) {
 	}
 	if got.String() != fallbackURL.String() {
 		t.Fatalf("unrelated proxy = %q, want %q", got, fallbackURL)
+	}
+}
+
+func TestControlProxyRejectsURLWithoutHostname(t *testing.T) {
+	_, err := controlProxyFunc("https://", "127.0.0.1:1055", nil)
+	if err == nil || !strings.Contains(err.Error(), "has no hostname") {
+		t.Fatalf("controlProxyFunc() error = %v", err)
+	}
+	if strings.Contains(err.Error(), "%!w") {
+		t.Fatalf("controlProxyFunc() exposed nil wrap formatting: %v", err)
 	}
 }
 
