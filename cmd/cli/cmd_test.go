@@ -63,7 +63,7 @@ func TestNewRootCmdContainsProductionCommands(t *testing.T) {
 		got[command.Name()] = true
 	}
 
-	want := []string{"connect", "discover", "host", "import", "init", "status", "version"}
+	want := []string{"browser", "connect", "discover", "host", "import", "init", "status", "version"}
 	for _, name := range want {
 		if !got[name] {
 			t.Errorf("production root is missing %q", name)

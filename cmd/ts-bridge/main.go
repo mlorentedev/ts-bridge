@@ -30,6 +30,7 @@ func main() {
 	cli.BuildVersion = version
 	cli.BuildCommit = commit
 	cli.Runner = cli.Run
+	cli.BrowserRunner = cli.RunBrowser
 	cli.LoggerInit = cli.InitLogger
 
 	// Let Cobra handle all flag parsing and command dispatch.
