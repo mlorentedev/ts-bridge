@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"tailscale.com/net/tshttpproxy"
@@ -22,7 +21,6 @@ const (
 	defaultPollInterval = 50 * time.Millisecond
 )
 
-// Config describes an opt-in OpenSSH dynamic-forward bootstrap.
 type Config struct {
 	Endpoint     string
 	SOCKSAddr    string
@@ -39,11 +37,9 @@ type dependencies struct {
 type Tunnel struct {
 	cancel context.CancelFunc
 	done   chan struct{}
-	mu     sync.RWMutex
 	err    error
 }
 
-// Start launches OpenSSH and waits until its local SOCKS listener is ready.
 func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 	var dialer net.Dialer
 	return start(ctx, cfg, dependencies{
@@ -66,6 +62,13 @@ func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) 
 	}
 
 	childCtx, cancel := context.WithCancel(ctx)
+	probe, err := net.Listen("tcp", cfg.SOCKSAddr)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("cannot bind bootstrap SOCKS address %q: %w", cfg.SOCKSAddr, err)
+	}
+	_ = probe.Close()
+
 	cmd := deps.commandContext(childCtx, sshPath, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -77,10 +80,7 @@ func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) 
 
 	tunnel := &Tunnel{cancel: cancel, done: make(chan struct{})}
 	go func() {
-		err := cmd.Wait()
-		tunnel.mu.Lock()
-		tunnel.err = err
-		tunnel.mu.Unlock()
+		tunnel.err = cmd.Wait()
 		close(tunnel.done)
 	}()
 
@@ -135,8 +135,6 @@ func (t *Tunnel) Done() <-chan struct{} {
 }
 
 func (t *Tunnel) Err() error {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
 	return t.err
 }
 
@@ -261,8 +259,11 @@ func controlProxyFunc(
 	fallback func(*url.URL) (*url.URL, error),
 ) (func(*url.URL) (*url.URL, error), error) {
 	control, err := url.Parse(controlURL)
-	if err != nil || control.Hostname() == "" {
+	if err != nil {
 		return nil, fmt.Errorf("parse control URL %q: %w", controlURL, err)
+	}
+	if control.Hostname() == "" {
+		return nil, fmt.Errorf("control URL %q has no hostname", controlURL)
 	}
 	proxyURL, err := url.Parse("socks5h://" + socksAddr)
 	if err != nil {
