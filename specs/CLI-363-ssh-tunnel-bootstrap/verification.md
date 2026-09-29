@@ -9,7 +9,7 @@ created: "2026-09-28"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [x] Criterion 1 -> `TestMergeBootstrapSSHPrecedence`, `TestMergeBootstrapSSHDefaultsToLoopback`, `TestMergeRejectsInvalidBootstrapConfig`, `TestDecodeYAMLBootstrapSSH`, `TestCollectFlagsBootstrapSSH`.
+- [x] Criterion 1 -> `TestMergeBootstrapSSHPrecedence`, `TestMergeBootstrapSSHDefaultsToLoopback`, `TestMergeRejectsInvalidBootstrapConfig`, `TestDecodeYAMLBootstrapSSH`, `TestCollectFlagsBootstrapSSH`, and `TestBootstrapSSHFlagsReachRunner`.
 - [x] Criterion 2 -> `TestBuildSSHArgs`, `TestControlProxySelectsOnlyControlHostname`, and `TestControlProxyPreservesHostnameThroughSOCKS`.
 - [x] Criterion 3 -> `TestStartWaitsForSOCKSAndClosesProcess`, `TestStartReportsEarlyExit`, `TestStartReportsCleanEarlyExit`, `TestStartReportsMissingOpenSSH`, `TestRunBootstrapFailureStopsBeforeTailscale`, and the canceled-startup READY guard.
 - [x] Criterion 4 -> `TestBootstrapSSHDocumentation` plus updates to `.env.example`, README, site configuration/CLI reference, ADR-005, and lesson-014.
