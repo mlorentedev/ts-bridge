@@ -52,7 +52,8 @@ Date: 2026-09-28
 - Bridge result:
   `READY local=127.0.0.1:1080 target=dynamic-socks5`.
 - Independent route probe:
-  `curl --socks5-hostname 127.0.0.1:1080 https://gitea.kubelab.live/api/healthz`
-  returned HTTP `200` with exit code `0`; response content was discarded.
+  `curl --socks5-hostname 127.0.0.1:1080 --output NUL --write-out "%{http_code}"`
+  `https://gitea.kubelab.live/api/healthz` returned HTTP `200` with exit code
+  `0`; response content was discarded.
 - Independent adversarial review: waived by the operator on 2026-09-28 because
   no approved reviewer was operationally available.
