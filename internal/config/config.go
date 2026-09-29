@@ -206,7 +206,10 @@ func validateLoadedConfig(cfg *Config) error {
 	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
 		return err
 	}
-	return normalizeBootstrapConfig(cfg)
+	if err := normalizeBootstrapConfig(cfg); err != nil {
+		return err
+	}
+	return validateBootstrapListenerCollision(*cfg)
 }
 
 func loadProxyModeFromEnv() (string, string, error) {

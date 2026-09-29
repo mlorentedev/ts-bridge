@@ -50,6 +50,10 @@ type controlBootstrap interface {
 }
 
 var bootstrapStarter = startConfiguredBootstrap
+var sshTunnelStarter func(context.Context, bootstrapssh.Config) (controlBootstrap, error) = func(ctx context.Context, cfg bootstrapssh.Config) (controlBootstrap, error) {
+	return bootstrapssh.Start(ctx, cfg)
+}
+var controlProxyConfigurer = bootstrapssh.ConfigureControlProxy
 
 // InitLogger initializes the dual structured logger (console + file).
 func InitLogger(cfg config.Config) {
@@ -160,13 +164,35 @@ func run(cfg config.Config, onReady func() error) error {
 		defer cleanupEphemeralStateDir(cfg.StateDir)
 	}
 
-	closeBootstrap, err := startBootstrapLifecycle(ctx, cancelWithCause, cfg)
+	return withBootstrapLifecycle(ctx, cancelWithCause, cfg, func() error {
+		return runBridge(ctx, cancelWithCause, cfg, onReady)
+	})
+}
+
+func withBootstrapLifecycle(
+	ctx context.Context,
+	cancel context.CancelCauseFunc,
+	cfg config.Config,
+	runBridge func() error,
+) error {
+	closeBootstrap, err := startBootstrapLifecycle(ctx, cancel, cfg)
 	if err != nil {
 		emitError(os.Stderr, reasonSSHBootstrapFailed, err.Error())
 		return err
 	}
-	defer closeBootstrap()
+	defer func() {
+		cancel(nil)
+		closeBootstrap()
+	}()
+	return runBridge()
+}
 
+func runBridge(
+	ctx context.Context,
+	cancelWithCause context.CancelCauseFunc,
+	cfg config.Config,
+	onReady func() error,
+) error {
 	server, err := initTailscale(ctx, cfg)
 	if err != nil {
 		if runErr := emitRunCause(ctx, os.Stderr); runErr != nil {
@@ -193,6 +219,7 @@ func run(cfg config.Config, onReady func() error) error {
 		healthServer = health.StartServer(cfg.HealthAddr, &tunnelStatus, logger)
 	}
 
+	// #nosec G118 -- ctx is the run-scoped cancellation context, not Background/TODO.
 	go handleShutdown(ctx, &tunnelStatus, listener, healthServer)
 
 	tunnelStatus.MarkReady()
@@ -271,7 +298,7 @@ func startConfiguredBootstrap(ctx context.Context, cfg config.Config) (controlBo
 		return nil, nil
 	}
 
-	tunnel, err := bootstrapssh.Start(ctx, bootstrapssh.Config{
+	tunnel, err := sshTunnelStarter(ctx, bootstrapssh.Config{
 		Endpoint:     cfg.BootstrapSSH,
 		SOCKSAddr:    cfg.BootstrapSOCKSAddr,
 		ReadyTimeout: cfg.ConnectTimeout,
@@ -279,7 +306,7 @@ func startConfiguredBootstrap(ctx context.Context, cfg config.Config) (controlBo
 	if err != nil {
 		return nil, fmt.Errorf("start SSH control-plane bootstrap: %w", err)
 	}
-	if err := bootstrapssh.ConfigureControlProxy(cfg.ControlURL, cfg.BootstrapSOCKSAddr); err != nil {
+	if err := controlProxyConfigurer(cfg.ControlURL, cfg.BootstrapSOCKSAddr); err != nil {
 		_ = tunnel.Close()
 		return nil, fmt.Errorf("configure SSH control-plane bootstrap: %w", err)
 	}

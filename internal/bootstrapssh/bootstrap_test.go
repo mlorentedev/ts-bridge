@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"tailscale.com/net/tshttpproxy"
 )
 
 func TestBuildSSHArgs(t *testing.T) {
@@ -294,6 +296,21 @@ func TestControlProxySelectsOnlyControlHostname(t *testing.T) {
 	}
 	if got.String() != fallbackURL.String() {
 		t.Fatalf("unrelated proxy = %q, want %q", got, fallbackURL)
+	}
+}
+
+func TestConfigureControlProxyInstallsHook(t *testing.T) {
+	if err := ConfigureControlProxy("https://vpn.example.com", "127.0.0.1:1055"); err != nil {
+		t.Fatalf("ConfigureControlProxy() error = %v", err)
+	}
+
+	requestURL, _ := url.Parse("https://vpn.example.com/key")
+	got, err := tshttpproxy.ProxyFromEnvironment(&http.Request{URL: requestURL})
+	if err != nil {
+		t.Fatalf("ProxyFromEnvironment() error = %v", err)
+	}
+	if got == nil || got.String() != "socks5h://127.0.0.1:1055" {
+		t.Fatalf("control proxy = %v, want socks5h://127.0.0.1:1055", got)
 	}
 }
 
