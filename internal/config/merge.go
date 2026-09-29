@@ -629,6 +629,9 @@ func validateBootstrapListenerCollision(cfg Config) error {
 		sameListenerEndpoint(cfg.BootstrapSOCKSAddr, cfg.SOCKS5Addr) {
 		return fmt.Errorf("bootstrap SOCKS listener %q conflicts with bridge listener", cfg.BootstrapSOCKSAddr)
 	}
+	if sameListenerEndpoint(cfg.BootstrapSOCKSAddr, cfg.HealthAddr) {
+		return fmt.Errorf("bootstrap SOCKS listener %q conflicts with health listener", cfg.BootstrapSOCKSAddr)
+	}
 	return nil
 }
 
