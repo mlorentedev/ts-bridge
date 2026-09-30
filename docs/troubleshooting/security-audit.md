@@ -47,10 +47,14 @@ Out of scope:
 
 Boundaries to defend (in order of blast radius):
 
-1. **The operator-supplied auth key (`TS_AUTHKEY` / `--auth-key-file`).**
+1. **The operator-supplied auth key (`TS_AUTHKEY` / `--auth-key-file` / managed credential store).**
    Owner of this key can register a node on the tailnet under the operator's identity.
    Treat as a secret equivalent to an SSH private key.
-   - *Hardened path:* `--auth-key-file /path/to/key` (stored in a `0600` file) prevents process environment inheritance and process list exposure.
+   - *Preferred path:* `ts-bridge auth set --profile <name>` writes to the
+     managed credential store with owner-only ACLs/modes and avoids manual path
+     handling.
+   - *Hardened explicit path:* `--auth-key-file /path/to/key` (stored in a
+     `0600` file) prevents process environment inheritance and process list exposure.
    - *Plaintext risk:* `TS_AUTHKEY` in `.env`/environment is inherited by child processes; `--auth-key` is visible in the process table (`ps`, Task Manager).
 2. **The local listener** at `TS_LOCAL_ADDR`. Default `127.0.0.1:33389`
    loopback-only. If misconfigured to a routable interface, anyone on

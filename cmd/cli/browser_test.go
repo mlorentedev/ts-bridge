@@ -118,7 +118,7 @@ func TestBrowserCommandRequiresAuthKeyFile(t *testing.T) {
 		"--route", "forge.example.internal:443=apps:443",
 	})
 	err := command.Execute()
-	if err == nil || err.Error() != "browser requires --auth-key-file" {
+	if err == nil || err.Error() != "browser requires --auth-key-file or --profile" {
 		t.Fatalf("browser error = %v", err)
 	}
 }

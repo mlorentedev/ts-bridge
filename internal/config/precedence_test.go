@@ -65,7 +65,7 @@ func mergePrecedence(t *testing.T, yaml PartialConfig, env map[string]string, fl
 	for k, v := range env {
 		t.Setenv(k, v)
 	}
-	if env["TS_AUTHKEY"] == "" && flags.AuthKey == "" {
+	if env["TS_AUTHKEY"] == "" && flags.AuthKey == "" && flags.ProfileAuthKey == "" {
 		t.Setenv("TS_AUTHKEY", precedenceAuthKey)
 	}
 	if yaml.Target == "" && env["TS_TARGET"] == "" && flags.Target == "" {
@@ -676,6 +676,7 @@ func TestPrecedenceAuthKey(t *testing.T) {
 		if cfg.AuthKey != "tskey-from-flag" {
 			t.Errorf("expected tskey-from-flag, got %q", cfg.AuthKey)
 		}
+
 	})
 
 	t.Run("env wins when flag is empty", func(t *testing.T) {
