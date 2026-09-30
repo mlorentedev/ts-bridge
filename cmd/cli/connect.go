@@ -131,21 +131,8 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	// Profiles are the lowest configuration source above defaults. Load the
 	// selected profile before Merge validates required and control-plane fields.
 	profileName, _ := cmd.Flags().GetString("profile")
-	selectedProfile, err := loadCommandProfile(profileName)
-	if err != nil {
+	if err := applyConnectProfile(&yamlCfg, &flags, profileName); err != nil {
 		return err
-	}
-	if yamlCfg.Target == "" {
-		yamlCfg.Target = selectedProfile.Target
-	}
-	if yamlCfg.ControlURL == "" {
-		yamlCfg.ControlURL = selectedProfile.ControlURL
-	}
-	if flags.AuthKey == "" && flags.AuthKeyFile == "" && os.Getenv("TS_AUTHKEY") == "" {
-		flags.ProfileAuthKey, err = loadManagedProfileCredential(selectedProfile)
-		if err != nil {
-			return err
-		}
 	}
 
 	// Merge: flags > env > yaml > profile > defaults.
@@ -170,6 +157,24 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		return Runner(cfg)
 	}
 	return fmt.Errorf("bridge runner not initialized (call main.go first)")
+}
+
+func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, profileName string) error {
+	selectedProfile, err := loadCommandProfile(profileName)
+	if err != nil {
+		return err
+	}
+	if yamlCfg.Target == "" {
+		yamlCfg.Target = selectedProfile.Target
+	}
+	if yamlCfg.ControlURL == "" {
+		yamlCfg.ControlURL = selectedProfile.ControlURL
+	}
+	if flags.AuthKey != "" || flags.AuthKeyFile != "" || os.Getenv("TS_AUTHKEY") != "" {
+		return nil
+	}
+	flags.ProfileAuthKey, err = loadManagedProfileCredential(selectedProfile)
+	return err
 }
 
 // collectFlags reads all CLI flag values into a FlagSet.
