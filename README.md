@@ -52,7 +52,14 @@ ts-bridge init --auth-key-file /path/to/authkey --target my-desktop:3389
 ts-bridge --help
 ```
 
-> **Security Note:** Keys in environment variables or `.env` files are readable by child processes, and `--auth-key` is visible in the process list. For production, automation, and hardened setups, use `--auth-key-file` with either `init` or `connect`.
+> **Security Note:** Keys in environment variables or `.env` files are readable by child processes, and `--auth-key` is visible in the process list. Prefer managed onboarding:
+>
+> ```bash
+> ts-bridge auth set --profile office
+> ts-bridge connect --profile office
+> ```
+>
+> The key is entered through a masked prompt and stored with owner-only permissions. `--auth-key-file` remains available as an explicit override.
 
 ### Dynamic mesh and private browser access
 
@@ -98,6 +105,8 @@ ts-bridge connect --profile home    # resolves target+port automatically
 ```
 
 `--profile` is additive: if `TS_TARGET` or `--target` is also set, it wins over the profile.
+When the profile has a managed `credential` reference, `connect --profile`
+loads it automatically; explicit key sources keep higher precedence.
 
 ### 2. Host Setup (Admin)
 

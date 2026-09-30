@@ -42,6 +42,7 @@ type FlagSet struct {
 	SOCKS5Routes       []string
 	AuthKey            string // #nosec G117 -- internal struct, never serialized
 	AuthKeyFile        string
+	ProfileAuthKey     string // #nosec G117 -- lower-precedence managed credential, never serialized
 	Instance           string
 	LocalAddr          string
 	Hostname           string
@@ -83,6 +84,9 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	cfg := defaults()
 	applyYAML(&cfg, yamlCfg)
 	applyEnv(&cfg)
+	if cfg.AuthKey == "" {
+		cfg.AuthKey = flags.ProfileAuthKey
+	}
 	applyFlags(&cfg, flags)
 
 	if err := validateMergedProxyConfig(cfg); err != nil {

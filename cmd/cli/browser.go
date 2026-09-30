@@ -33,6 +33,7 @@ func newBrowserCmd() *cobra.Command {
 	command.Flags().String("socks5", "127.0.0.1:1080", "Loopback SOCKS5 listener address")
 	command.Flags().StringArray("route", nil, "Allow-listed route SOURCE_HOST:PORT=MESH_HOST:PORT (repeatable)")
 	command.Flags().String("auth-key-file", "", "Read auth key from a local file")
+	command.Flags().String("profile", "", "Named profile supplying control plane and managed credential")
 	command.Flags().String("control-url", "", "Custom Headscale control plane URL")
 	command.Flags().String("hostname", "", "Tailscale hostname")
 	command.Flags().String("state-dir", "", "State directory")
@@ -43,32 +44,10 @@ func newBrowserCmd() *cobra.Command {
 }
 
 func runBrowser(command *cobra.Command, _ []string) error {
-	authKeyFile, _ := command.Flags().GetString("auth-key-file")
-	if authKeyFile == "" {
-		return fmt.Errorf("browser requires --auth-key-file")
-	}
-	flags, err := collectBrowserFlags(command)
+	cfg, err := resolveBrowserConfig(command)
 	if err != nil {
 		return err
 	}
-	if err := envfile.Load(".env"); err != nil {
-		return fmt.Errorf("load .env: %w", err)
-	}
-	yamlConfig, err := config.LoadYAMLConfig(flags.Config)
-	if err != nil {
-		return fmt.Errorf("load YAML config: %w", err)
-	}
-	if flags.SOCKS5Addr == "" && yamlConfig.SOCKS5Addr == "" && os.Getenv("TS_SOCKS5_ADDR") == "" {
-		flags.SOCKS5Addr = "127.0.0.1:1080"
-	}
-	cfg, err := config.Merge(yamlConfig, flags)
-	if err != nil {
-		return err
-	}
-	if cfg.SOCKS5Addr == "" || len(cfg.SOCKS5Routes) == 0 {
-		return fmt.Errorf("browser requires --socks5 and at least one --route")
-	}
-
 	options := BrowserOptions{}
 	options.StartURL, _ = command.Flags().GetString("url")
 	options.UserDataDir, _ = command.Flags().GetString("user-data-dir")
@@ -84,6 +63,59 @@ func runBrowser(command *cobra.Command, _ []string) error {
 		return fmt.Errorf("browser runner not initialized")
 	}
 	return BrowserRunner(cfg, options)
+}
+
+func resolveBrowserConfig(command *cobra.Command) (config.Config, error) {
+	authKeyFile, _ := command.Flags().GetString("auth-key-file")
+	profileName, _ := command.Flags().GetString("profile")
+	if authKeyFile == "" && profileName == "" {
+		return config.Config{}, fmt.Errorf("browser requires --auth-key-file or --profile")
+	}
+	flags, err := collectBrowserFlags(command)
+	if err != nil {
+		return config.Config{}, err
+	}
+	if err := envfile.Load(".env"); err != nil {
+		return config.Config{}, fmt.Errorf("load .env: %w", err)
+	}
+	yamlConfig, err := config.LoadYAMLConfig(flags.Config)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("load YAML config: %w", err)
+	}
+	if err := applyBrowserProfile(&yamlConfig, &flags, profileName); err != nil {
+		return config.Config{}, err
+	}
+	if flags.SOCKS5Addr == "" && yamlConfig.SOCKS5Addr == "" && os.Getenv("TS_SOCKS5_ADDR") == "" {
+		flags.SOCKS5Addr = "127.0.0.1:1080"
+	}
+	cfg, err := config.Merge(yamlConfig, flags)
+	if err != nil {
+		return config.Config{}, err
+	}
+	if cfg.SOCKS5Addr == "" || len(cfg.SOCKS5Routes) == 0 {
+		return config.Config{}, fmt.Errorf("browser requires --socks5 and at least one --route")
+	}
+	return cfg, nil
+}
+
+func applyBrowserProfile(yamlConfig *config.PartialConfig, flags *config.FlagSet, profileName string) error {
+	selectedProfile, err := loadCommandProfile(profileName)
+	if err != nil {
+		return err
+	}
+	if yamlConfig.ControlURL == "" {
+		yamlConfig.ControlURL = selectedProfile.ControlURL
+	}
+	if flags.AuthKey == "" {
+		flags.AuthKey, err = loadManagedProfileCredential(selectedProfile)
+		if err != nil {
+			return err
+		}
+		if flags.AuthKey == "" {
+			return fmt.Errorf("profile %q has no managed credential", profileName)
+		}
+	}
+	return nil
 }
 
 func collectBrowserFlags(command *cobra.Command) (config.FlagSet, error) {

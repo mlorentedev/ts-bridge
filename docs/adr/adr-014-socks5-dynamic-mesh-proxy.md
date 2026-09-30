@@ -70,8 +70,8 @@ Running N separate `ts-bridge` processes or configuring static port ranges per n
      rules for the allow-listed hosts. The command never modifies the Windows
      hosts file, system DNS, system proxy, or the user's normal browser
      profile.
-   - Browser mode requires an auth-key file. It does not accept a key from
-     CLI arguments or environment configuration.
+   - Browser mode requires an auth-key file or a managed profile credential.
+     It does not accept a key from CLI arguments or environment configuration.
 
 ---
 

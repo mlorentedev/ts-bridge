@@ -51,11 +51,11 @@ Failure modes, dependencies, and unknowns to clarify before implementation. If a
 
 Observable outcomes. Each must be testable.
 
-- [ ] `auth set` stores a masked/stdin key atomically with owner-only permissions, refuses silent overwrite, and never prints the key.
-- [ ] Profiles store only a managed credential name; old profiles remain readable and descriptors never export the reference.
-- [ ] `connect --profile` and `browser --profile` resolve the managed key consistently while explicit file/inline/env sources retain their documented precedence.
-- [ ] `auth status`, `auth list`, and `auth remove` expose no secret value and handle referenced/shared credentials safely.
-- [ ] Windows and Unix tests cover path selection, permission hardening, invalid names, missing credentials, rollback/error paths, and output redaction.
+- [x] `auth set` stores a masked/stdin key atomically with owner-only permissions, refuses silent overwrite, and never prints the key.
+- [x] Profiles store only a managed credential name; old profiles remain readable and descriptors never export the reference.
+- [x] `connect --profile` and `browser --profile` resolve the managed key consistently while explicit file/inline/env sources retain their documented precedence.
+- [x] `auth status`, `auth list`, and `auth remove` expose no secret value and handle referenced/shared credentials safely.
+- [x] Windows and Unix tests cover path selection, permission hardening, invalid names, missing credentials, rollback/error paths, and output redaction.
 
 ## References
 
