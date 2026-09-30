@@ -37,13 +37,16 @@ control-plane API.
 ## Constraints
 
 1. No secret value may enter `profiles.yaml` or a `tsb://` descriptor.
-2. Secret input is masked and never enters argv, stdout/stderr, logs, or agent
-   transcripts.
+2. New credential-onboarding flows use masked input or stdin and never place a
+   secret in argv, stdout/stderr, logs, or agent transcripts.
 3. Storage is per-user, requires no administrator privileges, and works on
    Windows, Linux, and macOS.
 4. Multiple named credentials can coexist and profiles select them by name.
 5. Credential precedence remains explicit:
-   `--auth-key-file` > `--auth-key` > `TS_AUTHKEY` > profile credential.
+   `--auth-key-file` > deprecated `--auth-key` > `TS_AUTHKEY` > profile
+   credential. The inline flag remains temporarily for backward compatibility,
+   keeps its process-list warning, and is removed only after `auth set` ships
+   and documented callers have migrated.
 6. Onboarding works offline with an auth key that already exists.
 7. Replacement is explicit and atomic; no silent overwrite is allowed.
 8. A control-plane administrative credential is transient and is not persisted
@@ -146,15 +149,19 @@ ts-bridge auth remove --profile <profile>
 7. Prints only the profile, provider/control-plane classification, and storage
    status.
 
-The initial file-backed location is:
+The initial file-backed location is derived from the same per-user base
+directory as `ProfileStorePath()`:
 
 - Windows: `%LOCALAPPDATA%\ts-bridge\credentials\`
 - Linux: `$XDG_STATE_HOME/ts-bridge/credentials/`, falling back to
   `~/.local/state/ts-bridge/credentials/`
 - macOS: `~/Library/Application Support/ts-bridge/credentials/`
 
-The directory is a sibling of `profiles.yaml` and `state/`. Credential names
-are validated identifiers, never raw path components supplied unchecked.
+In implementation terms, `CredentialStoreDir()` is
+`filepath.Join(filepath.Dir(ProfileStorePath()), "credentials")`. The directory
+is therefore a sibling of `profiles.yaml` and `state/` on every platform.
+Credential names are validated identifiers, never raw path components supplied
+unchecked.
 
 `profiles.yaml` gains only:
 
@@ -227,7 +234,7 @@ already created a key uses `auth set`.
 
 - #355: Phase 1 credential store and `auth set/status/list/remove`.
 - #368: profile-scoped credential reference and resolution.
-- Follow-up ticket: Phase 2 Tailscale/Headscale `auth create/rotate` adapters.
+- #383: Phase 2 Tailscale/Headscale `auth create/rotate` adapters.
 - #183: resume the ACEMAGIC E2E after Phase 1 can onboard the existing SaaS key.
 
 ## References
