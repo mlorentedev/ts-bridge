@@ -1,0 +1,23 @@
+[
+  {
+    "id": "CI-344-site-pr-build-f1",
+    "behavior": "Site changes and the site workflow itself trigger a pull-request site-build job",
+    "verification": "bash scripts/tests/test-site-pr-workflow.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-344-site-pr-build-f2",
+    "behavior": "The PR job uses the pinned read-only Node 22 npm ci and npm run build toolchain",
+    "verification": "bash scripts/check-actions-pinned.sh && bash scripts/check-workflow-permissions.sh && actionlint -shellcheck=shellcheck .github/workflows/site-pr.yml",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-344-site-pr-build-f3",
+    "behavior": "The documentation site installs and builds successfully without a PR deployment capability",
+    "verification": "npm --prefix site ci --ignore-scripts && npm --prefix site run build",
+    "state": "pending",
+    "evidence": ""
+  }
+]
