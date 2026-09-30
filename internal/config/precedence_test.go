@@ -713,7 +713,7 @@ func TestPrecedenceAutoInstanceMode(t *testing.T) {
 				env["TS_AUTO_INSTANCE"] = c.env
 			}
 			flags := FlagSet{ManualMode: c.manualMode}
-			
+
 			cfg := mergePrecedence(t, yaml, env, flags)
 			if cfg.AutoInstance != c.want {
 				t.Errorf("expected AutoInstance=%v, got %v", c.want, cfg.AutoInstance)
@@ -723,6 +723,12 @@ func TestPrecedenceAutoInstanceMode(t *testing.T) {
 }
 
 func TestPrecedenceAutoInstanceDerivation(t *testing.T) {
+	originalSelector := selectAvailablePort
+	t.Cleanup(func() { selectAvailablePort = originalSelector })
+	selectAvailablePort = func(_ string, start, _ int) (int, error) {
+		return start, nil
+	}
+
 	t.Run("flags override env vars", func(t *testing.T) {
 		yaml := PartialConfig{}
 		env := map[string]string{
@@ -735,7 +741,7 @@ func TestPrecedenceAutoInstanceDerivation(t *testing.T) {
 		}
 
 		cfg := mergePrecedence(t, yaml, env, flags)
-		
+
 		if !strings.Contains(cfg.Hostname, "flag-instance") {
 			t.Errorf("expected hostname to contain flag-instance, got %q", cfg.Hostname)
 		}
@@ -753,7 +759,7 @@ func TestPrecedenceAutoInstanceDerivation(t *testing.T) {
 		flags := FlagSet{}
 
 		cfg := mergePrecedence(t, yaml, env, flags)
-		
+
 		if !strings.Contains(cfg.Hostname, "env-instance") {
 			t.Errorf("expected hostname to contain env-instance, got %q", cfg.Hostname)
 		}
