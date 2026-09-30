@@ -180,6 +180,7 @@ func TestAcceptLoopWithDialer(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("acceptLoop did not stop")
 	}
+	wg.Wait()
 
 	m := telemetry.GetMetrics()
 	if m.TotalConnections <= 0 {
@@ -507,4 +508,3 @@ func TestProxyConnections_HalfClosesOnEOF(t *testing.T) {
 		t.Error("expected at least one CloseWrite invocation on graceful EOF; none recorded")
 	}
 }
-
