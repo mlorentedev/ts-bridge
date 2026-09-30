@@ -141,7 +141,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	if yamlCfg.ControlURL == "" {
 		yamlCfg.ControlURL = selectedProfile.ControlURL
 	}
-	if flags.AuthKey == "" && os.Getenv("TS_AUTHKEY") == "" {
+	if flags.AuthKey == "" && flags.AuthKeyFile == "" && os.Getenv("TS_AUTHKEY") == "" {
 		flags.ProfileAuthKey, err = loadManagedProfileCredential(selectedProfile)
 		if err != nil {
 			return err

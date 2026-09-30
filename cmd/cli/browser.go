@@ -99,6 +99,9 @@ func resolveBrowserConfig(command *cobra.Command) (config.Config, error) {
 }
 
 func applyBrowserProfile(yamlConfig *config.PartialConfig, flags *config.FlagSet, profileName string) error {
+	if profileName == "" {
+		return nil
+	}
 	selectedProfile, err := loadCommandProfile(profileName)
 	if err != nil {
 		return err
