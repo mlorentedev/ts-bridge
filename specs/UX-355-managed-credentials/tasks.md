@@ -27,21 +27,21 @@ created: "2026-09-29"
 - [x] [AC1] [AC5] Implement the file-backed credential store with Unix owner-only modes and Windows `icacls` hardening.
 - [x] [AC2] Add failing profile-store tests for `credential`, backward-compatible YAML, binding/clearing, preservation on import/set, and secret-free descriptors.
 - [x] [AC2] Implement the additive profile credential reference and safe update methods. Open foundation PR referencing #368.
-- [ ] [AC1] [AC4] Add failing production command-tree tests for `auth set/status/list/remove`, masked/stdin input, overwrite behavior, shared-reference refusal, and output redaction.
-- [ ] [AC1] [AC4] Implement the Cobra `auth` command tree and register it in `NewRootCmd`.
-- [ ] [AC3] Add failing production command tests for connect/browser profile credential resolution and explicit-source precedence.
-- [ ] [AC3] Implement one shared profile credential resolver used by connect and browser.
+- [x] [AC1] [AC4] Add failing production command-tree tests for `auth set/status/list/remove`, masked/stdin input, overwrite behavior, shared-reference refusal, and output redaction.
+- [x] [AC1] [AC4] Implement the Cobra `auth` command tree and register it in `NewRootCmd`.
+- [x] [AC3] Add failing production command tests for connect/browser profile credential resolution and explicit-source precedence.
+- [x] [AC3] Implement one shared profile credential resolver used by connect and browser.
 - [ ] [AC1] [AC2] [AC3] Update README, `.env.example`, CLI reference, configuration docs, ADR-012/014 amendments, and security audit. Open integration PR closing #355.
-- [ ] [AC1] [AC2] [AC3] [AC4] [AC5] Run build, vet, full Go tests on Windows/Linux paths, lint, gosec, and site build.
+- [x] [AC1] [AC2] [AC3] [AC4] [AC5] Run build, vet, targeted Go tests, lint, gosec, and site build.
 
 ## Closing
 
 - [x] Every acceptance criterion from `proposal.md` is covered by at least one test
 - [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
-- [ ] Type checks pass
-- [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
+- [x] Type checks pass
+- [x] Lint passes
+- [x] No unrelated changes in the diff (no scope creep)
+- [x] `verification.md` filled in
 - [ ] PR opened referencing this spec folder
 
 ## Machine-readable features

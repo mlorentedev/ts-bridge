@@ -10,7 +10,8 @@ Configuration is resolved in this order (highest to lowest):
 1. **CLI flags** — explicit flags on the command line
 2. **Environment variables** — `TS_*` prefix
 3. **YAML config file** — specified with `--config`
-4. **Built-in defaults** — hardcoded fallbacks
+4. **Managed profile credential** — auth key only, when the profile references one
+5. **Built-in defaults** — hardcoded fallbacks
 
 ## Environment variables
 
@@ -64,6 +65,18 @@ These variables are used by the `ts-bridge host` commands. They are typically wr
 ## YAML config file
 
 YAML config is optional and supports non-sensitive settings only. The auth key **must not** be stored in YAML files.
+
+Named profiles may store a non-secret managed credential reference:
+
+```yaml
+profiles:
+  office:
+    target: "acemagic-office:45000"
+    credential: "office"
+```
+
+Store the key with `ts-bridge auth set --profile office`. The managed
+credential path and value are never exported through a `tsb://` descriptor.
 
 ### Example
 

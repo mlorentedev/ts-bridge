@@ -131,15 +131,21 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	// Profiles are the lowest configuration source above defaults. Load the
 	// selected profile before Merge validates required and control-plane fields.
 	profileName, _ := cmd.Flags().GetString("profile")
-	var profileCfg config.Config
-	if err := applyProfile(&profileCfg, profileName, defaultProfileStorePath); err != nil {
+	selectedProfile, err := loadCommandProfile(profileName)
+	if err != nil {
 		return err
 	}
 	if yamlCfg.Target == "" {
-		yamlCfg.Target = profileCfg.Target
+		yamlCfg.Target = selectedProfile.Target
 	}
 	if yamlCfg.ControlURL == "" {
-		yamlCfg.ControlURL = profileCfg.ControlURL
+		yamlCfg.ControlURL = selectedProfile.ControlURL
+	}
+	if flags.AuthKey == "" && os.Getenv("TS_AUTHKEY") == "" {
+		flags.ProfileAuthKey, err = loadManagedProfileCredential(selectedProfile)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Merge: flags > env > yaml > profile > defaults.

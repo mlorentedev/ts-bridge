@@ -121,3 +121,10 @@ No new converter is needed.
 - Issue: ts-bridge#185
 - CFG-002 implementation: PR #228 (`internal/profile/`, `ts-bridge import`, `connect --profile`)
 - Related: `docs/adr/adr-011-shareable-connection-profile.md` (tsb:// design)
+
+## 2026-09-29 amendment: managed credential references
+
+ADR-015 adds an optional non-secret `credential:` name to each local profile.
+The managed credential store owns the platform-specific path and permissions;
+raw keys and file paths remain forbidden in `profiles.yaml` and `tsb://`
+descriptors. Existing profiles without the field remain backward compatible.

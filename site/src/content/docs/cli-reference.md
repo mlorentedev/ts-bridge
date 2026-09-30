@@ -9,6 +9,8 @@ description: Complete reference for all ts-bridge subcommands, flags, and usage 
 ts-bridge [command]
 
 Available Commands:
+  auth        Manage profile-scoped credentials
+  browser     Open an isolated browser through an allow-listed mesh proxy
   connect     Start the TCP bridge
   host        Host setup and verification commands
   init        Interactive setup wizard
@@ -19,6 +21,26 @@ Flags:
   -v, --verbose   Enable verbose logging
       --config string   Config file path (reserved for future use)
 ```
+
+## `ts-bridge auth`
+
+Manage keys without creating credential files manually or exposing values in
+command-line arguments.
+
+```bash
+# Masked prompt; defaults the credential name to the profile name
+ts-bridge auth set --profile office
+
+# Use an explicit shared credential name
+ts-bridge auth set shared-key --profile office
+
+ts-bridge auth status --profile office
+ts-bridge auth list
+ts-bridge auth remove --profile office
+```
+
+`auth set --stdin` is available for explicit automation. Existing credentials
+are never overwritten without `--force`.
 
 ## `ts-bridge connect`
 
