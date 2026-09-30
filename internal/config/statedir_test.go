@@ -85,6 +85,17 @@ func TestStateDirForPlatformLive(t *testing.T) {
 	}
 }
 
+func TestCredentialStoreDirIsSiblingOfProfileStore(t *testing.T) {
+	got := CredentialStoreDir()
+	want := filepath.Join(filepath.Dir(ProfileStorePath()), "credentials")
+	if got != want {
+		t.Fatalf("CredentialStoreDir() = %q, want %q", got, want)
+	}
+	if !filepath.IsAbs(got) {
+		t.Fatalf("credential store must be absolute, got %q", got)
+	}
+}
+
 // A hostname containing path separators or ".." must not let the ephemeral
 // state dir escape the temp state root.
 func TestEphemeralStateDirNoTraversal(t *testing.T) {

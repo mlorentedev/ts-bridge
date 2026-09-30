@@ -66,6 +66,13 @@ func ProfileStorePath() string {
 	return filepath.Join(filepath.Dir(StateDirForPlatform()), "profiles.yaml")
 }
 
+// CredentialStoreDir returns the per-user directory for managed credentials.
+// It shares the application data root with profiles.yaml but remains outside
+// the resettable tsnet state directory.
+func CredentialStoreDir() string {
+	return filepath.Join(filepath.Dir(ProfileStorePath()), "credentials")
+}
+
 // ephemeralSegment reduces hostname to a single safe path segment so a value
 // containing path separators or ".." cannot escape the temp state root.
 func ephemeralSegment(hostname string) string {

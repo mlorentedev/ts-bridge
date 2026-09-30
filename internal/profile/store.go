@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"ts-bridge/internal/credential"
 )
 
 // profileEntry is one named profile in the YAML store.
@@ -15,6 +17,7 @@ import (
 type profileEntry struct {
 	Target     string `yaml:"target"`
 	ControlURL string `yaml:"control_url,omitempty"`
+	Credential string `yaml:"credential,omitempty"`
 }
 
 // storeFile is the on-disk YAML shape.
@@ -27,6 +30,7 @@ type storeFile struct {
 type Profile struct {
 	Target     string
 	ControlURL string
+	Credential string
 }
 
 // Store is a persistent, file-backed named-profile store.
@@ -50,9 +54,11 @@ func (s *Store) Import(name string, d Descriptor) error {
 	}
 
 	target := fmt.Sprintf("%s:%d", d.Host, d.Port)
+	existing := data.Profiles[name]
 	data.Profiles[name] = profileEntry{
 		Target:     target,
 		ControlURL: d.ControlURL,
+		Credential: existing.Credential,
 	}
 	data.DescriptorVersion = 1
 
@@ -79,7 +85,12 @@ func (s *Store) Set(name, target, controlURL string) error {
 	if err != nil {
 		return fmt.Errorf("load profile store: %w", err)
 	}
-	data.Profiles[name] = profileEntry{Target: target, ControlURL: controlURL}
+	existing := data.Profiles[name]
+	data.Profiles[name] = profileEntry{
+		Target:     target,
+		ControlURL: controlURL,
+		Credential: existing.Credential,
+	}
 	data.DescriptorVersion = 1
 	if err := s.save(data); err != nil {
 		return fmt.Errorf("save profile store: %w", err)
@@ -97,7 +108,7 @@ func (s *Store) Get(name string) (Profile, error) {
 	if !ok {
 		return Profile{}, fmt.Errorf("profile %q not found in %s", name, s.path)
 	}
-	return Profile{Target: e.Target, ControlURL: e.ControlURL}, nil
+	return profileFromEntry(e), nil
 }
 
 // List returns all profile names in the store.
@@ -111,6 +122,54 @@ func (s *Store) List() ([]string, error) {
 		names = append(names, n)
 	}
 	return names, nil
+}
+
+// ListProfiles returns every profile keyed by its local name.
+func (s *Store) ListProfiles() (map[string]Profile, error) {
+	data, err := s.load()
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]Profile, len(data.Profiles))
+	for name, entry := range data.Profiles {
+		result[name] = profileFromEntry(entry)
+	}
+	return result, nil
+}
+
+// SetCredential associates a managed credential name with an existing profile.
+func (s *Store) SetCredential(profileName, credentialName string) error {
+	if err := credential.ValidateName(credentialName); err != nil {
+		return fmt.Errorf("invalid credential reference: %w", err)
+	}
+	return s.updateCredential(profileName, credentialName)
+}
+
+// ClearCredential removes the managed credential reference from a profile.
+func (s *Store) ClearCredential(profileName string) error {
+	return s.updateCredential(profileName, "")
+}
+
+func (s *Store) updateCredential(profileName, credentialName string) error {
+	data, err := s.load()
+	if err != nil {
+		return err
+	}
+	entry, ok := data.Profiles[profileName]
+	if !ok {
+		return fmt.Errorf("profile %q not found in %s", profileName, s.path)
+	}
+	entry.Credential = credentialName
+	data.Profiles[profileName] = entry
+	return s.save(data)
+}
+
+func profileFromEntry(entry profileEntry) Profile {
+	return Profile{
+		Target:     entry.Target,
+		ControlURL: entry.ControlURL,
+		Credential: entry.Credential,
+	}
 }
 
 func (s *Store) load() (storeFile, error) {
