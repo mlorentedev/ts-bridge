@@ -1,6 +1,7 @@
 package config
 
 import (
+	"hash/fnv"
 	"net"
 	"strconv"
 	"testing"
@@ -24,12 +25,23 @@ func TestSelectAvailablePortSkipsOccupiedPortAndReturnsFreeCandidate(t *testing.
 	defer occupied.Close()
 	occupiedPort := occupied.Addr().(*net.TCPAddr).Port
 
-	got, err := selectAvailablePortImpl("seed", occupiedPort, freePort)
+	got, err := selectAvailablePortImpl(seedForOffset(2, 0), occupiedPort, freePort)
 	if err != nil {
 		t.Fatalf("selectAvailablePortImpl() error = %v", err)
 	}
 	if got != freePort {
 		t.Fatalf("selectAvailablePortImpl() = %d, want free candidate %d", got, freePort)
+	}
+}
+
+func seedForOffset(span, want int) string {
+	for candidate := 0; ; candidate++ {
+		seed := strconv.Itoa(candidate)
+		hasher := fnv.New32a()
+		_, _ = hasher.Write([]byte(seed))
+		if int(int64(hasher.Sum32())%int64(span)) == want {
+			return seed
+		}
 	}
 }
 
