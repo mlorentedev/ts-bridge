@@ -35,6 +35,8 @@ jobs:
         run: bash scripts/tests/test-workflow-permissions.sh
       - name: That guard tolerates a null comment body (#345 regression)
         run: bash scripts/tests/test-check-review-published.sh
+      - name: Site changes keep their pull-request build gate
+        run: bash scripts/tests/test-site-pr-workflow.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.26'
