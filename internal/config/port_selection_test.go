@@ -19,6 +19,38 @@ func TestSelectAvailablePortRejectsOccupiedOnlyPort(t *testing.T) {
 	}
 }
 
+func TestSelectAvailablePortSkipsOccupiedPortAndReturnsFreeCandidate(t *testing.T) {
+	occupied, freePort := consecutiveAvailablePorts(t)
+	defer occupied.Close()
+	occupiedPort := occupied.Addr().(*net.TCPAddr).Port
+
+	got, err := selectAvailablePortImpl("seed", occupiedPort, freePort)
+	if err != nil {
+		t.Fatalf("selectAvailablePortImpl() error = %v", err)
+	}
+	if got != freePort {
+		t.Fatalf("selectAvailablePortImpl() = %d, want free candidate %d", got, freePort)
+	}
+}
+
+func consecutiveAvailablePorts(t *testing.T) (net.Listener, int) {
+	t.Helper()
+	for port := 20000; port < 60000; port++ {
+		first, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+		if err != nil {
+			continue
+		}
+		second, secondErr := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port+1)))
+		if secondErr == nil {
+			_ = second.Close()
+			return first, port + 1
+		}
+		_ = first.Close()
+	}
+	t.Fatal("could not reserve consecutive loopback ports")
+	return nil, 0
+}
+
 func TestDeriveAutoLocalAddrUsesInjectedPortSelector(t *testing.T) {
 	original := selectAvailablePort
 	t.Cleanup(func() { selectAvailablePort = original })
