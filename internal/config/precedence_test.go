@@ -724,6 +724,12 @@ func TestPrecedenceAutoInstanceMode(t *testing.T) {
 }
 
 func TestPrecedenceAutoInstanceDerivation(t *testing.T) {
+	originalSelector := selectAvailablePort
+	t.Cleanup(func() { selectAvailablePort = originalSelector })
+	selectAvailablePort = func(_ string, start, _ int) (int, error) {
+		return start, nil
+	}
+
 	t.Run("flags override env vars", func(t *testing.T) {
 		yaml := PartialConfig{}
 		env := map[string]string{

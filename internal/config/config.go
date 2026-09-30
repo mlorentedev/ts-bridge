@@ -555,7 +555,9 @@ func parsePortRange(value string) (int, int, error) {
 	return start, end, nil
 }
 
-func selectAvailablePort(seed string, start, end int) (int, error) {
+var selectAvailablePort = selectAvailablePortImpl
+
+func selectAvailablePortImpl(seed string, start, end int) (int, error) {
 	span := end - start + 1
 	if span <= 0 {
 		return 0, fmt.Errorf("TS_PORT_RANGE has invalid span: %d", span)
