@@ -128,10 +128,10 @@ optional layer.
 Add a provider-neutral credential store and these CLI operations:
 
 ```text
-ts-bridge auth set --profile <profile>
-ts-bridge auth status [--profile <profile>]
+ts-bridge auth set [<credential>] --profile <profile>
+ts-bridge auth status [<credential> | --profile <profile>]
 ts-bridge auth list
-ts-bridge auth remove --profile <profile>
+ts-bridge auth remove [<credential> | --profile <profile>]
 ```
 
 `auth set`:
@@ -144,8 +144,10 @@ ts-bridge auth remove --profile <profile>
    permissions, then atomically renames it.
 5. Refuses an existing credential unless the user explicitly confirms
    replacement or supplies `--force`.
-6. Updates the local profile with a non-secret credential reference. If no
-   credential name is supplied, the profile name is the credential name.
+6. Updates the local profile with a non-secret credential reference. The
+   optional positional argument is the credential name; when omitted, the
+   profile name is used. An explicit name allows several profiles to share one
+   managed credential without duplicating secret files.
 7. Prints only the profile, provider/control-plane classification, and storage
    status.
 
@@ -174,6 +176,24 @@ profiles:
 
 The secret file and its path are never exported through `tsb://`.
 
+### Resolution contract
+
+- `connect --profile <name>` and `browser --profile <name>` use one shared
+  resolver and consume the profile's managed credential when no higher
+  precedence source was supplied.
+- `init --profile <name>` may bind a credential reference (or direct the user
+  to `auth set`) but does not read the secret merely to write non-secret profile
+  configuration. This intentionally narrows #355's earlier wording that `init`
+  should "consume" the credential.
+- Existing profiles without `credential` remain valid and continue through the
+  legacy explicit/env credential sources.
+- ADR-015 supersedes #368's proposed storage of a machine-local auth-key **file
+  path** in the profile. The profile stores a managed credential name instead;
+  the credential store owns the path.
+- SaaS and Headscale profiles retain separate credential references and state
+  identities. Credential resolution must not collapse their state directories
+  or control-plane selection.
+
 ### Phase 2: optional provider-backed creation and rotation
 
 Add a narrow provider interface that returns a node credential to the same
@@ -190,6 +210,14 @@ an explicit protected file and is discarded after the API call. It is not
 stored by the credential store. Rotation writes and validates the new node key
 before replacing the old file; revocation of the old provider key is a
 separate explicit step when supported.
+
+- The Tailscale adapter requires an API/OAuth access token with `auth_keys`
+  authority and validates OAuth tag ownership before requesting reusable,
+  ephemeral, preauthorized, expiry, and tag capabilities.
+- The Headscale adapter requires the profile control URL, a Headscale API key,
+  and an explicit user identity; reusable, ephemeral, expiration, and ACL tags
+  are sent explicitly rather than inheriting Headscale's one-hour/single-use
+  defaults.
 
 Phase 2 is not required to solve the current onboarding case: an operator who
 already created a key uses `auth set`.
