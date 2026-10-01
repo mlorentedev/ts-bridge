@@ -156,8 +156,8 @@ warrants its own ticket if it recurs.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/CI-345-hygiene-guard-fixes/` -> `specs/archive/CI-345-hygiene-guard-fixes/`
-- [ ] Bitácora board ticket moved to Done / issue #345 closed with the PR link (`Closes #345`)
-- [ ] Independent adversarial review recorded (`review.md`) by a model in `harness/reviewer-pool.json`
-- [ ] Promotion candidates above executed or explicitly declined
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/CI-345-hygiene-guard-fixes/` -> `specs/archive/CI-345-hygiene-guard-fixes/`
+- [x] Bitácora board ticket moved to Done / issue #345 closed with the PR link (`Closes #345`)
+- [x] Independent adversarial review recorded (`review.md`) by a model in `harness/reviewer-pool.json`
+- [x] Promotion candidates above executed or explicitly declined

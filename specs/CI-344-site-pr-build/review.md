@@ -59,7 +59,7 @@ Rubric alone would land at PASS (no C, no D). The severity path escalates: one *
 
 ### Verdict
 
-**FAIL** — one REAL Major (the required-check guard does not assert the structure AC1/AC2 and `features.json` claim it does; three mutations of the workflow survive it with exit 0) plus five Minor/Question items, three of which are REAL.
+**FAIL** — one REAL Major (the required-check guard does not assert the structure AC1/AC2 and `features.json` claim it does; three mutations of the workflow survive it with exit 0) plus seven Minor/Question items, five of which are REAL.
 
 The shipped workflow itself is correct and its live proofs hold up under independent verification; what fails is the **regression contract** that is the only thing enforcing it.
 
@@ -80,7 +80,7 @@ The shipped workflow itself is correct and its live proofs hold up under indepen
 
 | Check | Verdict |
 |---|---|
-| **Debt** | Findings recorded here: 1 Major, 5 Minor/Question, each with a fix location. Nothing noticed was left verbal. |
+| **Debt** | Findings recorded here: 1 Major, 7 Minor/Question, each with a fix location. Nothing noticed was left verbal. |
 | **Knowledge** | Candidate named above (text-match vs structure in contract guards) for `docs/lessons/` or a vault pattern; the spec's own promotion lines are all answered `no: <reason>`. |
 | **Board** | `#344 CLOSED 2026-09-30T00:32:54Z` (closed by PR #381) — the ticket matches reality; the spec folder is still active, which is correct until it archives. |
 | **Review** | PR #381 is merged and closed; its reviewer output was dispositioned by the implementer (CodeRabbit's matcher fix is in `verification.md`). The one unexplained signal is the non-required `pr-agent` `review FAILURE`, recorded above as informational. |
