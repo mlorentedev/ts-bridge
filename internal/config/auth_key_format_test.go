@@ -13,6 +13,7 @@ func TestMergeRejectsNonMachineAndMalformedTailscaleKeys(t *testing.T) {
 		{name: "API token", key: "tskey-api-id-secret"},
 		{name: "OAuth client secret", key: "tskey-client-id-secret"},
 		{name: "missing auth segments", key: "tskey-auth"},
+		{name: "missing secret segment", key: "tskey-auth-id"},
 		{name: "unknown tskey type", key: "tskey-foo"},
 		{name: "concatenated auth keys", key: "tskey-auth-id-secret-auth-id-secret"},
 	}

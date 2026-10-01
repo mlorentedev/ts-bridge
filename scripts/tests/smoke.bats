@@ -564,7 +564,7 @@ TARGET="100.64.0.1:3389"
   # This deterministically returns an API token invalid error over the network
   # without requiring real credentials, proving runtime network dial errors are
   # routed cleanly to stderr without stack traces.
-  run bash -c '"${BIN}" discover --auth-key tskey-auth-dummy --tailnet hs 2>stderr.log >stdout.log'
+  run bash -c '"${BIN}" discover --auth-key tskey-auth-dummy-secret --tailnet hs 2>stderr.log >stdout.log'
   assert_failure
   run cat stderr.log
   assert_contains "API token invalid"

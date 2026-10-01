@@ -131,7 +131,7 @@ func TestBootstrapSSHFlagsReachRunner(t *testing.T) {
 	cmd := newConnectCmd()
 	cmd.SetArgs([]string{
 		"--target", "mesh-host:22",
-		"--auth-key", "tskey-auth-test",
+		"--auth-key", "tskey-auth-test-secret",
 		"--control-url", "https://vpn.example.com",
 		"--bootstrap-ssh", "deployer@bastion.example.com:2222",
 		"--bootstrap-socks-addr", "127.0.0.1:1101",

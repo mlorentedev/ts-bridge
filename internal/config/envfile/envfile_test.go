@@ -262,7 +262,7 @@ func TestLoad_exportPrefix(t *testing.T) {
 
 func BenchmarkLoad(b *testing.B) {
 	tmp := filepath.Join(b.TempDir(), ".env")
-	content := "TS_AUTHKEY=tskey-auth-xxx\nTS_TARGET=100.64.0.1:3389\nTS_INSTANCE_NAME=my-desktop\nTS_LOCAL_ADDR=127.0.0.1:33389\nTS_HEALTH_ADDR=127.0.0.1:9091\n"
+	content := "TS_AUTHKEY=tskey-auth-xxx-secret\nTS_TARGET=100.64.0.1:3389\nTS_INSTANCE_NAME=my-desktop\nTS_LOCAL_ADDR=127.0.0.1:33389\nTS_HEALTH_ADDR=127.0.0.1:9091\n"
 	_ = os.WriteFile(tmp, []byte(content), 0600)
 
 	b.ResetTimer()

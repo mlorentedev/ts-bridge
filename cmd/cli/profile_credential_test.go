@@ -21,7 +21,7 @@ func setupProfileCredentialTest(t *testing.T) (string, string) {
 	if err := profiles.SetCredential("office", "office-key"); err != nil {
 		t.Fatal(err)
 	}
-	if err := credential.NewStore(credentialDir).Set("office-key", "tskey-auth-profile", false); err != nil {
+	if err := credential.NewStore(credentialDir).Set("office-key", "tskey-auth-profile-secret", false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +55,7 @@ func TestConnectResolvesProfileCredential(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatalf("connect error = %v", err)
 	}
-	if captured.AuthKey != "tskey-auth-profile" {
+	if captured.AuthKey != "tskey-auth-profile-secret" {
 		t.Fatal("connect did not resolve the profile credential")
 	}
 }
@@ -74,8 +74,8 @@ func TestConnectExplicitCredentialSourcesOverrideProfile(t *testing.T) {
 		args    []string
 		wantKey string
 	}{
-		{name: "environment", envKey: "tskey-auth-env", wantKey: "tskey-auth-env"},
-		{name: "auth key file", args: []string{"--auth-key-file"}, wantKey: "tskey-auth-file"},
+		{name: "environment", envKey: "tskey-auth-env-secret", wantKey: "tskey-auth-env-secret"},
+		{name: "auth key file", args: []string{"--auth-key-file"}, wantKey: "tskey-auth-file-secret"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -111,7 +111,7 @@ func TestConnectAuthKeyFileOverridesMissingProfileCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	keyFile := filepath.Join(t.TempDir(), "authkey")
-	if err := os.WriteFile(keyFile, []byte("tskey-auth-file"), 0o600); err != nil {
+	if err := os.WriteFile(keyFile, []byte("tskey-auth-file-secret"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TS_AUTHKEY", "")
@@ -131,7 +131,7 @@ func TestConnectAuthKeyFileOverridesMissingProfileCredential(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatalf("connect error = %v (profile store %s)", err, profilePath)
 	}
-	if captured.AuthKey != "tskey-auth-file" {
+	if captured.AuthKey != "tskey-auth-file-secret" {
 		t.Fatalf("AuthKey = %q, want explicit file key", captured.AuthKey)
 	}
 }
@@ -159,7 +159,7 @@ func TestBrowserResolvesProfileCredential(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatalf("browser error = %v", err)
 	}
-	if captured.AuthKey != "tskey-auth-profile" {
+	if captured.AuthKey != "tskey-auth-profile-secret" {
 		t.Fatal("browser did not resolve the profile credential")
 	}
 }
@@ -170,7 +170,7 @@ func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 	t.Setenv("TS_TARGET", "")
 	t.Setenv("TS_CONTROL_URL", "")
 	keyFile := filepath.Join(t.TempDir(), "authkey")
-	if err := os.WriteFile(keyFile, []byte("tskey-auth-file"), 0o600); err != nil {
+	if err := os.WriteFile(keyFile, []byte("tskey-auth-file-secret"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	oldRunner, oldLogger := BrowserRunner, LoggerInit
@@ -192,7 +192,7 @@ func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatalf("browser error = %v", err)
 	}
-	if captured.AuthKey != "tskey-auth-file" {
+	if captured.AuthKey != "tskey-auth-file-secret" {
 		t.Fatalf("AuthKey = %q, want file key", captured.AuthKey)
 	}
 }

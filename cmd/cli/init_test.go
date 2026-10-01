@@ -26,7 +26,7 @@ func TestWriteEnvConfig_DetectsExistingFile(t *testing.T) {
 	// Create a mock command with non-terminal stdin (non-interactive).
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey: "tskey-auth-test",
+		AuthKey: "tskey-auth-test-secret",
 		Target:  "100.64.0.2:443",
 		Format:  "env",
 		Config:  envPath,
@@ -58,7 +58,7 @@ func TestWriteEnvConfig_OverwriteWithForce(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey: "tskey-auth-test",
+		AuthKey: "tskey-auth-test-secret",
 		Target:  "100.64.0.2:443",
 		Format:  "env",
 		Config:  envPath,
@@ -86,7 +86,7 @@ func TestWriteYAMLConfig_DetectsExistingFile(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey: "tskey-auth-test",
+		AuthKey: "tskey-auth-test-secret",
 		Target:  "100.64.0.2:443",
 		Format:  "yaml",
 		Config:  yamlPath,
@@ -109,7 +109,7 @@ func TestWriteYAMLConfig_CreatesYamlAndEnv(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey:   "tskey-auth-test",
+		AuthKey:   "tskey-auth-test-secret",
 		Target:    "100.64.0.1:3389",
 		Format:    "yaml",
 		Config:    yamlPath,
@@ -140,7 +140,7 @@ func TestWriteYAMLConfig_CreatesYamlAndEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf(".env file not created: %v", err)
 	}
-	if !strings.Contains(string(envData), "TS_AUTHKEY=tskey-auth-test") {
+	if !strings.Contains(string(envData), "TS_AUTHKEY=tskey-auth-test-secret") {
 		t.Error(".env should contain TS_AUTHKEY")
 	}
 	if !strings.Contains(string(envData), "--auth-key-file") {
@@ -227,7 +227,7 @@ func TestWriteEnvConfig_CreatesFullConfig(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey:   "tskey-auth-test",
+		AuthKey:   "tskey-auth-test-secret",
 		Target:    "100.64.0.1:3389",
 		Format:    "env",
 		Config:    envPath,
@@ -247,7 +247,7 @@ func TestWriteEnvConfig_CreatesFullConfig(t *testing.T) {
 
 	// Should contain both required fields.
 	content := string(data)
-	if !strings.Contains(content, "TS_AUTHKEY=tskey-auth-test") {
+	if !strings.Contains(content, "TS_AUTHKEY=tskey-auth-test-secret") {
 		t.Error("should contain TS_AUTHKEY")
 	}
 	if !strings.Contains(content, "TS_TARGET=100.64.0.1:3389") {

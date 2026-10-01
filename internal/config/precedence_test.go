@@ -29,7 +29,7 @@ import (
 //     merge_test.go.
 
 const (
-	precedenceAuthKey = "tskey-auth-precedence"
+	precedenceAuthKey = "tskey-auth-precedence-secret"
 	precedenceTarget  = "100.64.0.254:3389"
 )
 

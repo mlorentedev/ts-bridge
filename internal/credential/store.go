@@ -211,7 +211,7 @@ func validateTailscaleKey(key string) error {
 		return fmt.Errorf("credential must be a Tailscale machine auth key or Headscale pre-auth key")
 	}
 	parts := strings.Split(key, "-")
-	if (len(parts) != 3 && len(parts) != 4) || parts[0] != "tskey" || parts[1] != "auth" {
+	if len(parts) != 4 || parts[0] != "tskey" || parts[1] != "auth" {
 		return fmt.Errorf("credential must be a Tailscale machine auth key or Headscale pre-auth key")
 	}
 	for _, part := range parts[2:] {

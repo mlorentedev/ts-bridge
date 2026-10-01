@@ -150,7 +150,7 @@ func TestMergeRejectsInvalidBootstrapConfig(t *testing.T) {
 			t.Setenv("TS_AUTHKEY", "")
 			t.Setenv("TS_CONTROL_URL", "")
 			tt.flags.Target = "mesh-host:22"
-			tt.flags.AuthKey = "tskey-auth-test"
+			tt.flags.AuthKey = "tskey-auth-test-secret"
 
 			_, err := Merge(PartialConfig{}, tt.flags)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
@@ -221,7 +221,7 @@ func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
 			t.Setenv("TS_AUTHKEY", "")
 			t.Setenv("TS_CONTROL_URL", "")
 			tt.flags.Target = "mesh-host:22"
-			tt.flags.AuthKey = "tskey-auth-test"
+			tt.flags.AuthKey = "tskey-auth-test-secret"
 			tt.flags.ControlURL = "https://vpn.example.com"
 			tt.flags.BootstrapSSH = "deployer@bastion.example.com"
 

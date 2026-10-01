@@ -89,7 +89,7 @@ ts-bridge connect
 ts-bridge connect --auth-key-file /run/secrets/authkey
 
 # Run with all flags inline — quick try only: --auth-key is visible in `ps`
-ts-bridge connect --target 100.64.0.1:3389 --auth-key tskey-auth-xxxxx
+ts-bridge connect --target 100.64.0.1:3389 --auth-key tskey-auth-KEYID-SECRET
 
 # Run with YAML config
 ts-bridge connect --config ts-bridge.yaml

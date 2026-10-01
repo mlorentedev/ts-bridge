@@ -72,7 +72,7 @@ func TestUpdateEnv_PreservesComments(t *testing.T) {
 
 	existing := `# Required
 # Auth key
-TS_AUTHKEY=tskey-auth-test
+TS_AUTHKEY=tskey-auth-test-secret
 # Target
 TS_TARGET=old:3389
 # Optional
@@ -107,7 +107,7 @@ func TestUpdateEnv_NoTrailingNewline(t *testing.T) {
 	path := filepath.Join(dir, ".env")
 
 	// File with no trailing newline.
-	if err := os.WriteFile(path, []byte("TS_AUTHKEY=tskey-auth-test"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("TS_AUTHKEY=tskey-auth-test-secret"), 0600); err != nil {
 		t.Fatalf("write initial .env: %v", err)
 	}
 
@@ -121,7 +121,7 @@ func TestUpdateEnv_NoTrailingNewline(t *testing.T) {
 		t.Fatalf("read .env: %v", err)
 	}
 
-	if !strings.Contains(string(data), "TS_AUTHKEY=tskey-auth-test") {
+	if !strings.Contains(string(data), "TS_AUTHKEY=tskey-auth-test-secret") {
 		t.Error("TS_AUTHKEY should be preserved")
 	}
 	if !strings.Contains(string(data), "TS_TARGET=host:3389") {
