@@ -13,13 +13,18 @@ Configuration is resolved in this order (highest to lowest):
 4. **Managed profile credential** — auth key only, when the profile references one
 5. **Built-in defaults** — hardcoded fallbacks
 
+**Browser exception (ADR-014):** `browser` does not accept an environment-only
+credential. With `browser --profile`, `--auth-key-file` remains the highest
+precedence source; otherwise the managed profile credential is used and
+`TS_AUTHKEY` is ignored with an explicit warning.
+
 ## Environment variables
 
 ### Required
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TS_AUTHKEY` | Auth key. Tailscale: `tskey-auth-<id>-<secret>`. Headscale: `hskey-*`. Plaintext in the environment and readable by child processes. On a shared or hardened host, `connect --auth-key-file` can leave it unset; `init --auth-key-file` avoids command-line exposure but writes `TS_AUTHKEY` to the generated `.env` (or the sibling `.env` in YAML mode). | `tskey-auth-KEYID-SECRET` |
+| `TS_AUTHKEY` | Auth key for `connect`. Tailscale: `tskey-auth-<id>-<secret>`. Headscale: `hskey-*`. Plaintext in the environment and readable by child processes. On a shared or hardened host, `connect --auth-key-file` can leave it unset; `init --auth-key-file` avoids command-line exposure but writes `TS_AUTHKEY` to the generated `.env` (or the sibling `.env` in YAML mode). Browser mode intentionally ignores this variable; use `browser --auth-key-file` or a managed profile credential. | `tskey-auth-KEYID-SECRET` |
 | `TS_TARGET` | Host address on the mesh network | `100.82.151.104:3389` |
 
 ### Optional

@@ -2,7 +2,7 @@
   {
     "id": "UX-355-managed-credentials-f1",
     "behavior": "Managed credential storage is atomic, owner-only, and secret-safe",
-    "verification": "go test ./internal/credential ./internal/config -run 'Credential|CredentialStore' -count=1",
+    "verification": "go test ./internal/credential ./internal/config -run '^(TestStoreSetGetAndList|TestStoreRefusesOverwriteUnlessExplicit|TestStoreFailedAtomicReplacePreservesExistingCredential|TestStoreValidatesNamesAndKeysWithoutLeakingValues|TestStoreRemove|TestStoreUsesOwnerOnlyPermissionsOnUnix|TestHardenCredentialPathUsesOwnerOnlyWindowsACLs|TestCredentialStoreDirIsSiblingOfProfileStore)$' -count=1",
     "state": "pending",
     "evidence": ""
   },
@@ -23,7 +23,7 @@
   {
     "id": "UX-355-managed-credentials-f4",
     "behavior": "Connect and browser resolve profile credentials with explicit-source precedence",
-    "verification": "go test ./cmd/cli -run 'ProfileCredential|BrowserCommand' -count=1",
+    "verification": "go test ./cmd/cli ./internal/config -count=1",
     "state": "pending",
     "evidence": ""
   },

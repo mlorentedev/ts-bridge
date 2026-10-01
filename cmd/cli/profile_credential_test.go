@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ts-bridge/internal/config"
@@ -136,6 +138,33 @@ func TestConnectAuthKeyFileOverridesMissingProfileCredential(t *testing.T) {
 	}
 }
 
+func TestConnectEnvOverridesMissingProfileCredential(t *testing.T) {
+	_, credentialDir := setupProfileCredentialTest(t)
+	if err := os.Remove(filepath.Join(credentialDir, "office-key.key")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_CONTROL_URL", "")
+	oldRunner, oldLogger := Runner, LoggerInit
+	t.Cleanup(func() { Runner, LoggerInit = oldRunner, oldLogger })
+	LoggerInit = nil
+
+	var captured config.Config
+	Runner = func(cfg config.Config) error {
+		captured = cfg
+		return nil
+	}
+	command := newConnectCmd()
+	command.SetArgs([]string{"--profile", "office"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("connect error = %v", err)
+	}
+	if captured.AuthKey != "tskey-auth-env-secret" {
+		t.Fatalf("AuthKey = %q, want environment key", captured.AuthKey)
+	}
+}
+
 func TestBrowserResolvesProfileCredential(t *testing.T) {
 	setupProfileCredentialTest(t)
 	t.Setenv("TS_AUTHKEY", "")
@@ -164,9 +193,42 @@ func TestBrowserResolvesProfileCredential(t *testing.T) {
 	}
 }
 
+func TestBrowserManagedProfileCredentialOverridesEnvironmentWithWarning(t *testing.T) {
+	setupProfileCredentialTest(t)
+	t.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_CONTROL_URL", "")
+	oldRunner, oldLogger := BrowserRunner, LoggerInit
+	t.Cleanup(func() { BrowserRunner, LoggerInit = oldRunner, oldLogger })
+	LoggerInit = nil
+
+	var captured config.Config
+	BrowserRunner = func(cfg config.Config, _ BrowserOptions) error {
+		captured = cfg
+		return nil
+	}
+	var stderr bytes.Buffer
+	command := newBrowserCmd()
+	command.SetErr(&stderr)
+	command.SetArgs([]string{
+		"--profile", "office",
+		"--url", "https://forge.example.internal/",
+		"--route", "forge.example.internal:443=apps:443",
+	})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("browser error = %v", err)
+	}
+	if captured.AuthKey != "tskey-auth-profile-secret" {
+		t.Fatalf("AuthKey = %q, want managed profile credential", captured.AuthKey)
+	}
+	if !strings.Contains(stderr.String(), "browser ignores TS_AUTHKEY when --profile supplies a managed credential") {
+		t.Fatalf("stderr = %q, want ignored-environment warning", stderr.String())
+	}
+}
+
 func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 	setupProfileCredentialTest(t)
-	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 	t.Setenv("TS_TARGET", "")
 	t.Setenv("TS_CONTROL_URL", "")
 	keyFile := filepath.Join(t.TempDir(), "authkey")
@@ -182,7 +244,9 @@ func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 		captured = cfg
 		return nil
 	}
+	var stderr bytes.Buffer
 	command := newBrowserCmd()
+	command.SetErr(&stderr)
 	command.SetArgs([]string{
 		"--profile", "office",
 		"--auth-key-file", keyFile,
@@ -194,5 +258,8 @@ func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 	}
 	if captured.AuthKey != "tskey-auth-file-secret" {
 		t.Fatalf("AuthKey = %q, want file key", captured.AuthKey)
+	}
+	if strings.Contains(stderr.String(), "browser ignores TS_AUTHKEY") {
+		t.Fatalf("stderr = %q, did not expect ignored-environment warning with --auth-key-file", stderr.String())
 	}
 }

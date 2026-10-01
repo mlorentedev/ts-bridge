@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ts-bridge/internal/config"
 	"ts-bridge/internal/profile"
 )
 
@@ -335,6 +336,11 @@ func TestInitAuthKeyFile(t *testing.T) {
 			wantErr:        "auth key invalid format",
 		},
 		{
+			name:           "prefixed malformed key returns validation error",
+			keyFileContent: stringPtr("tskey-auth-abc"),
+			wantErr:        "auth key invalid format",
+		},
+		{
 			name:           "profile mode rejects auth key file",
 			keyFileContent: stringPtr("tskey-auth-from-file"),
 			profile:        "work",
@@ -407,6 +413,39 @@ func TestInitAuthKeyFile(t *testing.T) {
 	}
 }
 
+func TestInitAuthKeyValidationMatchesConfigMerge(t *testing.T) {
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	tests := []struct {
+		name string
+		key  string
+	}{
+		{name: "valid machine key", key: "tskey-auth-init-secret"},
+		{name: "malformed prefixed key", key: "tskey-auth-abc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initErr := validateAuthKey(tt.key)
+			_, mergeErr := config.Merge(config.PartialConfig{}, config.FlagSet{
+				Target:  "100.64.0.1:3389",
+				AuthKey: tt.key,
+			})
+			if (initErr == nil) != (mergeErr == nil) {
+				t.Fatalf("validator divergence for %q: init error=%v, merge error=%v", tt.key, initErr, mergeErr)
+			}
+		})
+	}
+}
+
+func TestValidateAuthKeyPreservesLoginURLHint(t *testing.T) {
+	err := validateAuthKey("https://login.tailscale.com/admin/auth/singleusekey/example")
+	if err == nil || !strings.Contains(err.Error(), "did you paste a Tailscale login URL") {
+		t.Fatalf("validateAuthKey() error = %v, want login URL remediation hint", err)
+	}
+}
+
 func stringPtr(value string) *string {
 	return &value
 }
@@ -444,25 +483,40 @@ func captureInitOutput(t *testing.T, fn func()) (stdout, stderr string) {
 	return string(out), string(errOut)
 }
 
-func TestPrintNextSteps_SecurityTip(t *testing.T) {
-	// captureStdoutStderr lives in package cmd_test; this file is package cmd, so pipe
-	// stdout here. The output is a few hundred bytes, well under the pipe buffer.
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe stdout: %v", err)
+func TestPrintNextSteps(t *testing.T) {
+	tests := []struct {
+		name      string
+		flags     initFlags
+		required  []string
+		forbidden []string
+	}{
+		{
+			name:      "config mode shows explicit file guidance only",
+			flags:     initFlags{Config: "ts-bridge.env", Format: "env"},
+			required:  []string{"ts-bridge connect --auth-key-file"},
+			forbidden: []string{"ts-bridge auth set --profile"},
+		},
+		{
+			name:      "profile mode shows managed credential onboarding",
+			flags:     initFlags{Profile: "office"},
+			required:  []string{"ts-bridge auth set --profile office", "ts-bridge connect --profile office"},
+			forbidden: []string{"ts-bridge connect --auth-key-file"},
+		},
 	}
-	oldStdout := os.Stdout
-	os.Stdout = w
-	printNextSteps(initFlags{Config: "ts-bridge.env", Format: "env"})
-	os.Stdout = oldStdout
-	w.Close()
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("read stdout: %v", err)
-	}
-	stdout := string(out)
-	if !strings.Contains(stdout, "ts-bridge connect --auth-key-file") {
-		t.Errorf("next steps should show the connect --auth-key-file form, got:\n%s", stdout)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdout, _ := captureInitOutput(t, func() { printNextSteps(tt.flags) })
+			for _, text := range tt.required {
+				if !strings.Contains(stdout, text) {
+					t.Errorf("next steps missing %q:\n%s", text, stdout)
+				}
+			}
+			for _, text := range tt.forbidden {
+				if strings.Contains(stdout, text) {
+					t.Errorf("next steps unexpectedly contain %q:\n%s", text, stdout)
+				}
+			}
+		})
 	}
 }
 

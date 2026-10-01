@@ -19,11 +19,12 @@ type Entry struct {
 }
 
 type Store struct {
-	dir string
+	dir    string
+	rename func(string, string) error
 }
 
 func NewStore(dir string) *Store {
-	return &Store{dir: dir}
+	return &Store{dir: dir, rename: os.Rename}
 }
 
 func (s *Store) path(name string) string {
@@ -144,7 +145,7 @@ func (s *Store) writeAtomic(path, name, key string) error {
 	if err := hardenCredentialPath(tempPath, false); err != nil {
 		return fmt.Errorf("secure temporary credential: %w", err)
 	}
-	if err := os.Rename(tempPath, path); err != nil {
+	if err := s.rename(tempPath, path); err != nil {
 		return fmt.Errorf("replace credential %q: %w", name, err)
 	}
 	if err := hardenCredentialPath(path, false); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ts-bridge/internal/config"
+	"ts-bridge/internal/credential"
 	"ts-bridge/internal/profile"
 )
 
@@ -178,8 +179,7 @@ func runInitProfile(storePath string, f initFlags) error {
 	}
 
 	fmt.Printf("\nProfile %q written to %s\n", f.Profile, storePath)
-	fmt.Println("\nNext step:")
-	fmt.Printf("  ts-bridge connect --profile %s\n\n", f.Profile)
+	printNextSteps(f)
 	return nil
 }
 
@@ -401,15 +401,15 @@ func readChoiceInput(reader *bufio.Reader, prompt string, choices []string) (str
 // ─── Validation ──────────────────────────────────────────────────
 
 func validateAuthKey(key string) error {
-	if key == "" {
-		return fmt.Errorf("auth key is required")
-	}
-	if !strings.HasPrefix(key, "tskey-") && !strings.HasPrefix(key, "hskey-") {
-		msg := "auth key invalid format (must start with tskey- or hskey-)"
-		if strings.HasPrefix(key, "http://") || strings.HasPrefix(key, "https://") {
-			msg += " (did you paste a Tailscale login URL instead of the auth key? use the key value after /auth/singleusekey/ or /auth/key)"
+	if err := credential.ValidateKey(key); err != nil {
+		if key == "" {
+			return fmt.Errorf("auth key is required")
 		}
-		return fmt.Errorf("%s", msg)
+		hint := ""
+		if strings.HasPrefix(key, "http://") || strings.HasPrefix(key, "https://") {
+			hint = " (did you paste a Tailscale login URL instead of the auth key? use the key value after /auth/singleusekey/ or /auth/key)"
+		}
+		return fmt.Errorf("auth key invalid format%s: %w", hint, err)
 	}
 	return nil
 }
@@ -675,6 +675,12 @@ func nowFormatted() string {
 }
 
 func printNextSteps(f initFlags) {
+	if f.Profile != "" {
+		fmt.Println("\nNext steps:")
+		fmt.Printf("  ts-bridge auth set --profile %s\n", f.Profile)
+		fmt.Printf("  ts-bridge connect --profile %s\n\n", f.Profile)
+		return
+	}
 	fmt.Println()
 	fmt.Println("Configuration written successfully.")
 	fmt.Printf("  Config: %s\n", f.Config)

@@ -1,6 +1,7 @@
 package credential
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -58,6 +59,40 @@ func TestStoreRefusesOverwriteUnlessExplicit(t *testing.T) {
 	got, getErr = store.Get("office")
 	if getErr != nil || got != "tskey-auth-new-secret" {
 		t.Fatalf("forced overwrite did not replace key: key=%q err=%v", got, getErr)
+	}
+}
+
+func TestStoreFailedAtomicReplacePreservesExistingCredential(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "credentials")
+	store := NewStore(dir)
+	if err := store.Set("office", "tskey-auth-old-secret", false); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "office.key")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	renameErr := errors.New("injected rename failure")
+	store.rename = func(string, string) error { return renameErr }
+	err = store.Set("office", "tskey-auth-new-secret", true)
+	if !errors.Is(err, renameErr) {
+		t.Fatalf("Set() error = %v, want injected rename failure", err)
+	}
+	after, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("failed replace changed credential bytes")
+	}
+	residue, globErr := filepath.Glob(filepath.Join(dir, ".office-*.tmp"))
+	if globErr != nil {
+		t.Fatal(globErr)
+	}
+	if len(residue) != 0 {
+		t.Fatalf("failed replace left temporary files: %v", residue)
 	}
 }
 

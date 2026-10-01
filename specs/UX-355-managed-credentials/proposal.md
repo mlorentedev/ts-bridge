@@ -27,9 +27,11 @@ profile association.
 `ts-bridge auth set [credential] --profile <profile>` stores an existing key
 through masked input (or explicit stdin), creates and protects the per-user
 credential store, and associates only the credential name with the profile.
-`auth status/list/remove` manage non-secret metadata. `connect` and `browser`
-resolve the selected profile credential automatically when no higher-precedence
-credential source is supplied.
+`auth status/list/remove` manage non-secret metadata. `connect` resolves the
+selected profile credential below explicit and environment sources. To preserve
+ADR-014's isolated-browser boundary, `browser` accepts only an explicit
+`--auth-key-file` or the selected profile credential and warns when it ignores
+`TS_AUTHKEY`.
 
 ## Out of scope
 
@@ -53,7 +55,7 @@ Observable outcomes. Each must be testable.
 
 - [x] `auth set` stores a masked/stdin key atomically with owner-only permissions, refuses silent overwrite, and never prints the key.
 - [x] Profiles store only a managed credential name; old profiles remain readable and descriptors never export the reference.
-- [x] `connect --profile` and `browser --profile` resolve the managed key consistently while explicit file/inline/env sources retain their documented precedence.
+- [x] `connect --profile` resolves the managed key below explicit file/inline/environment sources; `browser --profile` preserves ADR-014 by preferring `--auth-key-file`, otherwise using the managed credential and explicitly warning when `TS_AUTHKEY` is ignored.
 - [x] `auth status`, `auth list`, and `auth remove` expose no secret value and handle referenced/shared credentials safely.
 - [x] Windows and Unix tests cover path selection, permission hardening, invalid names, missing credentials, rollback/error paths, and output redaction.
 

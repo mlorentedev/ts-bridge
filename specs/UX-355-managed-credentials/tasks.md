@@ -31,7 +31,7 @@ created: "2026-09-29"
 - [x] [AC1] [AC4] Implement the Cobra `auth` command tree and register it in `NewRootCmd`.
 - [x] [AC3] Add failing production command tests for connect/browser profile credential resolution and explicit-source precedence.
 - [x] [AC3] Implement one shared profile credential resolver used by connect and browser.
-- [ ] [AC1] [AC2] [AC3] Update README, `.env.example`, CLI reference, configuration docs, ADR-012/014 amendments, and security audit. Open integration PR closing #355.
+- [x] [AC1] [AC2] [AC3] Update README, `.env.example`, CLI reference, configuration docs, ADR-012/014 amendments, and security audit. Open integration PR closing #355.
 - [x] [AC1] [AC2] [AC3] [AC4] [AC5] Run build, vet, targeted Go tests, lint, gosec, and site build.
 
 ## Closing
@@ -42,7 +42,7 @@ created: "2026-09-29"
 - [x] Lint passes
 - [x] No unrelated changes in the diff (no scope creep)
 - [x] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] PR opened referencing this spec folder
 
 ## Machine-readable features
 
