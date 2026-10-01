@@ -8,12 +8,15 @@ FIXTURES="$ROOT/scripts/tests/fixtures/doc-authkey"
 
 SPECS='clean:0:OK
 prose-only:0:OK
+prose-command-mention:0:OK
 connect-inline:1:inline --auth-key
 connect-equals:1:inline --auth-key
 connect-multiline:1:inline --auth-key
 connect-powershell-multiline:1:inline --auth-key
+connect-split-value:1:inline --auth-key
 init-warning:0:OK
-init-no-warning:1:init --auth-key example has no nearby process-table warning'
+init-no-warning:1:init --auth-key example has no nearby process-table warning
+init-then-connect:1:inline --auth-key'
 
 failed=0
 for sh_name in ${TDA_SHELLS:-bash zsh}; do

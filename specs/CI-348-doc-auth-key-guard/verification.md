@@ -10,10 +10,11 @@ created: "2026-09-30"
 - [x] Criterion 1 -> `bash scripts/check-doc-authkey.sh` reports
       `check-doc-authkey: OK (71 files)`. The `prose-only` and `clean` fixtures prove security
       guidance and `--auth-key-file` examples do not produce false findings.
-- [x] Criterion 2 -> `scripts/tests/test-doc-authkey.sh` covers eight fixtures: clean,
-      prose-only, same-line connect, equals-form connect, POSIX multiline connect, PowerShell
-      multiline connect, warned init, and unwarned init. The bash run is 8/8 green; the Repo
-      hygiene job installs real zsh and runs the same matrix on every PR.
+- [x] Criterion 2 -> `scripts/tests/test-doc-authkey.sh` covers eleven fixtures: clean,
+      two prose-only forms, same-line connect, equals-form connect, POSIX multiline connect,
+      two PowerShell continuation forms, warned init, unwarned init, and compound init/connect.
+      The bash run is 11/11 green; the Repo hygiene job installs real zsh and runs the same
+      matrix on every PR.
 - [x] Criterion 3 -> `.github/workflows/repo-hygiene.yml` invokes the guard before installing
       zsh and invokes the fixture suite afterward. `actionlint -shellcheck=shellcheck` is clean,
       as are all local hygiene, build, test, vet, and lint gates listed below.
@@ -26,8 +27,11 @@ created: "2026-09-30"
   the suite because `connect-multiline` returned 0 instead of 1.
 - RED 3: after adding a PowerShell multiline fixture but before backtick tracking -> exit 1 for
   the suite because `connect-powershell-multiline` returned 0 instead of 1.
+- RED 4 (CodeRabbit review): three fixtures failed against commit `8b7eb4a` exactly as reported:
+  `prose-command-mention` returned 1 instead of 0, while `init-then-connect` and
+  `connect-split-value` returned 0 instead of 1.
 - Targeted GREEN:
-  `TDA_SHELLS=bash bash scripts/tests/test-doc-authkey.sh` -> 8/8 fixtures passed.
+  `TDA_SHELLS=bash bash scripts/tests/test-doc-authkey.sh` -> 11/11 fixtures passed.
 - Real tree: `bash scripts/check-doc-authkey.sh` ->
   `check-doc-authkey: OK (71 files)`.
 - Existing hygiene guards:
@@ -63,6 +67,14 @@ created: "2026-09-30"
   parser without temporary directories or mutating repository documentation.
 - Command continuation state covers both POSIX backslashes and PowerShell backticks; both forms
   failed first as dedicated fixtures before their support was added.
+
+## Review window (PR #400)
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| CodeRabbit Major: prose containing separate `` `ts-bridge connect` `` and `` `--auth-key value` `` spans was treated as an executable example | **Applied.** Command detection now requires an executable-looking command segment at the start of a shell segment (or a whole inline-code span). | `prose-command-mention` failed before the fix and passes afterward. |
+| CodeRabbit Major: one `init` occurrence classified an entire compound line, allowing a later inline-key `connect` | **Applied.** Logical commands are split on `;`, `&&`, and `||`, then each `ts-bridge` invocation is classified independently. | `init-then-connect` failed before the fix and now reports the `connect` invocation. |
+| CodeRabbit Security Architecture Low: a PowerShell backtick between `--auth-key` and its value bypassed the physical-line matcher | **Applied as tightly coupled.** Continuation lines are normalized into one logical command before argument matching. | `connect-split-value` failed before the fix and now reports the inline key. |
 
 ## Promotion candidates
 

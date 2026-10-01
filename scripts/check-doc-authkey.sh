@@ -18,31 +18,72 @@ for file in "${files[@]}"; do
   display="${file#"$SCAN_ROOT"/}"
   output="$(
     awk -v file="$display" '
+      function normalize(segment) {
+        sub(/^[[:space:]]*>[[:space:]]*/, "", segment)
+        sub(/^[[:space:]]+/, "", segment)
+        sub(/^[$][[:space:]]+/, "", segment)
+        sub(/[[:space:]]+$/, "", segment)
+        if (segment ~ /^`[^`]+`$/) {
+          sub(/^`/, "", segment)
+          sub(/`$/, "", segment)
+        }
+        return segment
+      }
+      function is_command(segment) {
+        segment = normalize(segment)
+        return segment ~ /^ts-bridge(\.exe)?[[:space:]]/ ||
+               segment ~ /^\.[\/\\]ts-bridge(\.exe)?[[:space:]]/
+      }
+      function contains_command(text, parts, count, pos) {
+        count = split(text, parts, /(;|&&|\|\|)/)
+        for (pos = 1; pos <= count; pos++) {
+          if (is_command(parts[pos])) return 1
+        }
+        return 0
+      }
+      function has_warning(first, last, pos, warning) {
+        first = first > 3 ? first - 3 : 1
+        last = last + 3 < FNR ? last + 3 : FNR
+        for (pos = first; pos <= last; pos++) {
+          warning = tolower(lines[pos])
+          if (warning ~ /process[- ](list|table)/) return 1
+        }
+        return 0
+      }
+      function scan_command(text, first, last, parts, count, pos, segment) {
+        count = split(text, parts, /(;|&&|\|\|)/)
+        for (pos = 1; pos <= count; pos++) {
+          segment = normalize(parts[pos])
+          if (!is_command(segment) ||
+              segment !~ /--auth-key([[:space:]]+|=)[^[:space:]`]+/) continue
+          if (segment ~ /^(\.[\/\\])?ts-bridge(\.exe)?[[:space:]]+init([[:space:]]|$)/) {
+            if (!has_warning(first, last)) {
+              printf "%s:%d: init --auth-key example has no nearby process-table warning\n", file, last
+            }
+          } else {
+            printf "%s:%d: inline --auth-key is forbidden in command examples\n", file, last
+          }
+        }
+      }
       { lines[FNR] = $0 }
       END {
         command = ""
+        first = 0
         for (i = 1; i <= FNR; i++) {
           line = lines[i]
-          if (line ~ /ts-bridge(\.exe)?[[:space:]]/) {
-            command = line ~ /ts-bridge(\.exe)?[[:space:]]+init([[:space:]]|$)/ ? "init" : "other"
+          continued = line ~ /[\\`][[:space:]]*$/
+          sub(/[\\`][[:space:]]*$/, "", line)
+          if (command == "" && contains_command(line)) {
+            command = line
+            first = i
+          } else if (command != "") {
+            command = command " " line
           }
-          inline_key = line ~ /--auth-key([[:space:]]+|=)[^[:space:]`]+/
-          if (inline_key && command == "other") {
-            printf "%s:%d: inline --auth-key is forbidden in command examples\n", file, i
+          if (command != "" && !continued) {
+            scan_command(command, first, i)
+            command = ""
+            first = 0
           }
-          if (inline_key && command == "init") {
-            warned = 0
-            first = i > 3 ? i - 3 : 1
-            last = i + 3 < FNR ? i + 3 : FNR
-            for (j = first; j <= last; j++) {
-              warning = tolower(lines[j])
-              if (warning ~ /process[- ](list|table)/) warned = 1
-            }
-            if (!warned) {
-              printf "%s:%d: init --auth-key example has no nearby process-table warning\n", file, i
-            }
-          }
-          if (line !~ /[\\`][[:space:]]*$/) command = ""
         }
       }
     ' "$file"
