@@ -142,13 +142,17 @@ Matches the exact failure mode `pr-agent.yml`'s own comments already document ("
 exhaustion - the cluster allows 5 simultaneous requests, shared with pi, qq and hive embeddings").
 Out of scope for this PR to fix (external dependency); tracked for a human decision on whether it
 warrants its own ticket if it recurs.
+
+## Adversarial review dispositions
+
+- Pagination fixture coverage, stale workflow rationale, script-level shellcheck scope, and non-template `features.json` handling are deferred to #403.
+- The actionlint precedent sentence is inaccurate but does not affect the implemented pinning decision; it remains recorded in the archived review rather than editing the closed contract.
+- Non-string GitHub comment bodies are outside the documented API schema; the guard intentionally remains fail-closed instead of adding speculative coercion.
+
 ## Promotion candidates
 
-- [ ] **Lesson for `docs/lessons/`?** Candidate, not written here: "a text-matching guard is only
-  as tolerant as the JSON shapes it was tested against — `body: null` is a real GitHub API shape,
-  not an edge case invented for the test." Left for a human pass since it overlaps the CI-322
-  lessons already captured on the same theme (quoting/comment-as-structure).
-- [ ] **ADR-worthy?** No — CI tooling hygiene, not an architecture decision.
+- [x] **Lesson for `docs/lessons/`?** No; this overlaps the CI-322 guard lessons already captured on JSON shape and comment-as-structure failures.
+- [x] **ADR-worthy?** No; CI tooling hygiene does not change product architecture.
 
 ## Archive checklist
 

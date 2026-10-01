@@ -1,7 +1,7 @@
 ---
 id: "CI-345-hygiene-guard-fixes"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-28"
 issue: "mlorentedev/ts-bridge#345"
 tags: [spec, ci, github-actions, tech-debt]
