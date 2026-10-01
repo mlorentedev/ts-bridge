@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"ts-bridge/internal/credential"
 )
 
 // logger is the package-level logger set by LoggerInit in main.go.
@@ -344,12 +346,12 @@ func parseAuthKey() (string, error) {
 	if authKey == "" {
 		return "", errors.New("TS_AUTHKEY is required")
 	}
-	if !strings.HasPrefix(authKey, "tskey-") && !strings.HasPrefix(authKey, "hskey-") {
+	if err := credential.ValidateKey(authKey); err != nil {
 		hint := ""
 		if strings.HasPrefix(authKey, "http://") || strings.HasPrefix(authKey, "https://") {
 			hint = " (did you paste a Tailscale login URL instead of the auth key? use the key value after /auth/singleusekey/ or /auth/key)"
 		}
-		return "", errors.New("TS_AUTHKEY: invalid format (must start with tskey- or hskey-)" + hint)
+		return "", errors.New("TS_AUTHKEY: invalid format" + hint)
 	}
 	return authKey, nil
 }

@@ -49,7 +49,7 @@ Examples:
   ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389
 
   # Inline keys are visible in the process list while init runs.
-  ts-bridge init --auth-key tskey-auth-xxx --target 100.64.0.1:3389
+  ts-bridge init --auth-key tskey-auth-KEYID-SECRET --target 100.64.0.1:3389
 
   # Non-interactive: YAML output
   ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389 --format yaml

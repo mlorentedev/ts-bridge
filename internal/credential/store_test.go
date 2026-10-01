@@ -13,7 +13,7 @@ func TestStoreSetGetAndList(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "credentials")
 	store := NewStore(dir)
 
-	if err := store.Set("office", "tskey-auth-office", false); err != nil {
+	if err := store.Set("office", "tskey-auth-office-secret", false); err != nil {
 		t.Fatalf("Set() error = %v", err)
 	}
 	if err := store.Set("kubelab", "hskey-auth-kubelab", false); err != nil {
@@ -24,7 +24,7 @@ func TestStoreSetGetAndList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if got != "tskey-auth-office" {
+	if got != "tskey-auth-office-secret" {
 		t.Fatal("Get() returned the wrong credential")
 	}
 
@@ -39,24 +39,24 @@ func TestStoreSetGetAndList(t *testing.T) {
 
 func TestStoreRefusesOverwriteUnlessExplicit(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "credentials"))
-	if err := store.Set("office", "tskey-auth-old", false); err != nil {
+	if err := store.Set("office", "tskey-auth-old-secret", false); err != nil {
 		t.Fatal(err)
 	}
 
-	err := store.Set("office", "tskey-auth-new", false)
+	err := store.Set("office", "tskey-auth-new-secret", false)
 	if !errors.Is(err, ErrCredentialExists) {
 		t.Fatalf("Set() error = %v, want ErrCredentialExists", err)
 	}
 	got, getErr := store.Get("office")
-	if getErr != nil || got != "tskey-auth-old" {
+	if getErr != nil || got != "tskey-auth-old-secret" {
 		t.Fatalf("refused overwrite changed the stored key: key=%q err=%v", got, getErr)
 	}
 
-	if err := store.Set("office", "tskey-auth-new", true); err != nil {
+	if err := store.Set("office", "tskey-auth-new-secret", true); err != nil {
 		t.Fatalf("forced Set() error = %v", err)
 	}
 	got, getErr = store.Get("office")
-	if getErr != nil || got != "tskey-auth-new" {
+	if getErr != nil || got != "tskey-auth-new-secret" {
 		t.Fatalf("forced overwrite did not replace key: key=%q err=%v", got, getErr)
 	}
 }
@@ -66,13 +66,23 @@ func TestStoreValidatesNamesAndKeysWithoutLeakingValues(t *testing.T) {
 
 	for _, name := range []string{"", "../office", `..\office`, "two words", ".hidden", "a/b"} {
 		t.Run("name="+name, func(t *testing.T) {
-			if err := store.Set(name, "tskey-auth-test", false); err == nil {
+			if err := store.Set(name, "tskey-auth-test-secret", false); err == nil {
 				t.Fatalf("Set(%q) expected name validation error", name)
 			}
 		})
 	}
 
-	for _, key := range []string{"", "not-a-key", "tskey-auth-one\nsecond", "hskey-auth-one\rsecond"} {
+	for _, key := range []string{
+		"",
+		"not-a-key",
+		"tskey-api-id-secret",
+		"tskey-client-id-secret",
+		"tskey-auth",
+		"tskey-foo",
+		"tskey-auth-id-secret-auth-id-secret",
+		"tskey-auth-one-secret\nsecond",
+		"hskey-auth-one\rsecond",
+	} {
 		t.Run("invalid-key", func(t *testing.T) {
 			err := store.Set("office", key, false)
 			if err == nil {
@@ -87,7 +97,7 @@ func TestStoreValidatesNamesAndKeysWithoutLeakingValues(t *testing.T) {
 
 func TestStoreRemove(t *testing.T) {
 	store := NewStore(filepath.Join(t.TempDir(), "credentials"))
-	if err := store.Set("office", "tskey-auth-test", false); err != nil {
+	if err := store.Set("office", "tskey-auth-test-secret", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Remove("office"); err != nil {
@@ -104,7 +114,7 @@ func TestStoreUsesOwnerOnlyPermissionsOnUnix(t *testing.T) {
 	}
 	dir := filepath.Join(t.TempDir(), "credentials")
 	store := NewStore(dir)
-	if err := store.Set("office", "tskey-auth-test", false); err != nil {
+	if err := store.Set("office", "tskey-auth-test-secret", false); err != nil {
 		t.Fatal(err)
 	}
 

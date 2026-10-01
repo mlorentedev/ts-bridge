@@ -64,7 +64,7 @@ cd ts-bridge-linux-amd64
 
 # Configure (only two variables required)
 cat > .env << 'EOF'
-TS_AUTHKEY=tskey-auth-kXXXXXXXXX
+TS_AUTHKEY=tskey-auth-KEYID-SECRET
 TS_TARGET=100.82.151.104:3389
 EOF
 chmod 600 .env   # an auth key is a credential; the default umask is not 600

@@ -19,7 +19,7 @@ Configuration is resolved in this order (highest to lowest):
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `TS_AUTHKEY` | Auth key. Tailscale: `tskey-*`. Headscale: `hskey-*`. Plaintext in the environment and readable by child processes. On a shared or hardened host, `connect --auth-key-file` can leave it unset; `init --auth-key-file` avoids command-line exposure but writes `TS_AUTHKEY` to the generated `.env` (or the sibling `.env` in YAML mode). | `tskey-auth-kXXXXXX` |
+| `TS_AUTHKEY` | Auth key. Tailscale: `tskey-auth-<id>-<secret>`. Headscale: `hskey-*`. Plaintext in the environment and readable by child processes. On a shared or hardened host, `connect --auth-key-file` can leave it unset; `init --auth-key-file` avoids command-line exposure but writes `TS_AUTHKEY` to the generated `.env` (or the sibling `.env` in YAML mode). | `tskey-auth-KEYID-SECRET` |
 | `TS_TARGET` | Host address on the mesh network | `100.82.151.104:3389` |
 
 ### Optional

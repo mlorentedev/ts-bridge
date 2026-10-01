@@ -81,23 +81,23 @@ func TestAuthSetRefusesOverwriteUnlessForced(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := credential.NewStore(credentialDir)
-	if err := store.Set("office", "tskey-auth-old", false); err != nil {
+	if err := store.Set("office", "tskey-auth-old-secret", false); err != nil {
 		t.Fatal(err)
 	}
-	authSecretReader = func(string) (string, error) { return "tskey-auth-new", nil }
+	authSecretReader = func(string) (string, error) { return "tskey-auth-new-secret", nil }
 
 	if _, _, err := executeAuthCommand(t, "set", "--profile", "office"); err == nil {
 		t.Fatal("auth set expected overwrite refusal")
 	}
 	got, _ := store.Get("office")
-	if got != "tskey-auth-old" {
+	if got != "tskey-auth-old-secret" {
 		t.Fatal("refused overwrite changed the stored key")
 	}
 	if _, _, err := executeAuthCommand(t, "set", "--profile", "office", "--force"); err != nil {
 		t.Fatalf("forced auth set error = %v", err)
 	}
 	got, _ = store.Get("office")
-	if got != "tskey-auth-new" {
+	if got != "tskey-auth-new-secret" {
 		t.Fatal("forced overwrite did not replace the key")
 	}
 }
@@ -174,7 +174,7 @@ func TestAuthRemoveProtectsSharedCredential(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := credential.NewStore(credentialDir).Set("shared", "tskey-auth-shared", false); err != nil {
+	if err := credential.NewStore(credentialDir).Set("shared", "tskey-auth-shared-secret", false); err != nil {
 		t.Fatal(err)
 	}
 

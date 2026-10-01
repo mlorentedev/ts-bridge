@@ -29,7 +29,7 @@ ts-bridge runs a full, standalone Tailscale node purely in userspace using `tsne
 Download the binary from [Releases](https://github.com/mlorentedev/ts-bridge/releases) and create a `.env` file:
 
 ```env
-TS_AUTHKEY=tskey-auth-kXXXXXXXXX   # From Tailscale admin panel
+TS_AUTHKEY=tskey-auth-KEYID-SECRET   # From Tailscale admin panel
 TS_TARGET=my-desktop:3389           # Host's MagicDNS name + RDP port
 ```
 
