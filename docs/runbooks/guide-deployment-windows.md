@@ -33,7 +33,7 @@ Create a `.env` file with the two required variables:
 
 ```powershell
 # .env — same directory as ts-bridge.exe
-TS_AUTHKEY=tskey-auth-kXXXXXXXXX   # From Tailscale admin console
+TS_AUTHKEY=tskey-auth-KEYID-SECRET   # From Tailscale admin console
 TS_TARGET=100.82.151.104:3389       # Host Tailscale IP + port
 ```
 

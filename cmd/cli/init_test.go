@@ -26,7 +26,7 @@ func TestWriteEnvConfig_DetectsExistingFile(t *testing.T) {
 	// Create a mock command with non-terminal stdin (non-interactive).
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey: "tskey-test",
+		AuthKey: "tskey-auth-test-secret",
 		Target:  "100.64.0.2:443",
 		Format:  "env",
 		Config:  envPath,
@@ -58,7 +58,7 @@ func TestWriteEnvConfig_OverwriteWithForce(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey: "tskey-test",
+		AuthKey: "tskey-auth-test-secret",
 		Target:  "100.64.0.2:443",
 		Format:  "env",
 		Config:  envPath,
@@ -86,7 +86,7 @@ func TestWriteYAMLConfig_DetectsExistingFile(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey: "tskey-test",
+		AuthKey: "tskey-auth-test-secret",
 		Target:  "100.64.0.2:443",
 		Format:  "yaml",
 		Config:  yamlPath,
@@ -109,7 +109,7 @@ func TestWriteYAMLConfig_CreatesYamlAndEnv(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey:   "tskey-test",
+		AuthKey:   "tskey-auth-test-secret",
 		Target:    "100.64.0.1:3389",
 		Format:    "yaml",
 		Config:    yamlPath,
@@ -140,7 +140,7 @@ func TestWriteYAMLConfig_CreatesYamlAndEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf(".env file not created: %v", err)
 	}
-	if !strings.Contains(string(envData), "TS_AUTHKEY=tskey-test") {
+	if !strings.Contains(string(envData), "TS_AUTHKEY=tskey-auth-test-secret") {
 		t.Error(".env should contain TS_AUTHKEY")
 	}
 	if !strings.Contains(string(envData), "--auth-key-file") {
@@ -227,7 +227,7 @@ func TestWriteEnvConfig_CreatesFullConfig(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	f := initFlags{
-		AuthKey:   "tskey-test",
+		AuthKey:   "tskey-auth-test-secret",
 		Target:    "100.64.0.1:3389",
 		Format:    "env",
 		Config:    envPath,
@@ -247,7 +247,7 @@ func TestWriteEnvConfig_CreatesFullConfig(t *testing.T) {
 
 	// Should contain both required fields.
 	content := string(data)
-	if !strings.Contains(content, "TS_AUTHKEY=tskey-test") {
+	if !strings.Contains(content, "TS_AUTHKEY=tskey-auth-test-secret") {
 		t.Error("should contain TS_AUTHKEY")
 	}
 	if !strings.Contains(content, "TS_TARGET=100.64.0.1:3389") {
@@ -300,14 +300,14 @@ func TestInitAuthKeyFile(t *testing.T) {
 	}{
 		{
 			name:           "reads key from file",
-			keyFileContent: stringPtr("tskey-from-file\r\n"),
-			wantKey:        "tskey-from-file",
+			keyFileContent: stringPtr("tskey-auth-from-file\r\n"),
+			wantKey:        "tskey-auth-from-file",
 		},
 		{
 			name:           "file takes precedence over inline key",
-			keyFileContent: stringPtr("tskey-from-file"),
+			keyFileContent: stringPtr("tskey-auth-from-file"),
 			includeInline:  true,
-			wantKey:        "tskey-from-file",
+			wantKey:        "tskey-auth-from-file",
 			wantWarning:    true,
 		},
 		{
@@ -326,7 +326,7 @@ func TestInitAuthKeyFile(t *testing.T) {
 		},
 		{
 			name:           "embedded newline returns clear error",
-			keyFileContent: stringPtr("tskey-from-file\nTS_LOCAL_ADDR=0.0.0.0:33389"),
+			keyFileContent: stringPtr("tskey-auth-from-file\nTS_LOCAL_ADDR=0.0.0.0:33389"),
 			wantErr:        "auth key file contains embedded line break",
 		},
 		{
@@ -336,7 +336,7 @@ func TestInitAuthKeyFile(t *testing.T) {
 		},
 		{
 			name:           "profile mode rejects auth key file",
-			keyFileContent: stringPtr("tskey-from-file"),
+			keyFileContent: stringPtr("tskey-auth-from-file"),
 			profile:        "work",
 			wantErr:        "--auth-key-file is not compatible with --profile",
 		},
@@ -361,7 +361,7 @@ func TestInitAuthKeyFile(t *testing.T) {
 				args[1] = ""
 			}
 			if tt.includeInline {
-				args = append(args, "--auth-key", "tskey-from-inline")
+				args = append(args, "--auth-key", "tskey-auth-from-inline")
 			}
 			if tt.profile != "" {
 				args = append(args, "--profile", tt.profile)
@@ -397,7 +397,7 @@ func TestInitAuthKeyFile(t *testing.T) {
 			if !strings.Contains(string(data), "TS_AUTHKEY="+tt.wantKey) {
 				t.Errorf("generated config does not contain file key %q:\n%s", tt.wantKey, data)
 			}
-			if tt.includeInline && strings.Contains(string(data), "tskey-from-inline") {
+			if tt.includeInline && strings.Contains(string(data), "tskey-auth-from-inline") {
 				t.Errorf("generated config contains lower-precedence inline key:\n%s", data)
 			}
 			if tt.wantWarning && !strings.Contains(stderr, "--auth-key is visible in the process list") {

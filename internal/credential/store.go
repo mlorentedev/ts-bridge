@@ -174,14 +174,50 @@ func writeCredentialTemp(file *os.File, key string) error {
 
 func normalizeKey(key string) (string, error) {
 	key = strings.TrimRight(key, "\r\n")
-	if key == "" {
-		return "", fmt.Errorf("credential is empty")
-	}
-	if strings.ContainsAny(key, "\r\n") {
-		return "", fmt.Errorf("credential contains an embedded line break")
-	}
-	if !strings.HasPrefix(key, "tskey-") && !strings.HasPrefix(key, "hskey-") {
-		return "", fmt.Errorf("credential must start with tskey- or hskey-")
+	if err := ValidateKey(key); err != nil {
+		return "", err
 	}
 	return key, nil
+}
+
+// ValidateKey accepts node-registration credentials, never API/OAuth secrets.
+func ValidateKey(key string) error {
+	if key == "" {
+		return fmt.Errorf("credential is empty")
+	}
+	if containsCredentialWhitespace(key) {
+		return fmt.Errorf("credential contains whitespace")
+	}
+	if strings.HasPrefix(key, "hskey-") {
+		if len(key) == len("hskey-") {
+			return fmt.Errorf("Headscale credential is incomplete")
+		}
+		return nil
+	}
+	return validateTailscaleKey(key)
+}
+
+func containsCredentialWhitespace(key string) bool {
+	return strings.IndexFunc(key, func(r rune) bool {
+		return r == '\r' || r == '\n' || r == ' ' || r == '\t'
+	}) >= 0
+}
+
+func validateTailscaleKey(key string) error {
+	if strings.HasPrefix(key, "tskey-api-") || strings.HasPrefix(key, "tskey-client-") {
+		return fmt.Errorf("credential must not be a Tailscale API token or OAuth client secret")
+	}
+	if !strings.HasPrefix(key, "tskey-auth-") {
+		return fmt.Errorf("credential must be a Tailscale machine auth key or Headscale pre-auth key")
+	}
+	parts := strings.Split(key, "-")
+	if len(parts) != 4 || parts[0] != "tskey" || parts[1] != "auth" {
+		return fmt.Errorf("credential must be a Tailscale machine auth key or Headscale pre-auth key")
+	}
+	for _, part := range parts[2:] {
+		if part == "" {
+			return fmt.Errorf("credential must be a Tailscale machine auth key or Headscale pre-auth key")
+		}
+	}
+	return nil
 }

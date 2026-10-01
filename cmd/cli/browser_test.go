@@ -14,7 +14,7 @@ func TestBrowserCommandResolvesBridgeAndLaunchOptions(t *testing.T) {
 	t.Setenv("TS_CONTROL_URL", "")
 
 	keyFile := filepath.Join(t.TempDir(), "authkey")
-	if err := os.WriteFile(keyFile, []byte("tskey-auth-test123"), 0600); err != nil {
+	if err := os.WriteFile(keyFile, []byte("tskey-auth-test123-secret"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	userDataDir := filepath.Join(t.TempDir(), "edge-profile")
@@ -51,7 +51,7 @@ func TestBrowserCommandResolvesBridgeAndLaunchOptions(t *testing.T) {
 	if capturedConfig.SOCKS5Routes["forge.example.internal:443"] != "apps:443" {
 		t.Fatalf("SOCKS5Routes = %#v", capturedConfig.SOCKS5Routes)
 	}
-	if capturedConfig.AuthKey != "tskey-auth-test123" {
+	if capturedConfig.AuthKey != "tskey-auth-test123-secret" {
 		t.Fatal("auth key file was not resolved")
 	}
 	if capturedOptions.StartURL != "https://forge.example.internal/" {
@@ -71,7 +71,7 @@ func TestBrowserCommandPreservesYAMLSOCKS5Config(t *testing.T) {
 	t.Setenv("TS_CONTROL_URL", "")
 
 	keyFile := filepath.Join(t.TempDir(), "authkey")
-	if err := os.WriteFile(keyFile, []byte("tskey-auth-test123"), 0600); err != nil {
+	if err := os.WriteFile(keyFile, []byte("tskey-auth-test123-secret"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(t.TempDir(), "browser.yml")

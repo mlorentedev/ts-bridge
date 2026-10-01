@@ -29,7 +29,7 @@ import (
 //     merge_test.go.
 
 const (
-	precedenceAuthKey = "tskey-auth-precedence"
+	precedenceAuthKey = "tskey-auth-precedence-secret"
 	precedenceTarget  = "100.64.0.254:3389"
 )
 
@@ -668,21 +668,21 @@ func TestValidateDialRetriesRejectsNegativeButAllowsZero(t *testing.T) {
 
 func TestPrecedenceAuthKey(t *testing.T) {
 	yaml := PartialConfig{}
-	env := map[string]string{"TS_AUTHKEY": "tskey-from-env"}
-	flags := FlagSet{AuthKey: "tskey-from-flag"}
+	env := map[string]string{"TS_AUTHKEY": "tskey-auth-from-env"}
+	flags := FlagSet{AuthKey: "tskey-auth-from-flag"}
 
 	t.Run("flag wins over env", func(t *testing.T) {
 		cfg := mergePrecedence(t, yaml, env, flags)
-		if cfg.AuthKey != "tskey-from-flag" {
-			t.Errorf("expected tskey-from-flag, got %q", cfg.AuthKey)
+		if cfg.AuthKey != "tskey-auth-from-flag" {
+			t.Errorf("expected tskey-auth-from-flag, got %q", cfg.AuthKey)
 		}
 
 	})
 
 	t.Run("env wins when flag is empty", func(t *testing.T) {
 		cfg := mergePrecedence(t, yaml, env, FlagSet{})
-		if cfg.AuthKey != "tskey-from-env" {
-			t.Errorf("expected tskey-from-env, got %q", cfg.AuthKey)
+		if cfg.AuthKey != "tskey-auth-from-env" {
+			t.Errorf("expected tskey-auth-from-env, got %q", cfg.AuthKey)
 		}
 	})
 }

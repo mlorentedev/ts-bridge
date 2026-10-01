@@ -15,7 +15,7 @@ func TestConnectErrorHandling(t *testing.T) {
 	t.Setenv("TS_AUTHKEY", "")
 	t.Setenv("TS_AUTO_INSTANCE", "")
 	t.Setenv("TS_MANUAL_MODE", "")
-	
+
 	tmpDir := t.TempDir()
 	originalWD, _ := os.Getwd()
 	if err := os.Chdir(tmpDir); err != nil {
@@ -34,17 +34,17 @@ func TestConnectErrorHandling(t *testing.T) {
 	}{
 		{
 			name:        "missing target",
-			args:        []string{"connect", "--auth-key", "tskey-test"},
+			args:        []string{"connect", "--auth-key", "tskey-auth-test-secret"},
 			errContains: "target is required",
 		},
 		{
 			name:        "malformed target missing port",
-			args:        []string{"connect", "--target", "100.64.0.1", "--auth-key", "tskey-test"},
+			args:        []string{"connect", "--target", "100.64.0.1", "--auth-key", "tskey-auth-test-secret"},
 			errContains: "target invalid format",
 		},
 		{
 			name:        "out of bounds port",
-			args:        []string{"connect", "--target", "100.64.0.1:99999", "--auth-key", "tskey-test"},
+			args:        []string{"connect", "--target", "100.64.0.1:99999", "--auth-key", "tskey-auth-test-secret"},
 			errContains: "invalid port",
 		},
 		{
@@ -64,17 +64,17 @@ func TestConnectErrorHandling(t *testing.T) {
 		},
 		{
 			name:        "invalid dial retries",
-			args:        []string{"connect", "--target", "100.64.0.1:3389", "--auth-key", "tskey-test", "--dial-retries", "-1"},
+			args:        []string{"connect", "--target", "100.64.0.1:3389", "--auth-key", "tskey-auth-test-secret", "--dial-retries", "-1"},
 			errContains: "dial retries must be non-negative",
 		},
 		{
 			name:        "invalid idle timeout",
-			args:        []string{"connect", "--target", "100.64.0.1:3389", "--auth-key", "tskey-test", "--idle-timeout", "-5s"},
+			args:        []string{"connect", "--target", "100.64.0.1:3389", "--auth-key", "tskey-auth-test-secret", "--idle-timeout", "-5s"},
 			errContains: "idle timeout must be non-negative",
 		},
 		{
 			name:        "missing config file",
-			args:        []string{"connect", "--target", "100.64.0.1:3389", "--auth-key", "tskey-test", "--config", "does-not-exist.yaml"},
+			args:        []string{"connect", "--target", "100.64.0.1:3389", "--auth-key", "tskey-auth-test-secret", "--config", "does-not-exist.yaml"},
 			errContains: "read YAML config:",
 		},
 	}

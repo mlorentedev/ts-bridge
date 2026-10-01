@@ -14,7 +14,7 @@ import (
 
 func TestMergeFlagOverridesEnv(t *testing.T) {
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
@@ -32,7 +32,7 @@ func TestMergeFlagOverridesEnv(t *testing.T) {
 
 func TestMergeEnvOverridesYAML(t *testing.T) {
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
@@ -49,7 +49,7 @@ func TestMergeEnvOverridesYAML(t *testing.T) {
 
 func TestMergeYAMLOverridesDefault(t *testing.T) {
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
@@ -67,7 +67,7 @@ func TestMergeYAMLOverridesDefault(t *testing.T) {
 func TestMergeFullPrecedence(t *testing.T) {
 	os.Setenv("TS_TIMEOUT", "1m")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 	defer os.Unsetenv("TS_TIMEOUT")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
@@ -90,7 +90,7 @@ func TestMergeFullPrecedence(t *testing.T) {
 
 func TestMergeMissingYAMLNotError(t *testing.T) {
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
@@ -106,12 +106,12 @@ func TestMergeMissingYAMLNotError(t *testing.T) {
 
 func TestMergeAuthKeyNotInYAML(t *testing.T) {
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
 	// YAML must NOT carry auth key — if it does, Merge should reject it
-	yaml := PartialConfig{AuthKey: "tskey-auth-yaml"}
+	yaml := PartialConfig{AuthKey: "tskey-auth-yaml-secret"}
 	_, err := Merge(yaml, FlagSet{})
 	if err == nil {
 		t.Fatal("expected error when YAML contains auth key")
@@ -123,7 +123,7 @@ func TestMergeAuthKeyNotInYAML(t *testing.T) {
 
 func TestMergeUnknownYAMLFieldsWarn(t *testing.T) {
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
@@ -148,7 +148,7 @@ unknown_field: "should_warn"
 
 func TestMergeConfigFromFile(t *testing.T) {
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
@@ -214,7 +214,7 @@ func TestMergeYAMLRejectsAuthKey(t *testing.T) {
 	if err := os.WriteFile(yamlPath, []byte(`
 version: 1
 target: "100.64.0.1:3389"
-auth_key: "tskey-auth-secret"
+auth_key: "tskey-auth-secret-secret"
 `), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +280,7 @@ func TestFlagSetEmptyByDefault(t *testing.T) {
 
 func TestMergeAllowsSOCKS5WithoutStaticTarget(t *testing.T) {
 	t.Setenv("TS_TARGET", "")
-	t.Setenv("TS_AUTHKEY", "tskey-auth-test123")
+	t.Setenv("TS_AUTHKEY", "tskey-auth-test123-secret")
 	t.Setenv("TS_CONTROL_URL", "")
 
 	cfg, err := Merge(PartialConfig{}, FlagSet{SOCKS5Addr: "127.0.0.1:1080"})
@@ -297,7 +297,7 @@ func TestMergeAllowsSOCKS5WithoutStaticTarget(t *testing.T) {
 
 func TestMergeRejectsNonLoopbackSOCKS5Listener(t *testing.T) {
 	t.Setenv("TS_TARGET", "")
-	t.Setenv("TS_AUTHKEY", "tskey-auth-test123")
+	t.Setenv("TS_AUTHKEY", "tskey-auth-test123-secret")
 	t.Setenv("TS_CONTROL_URL", "")
 
 	_, err := Merge(PartialConfig{}, FlagSet{SOCKS5Addr: "0.0.0.0:1080"})
@@ -308,7 +308,7 @@ func TestMergeRejectsNonLoopbackSOCKS5Listener(t *testing.T) {
 
 func TestMergeSOCKS5Routes(t *testing.T) {
 	t.Setenv("TS_TARGET", "")
-	t.Setenv("TS_AUTHKEY", "tskey-auth-test123")
+	t.Setenv("TS_AUTHKEY", "tskey-auth-test123-secret")
 	t.Setenv("TS_CONTROL_URL", "")
 
 	cfg, err := Merge(
@@ -335,7 +335,7 @@ func TestMergeSOCKS5Routes(t *testing.T) {
 
 func TestMergeRejectsInvalidSOCKS5Route(t *testing.T) {
 	t.Setenv("TS_TARGET", "")
-	t.Setenv("TS_AUTHKEY", "tskey-auth-test123")
+	t.Setenv("TS_AUTHKEY", "tskey-auth-test123-secret")
 	t.Setenv("TS_CONTROL_URL", "")
 
 	_, err := Merge(
@@ -360,25 +360,25 @@ func TestMergeProxyModePrecedence(t *testing.T) {
 		{
 			name:       "flag target overrides environment SOCKS",
 			envSOCKS:   "127.0.0.1:1080",
-			flags:      FlagSet{Target: "mesh-host:22", AuthKey: "tskey-auth-test123"},
+			flags:      FlagSet{Target: "mesh-host:22", AuthKey: "tskey-auth-test123-secret"},
 			wantTarget: "mesh-host:22",
 		},
 		{
 			name:      "flag SOCKS overrides environment target",
 			envTarget: "mesh-host:22",
-			flags:     FlagSet{SOCKS5Addr: "127.0.0.1:1080", AuthKey: "tskey-auth-test123"},
+			flags:     FlagSet{SOCKS5Addr: "127.0.0.1:1080", AuthKey: "tskey-auth-test123-secret"},
 			wantSOCKS: "127.0.0.1:1080",
 		},
 		{
 			name:      "same layer cannot select both modes",
-			flags:     FlagSet{Target: "mesh-host:22", SOCKS5Addr: "127.0.0.1:1080", AuthKey: "tskey-auth-test123"},
+			flags:     FlagSet{Target: "mesh-host:22", SOCKS5Addr: "127.0.0.1:1080", AuthKey: "tskey-auth-test123-secret"},
 			wantError: "target and SOCKS5 listener cannot both be set at the same precedence level",
 		},
 		{
 			name:      "environment cannot select both modes",
 			envTarget: "mesh-host:22",
 			envSOCKS:  "127.0.0.1:1080",
-			flags:     FlagSet{AuthKey: "tskey-auth-test123"},
+			flags:     FlagSet{AuthKey: "tskey-auth-test123-secret"},
 			wantError: "target and SOCKS5 listener cannot both be set at the same precedence level",
 		},
 	}
@@ -423,7 +423,7 @@ func TestMergeHigherPrecedenceSOCKSModePreservesYAMLAllowlist(t *testing.T) {
 		},
 		FlagSet{
 			SOCKS5Addr: "127.0.0.1:1080",
-			AuthKey:    "tskey-auth-test123",
+			AuthKey:    "tskey-auth-test123-secret",
 		},
 	)
 	if err != nil {
@@ -448,7 +448,7 @@ func TestMergeRejectsSOCKS5RoutesInStaticMode(t *testing.T) {
 		FlagSet{
 			Target:       "mesh-host:22",
 			SOCKS5Routes: []string{"forge.example:443=apps:443"},
-			AuthKey:      "tskey-auth-test123",
+			AuthKey:      "tskey-auth-test123-secret",
 		},
 	)
 	if err == nil || !strings.Contains(err.Error(), "SOCKS5 routes require SOCKS5 mode") {
@@ -465,7 +465,7 @@ func TestMergeDefaultHostnameInManualMode(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test-secret",
 		ManualMode: true,
 	}
 
@@ -488,7 +488,7 @@ func TestMergeExplicitHostnameOverridesDefault(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test-secret",
 		Hostname:   "my-server",
 		ManualMode: true,
 	}
@@ -509,7 +509,7 @@ func TestMergeAutoModeDerivesHostname(t *testing.T) {
 
 	flags := FlagSet{
 		Target:   "100.64.0.1:3389",
-		AuthKey:  "tskey-test",
+		AuthKey:  "tskey-auth-test-secret",
 		Instance: "test-instance",
 	}
 
@@ -537,7 +537,7 @@ func TestMergeAutoModeDerivesLocalAddr(t *testing.T) {
 
 	flags := FlagSet{
 		Target:  "100.64.0.1:3389",
-		AuthKey: "tskey-test",
+		AuthKey: "tskey-auth-test-secret",
 	}
 
 	cfg, err := Merge(PartialConfig{}, flags)
@@ -565,7 +565,7 @@ func TestMergeAutoModeLocalAddrFromPortRangeFlag(t *testing.T) {
 
 	flags := FlagSet{
 		Target:    "100.64.0.1:3389",
-		AuthKey:   "tskey-test",
+		AuthKey:   "tskey-auth-test-secret",
 		PortRange: "40000-41000",
 	}
 
@@ -591,7 +591,7 @@ func TestMergeAutoModeLocalAddrFromEnv(t *testing.T) {
 	// When TS_LOCAL_ADDR is set, use it (no derivation).
 	os.Setenv("TS_LOCAL_ADDR", "127.0.0.1:9999")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test-secret")
 	defer os.Unsetenv("TS_LOCAL_ADDR")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
@@ -615,7 +615,7 @@ func TestMergeManualModeNoLocalAddrDerived(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test-secret",
 		ManualMode: true,
 	}
 
@@ -797,7 +797,7 @@ func TestMergeDialRetriesValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Setenv("TS_TARGET", "100.64.0.1:3389")
-			os.Setenv("TS_AUTHKEY", "tskey-auth-env")
+			os.Setenv("TS_AUTHKEY", "tskey-auth-env-secret")
 			defer os.Unsetenv("TS_TARGET")
 			defer os.Unsetenv("TS_AUTHKEY")
 
@@ -834,7 +834,7 @@ func TestMergeManualModeFlagDisablesAutoInstance(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test-secret",
 		ManualMode: true,
 	}
 
@@ -857,7 +857,7 @@ func TestMergeManualModeFlagDisablesAutoInstance(t *testing.T) {
 func TestMergeEnvAutoInstanceFalse(t *testing.T) {
 	os.Setenv("TS_AUTO_INSTANCE", "false")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test-secret")
 	defer os.Unsetenv("TS_AUTO_INSTANCE")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
@@ -874,7 +874,7 @@ func TestMergeEnvAutoInstanceFalse(t *testing.T) {
 func TestMergeEnvManualModeTrue(t *testing.T) {
 	os.Setenv("TS_MANUAL_MODE", "true")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test-secret")
 	defer os.Unsetenv("TS_MANUAL_MODE")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
@@ -892,14 +892,14 @@ func TestMergeFlagManualModeOverridesEnvAutoInstance(t *testing.T) {
 	// Env says auto, flag says manual → flag wins.
 	os.Setenv("TS_AUTO_INSTANCE", "true")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test-secret")
 	defer os.Unsetenv("TS_AUTO_INSTANCE")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test-secret",
 		ManualMode: true,
 	}
 
@@ -923,7 +923,7 @@ func TestMergeYAMLAutoInstanceExplicit(t *testing.T) {
 		AutoInstance: boolPtr(false),
 	}
 
-	cfg, err := Merge(yamlCfg, FlagSet{AuthKey: "tskey-test"})
+	cfg, err := Merge(yamlCfg, FlagSet{AuthKey: "tskey-auth-test-secret"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -936,7 +936,7 @@ func TestMergeAutoInstanceEnvOverridesYAML(t *testing.T) {
 	// Env should override YAML for AutoInstance.
 	os.Setenv("TS_AUTO_INSTANCE", "true")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test-secret")
 	defer os.Unsetenv("TS_AUTO_INSTANCE")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
@@ -967,7 +967,7 @@ func TestMergeManualModeNoAutoDerivedValues(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test-secret",
 		ManualMode: true,
 	}
 
@@ -1031,7 +1031,7 @@ func restoreStateEnv(t *testing.T) {
 // case-specific overrides.
 func baseFlags(extra FlagSet) FlagSet {
 	extra.Target = "100.64.0.1:3389"
-	extra.AuthKey = "tskey-test"
+	extra.AuthKey = "tskey-auth-test-secret"
 	return extra
 }
 
@@ -1145,9 +1145,9 @@ func TestMergeControlPlaneForKey(t *testing.T) {
 		{"headscale key with control url is accepted", "hskey-test123", "https://hs.example.com", false},
 		{"headscale key with whitespace-only control url is rejected", "hskey-test123", "   ", true},
 		{"headscale key with http control url is accepted (dev)", "hskey-test123", "http://localhost:8080", false},
-		{"tailscale key without control url is accepted (SaaS default)", "tskey-test123", "", false},
-		{"tailscale key with custom control url is accepted", "tskey-test123", "https://self-hosted.example.com", false},
-		{"control url without scheme is rejected", "tskey-test123", "headscale.example.com", true},
+		{"tailscale key without control url is accepted (SaaS default)", "tskey-auth-test123-secret", "", false},
+		{"tailscale key with custom control url is accepted", "tskey-auth-test123-secret", "https://self-hosted.example.com", false},
+		{"control url without scheme is rejected", "tskey-auth-test123-secret", "headscale.example.com", true},
 		{"control url with wrong scheme is rejected", "hskey-test123", "ftp://hs.example.com", true},
 	}
 	for _, tc := range cases {

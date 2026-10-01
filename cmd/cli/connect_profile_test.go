@@ -44,7 +44,7 @@ func TestConnectProfileResolvedBeforeValidation(t *testing.T) {
 		{
 			name:        "SaaS profile supplies target",
 			profileName: "saas",
-			authKey:     "tskey-auth-test",
+			authKey:     "tskey-auth-test-secret",
 			wantTarget:  "profile-saas:22",
 		},
 		{
@@ -57,7 +57,7 @@ func TestConnectProfileResolvedBeforeValidation(t *testing.T) {
 		{
 			name:        "flags override profile",
 			profileName: "headscale",
-			authKey:     "tskey-auth-test",
+			authKey:     "tskey-auth-test-secret",
 			extraArgs:   []string{"--target", "flag-host:22", "--control-url", "https://flag.example.com"},
 			wantTarget:  "flag-host:22",
 			wantControl: "https://flag.example.com",
@@ -65,7 +65,7 @@ func TestConnectProfileResolvedBeforeValidation(t *testing.T) {
 		{
 			name:        "environment overrides profile",
 			profileName: "headscale",
-			authKey:     "tskey-auth-test",
+			authKey:     "tskey-auth-test-secret",
 			envTarget:   "env-host:22",
 			envControl:  "https://env.example.com",
 			wantTarget:  "env-host:22",
@@ -74,7 +74,7 @@ func TestConnectProfileResolvedBeforeValidation(t *testing.T) {
 		{
 			name:        "YAML overrides profile",
 			profileName: "headscale",
-			authKey:     "tskey-auth-test",
+			authKey:     "tskey-auth-test-secret",
 			yaml:        "version: 1\ntarget: yaml-host:22\ncontrol_url: https://yaml.example.com\n",
 			wantTarget:  "yaml-host:22",
 			wantControl: "https://yaml.example.com",

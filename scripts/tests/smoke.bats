@@ -316,7 +316,7 @@ TARGET="100.64.0.1:3389"
 @test "connect: rejects a malformed auth key before starting" {
   run "${BIN}" connect --auth-key notavalidkey --target 100.64.0.1:3389
   assert_failure
-  assert_contains "must start with tskey- or hskey-"
+  assert_contains "must be a Tailscale machine auth key or Headscale pre-auth key"
 }
 
 @test "connect: --auth-key-file pointing at a missing file fails fast" {
@@ -564,11 +564,10 @@ TARGET="100.64.0.1:3389"
   # This deterministically returns an API token invalid error over the network
   # without requiring real credentials, proving runtime network dial errors are
   # routed cleanly to stderr without stack traces.
-  run bash -c '"${BIN}" discover --auth-key tskey-auth-dummy --tailnet hs 2>stderr.log >stdout.log'
+  run bash -c '"${BIN}" discover --auth-key tskey-auth-dummy-secret --tailnet hs 2>stderr.log >stdout.log'
   assert_failure
   run cat stderr.log
   assert_contains "API token invalid"
   run cat stdout.log
   [ -z "$output" ]
 }
-

@@ -17,7 +17,7 @@ func TestLoadConfig(t *testing.T) {
 	}{
 		{
 			name:    "valid config with defaults",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.Target != "100.64.0.1:3389" {
@@ -47,7 +47,7 @@ func TestLoadConfig(t *testing.T) {
 			name: "manual mode restores legacy defaults",
 			env: map[string]string{
 				"TS_TARGET":      "100.64.0.1:3389",
-				"TS_AUTHKEY":     "tskey-auth-test123",
+				"TS_AUTHKEY":     "tskey-auth-test123-secret",
 				"TS_MANUAL_MODE": "true",
 			},
 			wantErr: false,
@@ -76,7 +76,7 @@ func TestLoadConfig(t *testing.T) {
 			name: "explicit auto flag false restores legacy defaults",
 			env: map[string]string{
 				"TS_TARGET":        "100.64.0.1:3389",
-				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTHKEY":       "tskey-auth-test123-secret",
 				"TS_AUTO_INSTANCE": "false",
 			},
 			wantErr: false,
@@ -91,7 +91,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "custom timeout",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_TIMEOUT": "1m30s"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_TIMEOUT": "1m30s"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.ConnectTimeout != 90*time.Second {
@@ -101,7 +101,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "control URL unset defaults to empty",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.ControlURL != "" {
@@ -111,7 +111,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "control URL set to headscale",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_CONTROL_URL": "https://vpn.example.com"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_CONTROL_URL": "https://vpn.example.com"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.ControlURL != "https://vpn.example.com" {
@@ -123,7 +123,7 @@ func TestLoadConfig(t *testing.T) {
 			name: "auto instance mode derives runtime values",
 			env: map[string]string{
 				"TS_TARGET":        "100.64.0.1:3389",
-				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTHKEY":       "tskey-auth-test123-secret",
 				"TS_AUTO_INSTANCE": "true",
 				"TS_INSTANCE_NAME": "office-laptop",
 				"TS_PORT_RANGE":    "61000-61100",
@@ -151,7 +151,7 @@ func TestLoadConfig(t *testing.T) {
 			name: "auto instance mode keeps explicit values",
 			env: map[string]string{
 				"TS_TARGET":        "100.64.0.1:3389",
-				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTHKEY":       "tskey-auth-test123-secret",
 				"TS_AUTO_INSTANCE": "1",
 				"TS_LOCAL_ADDR":    "127.0.0.1:40001",
 				"TS_HOSTNAME":      "manual-host",
@@ -177,7 +177,7 @@ func TestLoadConfig(t *testing.T) {
 			name: "auto instance mode invalid port range",
 			env: map[string]string{
 				"TS_TARGET":        "100.64.0.1:3389",
-				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTHKEY":       "tskey-auth-test123-secret",
 				"TS_AUTO_INSTANCE": "true",
 				"TS_PORT_RANGE":    "bad-range",
 			},
@@ -187,7 +187,7 @@ func TestLoadConfig(t *testing.T) {
 			name: "manual mode overrides explicit auto mode flag",
 			env: map[string]string{
 				"TS_TARGET":        "100.64.0.1:3389",
-				"TS_AUTHKEY":       "tskey-auth-test123",
+				"TS_AUTHKEY":       "tskey-auth-test123-secret",
 				"TS_AUTO_INSTANCE": "true",
 				"TS_MANUAL_MODE":   "true",
 			},
@@ -203,7 +203,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "missing target",
-			env:     map[string]string{"TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: true,
 		},
 		{
@@ -213,7 +213,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "hostname target (MagicDNS)",
-			env:     map[string]string{"TS_TARGET": "acemagic-lab-1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "acemagic-lab-1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.Target != "acemagic-lab-1:3389" {
@@ -223,7 +223,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "FQDN target (MagicDNS)",
-			env:     map[string]string{"TS_TARGET": "acemagic-lab-1.tail-abc123.ts.net:22", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "acemagic-lab-1.tail-abc123.ts.net:22", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.Target != "acemagic-lab-1.tail-abc123.ts.net:22" {
@@ -253,12 +253,12 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "invalid timeout",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_TIMEOUT": "invalid"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_TIMEOUT": "invalid"},
 			wantErr: true,
 		},
 		{
 			name:    "idle timeout defaults to disabled",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.IdleTimeout != 0 {
@@ -268,7 +268,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "idle timeout parsed",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_IDLE_TIMEOUT": "5m"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_IDLE_TIMEOUT": "5m"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.IdleTimeout != 5*time.Minute {
@@ -278,17 +278,17 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "idle timeout invalid",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_IDLE_TIMEOUT": "garbage"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_IDLE_TIMEOUT": "garbage"},
 			wantErr: true,
 		},
 		{
 			name:    "idle timeout negative rejected",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_IDLE_TIMEOUT": "-1m"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_IDLE_TIMEOUT": "-1m"},
 			wantErr: true,
 		},
 		{
 			name:    "dial timeout defaults to 5s",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.DialTimeout != 5*time.Second {
@@ -298,7 +298,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "dial timeout parsed",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_TIMEOUT": "10s"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_TIMEOUT": "10s"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.DialTimeout != 10*time.Second {
@@ -308,22 +308,22 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "dial timeout zero rejected",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_TIMEOUT": "0"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_TIMEOUT": "0"},
 			wantErr: true,
 		},
 		{
 			name:    "dial timeout negative rejected",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_TIMEOUT": "-1s"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_TIMEOUT": "-1s"},
 			wantErr: true,
 		},
 		{
 			name:    "dial timeout invalid rejected",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_TIMEOUT": "garbage"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_TIMEOUT": "garbage"},
 			wantErr: true,
 		},
 		{
 			name:    "dial retries defaults",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.DialRetries != 3 {
@@ -341,7 +341,7 @@ func TestLoadConfig(t *testing.T) {
 			name: "dial retries parsed",
 			env: map[string]string{
 				"TS_TARGET":            "100.64.0.1:3389",
-				"TS_AUTHKEY":           "tskey-auth-test123",
+				"TS_AUTHKEY":           "tskey-auth-test123-secret",
 				"TS_DIAL_RETRIES":      "5",
 				"TS_DIAL_BACKOFF_BASE": "500ms",
 				"TS_DIAL_BACKOFF_MAX":  "10s",
@@ -361,7 +361,7 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "dial retries zero disables retry",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_RETRIES": "0"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_RETRIES": "0"},
 			wantErr: false,
 			check: func(t *testing.T, cfg Config) {
 				if cfg.DialRetries != 0 {
@@ -371,64 +371,64 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:    "dial retries negative rejected",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_RETRIES": "-1"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_RETRIES": "-1"},
 			wantErr: true,
 		},
 		{
 			name:    "dial retries invalid rejected",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_RETRIES": "abc"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_RETRIES": "abc"},
 			wantErr: true,
 		},
 		{
 			name:    "dial backoff base negative rejected",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_BACKOFF_BASE": "-1s"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_BACKOFF_BASE": "-1s"},
 			wantErr: true,
 		},
 		{
 			name:    "dial backoff max negative rejected",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_BACKOFF_MAX": "-1s"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_BACKOFF_MAX": "-1s"},
 			wantErr: true,
 		},
 		{
 			name:    "dial backoff max less than base rejected",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123", "TS_DIAL_BACKOFF_BASE": "10s", "TS_DIAL_BACKOFF_MAX": "1s"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:3389", "TS_AUTHKEY": "tskey-auth-test123-secret", "TS_DIAL_BACKOFF_BASE": "10s", "TS_DIAL_BACKOFF_MAX": "1s"},
 			wantErr: true,
 		},
 		{
 			name:    "target no port",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: true,
 		},
 		{
 			name:    "target empty host",
-			env:     map[string]string{"TS_TARGET": ":3389", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": ":3389", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: true,
 		},
 		{
 			name:    "target invalid port",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:abc", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:abc", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: true,
 		},
 		{
 			name:    "target port too high",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:99999", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:99999", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: true,
 		},
 		{
 			name:    "target port zero",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:0", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:0", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: true,
 		},
 		{
 			name:    "target negative port",
-			env:     map[string]string{"TS_TARGET": "100.64.0.1:-1", "TS_AUTHKEY": "tskey-auth-test123"},
+			env:     map[string]string{"TS_TARGET": "100.64.0.1:-1", "TS_AUTHKEY": "tskey-auth-test123-secret"},
 			wantErr: true,
 		},
 		{
 			name: "SOCKS5 env mode without static target",
 			env: map[string]string{
 				"TS_SOCKS5_ADDR": "127.0.0.1:1080",
-				"TS_AUTHKEY":     "tskey-auth-test123",
+				"TS_AUTHKEY":     "tskey-auth-test123-secret",
 			},
 			check: func(t *testing.T, cfg Config) {
 				if cfg.Target != "" || cfg.SOCKS5Addr != "127.0.0.1:1080" {
@@ -440,7 +440,7 @@ func TestLoadConfig(t *testing.T) {
 			name: "SOCKS5 env mode rejects non-loopback listener",
 			env: map[string]string{
 				"TS_SOCKS5_ADDR": "0.0.0.0:1080",
-				"TS_AUTHKEY":     "tskey-auth-test123",
+				"TS_AUTHKEY":     "tskey-auth-test123-secret",
 			},
 			wantErr: true,
 		},
@@ -449,7 +449,7 @@ func TestLoadConfig(t *testing.T) {
 			env: map[string]string{
 				"TS_TARGET":      "mesh-host:22",
 				"TS_SOCKS5_ADDR": "127.0.0.1:1080",
-				"TS_AUTHKEY":     "tskey-auth-test123",
+				"TS_AUTHKEY":     "tskey-auth-test123-secret",
 			},
 			wantErr: true,
 		},
