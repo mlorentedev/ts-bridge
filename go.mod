@@ -6,8 +6,8 @@ require (
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.46.0
 	gopkg.in/yaml.v3 v3.0.1
-	tailscale.com v1.102.4
-	tailscale.com/client/tailscale/v2 v2.10.1
+	tailscale.com v1.102.5
+	tailscale.com/client/tailscale/v2 v2.11.0
 )
 
 require (
