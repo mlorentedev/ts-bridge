@@ -185,7 +185,7 @@ func ValidateKey(key string) error {
 	if key == "" {
 		return fmt.Errorf("credential is empty")
 	}
-	if strings.IndexFunc(key, func(r rune) bool { return r == '\r' || r == '\n' || r == ' ' || r == '\t' }) >= 0 {
+	if containsCredentialWhitespace(key) {
 		return fmt.Errorf("credential contains whitespace")
 	}
 	if strings.HasPrefix(key, "hskey-") {
@@ -194,6 +194,16 @@ func ValidateKey(key string) error {
 		}
 		return nil
 	}
+	return validateTailscaleKey(key)
+}
+
+func containsCredentialWhitespace(key string) bool {
+	return strings.IndexFunc(key, func(r rune) bool {
+		return r == '\r' || r == '\n' || r == ' ' || r == '\t'
+	}) >= 0
+}
+
+func validateTailscaleKey(key string) error {
 	if strings.HasPrefix(key, "tskey-api-") || strings.HasPrefix(key, "tskey-client-") {
 		return fmt.Errorf("credential must not be a Tailscale API token or OAuth client secret")
 	}

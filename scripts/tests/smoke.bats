@@ -316,7 +316,7 @@ TARGET="100.64.0.1:3389"
 @test "connect: rejects a malformed auth key before starting" {
   run "${BIN}" connect --auth-key notavalidkey --target 100.64.0.1:3389
   assert_failure
-  assert_contains "must start with tskey- or hskey-"
+  assert_contains "must be a Tailscale machine auth key or Headscale pre-auth key"
 }
 
 @test "connect: --auth-key-file pointing at a missing file fails fast" {
@@ -571,4 +571,3 @@ TARGET="100.64.0.1:3389"
   run cat stdout.log
   [ -z "$output" ]
 }
-
