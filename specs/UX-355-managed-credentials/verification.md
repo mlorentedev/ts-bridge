@@ -19,6 +19,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 
 - Foundation packages: `go test ./internal/credential ./internal/profile` -> passed.
 - Path contract: `go test ./internal/config -run TestCredentialStoreDirIsSiblingOfProfileStore -count=1` -> passed.
+- Corrected f1 contract: `go test ./internal/credential ./internal/config -run '^(TestStoreRefusesOverwriteUnlessExplicit|TestStoreUsesOwnerOnlyPermissionsOnUnix|TestHardenCredentialPathUsesOwnerOnlyWindowsACLs|TestCredentialStoreDirIsSiblingOfProfileStore)$' -count=1` -> passed.
+- Controlled mutation proof: temporarily bypassing the `replace == false` overwrite guard made the corrected f1 command fail in `TestStoreRefusesOverwriteUnlessExplicit`; production code was restored before the passing run.
 - Static checks: `go vet ./internal/credential ./internal/profile ./internal/config` -> passed.
 - CLI regression set: `go test ./cmd/cli -run 'TestAuth|ProfileCredential|BrowserAuthKeyFileOverrides|TestNewRootCmdContainsProductionCommands|TestManagedCredentialDocumentation' -count=1` -> passed.
 - Build/vet: `go build ./...` and `go vet ./...` -> passed.
@@ -36,6 +38,12 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - Windows uses the built-in `icacls` utility to remove inheritance and grant only the current user; Unix uses `0700` directories and `0600` files.
 - Browser keeps its stronger security boundary: it accepts an explicit key file or managed profile credential, not the legacy environment key alone.
 
+## Review dispositions
+
+- Major (required) — `features.json` f1 used a broad `-run` expression that did not select the credential-store behavior tests. Applied: f1 now names overwrite refusal, platform-appropriate owner-only permission tests, and the config sibling-store test explicitly.
+- Minor (theoretical) — credential write and profile binding are not one transactional operation. Deferred to #391, which already tracks transactional credential/profile updates; no code change in this review-gate fix.
+- Minor (theoretical) — concurrent writers can race between overwrite detection and replacement. Deferred to #391, which already tracks credential-store concurrency; no code change in this review-gate fix.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
@@ -48,5 +56,5 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
 - [ ] Folder moved: `specs/UX-355-managed-credentials/` -> `specs/archive/UX-355-managed-credentials/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [ ] Promotions above executed (if any)
