@@ -1,9 +1,9 @@
 name: Repo hygiene
 
 # Guards that need no toolchain (lesson numbering/index integrity, SHA-pinned actions,
-# workflow credential posture, PR-Agent review-published parsing) run under bash and zsh and
-# print what failed, plus a toolchain-backed lint pass (actionlint + shellcheck, #345) over
-# every workflow's YAML shape and embedded shell.
+# workflow credential posture, documentation auth-key examples, PR-Agent review-published
+# parsing) run under bash and zsh and print what failed, plus a toolchain-backed lint pass
+# (actionlint + shellcheck, #345) over every workflow's YAML shape and embedded shell.
 
 on:
   pull_request:
@@ -27,12 +27,16 @@ jobs:
         run: bash scripts/check-actions-pinned.sh
       - name: Workflows carry no default credential
         run: bash scripts/check-workflow-permissions.sh
+      - name: Documentation examples keep auth keys out of argv
+        run: bash scripts/check-doc-authkey.sh
       # The fixture suite runs every case under bash AND zsh, and fails when either is missing.
       # ubuntu-latest ships no zsh, so without this step the second shell was silently skipped.
       - name: Install zsh for the two-shell fixture suite
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
       - name: That guard still refuses each way the posture can widen
         run: bash scripts/tests/test-workflow-permissions.sh
+      - name: Auth-key guard rejects unsafe command examples
+        run: bash scripts/tests/test-doc-authkey.sh
       - name: That guard tolerates a null comment body (#345 regression)
         run: bash scripts/tests/test-check-review-published.sh
       - name: Site changes keep their pull-request build gate
