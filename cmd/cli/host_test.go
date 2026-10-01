@@ -167,7 +167,7 @@ func TestWriteHostEnv_PreservesExistingVars(t *testing.T) {
 	envPath := filepath.Join(tmpDir, ".env")
 
 	// Pre-write existing client config.
-	existing := "TS_AUTHKEY=tskey-test\nTS_TARGET=100.64.0.1:3389\n"
+	existing := "TS_AUTHKEY=tskey-auth-test\nTS_TARGET=100.64.0.1:3389\n"
 	if err := os.WriteFile(envPath, []byte(existing), 0600); err != nil {
 		t.Fatalf("write initial .env: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestWriteHostEnv_PreservesExistingVars(t *testing.T) {
 	}
 
 	content := string(data)
-	if !strings.Contains(content, "TS_AUTHKEY=tskey-test") {
+	if !strings.Contains(content, "TS_AUTHKEY=tskey-auth-test") {
 		t.Error("expected TS_AUTHKEY to be preserved")
 	}
 	if !strings.Contains(content, "TS_TARGET=100.64.0.1:3389") {

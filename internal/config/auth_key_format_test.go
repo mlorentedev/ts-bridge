@@ -6,12 +6,19 @@ import (
 )
 
 func TestMergeRejectsNonMachineAndMalformedTailscaleKeys(t *testing.T) {
-	for _, key := range []string{
-		"tskey-api-id-secret",
-		"tskey-client-id-secret",
-		"tskey-auth-id-secret-auth-id-secret",
-	} {
-		t.Run(key[:strings.Index(key, "-secret")+7], func(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+	}{
+		{name: "API token", key: "tskey-api-id-secret"},
+		{name: "OAuth client secret", key: "tskey-client-id-secret"},
+		{name: "missing auth segments", key: "tskey-auth"},
+		{name: "unknown tskey type", key: "tskey-foo"},
+		{name: "concatenated auth keys", key: "tskey-auth-id-secret-auth-id-secret"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := tt.key
 			t.Setenv("TS_AUTHKEY", "")
 			t.Setenv("TS_TARGET", "")
 			_, err := Merge(PartialConfig{}, FlagSet{

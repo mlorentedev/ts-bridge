@@ -77,6 +77,8 @@ func TestStoreValidatesNamesAndKeysWithoutLeakingValues(t *testing.T) {
 		"not-a-key",
 		"tskey-api-id-secret",
 		"tskey-client-id-secret",
+		"tskey-auth",
+		"tskey-foo",
 		"tskey-auth-id-secret-auth-id-secret",
 		"tskey-auth-one\nsecond",
 		"hskey-auth-one\rsecond",

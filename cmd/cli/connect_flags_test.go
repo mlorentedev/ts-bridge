@@ -167,12 +167,12 @@ func TestBootstrapSSHFlagsReachRunner(t *testing.T) {
 func TestAuthKeyFilePrecedence(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyFile := tmpDir + "/auth.key"
-	if err := os.WriteFile(keyFile, []byte("tskey-from-file"), 0600); err != nil {
+	if err := os.WriteFile(keyFile, []byte("tskey-auth-from-file"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
 	root := newConnectCmd()
-	root.SetArgs([]string{"--target", "100.64.0.1:3389", "--auth-key", "tskey-from-flag", "--auth-key-file", keyFile})
+	root.SetArgs([]string{"--target", "100.64.0.1:3389", "--auth-key", "tskey-auth-from-flag", "--auth-key-file", keyFile})
 	root.SilenceUsage = true
 	root.SilenceErrors = true
 
@@ -187,7 +187,7 @@ func TestAuthKeyFilePrecedence(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if capturedKey != "tskey-from-file" {
-		t.Errorf("expected tskey-from-file, got %q", capturedKey)
+	if capturedKey != "tskey-auth-from-file" {
+		t.Errorf("expected tskey-auth-from-file, got %q", capturedKey)
 	}
 }

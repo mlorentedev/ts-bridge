@@ -198,9 +198,6 @@ func ValidateKey(key string) error {
 		return fmt.Errorf("credential must not be a Tailscale API token or OAuth client secret")
 	}
 	if !strings.HasPrefix(key, "tskey-auth-") {
-		if strings.HasPrefix(key, "tskey-") {
-			return nil
-		}
 		return fmt.Errorf("credential must be a Tailscale machine auth key or Headscale pre-auth key")
 	}
 	parts := strings.Split(key, "-")

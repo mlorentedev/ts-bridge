@@ -32,7 +32,7 @@ func TestUpdateEnv_UpdatesExisting(t *testing.T) {
 
 	// Write existing .env with other vars.
 	existing := `# ts-bridge config
-TS_AUTHKEY=tskey-test-123
+TS_AUTHKEY=tskey-auth-test-123
 TS_TARGET=old-host:3389
 TS_INSTANCE_NAME=mybridge
 `
@@ -58,7 +58,7 @@ TS_INSTANCE_NAME=mybridge
 	}
 
 	// Other vars preserved.
-	if !strings.Contains(content, "TS_AUTHKEY=tskey-test-123") {
+	if !strings.Contains(content, "TS_AUTHKEY=tskey-auth-test-123") {
 		t.Error("TS_AUTHKEY should be preserved")
 	}
 	if !strings.Contains(content, "TS_INSTANCE_NAME=mybridge") {
@@ -72,7 +72,7 @@ func TestUpdateEnv_PreservesComments(t *testing.T) {
 
 	existing := `# Required
 # Auth key
-TS_AUTHKEY=tskey-test
+TS_AUTHKEY=tskey-auth-test
 # Target
 TS_TARGET=old:3389
 # Optional
@@ -107,7 +107,7 @@ func TestUpdateEnv_NoTrailingNewline(t *testing.T) {
 	path := filepath.Join(dir, ".env")
 
 	// File with no trailing newline.
-	if err := os.WriteFile(path, []byte("TS_AUTHKEY=tskey-test"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("TS_AUTHKEY=tskey-auth-test"), 0600); err != nil {
 		t.Fatalf("write initial .env: %v", err)
 	}
 
@@ -121,7 +121,7 @@ func TestUpdateEnv_NoTrailingNewline(t *testing.T) {
 		t.Fatalf("read .env: %v", err)
 	}
 
-	if !strings.Contains(string(data), "TS_AUTHKEY=tskey-test") {
+	if !strings.Contains(string(data), "TS_AUTHKEY=tskey-auth-test") {
 		t.Error("TS_AUTHKEY should be preserved")
 	}
 	if !strings.Contains(string(data), "TS_TARGET=host:3389") {

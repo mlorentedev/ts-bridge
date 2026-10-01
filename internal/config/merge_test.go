@@ -465,7 +465,7 @@ func TestMergeDefaultHostnameInManualMode(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test",
 		ManualMode: true,
 	}
 
@@ -488,7 +488,7 @@ func TestMergeExplicitHostnameOverridesDefault(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test",
 		Hostname:   "my-server",
 		ManualMode: true,
 	}
@@ -509,7 +509,7 @@ func TestMergeAutoModeDerivesHostname(t *testing.T) {
 
 	flags := FlagSet{
 		Target:   "100.64.0.1:3389",
-		AuthKey:  "tskey-test",
+		AuthKey:  "tskey-auth-test",
 		Instance: "test-instance",
 	}
 
@@ -537,7 +537,7 @@ func TestMergeAutoModeDerivesLocalAddr(t *testing.T) {
 
 	flags := FlagSet{
 		Target:  "100.64.0.1:3389",
-		AuthKey: "tskey-test",
+		AuthKey: "tskey-auth-test",
 	}
 
 	cfg, err := Merge(PartialConfig{}, flags)
@@ -565,7 +565,7 @@ func TestMergeAutoModeLocalAddrFromPortRangeFlag(t *testing.T) {
 
 	flags := FlagSet{
 		Target:    "100.64.0.1:3389",
-		AuthKey:   "tskey-test",
+		AuthKey:   "tskey-auth-test",
 		PortRange: "40000-41000",
 	}
 
@@ -591,7 +591,7 @@ func TestMergeAutoModeLocalAddrFromEnv(t *testing.T) {
 	// When TS_LOCAL_ADDR is set, use it (no derivation).
 	os.Setenv("TS_LOCAL_ADDR", "127.0.0.1:9999")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test")
 	defer os.Unsetenv("TS_LOCAL_ADDR")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
@@ -615,7 +615,7 @@ func TestMergeManualModeNoLocalAddrDerived(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test",
 		ManualMode: true,
 	}
 
@@ -834,7 +834,7 @@ func TestMergeManualModeFlagDisablesAutoInstance(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test",
 		ManualMode: true,
 	}
 
@@ -857,7 +857,7 @@ func TestMergeManualModeFlagDisablesAutoInstance(t *testing.T) {
 func TestMergeEnvAutoInstanceFalse(t *testing.T) {
 	os.Setenv("TS_AUTO_INSTANCE", "false")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test")
 	defer os.Unsetenv("TS_AUTO_INSTANCE")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
@@ -874,7 +874,7 @@ func TestMergeEnvAutoInstanceFalse(t *testing.T) {
 func TestMergeEnvManualModeTrue(t *testing.T) {
 	os.Setenv("TS_MANUAL_MODE", "true")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test")
 	defer os.Unsetenv("TS_MANUAL_MODE")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
@@ -892,14 +892,14 @@ func TestMergeFlagManualModeOverridesEnvAutoInstance(t *testing.T) {
 	// Env says auto, flag says manual → flag wins.
 	os.Setenv("TS_AUTO_INSTANCE", "true")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test")
 	defer os.Unsetenv("TS_AUTO_INSTANCE")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test",
 		ManualMode: true,
 	}
 
@@ -923,7 +923,7 @@ func TestMergeYAMLAutoInstanceExplicit(t *testing.T) {
 		AutoInstance: boolPtr(false),
 	}
 
-	cfg, err := Merge(yamlCfg, FlagSet{AuthKey: "tskey-test"})
+	cfg, err := Merge(yamlCfg, FlagSet{AuthKey: "tskey-auth-test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -936,7 +936,7 @@ func TestMergeAutoInstanceEnvOverridesYAML(t *testing.T) {
 	// Env should override YAML for AutoInstance.
 	os.Setenv("TS_AUTO_INSTANCE", "true")
 	os.Setenv("TS_TARGET", "100.64.0.1:3389")
-	os.Setenv("TS_AUTHKEY", "tskey-test")
+	os.Setenv("TS_AUTHKEY", "tskey-auth-test")
 	defer os.Unsetenv("TS_AUTO_INSTANCE")
 	defer os.Unsetenv("TS_TARGET")
 	defer os.Unsetenv("TS_AUTHKEY")
@@ -967,7 +967,7 @@ func TestMergeManualModeNoAutoDerivedValues(t *testing.T) {
 
 	flags := FlagSet{
 		Target:     "100.64.0.1:3389",
-		AuthKey:    "tskey-test",
+		AuthKey:    "tskey-auth-test",
 		ManualMode: true,
 	}
 
@@ -1031,7 +1031,7 @@ func restoreStateEnv(t *testing.T) {
 // case-specific overrides.
 func baseFlags(extra FlagSet) FlagSet {
 	extra.Target = "100.64.0.1:3389"
-	extra.AuthKey = "tskey-test"
+	extra.AuthKey = "tskey-auth-test"
 	return extra
 }
 
@@ -1145,9 +1145,9 @@ func TestMergeControlPlaneForKey(t *testing.T) {
 		{"headscale key with control url is accepted", "hskey-test123", "https://hs.example.com", false},
 		{"headscale key with whitespace-only control url is rejected", "hskey-test123", "   ", true},
 		{"headscale key with http control url is accepted (dev)", "hskey-test123", "http://localhost:8080", false},
-		{"tailscale key without control url is accepted (SaaS default)", "tskey-test123", "", false},
-		{"tailscale key with custom control url is accepted", "tskey-test123", "https://self-hosted.example.com", false},
-		{"control url without scheme is rejected", "tskey-test123", "headscale.example.com", true},
+		{"tailscale key without control url is accepted (SaaS default)", "tskey-auth-test123", "", false},
+		{"tailscale key with custom control url is accepted", "tskey-auth-test123", "https://self-hosted.example.com", false},
+		{"control url without scheme is rejected", "tskey-auth-test123", "headscale.example.com", true},
 		{"control url with wrong scheme is rejected", "hskey-test123", "ftp://hs.example.com", true},
 	}
 	for _, tc := range cases {
