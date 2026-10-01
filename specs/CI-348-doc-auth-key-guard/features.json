@@ -1,0 +1,23 @@
+[
+  {
+    "id": "CI-348-doc-auth-key-guard-f1",
+    "behavior": "The current README.md and docs tree contains no prohibited inline auth-key command example.",
+    "verification": "bash scripts/check-doc-authkey.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-348-doc-auth-key-guard-f2",
+    "behavior": "Fixture tests reject inline connect keys and unwarned init keys while allowing a warned init exception.",
+    "verification": "bash scripts/tests/test-doc-authkey.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-348-doc-auth-key-guard-f3",
+    "behavior": "Repository hygiene runs the documentation auth-key guard and its fixture suite.",
+    "verification": "actionlint -shellcheck=shellcheck .github/workflows/repo-hygiene.yml",
+    "state": "pending",
+    "evidence": ""
+  }
+]
