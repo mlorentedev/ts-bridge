@@ -29,6 +29,15 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 
 - Reused the existing `readAuthKeyFile` implementation so `connect` and `init` share path resolution, permission warnings, newline trimming, and file errors.
 - Kept secure credential onboarding outside this atomic PR; follow-up #355 tracks a masked `ts-bridge auth set`-style product flow.
+- The shared-reader newline hardening also applies to `connect` and `browser`; accepted because embedded newlines are invalid for every auth-key file consumer.
+
+## Review dispositions
+
+- Documentation regression coverage, interactive fallback behavior, duplicate error context, and warning-absence coverage are deferred to #401.
+- The load-sensitive bootstrap SSH readiness assertion is deferred to #402.
+- The Windows CRLF archive status rewrite defect is tracked in `mlorentedev/dotfiles#1932`.
+- The full-suite timing failure was isolated to the pre-existing bootstrap SSH test and passed repeatedly in isolation; it does not invalidate CLI-306 behavior.
+- The unreproduced `features.json` digest question requires no spec change because the archive tool and reviewer share the same contract implementation and the review gate accepted the current digest.
 
 ## Promotion candidates
 
@@ -40,7 +49,7 @@ Before archiving, flag what (if anything) should be promoted to the vault. If al
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/CLI-306-init-auth-key-file/` -> `specs/archive/CLI-306-init-auth-key-file/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/CLI-306-init-auth-key-file/` -> `specs/archive/CLI-306-init-auth-key-file/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
+- [x] Promotions above executed (if any)
