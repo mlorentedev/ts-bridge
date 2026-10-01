@@ -217,7 +217,9 @@ func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 		captured = cfg
 		return nil
 	}
+	var stderr bytes.Buffer
 	command := newBrowserCmd()
+	command.SetErr(&stderr)
 	command.SetArgs([]string{
 		"--profile", "office",
 		"--auth-key-file", keyFile,
@@ -229,5 +231,8 @@ func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 	}
 	if captured.AuthKey != "tskey-auth-file-secret" {
 		t.Fatalf("AuthKey = %q, want file key", captured.AuthKey)
+	}
+	if strings.Contains(stderr.String(), "browser ignores TS_AUTHKEY") {
+		t.Fatalf("stderr = %q, did not expect ignored-environment warning with --auth-key-file", stderr.String())
 	}
 }

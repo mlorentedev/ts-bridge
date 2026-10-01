@@ -32,6 +32,17 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - Linux race dependency #386 is already in the review base; `-race` was not rerun in this Windows-only closure pass.
 - No regressions in the directly changed packages: yes.
 
+### Feature verification command sweep (round 4)
+
+Each `features.json` command was run exactly with `-v`; names below are the selected top-level tests.
+
+- f1 -> `TestHardenCredentialPathUsesOwnerOnlyWindowsACLs`, `TestStoreSetGetAndList`, `TestStoreRefusesOverwriteUnlessExplicit`, `TestStoreFailedAtomicReplacePreservesExistingCredential`, `TestStoreValidatesNamesAndKeysWithoutLeakingValues`, `TestStoreRemove`, `TestStoreUsesOwnerOnlyPermissionsOnUnix` (skipped on Windows), `TestCredentialStoreDirIsSiblingOfProfileStore`.
+- f2 -> `TestStoreCredentialReference`, `TestStoreCredentialReferenceIsBackwardCompatibleAndPreserved`, `TestStoreClearCredentialAndListProfiles`, `TestStoreSetCredentialValidatesProfileAndCredential`.
+- f3 -> `TestAuthCommandIsRegistered`, `TestAuthSetStoresMaskedCredentialAndBindsProfile`, `TestAuthSetRefusesOverwriteUnlessForced`, `TestAuthSetReadsExplicitStdinWithoutPrintingCredential`, `TestAuthListStatusAndRemoveNeverPrintSecrets`, `TestAuthRemoveProtectsSharedCredential`, `TestAuthSetRejectsHeadscaleKeyForSaaSProfile`, `TestAuthDefaultsUsePerUserPaths`, `TestAuthKeyFilePrecedence`, `TestAuthKeyFlags_WarnProcessList`.
+- f4 -> `TestBrowserCommandResolvesBridgeAndLaunchOptions`, `TestBrowserCommandPreservesYAMLSOCKS5Config`, `TestBrowserCommandRequiresAuthKeyFile`, `TestConnectResolvesProfileCredential`, `TestConnectExplicitCredentialSourcesOverrideProfile`, `TestConnectAuthKeyFileOverridesMissingProfileCredential`, `TestBrowserResolvesProfileCredential`, `TestBrowserManagedProfileCredentialOverridesEnvironmentWithWarning`, `TestBrowserAuthKeyFileOverridesProfileCredential`.
+- f5 -> `TestManagedCredentialDocumentation`.
+- Sweep result -> f4 alone omitted an existing named test required by its stated behavior; its regex was widened. No other feature regex required adjustment.
+
 ## Decisions made during implementation
 
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
@@ -54,6 +65,8 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - Minor (shared-credential force overwrite) — deferred to #391, which covers serialized shared credential/profile transitions and overwrite concurrency.
 - Minor (read-time permission enforcement) — deferred: this feature enforces owner-only permissions during every managed write and fails loudly on enforcement errors; detecting external ACL/mode tampering on every read is optional platform-specific defense in depth outside the accepted write contract.
 - Minor (implicit credential naming) — deferred to #399, whose profile-first migration and documentation work must reconcile profile display names with managed credential identifiers.
+- Major (round 4) — f4 did not select `TestConnectExplicitCredentialSourcesOverrideProfile`. Applied: f4 now selects it; the review's connect-precedence mutation made the corrected command fail in the `environment` subtest, and restoring production made it pass.
+- Minor (round 4 warning branch) — applied: `TestBrowserAuthKeyFileOverridesProfileCredential` now captures stderr and asserts no ignored-environment warning. Removing the `authKeyFile != ""` guard made the test fail; restoring it made the test pass.
 
 ## Promotion candidates
 

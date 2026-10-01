@@ -23,7 +23,7 @@
   {
     "id": "UX-355-managed-credentials-f4",
     "behavior": "Connect and browser resolve profile credentials with explicit-source precedence",
-    "verification": "go test ./cmd/cli -run 'ProfileCredential|BrowserCommand' -count=1",
+    "verification": "go test ./cmd/cli -run 'ProfileCredential|BrowserCommand|TestConnectExplicitCredentialSourcesOverrideProfile' -count=1",
     "state": "pending",
     "evidence": ""
   },
