@@ -72,7 +72,15 @@ func TestStoreValidatesNamesAndKeysWithoutLeakingValues(t *testing.T) {
 		})
 	}
 
-	for _, key := range []string{"", "not-a-key", "tskey-auth-one\nsecond", "hskey-auth-one\rsecond"} {
+	for _, key := range []string{
+		"",
+		"not-a-key",
+		"tskey-api-id-secret",
+		"tskey-client-id-secret",
+		"tskey-auth-id-secret-auth-id-secret",
+		"tskey-auth-one\nsecond",
+		"hskey-auth-one\rsecond",
+	} {
 		t.Run("invalid-key", func(t *testing.T) {
 			err := store.Set("office", key, false)
 			if err == nil {

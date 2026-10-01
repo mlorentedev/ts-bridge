@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"ts-bridge/internal/credential"
 )
 
 // PartialConfig holds values loaded from a YAML config file.
@@ -200,8 +202,8 @@ func validateRequiredFields(cfg Config) error {
 	if cfg.AuthKey == "" {
 		return fmt.Errorf("auth key is required (provide TS_AUTHKEY env var or --auth-key-file flag)")
 	}
-	if !strings.HasPrefix(cfg.AuthKey, "tskey-") && !strings.HasPrefix(cfg.AuthKey, "hskey-") {
-		return fmt.Errorf("auth key invalid format (must start with tskey- or hskey-)")
+	if err := credential.ValidateKey(cfg.AuthKey); err != nil {
+		return fmt.Errorf("auth key invalid format: %w", err)
 	}
 	return nil
 }
