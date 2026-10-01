@@ -76,6 +76,7 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - Minor (round 5 validation scope) — #398 owns auth-key validation semantics. The full f4 config suite now covers its config-layer wiring because that code is present in the reviewed range, without redefining UX-355 as the semantic owner.
 - Major (final validator divergence) — applied: init now delegates structural key validation to `credential.ValidateKey`, matching config/connect and #398 semantics while retaining the login-URL remediation hint. Malformed prefixed keys are rejected before configuration is emitted.
 - Minor (final onboarding guidance) — applied: profile initialization now gives the concise sequence `auth set --profile` then `connect --profile`; file-based config initialization keeps its existing `--auth-key-file` guidance and never shows profile-only instructions.
+- Round 7 (Headscale control-plane divergence) — deferred outside UX-355: the environment/YAML `init` -> `connect` control-plane mismatch predates this feature and is outside its acceptance criteria; it is explicitly folded into open #401. The `configuration.md` overclaim about Headscale auto-configuration also belongs to #401. UX-355 remains blocked from archive because the independent review still fails, and no force or review waiver was authorized.
 
 ## Promotion candidates
 
