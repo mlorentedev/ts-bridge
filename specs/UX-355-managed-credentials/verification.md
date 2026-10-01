@@ -25,6 +25,8 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - Atomic rollback: `go test ./internal/credential -run '^TestStoreFailedAtomicReplacePreservesExistingCredential$' -count=1` -> passed; bypassing the injected rename seam made it fail with `Set() error = <nil>, want injected rename failure`, then the production call was restored.
 - Missing managed credential fallback: `go test ./cmd/cli -run '^TestConnectEnvOverridesMissingProfileCredential$' -count=1` -> passed; removing the `os.Getenv("TS_AUTHKEY")` guard made it fail while loading the absent managed credential, then the production guard was restored.
 - Final f4 contract: `go test ./cmd/cli ./internal/config -count=1` -> passed; making `ProfileAuthKey` override a populated environment key made the exact command fail in `TestPrecedenceProfileAuthKeyIsBelowEnvironmentAndFlags/environment_overrides_profile`, then production was restored.
+- Shared init validator: `go test ./cmd/cli -run '^TestInitAuthKeyFile/prefixed_malformed_key_returns_validation_error$' -count=1` and `go test ./cmd/cli -run '^TestInitAuthKeyValidationMatchesConfigMerge$' -count=1` -> failed before delegation because `tskey-auth-abc` was accepted by init, then passed after `validateAuthKey` delegated to `credential.ValidateKey`.
+- Init UX regressions: `go test ./cmd/cli -run '^(TestValidateAuthKeyPreservesLoginURLHint|TestPrintNextSteps|TestManagedCredentialDocumentation)$' -count=1` -> passed; profile output alone includes managed credential onboarding, and the security audit documents structural validation.
 - Static checks: `go vet ./cmd/cli ./internal/credential ./internal/config` -> passed.
 - CLI regression set: `go test ./cmd/cli -run 'TestAuth|ProfileCredential|BrowserAuthKeyFileOverrides|TestNewRootCmdContainsProductionCommands|TestManagedCredentialDocumentation' -count=1` -> passed.
 - Build/vet: `go build ./...` and `go vet ./...` -> passed.
@@ -72,6 +74,8 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - Major (round 5 missing credential) — applied: `TestConnectEnvOverridesMissingProfileCredential` mirrors the file-source variant and pins the environment guard when the referenced managed credential file is absent.
 - Major (round 5 f4 gate) — applied: f4 now runs the complete `cmd/cli` and `internal/config` suites. The config-precedence mutation makes this exact command red, and restored production is green.
 - Minor (round 5 validation scope) — #398 owns auth-key validation semantics. The full f4 config suite now covers its config-layer wiring because that code is present in the reviewed range, without redefining UX-355 as the semantic owner.
+- Major (final validator divergence) — applied: init now delegates structural key validation to `credential.ValidateKey`, matching config/connect and #398 semantics while retaining the login-URL remediation hint. Malformed prefixed keys are rejected before configuration is emitted.
+- Minor (final onboarding guidance) — applied: profile initialization now gives the concise sequence `auth set --profile` then `connect --profile`; file-based config initialization keeps its existing `--auth-key-file` guidance and never shows profile-only instructions.
 
 ## Promotion candidates
 

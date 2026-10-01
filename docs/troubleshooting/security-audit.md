@@ -136,7 +136,7 @@ Boundaries to defend (in order of blast radius):
 
 | Vector | Source | Validation |
 |---|---|---|
-| `TS_AUTHKEY` | env var / `.env` file | Format prefix check (`tskey-` / `hskey-`). Length not validated. Value never logged. |
+| `TS_AUTHKEY` | env var / `.env` file | Structural validation: Tailscale machine keys must be `tskey-auth-<id>-<secret>`; Headscale pre-auth keys use `hskey-*`. API tokens, OAuth client secrets, concatenated keys, whitespace, and malformed values are rejected. Value never logged. |
 | `TS_TARGET` | env var | `net.SplitHostPort` + port range 1-65535. |
 | `TS_CONTROL_URL` | env var | Passed verbatim to tsnet. Tsnet validates as URL. |
 | `TS_LOCAL_ADDR` | env var | `net.Listen` rejects malformed addresses. **Operator can bind to `0.0.0.0`** — that's a config error, not an injection. Document as a known risk. |

@@ -39,6 +39,8 @@ func TestManagedCredentialDocumentation(t *testing.T) {
 		"docs/troubleshooting/security-audit.md": {
 			"managed credential store",
 			"owner-only",
+			"Structural validation",
+			"tskey-auth-<id>-<secret>",
 		},
 	}
 
