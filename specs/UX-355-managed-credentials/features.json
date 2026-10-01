@@ -2,7 +2,7 @@
   {
     "id": "UX-355-managed-credentials-f1",
     "behavior": "Managed credential storage is atomic, owner-only, and secret-safe",
-    "verification": "go test ./internal/credential ./internal/config -run '^(TestStoreRefusesOverwriteUnlessExplicit|TestStoreUsesOwnerOnlyPermissionsOnUnix|TestHardenCredentialPathUsesOwnerOnlyWindowsACLs|TestCredentialStoreDirIsSiblingOfProfileStore)$' -count=1",
+    "verification": "go test ./internal/credential ./internal/config -run '^(TestStoreSetGetAndList|TestStoreRefusesOverwriteUnlessExplicit|TestStoreFailedAtomicReplacePreservesExistingCredential|TestStoreValidatesNamesAndKeysWithoutLeakingValues|TestStoreRemove|TestStoreUsesOwnerOnlyPermissionsOnUnix|TestHardenCredentialPathUsesOwnerOnlyWindowsACLs|TestCredentialStoreDirIsSiblingOfProfileStore)$' -count=1",
     "state": "pending",
     "evidence": ""
   },

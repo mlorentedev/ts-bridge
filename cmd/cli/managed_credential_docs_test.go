@@ -21,6 +21,8 @@ func TestManagedCredentialDocumentation(t *testing.T) {
 		"site/src/content/docs/configuration.md": {
 			"credential:",
 			"auth set --profile",
+			"Browser exception",
+			"`TS_AUTHKEY` is ignored",
 		},
 		"site/src/content/docs/cli-reference.md": {
 			"auth set",

@@ -85,6 +85,7 @@ func resolveBrowserConfig(command *cobra.Command) (config.Config, error) {
 	if err := applyBrowserProfile(&yamlConfig, &flags, profileName); err != nil {
 		return config.Config{}, err
 	}
+	warnIgnoredBrowserEnvCredential(command, authKeyFile, profileName)
 	if flags.SOCKS5Addr == "" && yamlConfig.SOCKS5Addr == "" && os.Getenv("TS_SOCKS5_ADDR") == "" {
 		flags.SOCKS5Addr = "127.0.0.1:1080"
 	}
@@ -96,6 +97,13 @@ func resolveBrowserConfig(command *cobra.Command) (config.Config, error) {
 		return config.Config{}, fmt.Errorf("browser requires --socks5 and at least one --route")
 	}
 	return cfg, nil
+}
+
+func warnIgnoredBrowserEnvCredential(command *cobra.Command, authKeyFile, profileName string) {
+	if profileName == "" || authKeyFile != "" || os.Getenv("TS_AUTHKEY") == "" {
+		return
+	}
+	fmt.Fprintln(command.ErrOrStderr(), "WARNING: browser ignores TS_AUTHKEY when --profile supplies a managed credential; use --auth-key-file for an explicit override")
 }
 
 func applyBrowserProfile(yamlConfig *config.PartialConfig, flags *config.FlagSet, profileName string) error {
