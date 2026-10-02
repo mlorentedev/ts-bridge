@@ -1,7 +1,7 @@
 ---
 id: "UX-355-managed-credentials"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-09-29"
 issue: "mlorentedev/ts-bridge#355"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -65,3 +65,5 @@ Observable outcomes. Each must be testable.
 - Related ADR: `docs/adr/adr-015-profile-scoped-credential-management.md`
 - Related issues: #368 (profile reference), #383 (future provider rotation)
 - Related patterns: `pattern-secrets-security`, `pattern-secrets-rotation`
+
+<!-- archived 2026-10-02 — PR: https://github.com/mlorentedev/ts-bridge/pull/406 -->
