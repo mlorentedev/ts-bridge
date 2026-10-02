@@ -127,7 +127,16 @@ TS_CONTROL_URL=https://vpn.example.com
 Keep that file at `600`, or leave `TS_AUTHKEY` out of it entirely and start with
 `ts-bridge connect --auth-key-file /run/secrets/authkey --control-url https://vpn.example.com`.
 
-The `init` wizard supports both Tailscale and Headscale — it detects the key prefix and configures accordingly.
+The `init` wizard supports both Tailscale and Headscale — it detects the key prefix. For an
+`hskey-*` key it requires a control plane (`--control-url`, or `--profile` for a named profile)
+and refuses to write a configuration that `connect` would then reject; the pairing is enforced
+on write by the same validator the runtime applies on read.
+
+Re-running `init --format yaml` in a directory that already holds a `.env` rewrites that file's
+`TS_TARGET` and `TS_CONTROL_URL` from the flags it was given. That layer outranks the YAML file in
+the merge chain (`flags > env > yaml > defaults`), so a stale value there would otherwise be the
+one `connect` uses — which is why init writes the values it validated instead of preserving them,
+and validates a preserved control URL when no flag was given.
 
 ### SSH bootstrap for filtered networks
 

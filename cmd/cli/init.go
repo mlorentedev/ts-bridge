@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ts-bridge/internal/config"
+	"ts-bridge/internal/config/envfile"
 	"ts-bridge/internal/credential"
 	"ts-bridge/internal/profile"
 )
@@ -55,6 +57,11 @@ Examples:
   # Non-interactive: YAML output
   ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389 --format yaml
 
+  # Headscale (hskey-*) requires the control plane in the same file: without it
+  # connect would reject the configuration this command just wrote.
+  ts-bridge init --auth-key-file /path/to/hskey --target 100.64.0.1:3389 \
+    --control-url https://headscale.example.com
+
   # Custom output path
   ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389 --config /etc/ts-bridge.yaml
 `,
@@ -70,7 +77,7 @@ Examples:
 	cmd.Flags().String("config", "", "Output config file path (default: ./ts-bridge.yaml for yaml, ./.env for env)")
 	cmd.Flags().Bool("force", false, "Overwrite existing config files without prompting")
 	cmd.Flags().String("profile", "", "Write a named profile to the profile store instead of a config file")
-	cmd.Flags().String("control-url", "", "Control plane URL for the profile (Headscale only; used with --profile)")
+	cmd.Flags().String("control-url", "", "Control plane URL (Headscale) — stored with the profile, or written to the config file")
 	return cmd
 }
 
@@ -225,14 +232,8 @@ func runInitInteractive(cmd *cobra.Command, f initFlags) error {
 	}
 
 	// Write config.
-	if f.Format == formatYAML {
-		if err := writeYAMLConfig(cmd, f); err != nil {
-			return err
-		}
-	} else {
-		if err := writeEnvConfig(cmd, f); err != nil {
-			return err
-		}
+	if err := writeConfig(cmd, f); err != nil {
+		return err
 	}
 
 	// Print next steps.
@@ -317,14 +318,8 @@ func runInitNonInteractive(cmd *cobra.Command, f initFlags) error {
 	}
 
 	// Write config.
-	if f.Format == formatYAML {
-		if err := writeYAMLConfig(cmd, f); err != nil {
-			return err
-		}
-	} else {
-		if err := writeEnvConfig(cmd, f); err != nil {
-			return err
-		}
+	if err := writeConfig(cmd, f); err != nil {
+		return err
 	}
 
 	// Print next steps (non-interactive still shows them).
@@ -471,7 +466,7 @@ func writeYAMLConfig(cmd *cobra.Command, f initFlags) error {
 		return fmt.Errorf("write YAML config: %w", err)
 	}
 
-	envContent := buildEnvContent(f.AuthKey, envPath)
+	envContent := buildEnvContent(f, envPath)
 	if err := writeFileWithPerms(envPath, []byte(envContent)); err != nil {
 		return fmt.Errorf("write .env file: %w", err)
 	}
@@ -493,6 +488,53 @@ func writeEnvConfig(cmd *cobra.Command, f initFlags) error {
 	}
 
 	return nil
+}
+
+// writeConfig validates the pairing and the target against the values this run
+// makes effective, and only then writes. Both the interactive and the
+// non-interactive path go through here, so no caller emits a file set without
+// the validation the runtime applies when it reads it back.
+//
+// The deciding layer is the env layer: the flags when init was given them,
+// because the writers put them there, and otherwise a preserved .env. One case
+// init cannot own: connect loads a `.env` from the process CWD, so a config
+// written in another directory can still be outranked by a `.env` sitting next
+// to the shell. That failure is fail-loud at connect, and no writer here can
+// reach that file.
+func writeConfig(cmd *cobra.Command, f initFlags) error {
+	if err := validateTarget(f.Target); err != nil {
+		return err
+	}
+	controlURL, source, err := effectiveControlURL(f)
+	if err != nil {
+		return err
+	}
+	if err := config.ValidateControlPlane(f.AuthKey, controlURL); err != nil {
+		return fmt.Errorf("%w\n  Check %s: connect reads it with higher precedence than the file init writes", err, source)
+	}
+	if f.Format == formatYAML {
+		return writeYAMLConfig(cmd, f)
+	}
+	return writeEnvConfig(cmd, f)
+}
+
+// effectiveControlURL returns the control URL connect will use, and the source
+// that decides it. The flag wins when init was given one, because the writers
+// put it into the env layer that outranks the config file. With no flag the
+// control URL comes from a preserved .env, which wins over the YAML init is
+// about to write — a user's own control plane, which must be validated rather
+// than clobbered. Env mode rewrites its file wholesale, so only the flag counts
+// there.
+func effectiveControlURL(f initFlags) (value, source string, err error) {
+	if f.ControlURL != "" || f.Format != formatYAML {
+		return f.ControlURL, "--control-url", nil
+	}
+	envPath := filepath.Join(filepath.Dir(f.Config), ".env")
+	values, err := envfile.Values(envPath)
+	if err != nil {
+		return "", envPath, fmt.Errorf("read existing %s: %w", envPath, err)
+	}
+	return values["TS_CONTROL_URL"], envPath, nil
 }
 
 // ensureWritable checks if a file exists and enforces overwrite protection.
@@ -519,6 +561,9 @@ func buildYAMLContent(f initFlags) string {
 
 	sb.WriteString("version: 1\n")
 	sb.WriteString(fmt.Sprintf("target: %s\n", f.Target))
+	if f.ControlURL != "" {
+		sb.WriteString(fmt.Sprintf("control_url: %s\n", f.ControlURL))
+	}
 	if f.Instance != "" {
 		sb.WriteString(fmt.Sprintf("hostname: tsb-%s\n", config.SanitizeHostnameLabel(f.Instance)))
 	}
@@ -553,7 +598,11 @@ func buildEnvConfigContent(f initFlags) string {
 	}
 	sb.WriteString("#\n")
 	sb.WriteString("# TS_LOCAL_ADDR=127.0.0.1:33389   # Local bind address\n")
-	sb.WriteString("# TS_CONTROL_URL=                  # Custom control plane\n")
+	if f.ControlURL != "" {
+		sb.WriteString(fmt.Sprintf("TS_CONTROL_URL=%s\n", f.ControlURL))
+	} else {
+		sb.WriteString("# TS_CONTROL_URL=                  # Custom control plane\n")
+	}
 	sb.WriteString("# TS_BOOTSTRAP_SSH=                # OpenSSH endpoint for blocked control plane\n")
 	sb.WriteString("# TS_BOOTSTRAP_SOCKS_ADDR=127.0.0.1:1055 # Loopback SOCKS listener\n")
 	sb.WriteString("# TS_IDLE_TIMEOUT=                 # Close idle conns after this duration\n")
@@ -574,67 +623,62 @@ func writeFileWithPerms(path string, content []byte) error {
 	return nil
 }
 
-// buildEnvContent builds the .env file content, merging the auth key
-// with any existing .env file to avoid overwriting TS_TARGET or other vars.
-func buildEnvContent(authKey, envPath string) string {
+// envKeyOrder is the order known .env keys are written in, so regenerating a
+// file diffs only where a value changed. Keys outside this list are appended in
+// sorted order rather than map order.
+var envKeyOrder = []string{
+	"TS_TARGET", "TS_INSTANCE_NAME", "TS_PORT_RANGE",
+	"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
+	"TS_BOOTSTRAP_SSH", "TS_BOOTSTRAP_SOCKS_ADDR",
+	"TS_HEALTH_ADDR", "TS_LOG_FORMAT", "TS_IDLE_TIMEOUT", "TS_DIAL_TIMEOUT",
+	"TS_DIAL_RETRIES", "TS_DIAL_BACKOFF_BASE", "TS_DIAL_BACKOFF_MAX",
+	"TS_MAX_CONNECTIONS", "TS_TIMEOUT", "TS_DRAIN_TIMEOUT", "TS_VERBOSE",
+}
+
+// buildEnvContent builds the .env written beside a YAML config. That layer
+// outranks the YAML file in the merge chain, so the two values init was given
+// and validated — target and control URL — are written from the flags rather
+// than preserved: a stale value here would be the one connect actually uses.
+// Every other var the previous .env held is preserved.
+func buildEnvContent(f initFlags, envPath string) string {
 	var sb strings.Builder
 	sb.WriteString("# ts-bridge environment configuration\n")
 	sb.WriteString("# Auth key — DO NOT commit this file (visible to child processes)\n")
 	sb.WriteString("# Secure alternative: pass --auth-key-file /path/to/key (chmod 0600)\n")
 	sb.WriteString(fmt.Sprintf("# Generated by ts-bridge init on %s\n\n", nowFormatted()))
 
-	// Read existing .env and preserve known vars.
-	existingVars := make(map[string]string)
-	// #nosec G304 -- envPath is derived from yamlPath directory, not user-controlled.
-	if data, err := os.ReadFile(envPath); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			if idx := strings.Index(line, "="); idx > 0 {
-				key := line[:idx]
-				val := line[idx+1:]
-				existingVars[key] = val
-			}
-		}
+	// A read error cannot be reported through this signature; the file is about
+	// to be replaced wholesale, and writeFileWithPerms reports a real write
+	// failure. Upsetting the process on an unreadable file would change nothing.
+	values, err := envfile.Values(envPath)
+	if err != nil {
+		values = make(map[string]string)
 	}
+	values["TS_TARGET"] = f.Target
+	if f.ControlURL != "" {
+		values["TS_CONTROL_URL"] = f.ControlURL
+	}
+	delete(values, "TS_AUTHKEY")
 
 	// Write TS_AUTHKEY first.
-	sb.WriteString(fmt.Sprintf("TS_AUTHKEY=%s\n", authKey))
+	sb.WriteString(fmt.Sprintf("TS_AUTHKEY=%s\n", f.AuthKey))
 
 	// Write preserved vars in a stable order.
-	for _, key := range []string{"TS_TARGET", "TS_INSTANCE_NAME", "TS_PORT_RANGE",
-		"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
-		"TS_BOOTSTRAP_SSH", "TS_BOOTSTRAP_SOCKS_ADDR",
-		"TS_HEALTH_ADDR", "TS_LOG_FORMAT", "TS_IDLE_TIMEOUT", "TS_DIAL_TIMEOUT",
-		"TS_DIAL_RETRIES", "TS_DIAL_BACKOFF_BASE", "TS_DIAL_BACKOFF_MAX",
-		"TS_MAX_CONNECTIONS", "TS_TIMEOUT", "TS_DRAIN_TIMEOUT", "TS_VERBOSE"} {
-		if v, ok := existingVars[key]; ok {
+	for _, key := range envKeyOrder {
+		if v, ok := values[key]; ok {
 			sb.WriteString(fmt.Sprintf("%s=%s\n", key, v))
 		}
+		delete(values, key)
 	}
 
-	// Write any other vars we didn't explicitly list.
-	for key, val := range existingVars {
-		if key == "TS_AUTHKEY" {
-			continue
-		}
-		found := false
-		for _, known := range []string{"TS_TARGET", "TS_INSTANCE_NAME", "TS_PORT_RANGE",
-			"TS_LOCAL_ADDR", "TS_HOSTNAME", "TS_STATE_DIR", "TS_CONTROL_URL",
-			"TS_BOOTSTRAP_SSH", "TS_BOOTSTRAP_SOCKS_ADDR",
-			"TS_HEALTH_ADDR", "TS_LOG_FORMAT", "TS_IDLE_TIMEOUT", "TS_DIAL_TIMEOUT",
-			"TS_DIAL_RETRIES", "TS_DIAL_BACKOFF_BASE", "TS_DIAL_BACKOFF_MAX",
-			"TS_MAX_CONNECTIONS", "TS_TIMEOUT", "TS_DRAIN_TIMEOUT", "TS_VERBOSE"} {
-			if key == known {
-				found = true
-				break
-			}
-		}
-		if !found {
-			sb.WriteString(fmt.Sprintf("%s=%s\n", key, val))
-		}
+	// Write any other vars we didn't explicitly list, in sorted order.
+	rest := make([]string, 0, len(values))
+	for key := range values {
+		rest = append(rest, key)
+	}
+	slices.Sort(rest)
+	for _, key := range rest {
+		sb.WriteString(fmt.Sprintf("%s=%s\n", key, values[key]))
 	}
 
 	return sb.String()

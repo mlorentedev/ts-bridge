@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ts-bridge/internal/config"
+	"ts-bridge/internal/config/envfile"
 	"ts-bridge/internal/profile"
 )
 
@@ -443,6 +445,353 @@ func TestValidateAuthKeyPreservesLoginURLHint(t *testing.T) {
 	err := validateAuthKey("https://login.tailscale.com/admin/auth/singleusekey/example")
 	if err == nil || !strings.Contains(err.Error(), "did you paste a Tailscale login URL") {
 		t.Fatalf("validateAuthKey() error = %v, want login URL remediation hint", err)
+	}
+}
+
+// initTestEnv clears every environment variable that config loading reads, so a
+// generated file is the only input to the round-trip assertion. t.Setenv
+// restores the original values on cleanup, including any later overwrite.
+func initTestEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		"TS_AUTHKEY", "TS_TARGET", "TS_CONTROL_URL", "TS_INSTANCE_NAME",
+		"TS_PORT_RANGE", "TS_MANUAL_MODE", "TS_LOCAL_ADDR", "TS_STATE_DIR",
+		"TS_HOSTNAME", "TS_AUTO_INSTANCE",
+	} {
+		t.Setenv(key, "")
+	}
+}
+
+// loadInitOutput loads exactly what init wrote, the way connect does: the .env
+// beside the config, plus the YAML file when one was produced.
+func loadInitOutput(t *testing.T, tmpDir, format string) (config.PartialConfig, error) {
+	t.Helper()
+	envPath := filepath.Join(tmpDir, ".env")
+	if err := envfile.Load(envPath); err != nil {
+		t.Fatalf("load generated .env: %v", err)
+	}
+	if format != formatYAML {
+		return config.PartialConfig{}, nil
+	}
+	yamlPath := filepath.Join(tmpDir, "ts-bridge.yaml")
+	partial, err := config.LoadYAMLConfig(yamlPath)
+	if err != nil {
+		t.Fatalf("load generated YAML: %v", err)
+	}
+	return partial, nil
+}
+
+// UX-355 round-7 finding: init in env/yaml mode accepted an hskey-* key with no
+// control URL, wrote a config, and reported success while connect rejected that
+// same config. init must either write a config connect accepts, or refuse to
+// write one at all.
+func TestInitHeadscaleControlURL(t *testing.T) {
+	const controlURL = "https://headscale.example.com"
+
+	tests := []struct {
+		name       string
+		format     string
+		controlURL string
+		wantErr    string
+		wantInEnv  string
+		wantInYAML string
+	}{
+		{
+			name:       "env mode writes TS_CONTROL_URL for a Headscale key",
+			format:     formatENV,
+			controlURL: controlURL,
+			wantInEnv:  "TS_CONTROL_URL=" + controlURL,
+		},
+		{
+			name:       "yaml mode writes control_url for a Headscale key",
+			format:     formatYAML,
+			controlURL: controlURL,
+			wantInYAML: "control_url: " + controlURL,
+		},
+		{
+			name:    "env mode refuses a Headscale key without a control URL",
+			format:  formatENV,
+			wantErr: "--control-url",
+		},
+		{
+			name:    "yaml mode refuses a Headscale key without a control URL",
+			format:  formatYAML,
+			wantErr: "--control-url",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initTestEnv(t)
+			tmpDir := t.TempDir()
+
+			keyPath := filepath.Join(tmpDir, "authkey")
+			if err := os.WriteFile(keyPath, []byte("hskey-abcdef"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			yamlPath := filepath.Join(tmpDir, "ts-bridge.yaml")
+			configPath := filepath.Join(tmpDir, ".env")
+			if tt.format == formatYAML {
+				configPath = yamlPath
+			}
+
+			args := []string{
+				"--auth-key-file", keyPath,
+				"--target", "100.64.0.1:3389",
+				"--format", tt.format,
+				"--config", configPath,
+			}
+			if tt.controlURL != "" {
+				args = append(args, "--control-url", tt.controlURL)
+			}
+
+			cmd := newInitCmd()
+			cmd.SetArgs(args)
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+
+			var runErr error
+			_, _ = captureInitOutput(t, func() { runErr = cmd.Execute() })
+
+			if tt.wantErr != "" {
+				if runErr == nil {
+					t.Fatal("expected init to refuse an unusable configuration, got nil error")
+				}
+				if !strings.Contains(runErr.Error(), tt.wantErr) {
+					t.Fatalf("error = %q, want substring %q", runErr, tt.wantErr)
+				}
+				if _, statErr := os.Stat(configPath); statErr == nil {
+					t.Errorf("%s was written even though the configuration is unusable", configPath)
+				}
+				return
+			}
+			if runErr != nil {
+				t.Fatalf("unexpected error: %v", runErr)
+			}
+
+			if tt.wantInEnv != "" {
+				data, err := os.ReadFile(filepath.Join(tmpDir, ".env"))
+				if err != nil {
+					t.Fatalf("read generated .env: %v", err)
+				}
+				if !strings.Contains(string(data), tt.wantInEnv) {
+					t.Errorf("generated .env lacks %q:\n%s", tt.wantInEnv, data)
+				}
+			}
+			if tt.wantInYAML != "" {
+				data, err := os.ReadFile(yamlPath)
+				if err != nil {
+					t.Fatalf("read generated YAML: %v", err)
+				}
+				if !strings.Contains(string(data), tt.wantInYAML) {
+					t.Errorf("generated YAML lacks %q:\n%s", tt.wantInYAML, data)
+				}
+			}
+
+			// Round trip: feed what init wrote through the same merge connect uses.
+			partial, err := loadInitOutput(t, tmpDir, tt.format)
+			if err != nil {
+				t.Fatalf("load generated config: %v", err)
+			}
+			if _, err := config.Merge(partial, config.FlagSet{}); err != nil {
+				t.Fatalf("connect would reject the config init just wrote: %v", err)
+			}
+		})
+	}
+}
+
+// The invariant rounds 4-7 kept finding broken: every configuration init
+// accepts, connect accepts too, and every configuration connect would refuse,
+// init refuses instead of writing it.
+func TestInitAcceptedConfigIsAcceptedByConnect(t *testing.T) {
+	keys := []string{"hskey-abcdef", "tskey-auth-init-secret"}
+	controlURLs := []string{"", "https://headscale.example.com", "headscale.example.com", "http://127.0.0.1:8080"}
+	formats := []string{formatENV, formatYAML}
+
+	for _, key := range keys {
+		for _, controlURL := range controlURLs {
+			for _, format := range formats {
+				name := fmt.Sprintf("key=%s url=%q format=%s", key, controlURL, format)
+				t.Run(name, func(t *testing.T) {
+					initTestEnv(t)
+					tmpDir := t.TempDir()
+
+					keyPath := filepath.Join(tmpDir, "authkey")
+					if err := os.WriteFile(keyPath, []byte(key), 0600); err != nil {
+						t.Fatal(err)
+					}
+					configPath := filepath.Join(tmpDir, ".env")
+					if format == formatYAML {
+						configPath = filepath.Join(tmpDir, "ts-bridge.yaml")
+					}
+
+					args := []string{
+						"--auth-key-file", keyPath,
+						"--target", "100.64.0.1:3389",
+						"--format", format,
+						"--config", configPath,
+					}
+					if controlURL != "" {
+						args = append(args, "--control-url", controlURL)
+					}
+
+					cmd := newInitCmd()
+					cmd.SetArgs(args)
+					cmd.SilenceUsage = true
+					cmd.SilenceErrors = true
+
+					var initErr error
+					_, _ = captureInitOutput(t, func() { initErr = cmd.Execute() })
+
+					mergeErr := error(nil)
+					if initErr == nil {
+						partial, err := loadInitOutput(t, tmpDir, format)
+						if err != nil {
+							t.Fatalf("load generated config: %v", err)
+						}
+						_, mergeErr = config.Merge(partial, config.FlagSet{})
+					} else {
+						// init refused: connect must have refused the same pairing too.
+						_, mergeErr = config.Merge(config.PartialConfig{}, config.FlagSet{
+							Target:     "100.64.0.1:3389",
+							AuthKey:    key,
+							ControlURL: controlURL,
+						})
+					}
+
+					if (initErr == nil) != (mergeErr == nil) {
+						t.Fatalf("init and connect disagree: init error=%v, connect error=%v", initErr, mergeErr)
+					}
+				})
+			}
+		}
+	}
+}
+
+// Round-8 finding: YAML mode preserves the rest of a pre-existing `.env`, and
+// `env` outranks `yaml` in the merge chain, so a stale `TS_TARGET` or
+// `TS_CONTROL_URL` there is the value connect actually uses. init must leave the
+// effective layer carrying what it validated, and refuse when the effective
+// layer is something connect would reject.
+func TestInitValidatesTheEffectiveEnvLayer(t *testing.T) {
+	tests := []struct {
+		name       string
+		envContent string
+		key        string
+		controlURL string
+		wantErr    string
+		wantEnv    []string
+		wantAbsent []string
+	}{
+		{
+			name:       "stale but valid control URL loses to the flag",
+			envContent: "TS_AUTHKEY=tskey-auth-old\nTS_CONTROL_URL=https://old.example.com\n",
+			key:        "hskey-abcdef",
+			controlURL: "https://new.example.com",
+			wantEnv:    []string{"TS_CONTROL_URL=https://new.example.com", "TS_TARGET=100.64.0.1:3389"},
+			wantAbsent: []string{"https://old.example.com"},
+		},
+		{
+			name:       "preserved control URL survives when no flag is given",
+			envContent: "TS_AUTHKEY=tskey-auth-old\nTS_CONTROL_URL=https://headscale.example.com\n",
+			key:        "hskey-abcdef",
+			wantEnv:    []string{"TS_CONTROL_URL=https://headscale.example.com"},
+		},
+		{
+			name:       "malformed preserved control URL is refused when no flag is given",
+			envContent: "TS_AUTHKEY=tskey-auth-old\nTS_CONTROL_URL=headscale.example.com\n",
+			key:        "hskey-abcdef",
+			wantErr:    "control URL must be",
+		},
+		{
+			name:       "malformed preserved control URL is refused for a Tailscale key too",
+			envContent: "TS_CONTROL_URL=headscale.example.com\n",
+			key:        "tskey-auth-init-secret",
+			wantErr:    "control URL must be",
+		},
+		{
+			name:       "malformed preserved target loses to the flag",
+			envContent: "TS_TARGET=not-a-target\n",
+			key:        "tskey-auth-init-secret",
+			wantEnv:    []string{"TS_TARGET=100.64.0.1:3389", "TS_AUTHKEY=tskey-auth-init-secret"},
+			wantAbsent: []string{"not-a-target"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initTestEnv(t)
+			tmpDir := t.TempDir()
+
+			envPath := filepath.Join(tmpDir, ".env")
+			if err := os.WriteFile(envPath, []byte(tt.envContent), 0600); err != nil {
+				t.Fatal(err)
+			}
+			keyPath := filepath.Join(tmpDir, "authkey")
+			if err := os.WriteFile(keyPath, []byte(tt.key), 0600); err != nil {
+				t.Fatal(err)
+			}
+			yamlPath := filepath.Join(tmpDir, "ts-bridge.yaml")
+
+			args := []string{
+				"--auth-key-file", keyPath,
+				"--target", "100.64.0.1:3389",
+				"--format", formatYAML,
+				"--config", yamlPath,
+				"--force",
+			}
+			if tt.controlURL != "" {
+				args = append(args, "--control-url", tt.controlURL)
+			}
+
+			cmd := newInitCmd()
+			cmd.SetArgs(args)
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+
+			var runErr error
+			_, _ = captureInitOutput(t, func() { runErr = cmd.Execute() })
+
+			if tt.wantErr != "" {
+				if runErr == nil {
+					t.Fatal("expected init to refuse an effective configuration connect rejects, got nil error")
+				}
+				if !strings.Contains(runErr.Error(), tt.wantErr) {
+					t.Fatalf("error = %q, want substring %q", runErr, tt.wantErr)
+				}
+				if _, statErr := os.Stat(yamlPath); statErr == nil {
+					t.Error("the YAML file was written even though the effective configuration is unusable")
+				}
+				return
+			}
+			if runErr != nil {
+				t.Fatalf("unexpected error: %v", runErr)
+			}
+
+			data, err := os.ReadFile(envPath)
+			if err != nil {
+				t.Fatalf("read generated .env: %v", err)
+			}
+			for _, want := range tt.wantEnv {
+				if !strings.Contains(string(data), want) {
+					t.Errorf("generated .env lacks %q:\n%s", want, data)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(string(data), absent) {
+					t.Errorf("generated .env still carries the stale value %q:\n%s", absent, data)
+				}
+			}
+
+			// Round trip: what connect reads must be what init validated.
+			partial, err := loadInitOutput(t, tmpDir, formatYAML)
+			if err != nil {
+				t.Fatalf("load generated config: %v", err)
+			}
+			if _, err := config.Merge(partial, config.FlagSet{}); err != nil {
+				t.Fatalf("connect would reject the config init just wrote: %v", err)
+			}
+		})
 	}
 }
 

@@ -23,11 +23,14 @@ func TestManagedCredentialDocumentation(t *testing.T) {
 			"auth set --profile",
 			"Browser exception",
 			"`TS_AUTHKEY` is ignored",
+			"requires a control plane",
+			"refuses to write a configuration that `connect` would then reject",
 		},
 		"site/src/content/docs/cli-reference.md": {
 			"auth set",
 			"auth status",
 			"auth remove",
+			"requires the control plane in the same configuration",
 		},
 		"docs/adr/adr-012-config-profiles-model.md": {
 			"credential:",

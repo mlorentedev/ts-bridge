@@ -98,7 +98,7 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 	// and hand to tsnet (a padded URL would otherwise pass validation but fail
 	// deeper) — #209 review.
 	cfg.ControlURL = strings.TrimSpace(cfg.ControlURL)
-	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
+	if err := ValidateControlPlane(cfg.AuthKey, cfg.ControlURL); err != nil {
 		return Config{}, err
 	}
 	if err := normalizeBootstrapConfig(&cfg); err != nil {

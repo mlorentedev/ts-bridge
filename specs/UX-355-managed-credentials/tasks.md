@@ -33,6 +33,13 @@ created: "2026-09-29"
 - [x] [AC3] Implement one shared profile credential resolver used by connect and browser.
 - [x] [AC1] [AC2] [AC3] Update README, `.env.example`, CLI reference, configuration docs, ADR-012/014 amendments, and security audit. Open integration PR closing #355.
 - [x] [AC1] [AC2] [AC3] [AC4] [AC5] Run build, vet, targeted Go tests, lint, gosec, and site build.
+- [x] Round-7 review remediation: validate the auth-key/control-plane pairing in `init`
+      before either writer runs, and emit `TS_CONTROL_URL` (env) / `control_url` (yaml) when
+      `--control-url` is provided, so `init` can no longer write a config `connect` rejects.
+- [x] Round-8 review remediation: validate and write the *effective* layer — YAML mode now writes
+      `TS_TARGET` / `TS_CONTROL_URL` from the flags instead of preserving a stale `.env` that wins
+      the merge, reads a preserved control URL when no flag is given, and refuses before writing
+      when that pairing is one `connect` rejects.
 
 ## Closing
 
