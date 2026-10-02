@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.19.0](https://github.com/mlorentedev/ts-bridge/compare/v1.18.0...v1.19.0) (2026-10-01)
+
+
+### Features
+
+* **browser:** open private services through SOCKS5 ([#367](https://github.com/mlorentedev/ts-bridge/issues/367)) ([d9c7ac7](https://github.com/mlorentedev/ts-bridge/commit/d9c7ac7b24bff6c97fe2229a37929cf1b590315c))
+* **cli:** add managed credential commands ([#389](https://github.com/mlorentedev/ts-bridge/issues/389)) ([c51c845](https://github.com/mlorentedev/ts-bridge/commit/c51c8452aed5fc1225c5ef771ce5d66875426db9))
+* **cli:** expose SOCKS5 mesh routing ([#366](https://github.com/mlorentedev/ts-bridge/issues/366)) ([19bda4d](https://github.com/mlorentedev/ts-bridge/commit/19bda4dd848ba15fb03e31eaf54daf658a7bd6e1))
+* **config:** add SSH bootstrap settings ([#373](https://github.com/mlorentedev/ts-bridge/issues/373)) ([1c5a966](https://github.com/mlorentedev/ts-bridge/commit/1c5a966e5104eeb485d1cae7ebe918abbb708582))
+* **connect:** bootstrap blocked control planes through SSH ([#374](https://github.com/mlorentedev/ts-bridge/issues/374)) ([54c3b91](https://github.com/mlorentedev/ts-bridge/commit/54c3b91594e08d3167a186a210640163ab9f9dd6))
+* **credentials:** add managed per-user store ([#388](https://github.com/mlorentedev/ts-bridge/issues/388)) ([aad5fc9](https://github.com/mlorentedev/ts-bridge/commit/aad5fc96993bb2df9eefd27af7e18049ddd4c323))
+* **network:** add OpenSSH bootstrap transport ([#372](https://github.com/mlorentedev/ts-bridge/issues/372)) ([ad9b8b1](https://github.com/mlorentedev/ts-bridge/commit/ad9b8b11ffa448097751c5b6f4cbf60110d05e98))
+* **profiles:** resolve managed credentials ([#393](https://github.com/mlorentedev/ts-bridge/issues/393)) ([7cdcb41](https://github.com/mlorentedev/ts-bridge/commit/7cdcb41600f8806c7c928f1c6ac49c1d88927753))
+* **proxy:** add SOCKS5 dynamic forwarding ([#365](https://github.com/mlorentedev/ts-bridge/issues/365)) ([745d02a](https://github.com/mlorentedev/ts-bridge/commit/745d02a2f518b223f12145bdd667d3363134e914))
+
+
+### Bug Fixes
+
+* **ci:** guard inline auth keys in docs ([#400](https://github.com/mlorentedev/ts-bridge/issues/400)) ([ea0a83d](https://github.com/mlorentedev/ts-bridge/commit/ea0a83d5b14de35ae19f79107bc143c46c87c166))
+* **ci:** pin the review-guard checkout to the default branch ([#361](https://github.com/mlorentedev/ts-bridge/issues/361)) ([5a845e0](https://github.com/mlorentedev/ts-bridge/commit/5a845e0c6feb8f2ea3f7b68cdf5689670a7a6254))
+* **ci:** tolerate null comment body in review guard; lint workflows ([#345](https://github.com/mlorentedev/ts-bridge/issues/345)) ([#359](https://github.com/mlorentedev/ts-bridge/issues/359)) ([4ec2499](https://github.com/mlorentedev/ts-bridge/commit/4ec249922e3bf02edb1ac1885c8527d70787f639))
+* **cli:** load profiles before config validation ([#379](https://github.com/mlorentedev/ts-bridge/issues/379)) ([6d5f613](https://github.com/mlorentedev/ts-bridge/commit/6d5f613b272e97492d7aa462c6ab1d1ab6f2d9c8))
+* **config:** reject bootstrap health listener collisions ([#377](https://github.com/mlorentedev/ts-bridge/issues/377)) ([9571055](https://github.com/mlorentedev/ts-bridge/commit/95710559561064e1ad708f504b1e2298cf8fdce7))
+* **credentials:** close managed credential review gaps ([#405](https://github.com/mlorentedev/ts-bridge/issues/405)) ([822df20](https://github.com/mlorentedev/ts-bridge/commit/822df20e0c52b0a4a0241f8011be75722ef43835))
+* **credentials:** reject malformed Tailscale keys ([#398](https://github.com/mlorentedev/ts-bridge/issues/398)) ([b9d37ff](https://github.com/mlorentedev/ts-bridge/commit/b9d37ff75e3ed6c645d5529ed2db808b955e18c7))
+* **site:** upgrade undici past websocket DoS ([#380](https://github.com/mlorentedev/ts-bridge/issues/380)) ([8436b61](https://github.com/mlorentedev/ts-bridge/commit/8436b61411e157bd744d169daba588408f95ded1)), closes [#371](https://github.com/mlorentedev/ts-bridge/issues/371)
+
 ## [1.18.0](https://github.com/mlorentedev/ts-bridge/compare/v1.17.4...v1.18.0) (2026-09-25)
 
 
