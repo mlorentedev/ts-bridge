@@ -490,9 +490,17 @@ func writeEnvConfig(cmd *cobra.Command, f initFlags) error {
 	return nil
 }
 
-	// No caller can emit a file set that connect would reject: the pairing and the
-	// target the runtime enforces on read are enforced on write, by the same
-	// validators, on the values the merge chain will actually pick.
+// writeConfig validates the pairing and the target against the values this run
+// makes effective, and only then writes. Both the interactive and the
+// non-interactive path go through here, so no caller emits a file set without
+// the validation the runtime applies when it reads it back.
+//
+// The deciding layer is the env layer: the flags when init was given them,
+// because the writers put them there, and otherwise a preserved .env. One case
+// init cannot own: connect loads a `.env` from the process CWD, so a config
+// written in another directory can still be outranked by a `.env` sitting next
+// to the shell. That failure is fail-loud at connect, and no writer here can
+// reach that file.
 func writeConfig(cmd *cobra.Command, f initFlags) error {
 	if err := validateTarget(f.Target); err != nil {
 		return err

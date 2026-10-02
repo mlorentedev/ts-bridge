@@ -692,6 +692,12 @@ func TestInitValidatesTheEffectiveEnvLayer(t *testing.T) {
 			wantAbsent: []string{"https://old.example.com"},
 		},
 		{
+			name:       "preserved control URL survives when no flag is given",
+			envContent: "TS_AUTHKEY=tskey-auth-old\nTS_CONTROL_URL=https://headscale.example.com\n",
+			key:        "hskey-abcdef",
+			wantEnv:    []string{"TS_CONTROL_URL=https://headscale.example.com"},
+		},
+		{
 			name:       "malformed preserved control URL is refused when no flag is given",
 			envContent: "TS_AUTHKEY=tskey-auth-old\nTS_CONTROL_URL=headscale.example.com\n",
 			key:        "hskey-abcdef",
