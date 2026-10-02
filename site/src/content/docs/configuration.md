@@ -132,6 +132,12 @@ The `init` wizard supports both Tailscale and Headscale — it detects the key p
 and refuses to write a configuration that `connect` would then reject; the pairing is enforced
 on write by the same validator the runtime applies on read.
 
+Re-running `init --format yaml` in a directory that already holds a `.env` rewrites that file's
+`TS_TARGET` and `TS_CONTROL_URL` from the flags it was given. That layer outranks the YAML file in
+the merge chain (`flags > env > yaml > defaults`), so a stale value there would otherwise be the
+one `connect` uses — which is why init writes the values it validated instead of preserving them,
+and validates a preserved control URL when no flag was given.
+
 ### SSH bootstrap for filtered networks
 
 When the local network blocks or sinkholes the Headscale hostname, but SSH to a

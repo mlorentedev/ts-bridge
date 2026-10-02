@@ -668,6 +668,127 @@ func TestInitAcceptedConfigIsAcceptedByConnect(t *testing.T) {
 	}
 }
 
+// Round-8 finding: YAML mode preserves the rest of a pre-existing `.env`, and
+// `env` outranks `yaml` in the merge chain, so a stale `TS_TARGET` or
+// `TS_CONTROL_URL` there is the value connect actually uses. init must leave the
+// effective layer carrying what it validated, and refuse when the effective
+// layer is something connect would reject.
+func TestInitValidatesTheEffectiveEnvLayer(t *testing.T) {
+	tests := []struct {
+		name       string
+		envContent string
+		key        string
+		controlURL string
+		wantErr    string
+		wantEnv    []string
+		wantAbsent []string
+	}{
+		{
+			name:       "stale but valid control URL loses to the flag",
+			envContent: "TS_AUTHKEY=tskey-auth-old\nTS_CONTROL_URL=https://old.example.com\n",
+			key:        "hskey-abcdef",
+			controlURL: "https://new.example.com",
+			wantEnv:    []string{"TS_CONTROL_URL=https://new.example.com", "TS_TARGET=100.64.0.1:3389"},
+			wantAbsent: []string{"https://old.example.com"},
+		},
+		{
+			name:       "malformed preserved control URL is refused when no flag is given",
+			envContent: "TS_AUTHKEY=tskey-auth-old\nTS_CONTROL_URL=headscale.example.com\n",
+			key:        "hskey-abcdef",
+			wantErr:    "control URL must be",
+		},
+		{
+			name:       "malformed preserved control URL is refused for a Tailscale key too",
+			envContent: "TS_CONTROL_URL=headscale.example.com\n",
+			key:        "tskey-auth-init-secret",
+			wantErr:    "control URL must be",
+		},
+		{
+			name:       "malformed preserved target loses to the flag",
+			envContent: "TS_TARGET=not-a-target\n",
+			key:        "tskey-auth-init-secret",
+			wantEnv:    []string{"TS_TARGET=100.64.0.1:3389", "TS_AUTHKEY=tskey-auth-init-secret"},
+			wantAbsent: []string{"not-a-target"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initTestEnv(t)
+			tmpDir := t.TempDir()
+
+			envPath := filepath.Join(tmpDir, ".env")
+			if err := os.WriteFile(envPath, []byte(tt.envContent), 0600); err != nil {
+				t.Fatal(err)
+			}
+			keyPath := filepath.Join(tmpDir, "authkey")
+			if err := os.WriteFile(keyPath, []byte(tt.key), 0600); err != nil {
+				t.Fatal(err)
+			}
+			yamlPath := filepath.Join(tmpDir, "ts-bridge.yaml")
+
+			args := []string{
+				"--auth-key-file", keyPath,
+				"--target", "100.64.0.1:3389",
+				"--format", formatYAML,
+				"--config", yamlPath,
+				"--force",
+			}
+			if tt.controlURL != "" {
+				args = append(args, "--control-url", tt.controlURL)
+			}
+
+			cmd := newInitCmd()
+			cmd.SetArgs(args)
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+
+			var runErr error
+			_, _ = captureInitOutput(t, func() { runErr = cmd.Execute() })
+
+			if tt.wantErr != "" {
+				if runErr == nil {
+					t.Fatal("expected init to refuse an effective configuration connect rejects, got nil error")
+				}
+				if !strings.Contains(runErr.Error(), tt.wantErr) {
+					t.Fatalf("error = %q, want substring %q", runErr, tt.wantErr)
+				}
+				if _, statErr := os.Stat(yamlPath); statErr == nil {
+					t.Error("the YAML file was written even though the effective configuration is unusable")
+				}
+				return
+			}
+			if runErr != nil {
+				t.Fatalf("unexpected error: %v", runErr)
+			}
+
+			data, err := os.ReadFile(envPath)
+			if err != nil {
+				t.Fatalf("read generated .env: %v", err)
+			}
+			for _, want := range tt.wantEnv {
+				if !strings.Contains(string(data), want) {
+					t.Errorf("generated .env lacks %q:\n%s", want, data)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(string(data), absent) {
+					t.Errorf("generated .env still carries the stale value %q:\n%s", absent, data)
+				}
+			}
+
+			// Round trip: what connect reads must be what init validated.
+			partial, err := loadInitOutput(t, tmpDir, formatYAML)
+			if err != nil {
+				t.Fatalf("load generated config: %v", err)
+			}
+			if _, err := config.Merge(partial, config.FlagSet{}); err != nil {
+				t.Fatalf("connect would reject the config init just wrote: %v", err)
+			}
+		})
+	}
+}
+
 func stringPtr(value string) *string {
 	return &value
 }
