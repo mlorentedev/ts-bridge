@@ -205,7 +205,7 @@ func validateLoadedConfig(cfg *Config) error {
 	if err := validateSOCKS5Addr(cfg.SOCKS5Addr); err != nil {
 		return err
 	}
-	if err := validateControlPlaneForKey(cfg.AuthKey, cfg.ControlURL); err != nil {
+	if err := ValidateControlPlane(cfg.AuthKey, cfg.ControlURL); err != nil {
 		return err
 	}
 	if err := normalizeBootstrapConfig(cfg); err != nil {
@@ -356,7 +356,7 @@ func parseAuthKey() (string, error) {
 	return authKey, nil
 }
 
-// validateControlPlaneForKey routes the auth key to the right control plane by
+// ValidateControlPlane routes the auth key to the right control plane by
 // prefix (#209):
 //
 //   - A Headscale key (hskey-) with no control URL is rejected: it would
@@ -369,7 +369,11 @@ func parseAuthKey() (string, error) {
 //   - Any non-empty control URL must look like an http(s):// URL, so a typo
 //     (e.g. a host with no scheme) is caught here rather than failing deeper in
 //     tsnet with a less obvious error.
-func validateControlPlaneForKey(authKey, controlURL string) error {
+//
+// Exported so every writer of a configuration file can enforce the pairing the
+// runtime will enforce when it reads that file back: a producer that accepts
+// what its own consumer rejects is the defect UX-355's review found in init.
+func ValidateControlPlane(authKey, controlURL string) error {
 	trimmed := strings.TrimSpace(controlURL)
 	if strings.HasPrefix(authKey, "hskey-") && trimmed == "" {
 		return errors.New("Headscale auth key (hskey-) requires a control URL; " +

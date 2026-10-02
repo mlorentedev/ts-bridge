@@ -55,6 +55,11 @@ Examples:
   # Non-interactive: YAML output
   ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389 --format yaml
 
+  # Headscale (hskey-*) requires the control plane in the same file: without it
+  # connect would reject the configuration this command just wrote.
+  ts-bridge init --auth-key-file /path/to/hskey --target 100.64.0.1:3389 \
+    --control-url https://headscale.example.com
+
   # Custom output path
   ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389 --config /etc/ts-bridge.yaml
 `,
@@ -70,7 +75,7 @@ Examples:
 	cmd.Flags().String("config", "", "Output config file path (default: ./ts-bridge.yaml for yaml, ./.env for env)")
 	cmd.Flags().Bool("force", false, "Overwrite existing config files without prompting")
 	cmd.Flags().String("profile", "", "Write a named profile to the profile store instead of a config file")
-	cmd.Flags().String("control-url", "", "Control plane URL for the profile (Headscale only; used with --profile)")
+	cmd.Flags().String("control-url", "", "Control plane URL (Headscale) — stored with the profile, or written to the config file")
 	return cmd
 }
 
@@ -225,14 +230,8 @@ func runInitInteractive(cmd *cobra.Command, f initFlags) error {
 	}
 
 	// Write config.
-	if f.Format == formatYAML {
-		if err := writeYAMLConfig(cmd, f); err != nil {
-			return err
-		}
-	} else {
-		if err := writeEnvConfig(cmd, f); err != nil {
-			return err
-		}
+	if err := writeConfig(cmd, f); err != nil {
+		return err
 	}
 
 	// Print next steps.
@@ -317,14 +316,8 @@ func runInitNonInteractive(cmd *cobra.Command, f initFlags) error {
 	}
 
 	// Write config.
-	if f.Format == formatYAML {
-		if err := writeYAMLConfig(cmd, f); err != nil {
-			return err
-		}
-	} else {
-		if err := writeEnvConfig(cmd, f); err != nil {
-			return err
-		}
+	if err := writeConfig(cmd, f); err != nil {
+		return err
 	}
 
 	// Print next steps (non-interactive still shows them).
@@ -495,6 +488,20 @@ func writeEnvConfig(cmd *cobra.Command, f initFlags) error {
 	return nil
 }
 
+// writeConfig validates the control-plane pairing and writes the requested
+// format. Both the interactive and the non-interactive path go through here, so
+// no caller can emit a file that connect would reject: the pairing the runtime
+// enforces on read is enforced on write, by the same validator.
+func writeConfig(cmd *cobra.Command, f initFlags) error {
+	if err := config.ValidateControlPlane(f.AuthKey, f.ControlURL); err != nil {
+		return fmt.Errorf("%w\n  Pass --control-url https://<headscale-host> to write a Headscale configuration", err)
+	}
+	if f.Format == formatYAML {
+		return writeYAMLConfig(cmd, f)
+	}
+	return writeEnvConfig(cmd, f)
+}
+
 // ensureWritable checks if a file exists and enforces overwrite protection.
 // Returns an error if the file exists and overwrite is not allowed.
 func ensureWritable(path string, force bool, nonInteractive bool, cmd *cobra.Command) error {
@@ -519,6 +526,9 @@ func buildYAMLContent(f initFlags) string {
 
 	sb.WriteString("version: 1\n")
 	sb.WriteString(fmt.Sprintf("target: %s\n", f.Target))
+	if f.ControlURL != "" {
+		sb.WriteString(fmt.Sprintf("control_url: %s\n", f.ControlURL))
+	}
 	if f.Instance != "" {
 		sb.WriteString(fmt.Sprintf("hostname: tsb-%s\n", config.SanitizeHostnameLabel(f.Instance)))
 	}
@@ -553,7 +563,11 @@ func buildEnvConfigContent(f initFlags) string {
 	}
 	sb.WriteString("#\n")
 	sb.WriteString("# TS_LOCAL_ADDR=127.0.0.1:33389   # Local bind address\n")
-	sb.WriteString("# TS_CONTROL_URL=                  # Custom control plane\n")
+	if f.ControlURL != "" {
+		sb.WriteString(fmt.Sprintf("TS_CONTROL_URL=%s\n", f.ControlURL))
+	} else {
+		sb.WriteString("# TS_CONTROL_URL=                  # Custom control plane\n")
+	}
 	sb.WriteString("# TS_BOOTSTRAP_SSH=                # OpenSSH endpoint for blocked control plane\n")
 	sb.WriteString("# TS_BOOTSTRAP_SOCKS_ADDR=127.0.0.1:1055 # Loopback SOCKS listener\n")
 	sb.WriteString("# TS_IDLE_TIMEOUT=                 # Close idle conns after this duration\n")

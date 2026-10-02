@@ -119,6 +119,7 @@ ts-bridge init [flags]
 | `--auth-key` | string | Auth key (non-interactive mode) — WARNING: visible in process list |
 | `--auth-key-file` | string | Read auth key from file (secure non-interactive mode) |
 | `--config` | string | Output config file path (default: `./ts-bridge.yaml` for yaml, `./.env` for env) |
+| `--control-url` | string | Control plane URL (Headscale). Written to the config file, or stored with the profile under `--profile` |
 | `--format` | string | Output format: `yaml` or `env` (default `env`) |
 | `--instance` | string | Instance name for auto-mode |
 | `--port-range` | string | Port range for auto mode (e.g. `33389-34388`) |
@@ -135,6 +136,11 @@ ts-bridge init --auth-key-file /run/secrets/authkey --target 100.64.0.1:3389
 
 # Non-interactive: YAML output
 ts-bridge init --auth-key-file /run/secrets/authkey --target 100.64.0.1:3389 --format yaml
+
+# Headscale (hskey-*) requires the control plane in the same configuration
+# file, otherwise connect rejects what init wrote
+ts-bridge init --auth-key-file /run/secrets/hskey --target 100.64.0.1:3389 \
+  --control-url https://headscale.example.com
 ```
 
 ### Security notes
