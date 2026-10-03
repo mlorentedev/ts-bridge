@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.19.1](https://github.com/mlorentedev/ts-bridge/compare/v1.19.0...v1.19.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* **ci:** move PR-Agent off the retired mimo-v2.5 model ([#413](https://github.com/mlorentedev/ts-bridge/issues/413)) ([177355c](https://github.com/mlorentedev/ts-bridge/commit/177355cea297e6026a38234935dec463ae7d10bc))
+* **init:** require a control plane for Headscale keys ([#406](https://github.com/mlorentedev/ts-bridge/issues/406)) ([cea8341](https://github.com/mlorentedev/ts-bridge/commit/cea83417b0d1d398e5f7d03d4f8d816d1912444a))
+
 ## [1.19.0](https://github.com/mlorentedev/ts-bridge/compare/v1.18.0...v1.19.0) (2026-10-01)
 
 
