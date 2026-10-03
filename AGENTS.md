@@ -94,7 +94,7 @@ Read it once at session start and apply its §Spec-Driven Development +
 
 ### Review gates are repo-owned config (`harness/`)
 
-Two doctrine mechanisms read `harness/` and answer *nothing* where it is absent, so they are
+Three doctrine mechanisms read `harness/` and answer *nothing* where it is absent, so they are
 wired here rather than assumed available:
 
 - **`dotf pr triage-queue`** — run at session start and before claiming any PR work complete.
