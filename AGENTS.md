@@ -104,6 +104,10 @@ wired here rather than assumed available:
 - **`dotf spec archive`** — refuses a `review.md` signed by a model outside
   `harness/reviewer-pool.json`. The adversarial reviewer may never be the implementer, which is
   why no Anthropic model is in the pool.
+- **`dotf spec review`** — draws a reviewer at random from the pool. A drawn model that is
+  dead upstream burns a whole round (up to `--timeout`, default 45m) without a verdict, so
+  pass `--reviewer <pool-id>` to pick a live member deliberately. A red `review` job or a
+  "no review ran" comment is a notice, not a review: disposition it, never count it.
 
 The registry names only reviewers that measurably act in this repo. Adding one that never posts
 here does not widen the gate; it fabricates attestation.
