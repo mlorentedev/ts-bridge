@@ -94,7 +94,7 @@ Read it once at session start and apply its §Spec-Driven Development +
 
 ### Review gates are repo-owned config (`harness/`)
 
-Two doctrine mechanisms read `harness/` and answer *nothing* where it is absent, so they are
+Three doctrine mechanisms read `harness/` and answer *nothing* where it is absent, so they are
 wired here rather than assumed available:
 
 - **`dotf pr triage-queue`** — run at session start and before claiming any PR work complete.
@@ -104,6 +104,10 @@ wired here rather than assumed available:
 - **`dotf spec archive`** — refuses a `review.md` signed by a model outside
   `harness/reviewer-pool.json`. The adversarial reviewer may never be the implementer, which is
   why no Anthropic model is in the pool.
+- **`dotf spec review`** — draws a reviewer at random from the pool. A drawn model that is
+  dead upstream burns a whole round (up to `--timeout`, default 45m) without a verdict, so
+  pass `--reviewer <pool-id>` to pick a live member deliberately. A red `review` job or a
+  "no review ran" comment is a notice, not a review: disposition it, never count it.
 
 The registry names only reviewers that measurably act in this repo. Adding one that never posts
 here does not widen the gate; it fabricates attestation.
