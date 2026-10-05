@@ -40,6 +40,11 @@ Use `--force` with `init` or `auth set` only when intentionally replacing an
 existing profile or rotated key. `.env` and `--auth-key-file` remain compatibility
 paths, not the preferred multi-device operating model.
 
+When migrating an existing client, remove `TS_AUTHKEY` from its `.env` file and
+process environment before relying on the managed credential. Environment
+variables have higher precedence and would otherwise keep the legacy key active
+after `auth set` stores or rotates the profile credential.
+
 ## Launch Commands
 
 ```bash
