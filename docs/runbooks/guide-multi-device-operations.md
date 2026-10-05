@@ -97,7 +97,7 @@ checking that separate criterion in #183.
 - Use alias (TS_INSTANCE_NAME) as your stable operational identity in Vault.
 - If you need a stable hostname for admin visibility, set `TS_HOSTNAME` explicitly and treat it as managed configuration.
 
-## Linux Parity Checklist
+## Linux Compatibility Checklist (`.env` / `--instance`)
 
 - [ ] `./ts-bridge connect --instance <alias>` works with `.env` auto mode settings.
 - [ ] Reboot test keeps deterministic local port for same alias.
