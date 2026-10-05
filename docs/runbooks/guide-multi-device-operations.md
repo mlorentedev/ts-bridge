@@ -78,12 +78,14 @@ The `office` profile connected this Windows workstation to
 | Terminal failure | NXDOMAIN stopped after one attempt |
 | Sustained load | 1,000/1,000 RDP negotiations; 0 failures; 29.88 connections/s |
 | Latency | p50 26.39 ms; p95 38.35 ms; p99 85.27 ms |
+| Interactive RDP payload | 8,096,109 bytes over 487.41 seconds; 0 errors; operator confirmed responsive use |
 | Resource stability | Working set 72.68-73.71 MiB; handles 1040-1042; threads 74-75 |
 | Final state | `active_connections: 0`; readiness remained `ok` |
 
-This validates connection setup throughput and resource stability, not bulk
-RDP payload throughput. Measure an interactive or replayed RDP workload before
-checking that separate criterion in #183.
+The interactive session averaged 0.133 Mbps across active and idle periods.
+Byte totals became visible only after disconnect because live sessions are not
+yet reflected in `total_bytes_tx` / `total_bytes_rx`; #415 tracks that
+observability defect.
 
 ## Windows Runtime Notes
 
