@@ -38,7 +38,9 @@ input:
 
 Use `--force` with `init` or `auth set` only when intentionally replacing an
 existing profile or rotated key. `.env` and `--auth-key-file` remain compatibility
-paths, not the preferred multi-device operating model. If a Windows client still
+paths, not the preferred multi-device operating model. Never pass the key inline
+with `--auth-key`: it lands in the process table (`ps`, Task Manager), readable by
+every local user. If a Windows client still
 uses `--auth-key-file`, trim the file's inheritance with
 `icacls <file> /inheritance:r /grant:r "${env:USERNAME}:F"`; `chmod` has no effect
 on NTFS ACLs.
