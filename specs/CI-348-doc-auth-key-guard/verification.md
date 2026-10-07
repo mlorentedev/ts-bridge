@@ -96,6 +96,19 @@ changed, so the next round reviews the same contract.
 - Real tree: `bash scripts/check-doc-authkey.sh` -> `check-doc-authkey: OK (73 files)`.
 - `shellcheck scripts/check-doc-authkey.sh scripts/tests/test-doc-authkey.sh` -> no findings.
 
+## Review round 2 (`agy/gemini-3.1-pro-high`, FAIL at `c5cceef`)
+
+One REAL Blocker and two THEORETICAL Majors. Contract files unchanged again.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Blocker (REAL): `ts-bridge \` split right after the binary drops the trailing space `is_command` required | **Applied.** The binary match ends at whitespace *or* end of segment. | `connect-split-after-binary` returned 0 against `c5cceef`, 1 now |
+| Major (THEORETICAL): `VAR="a b" ts-bridge` is not unwrapped | **Applied.** Assignments accept bare, double-quoted and single-quoted values. | `connect-quoted-env`, `connect-single-quoted-env` |
+| Major (THEORETICAL): runners (`go run`, `docker run`) bypass the guard | **Applied for `go run`**, which `docs/runbooks/guide-launcher-parity.md` names as the binary fallback: `go run ./cmd/ts-bridge connect …` now unwraps to a path-prefixed binary. **Declined for `docker run`**: the project ships a single binary and no container image (no `Dockerfile`, ADR-002), so no documented invocation exists to guard, and an image name need not contain `ts-bridge` at all. | `connect-go-run` |
+
+- GREEN: `bash scripts/tests/test-doc-authkey.sh` -> 46/46 (23 fixtures x bash + zsh).
+- Real tree: `check-doc-authkey: OK (73 files)`; `shellcheck` clean.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.

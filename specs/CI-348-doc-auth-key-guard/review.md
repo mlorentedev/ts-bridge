@@ -1,44 +1,44 @@
 ---
 spec: "CI-348-doc-auth-key-guard"
 verdict: "FAIL"
-reviewed_sha: "177355cea297e6026a38234935dec463ae7d10bc"
+reviewed_sha: "c5cceef8e023246b3bd6da40b3ac8149e3ff257c"
 reviewer: "agy/gemini-3.1-pro-high"
 date: "2026-10-06"
 ---
-
 ## Adversarial review
 
 **Scope**: CI-348-doc-auth-key-guard
-**Sources**: `specs/CI-348-doc-auth-key-guard/{proposal,tasks,verification}.md` + `git diff 0b23df6e9b8e1298b66f84d3c21d4116b420770d...HEAD`
+**Sources**: `specs/CI-348-doc-auth-key-guard/{proposal,tasks,verification}.md`, PR diff `0b23df6e9b8e1298b66f84d3c21d4116b420770d...HEAD`
 
 ### Spec and task alignment
-- The diff cleanly matches the proposed file additions (guard script, test suite, and workflow wiring) without scope creep.
-- However, critical parsing flaws in the awk state machine mean the guard silently ignores common valid documentation forms, violating the primary acceptance criterion.
+- `check-doc-authkey.sh` was introduced and wired into the GitHub Actions workflow successfully.
+- Tests exercise multiple shell syntaxes, but miss edge cases where commands are split at the binary name or executed via wrappers.
 
 ### Findings
 
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
 |----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Blocker | REAL | parsing | Shell prefix bypass: `is_command` requires the segment to start exactly with `ts-bridge` or `.\ts-bridge`. A valid command prefixed with `sudo`, an environment variable (`VAR=1 ts-bridge`), or an absolute path is silently ignored. | Demonstrated locally | UNTESTED | code + tests |
-| Blocker | REAL | parsing | PowerShell continuation conflicts with Markdown inline code spans. Any line ending in a backtick is treated as continued, stripping the trailing backtick. For a whole-line inline code span (`` `ts-bridge...` ``), this breaks the inline-span regex in `normalize` and appends the next line. The leading backtick remains, failing `is_command`. | Demonstrated locally | UNTESTED | code + tests |
-| Major | REAL | parsing | Pipe splitting gap: The command splitting regex `/(;\|&&\|\|\|)/` does not split on single pipes. A piped command like `yes \| ts-bridge connect --auth-key 123` is evaluated as starting with `yes`, failing `is_command` and bypassing the guard. | Demonstrated locally | UNTESTED | code + tests |
+| Blocker  | REAL    | regex | `is_command` expects a trailing space after `ts-bridge`, so a line split immediately after the command (`ts-bridge \`) drops the space and bypasses the guard entirely. | `ts-bridge \ \n connect --auth-key tskey...` returns `OK`. | UNTESTED | code + tests |
+| Major    | THEORETICAL | wrapper | `strip_prefixes` fails to strip environment variables whose values contain spaces (e.g., `VAR="a b" ts-bridge`) because its regex `[^[:space:]]*` stops at the first space. | `VAR="value with spaces" ts-bridge ...` returns `OK`. | UNTESTED | code + tests |
+| Major    | THEORETICAL | wrapper | Execution via runners like `docker run` or `go run` bypasses `is_command` because the regex anchors `ts-bridge` to the start of the segment. A future doc using a runner will silently bypass the guard. | `docker run mlorentedev/ts-bridge connect ...` returns `OK`. | UNTESTED | code + tests |
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | D | The guard silently fails to detect `--auth-key` in very common documentation forms (sudo, pipes, inline code spans), breaking its primary invariant. |
-| Verification       | C | Existing tests pass, but negative-path tests for these common shell and markdown syntax structures are missing. |
-| Scope              | A | Diff perfectly matches the proposal without creep; zero unrelated changes. |
-| Reliability        | C | The awk parsing state machine is brittle against standard shell prefixes and markdown backticks. |
-| Maintainability    | C | A 100-line awk regex parser for shell/markdown is fragile; future syntax will likely require more regex tweaks. |
-| Handoff-readiness  | B | Spec is updated and artifacts captured, but the implementation has significant holes requiring fixes. |
+| Correctness        | D | `ts-bridge \` parsing defect completely bypasses the guard for a common multi-line pattern. |
+| Verification       | B | Evidence covers criteria but misses several edge cases in command prefixes and splits. |
+| Scope              | A | Diff matches proposal exactly; no scope creep. |
+| Reliability        | B | Awk parser is mostly reliable but brittle around shell edge cases. |
+| Maintainability    | B | Clear naming and structure, but `strip_prefixes` regexes are hard to maintain. |
+| Handoff-readiness  | A | Spec updates and verification artifacts are present and well-documented. |
 
 ### Verdict
 FAIL
 
 ### Recommended next steps
-- Fix `is_command` to tolerate common command prefixes (`sudo `, env var assignments) and absolute paths. Add named fixture tests for these.
-- Refactor the PowerShell continuation logic to distinguish between a trailing backtick used for continuation and a Markdown closing backtick. Add a named fixture test for a whole-line inline code span.
-- Extend the command splitting regex to handle single pipes (`|`). Add a named fixture test for piped commands.
-- Do not run `/spec archive` or `dotf spec archive` in the current state. Fix the bugs and run another adversarial review first.
+- Update `is_command` regex to allow `ts-bridge` at the end of the segment: `^([^[:space:]]*[\/\\])?ts-bridge(\.exe)?([[:space:]]|$)`
+- Update `strip_prefixes` to properly handle quoted strings in environment variables.
+- Update `is_command` or `contains_command` to detect `ts-bridge` when executed via common wrappers like `docker run` or `go run`.
+- Add fixtures for `ts-bridge \` (split), `VAR="with spaces"`, and `docker run` to `scripts/tests/fixtures/doc-authkey/` and ensure they fail without the fixes.
+- Do not run `/spec archive` until the code is fixed and a re-review passes.

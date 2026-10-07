@@ -24,7 +24,11 @@ connect-windows-path:1:inline --auth-key
 connect-inline-span:1:inline --auth-key
 connect-list-inline-span:1:inline --auth-key
 connect-piped:1:inline --auth-key
-pipe-no-key:0:OK'
+pipe-no-key:0:OK
+connect-split-after-binary:1:inline --auth-key
+connect-quoted-env:1:inline --auth-key
+connect-single-quoted-env:1:inline --auth-key
+connect-go-run:1:inline --auth-key'
 
 failed=0
 for sh_name in ${TDA_SHELLS:-bash zsh}; do

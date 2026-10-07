@@ -31,21 +31,23 @@ for file in "${files[@]}"; do
         return strip_prefixes(segment)
       }
       # Wrappers that still run ts-bridge with the same arguments: the
-      # PowerShell call operator, sudo, env, and VAR=value assignments.
+      # PowerShell call operator, sudo, env, go run, and VAR=value assignments
+      # (bare, "double-quoted" or 'single-quoted').
       function strip_prefixes(segment, changed) {
         do {
           changed = 0
           if (sub(/^&[[:space:]]+/, "", segment)) changed = 1
           if (sub(/^sudo([[:space:]]+-[^[:space:]]+)*[[:space:]]+/, "", segment)) changed = 1
           if (sub(/^env[[:space:]]+/, "", segment)) changed = 1
-          if (sub(/^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+/, "", segment)) changed = 1
+          if (sub(/^go[[:space:]]+run[[:space:]]+/, "", segment)) changed = 1
+          if (sub(/^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|\047[^\047]*\047|[^[:space:]"\047]*)[[:space:]]+/, "", segment)) changed = 1
         } while (changed)
         return segment
       }
       # Any path prefix counts: ./, .\, /usr/local/bin/, C:\tools\.
       function is_command(segment) {
         segment = normalize(segment)
-        return segment ~ /^([^[:space:]]*[\/\\])?ts-bridge(\.exe)?[[:space:]]/
+        return segment ~ /^([^[:space:]]*[\/\\])?ts-bridge(\.exe)?([[:space:]]|$)/
       }
       function contains_command(text, parts, count, pos) {
         count = split(text, parts, /(;|&&|\|\|?)/)
