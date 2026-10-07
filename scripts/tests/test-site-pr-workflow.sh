@@ -127,6 +127,9 @@ check_workflow() {
   [ -n "$steps" ] || { echo "missing contract: job '$JOB'"; return 1; }
   # A condition on the job or on any step can switch the build off while every line stays put.
   ! grep -qE '^(job\.)?if:' <<<"$steps" || { echo "forbidden PR capability: if condition in job '$JOB'"; return 1; }
+  # continue-on-error turns a failed build into a green one, on a step or on the whole job.
+  ! grep -qE '^(job\.)?continue-on-error:' <<<"$steps" ||
+    { echo "forbidden PR capability: continue-on-error in job '$JOB'"; return 1; }
   step_has '^uses:[[:space:]]*actions/checkout@[0-9a-f]{40}' '^with\.persist-credentials:[[:space:]]*false[[:space:]]*$' <<<"$steps" ||
     { echo "missing contract: credential-less checkout in job '$JOB'"; return 1; }
   step_has '^uses:[[:space:]]*actions/setup-node@[0-9a-f]{40}' "^with\\.node-version:[[:space:]]*['\"]?22['\"]?[[:space:]]*$" <<<"$steps" ||
@@ -169,6 +172,8 @@ run-under-env:1:npm ci under site/
 persist-under-env:1:credential-less checkout
 step-if:1:if condition
 job-if:1:if condition
+step-continue-on-error:1:continue-on-error
+job-continue-on-error:1:continue-on-error
 crlf:0:OK"
 
 failed=0

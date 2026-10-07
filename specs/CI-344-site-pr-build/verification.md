@@ -79,6 +79,7 @@ under `env:` or `with:` read like a step key, and nothing barred a condition or 
 | Major (THEORETICAL): `check-workflow-permissions.sh` accepts `persist-credentials: false` under `env:` | **Ticketed** as #427 (`CI-351`, Backlog/P2): a different guard, out of this spec's scope. | #427 |
 
 - GREEN: `bash` and `zsh scripts/tests/test-site-pr-workflow.sh` -> `OK (20 fixtures + .github/workflows/site-pr.yml)`; same under `mawk` and `busybox awk`. `shellcheck` clean.
+- PR #426 CodeRabbit (Minor, applied): `continue-on-error` on the job or a step turns a failed build green; it is now a finding, with `step-continue-on-error` and `job-continue-on-error` fixtures (22 in total, green under bash and zsh).
 - Status: the spec stays `verifying`. Round 4 (`dotf spec review CI-344-site-pr-build --reviewer <pool-id>`) is the next step before archive.
 
 ## Promotion candidates
