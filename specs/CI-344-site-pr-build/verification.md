@@ -34,11 +34,29 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - A separate read-only PR workflow is safer than adding `pull_request` to `pages.yml`, whose Pages and OIDC write permissions are required only for deployment.
 - The workflow includes its own path so the introducing PR proves the check runs instead of waiting for the first later site edit.
 
+## Review round 1 (`nan/deepseek-v4-flash`, FAIL)
+
+`review.md` records one REAL Major and seven Minor/Question rows. The Major is fixed in
+`scripts/tests/test-site-pr-workflow.sh`; no contract file (`proposal.md`, `tasks.md`,
+`features.json`) changed, so the next round reviews the same contract digests.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Major: the guard asserts on file text, so a renamed job, `npm ci` kept only in a comment, and a checkout moved to another job all pass | **Applied.** The guard strips comments, cuts out the `site-build` job, and asserts per step (`run: npm ci` with `working-directory: site` in the same step; checkout with `persist-credentials: false` in the same step). Fixture suite under `scripts/tests/fixtures/site-pr/` in the style of `test-workflow-permissions.sh`. | RED: against the old guard, `renamed-job`, `npm-ci-in-comment` and `checkout-other-job` exited 0. GREEN: all 9 fixtures behave as specified under bash and zsh. Six mutants of the real `site-pr.yml` (job renamed, `npm ci` in a comment, build command changed, Node 20, pin comment dropped, `contents: write`) all exit 1. |
+| Minor: the guard pins the quoting of `node-version` | **Applied.** Quote-tolerant match; `node-unquoted` fixture must pass. | `node-unquoted` exited 1 against the old guard, 0 now. |
+| Minor: a comment naming a forbidden capability would red the guard | **Applied** (found while writing fixtures, same root cause as the Major). | `comment-mentions-forbidden` exited 1 against the old guard, 0 now. |
+| Minor: the recorded local proof (`npm ci --ignore-scripts`, Node 24) does not reproduce the gate | **Declined, with the gate as evidence.** The gate is the `site-build` job itself on Node 22 without `--ignore-scripts`; its green run on PR #381 is the reproduction. The local line stays as what it is: a smoke check, labelled as such here. | PR #381 `site-build` job |
+| Minor: `features.json` entries stay `pending` with empty `evidence` | **Declined for this spec.** Only the harness may set `passing` (tasks.md, "Pass-state gating"), and the review itself notes no `dotf spec archive` pre-flight executes them; that is harness scope, not this workflow. | `tasks.md` gating rule |
+| Minor (theoretical): no `timeout-minutes` on `site-build` | **Applied.** `timeout-minutes: 15`, in line with `pr-agent.yml`. | `actionlint .github/workflows/site-pr.yml` clean |
+| Minor (theoretical): `npm ci` runs lifecycle scripts on PR-controlled lockfiles | **Declined.** Residual only (no secrets, `contents: read`, no `id-token`, credential-less checkout), and `pages.yml` shares the posture: switching one arm alone creates the divergence the review warns about. Both arms change together or neither. | review.md row |
+| Question: `site-build` is not a required status | **Informational.** Required contexts are an owner-side branch-protection setting, already tracked as hand-set state in #351. What the merge gate enforces is this guard, via the required `hygiene` job. | #351 |
+| Question: launcher review base spans other specs | **Informational, harness scope.** Not a defect of this change. | — |
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [x] Lesson for the repo's `docs/lessons/`? no: the workflow contract and regression guard fully encode the finding.
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-036-2026-10-06.md
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: this is a CI verification boundary, not a product architecture decision.
 - [x] New pattern candidate for `00_meta/patterns/`? no: PR-time documentation builds are established CI practice, not a new cross-project pattern.
 
