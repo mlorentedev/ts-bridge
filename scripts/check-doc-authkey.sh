@@ -48,7 +48,7 @@ for file in "${files[@]}"; do
         for (pos = 1; pos <= count; pos++) {
           keys = auth_key_count(parts[pos])
           if (keys == 0) continue
-          if (keys == 1 && parts[pos] ~ /(^|[[:space:]])init([[:space:]]|$)/) {
+          if (keys == 1 && init_token(parts[pos])) {
             if (!has_warning(first, last)) {
               printf "%s:%d: init --auth-key example has no nearby process-table warning\n", file, last
             }
@@ -56,6 +56,12 @@ for file in "${files[@]}"; do
             printf "%s:%d: inline --auth-key is forbidden in command examples\n", file, last
           }
         }
+      }
+      # `init` counts only as a bare word: one inside quotes or a command
+      # substitution (VAR=" init ", $(echo init)) is data, not the subcommand.
+      function init_token(text) {
+        gsub(/"[^"]*"|\047[^\047]*\047|\$\([^)]*\)|`[^`]*`/, "", text)
+        return text ~ /(^|[[:space:]])init([[:space:]]|$)/
       }
       function scan_prose(line, i, span) {
         while (match(line, /`[^`]+`/)) {
@@ -69,16 +75,33 @@ for file in "${files[@]}"; do
         command = ""
         first = 0
         fence = ""
+        icode = 0
+        in_list = 0
+        prev_blank = 1
         for (i = 1; i <= FNR; i++) {
           line = lines[i]
-          if (match(line, /^[[:space:]]*(```|~~~)/)) {
-            marker = substr(line, RSTART + RLENGTH - 3, 3)
-            if (fence == "") fence = marker
-            else if (marker == fence) fence = ""
-            command = ""
+          # A fence closes only on a run of the same character at least as long
+          # as the one that opened it, so a ```` block may contain ``` lines.
+          if (match(line, /^[[:space:]]*(`{3,}|~{3,})/)) {
+            run = substr(line, RSTART, RLENGTH); sub(/^[[:space:]]+/, "", run)
+            if (fence == "") { fence = run; command = "" }
+            else if (substr(run, 1, 1) == substr(fence, 1, 1) && length(run) >= length(fence) &&
+                     substr(line, RSTART + RLENGTH) ~ /^[[:space:]]*$/) { fence = ""; command = "" }
             continue
           }
-          if (fence == "" && line !~ /^(    |\t)/) {
+          if (fence == "") {
+            blank = line ~ /^[[:space:]]*$/
+            indented = line ~ /^(    |\t)/
+            # Indented code is a block after a blank line outside a list; an
+            # indented line inside a list is the item continuation (prose).
+            if (indented && (icode || (prev_blank && !in_list))) icode = 1
+            else if (!blank) {
+              icode = 0
+              if (!indented) in_list = line ~ /^([-*+]|[0-9]+\.)[[:space:]]/ || (in_list && !prev_blank)
+            }
+            prev_blank = blank
+          }
+          if (fence == "" && !icode) {
             if (command != "") { scan_command(command, first, i - 1); command = "" }
             scan_prose(line, i)
             continue

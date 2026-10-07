@@ -36,7 +36,10 @@ connect-upper-exe:1:inline --auth-key
 connect-command-substitution:1:inline --auth-key
 connect-indented-code:1:inline --auth-key
 init-flag-before-subcommand:0:OK
-init-subshell-two-keys:1:inline --auth-key'
+init-subshell-two-keys:1:inline --auth-key
+nested-list-mention:0:OK
+init-word-in-quotes:1:inline --auth-key
+connect-long-fence:1:inline --auth-key'
 
 failed=0
 for sh_name in ${TDA_SHELLS:-bash zsh}; do

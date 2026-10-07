@@ -22,8 +22,9 @@ guidance has already drifted twice, so a future documentation edit can silently 
 ## What
 
 Add a zero-toolchain documentation guard and fixture-driven test suite. The guard scans `README.md`
-and Markdown below `docs/`, fails with file and line details when a `ts-bridge` command passes an
-inline `--auth-key` value outside `init`, and permits an `init` exception only when a process-list
+and Markdown below `docs/`, fails with file and line details when a command example (any logical
+command in a code block, or an inline code span naming `ts-bridge`; see the threat model below)
+passes an inline `--auth-key` value outside `init`, and permits an `init` exception only when a process-list
 or process-table warning is within three lines. `repo-hygiene.yml` runs both the guard and its
 tests on every pull request and push to `master`.
 

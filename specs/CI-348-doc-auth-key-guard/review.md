@@ -1,7 +1,7 @@
 ---
 spec: "CI-348-doc-auth-key-guard"
 verdict: "FAIL"
-reviewed_sha: "fe7f821646a17c20291a2bb44ccceca96ddb0d9e"
+reviewed_sha: "7603f59cd81f6e88f3c2f22bd07af7f6fb567a26"
 reviewer: "agy/gemini-3.1-pro-high"
 date: "2026-10-06"
 ---
@@ -9,40 +9,37 @@ date: "2026-10-06"
 ## Adversarial review
 
 **Scope**: CI-348-doc-auth-key-guard
-**Sources**: `specs/CI-348-doc-auth-key-guard/`, `git diff 0b23df6e9b8e1298b66f84d3c21d4116b420770d...HEAD`
+**Sources**: `specs/CI-348-doc-auth-key-guard/` and diff against `0b23df6e9b8e1298b66f84d3c21d4116b420770d...HEAD`
 
 ### Spec and task alignment
-- The guard successfully implements the core requirements: scanning `README.md` and `docs/`, flagging inline `--auth-key` usages, and providing an exception for warned `init` commands.
-- The `repo-hygiene.yml` integration ensures it runs automatically.
-- However, the `awk` regex-based command parser misses several common shell syntax patterns, allowing significant bypasses where an inline key would go unnoticed.
+- The implementation diverges from AC1 by failing to ignore `--auth-key <value>` in nested prose lists.
+- The redesign documented in the threat model (scanning by region, not by command) causes `check-doc-authkey.sh` to correctly ignore `ts-bridge` invocation matching, but conflicts with the `proposal.md` "What" section which states the guard fails when a "ts-bridge command" passes a key.
 
 ### Findings
 
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
 |----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Blocker  | REAL    | parser | Quoted executable paths and names (`"C:\Program Files\ts-bridge.exe"`, `"ts-bridge"`) bypass `is_command`. Spaces break `[^[:space:]]*`, and the closing quote breaks the `([[:space:]]\|$)` suffix check. | Manually verified: `"ts-bridge" connect --auth-key X` and `& "C:\Program Files\ts-bridge\ts-bridge.exe" connect --auth-key X` return exit 0 | UNTESTED | code + tests |
-| Blocker  | REAL    | parser | Root shell prompts (`# `) and alternative prompts (`% `) are not stripped by `normalize` (only `$ ` and `> ` are). This bypasses `is_command` completely, and also silently ignores commented-out examples. | Manually verified: `# ts-bridge connect --auth-key X` returns exit 0 | UNTESTED | code + tests |
-| Major    | REAL    | parser | Subshells `(...)` and brace groups `{ ... }` bypass the guard because `split` on `;`, `&&`, `\|\|`, `\|` leaves the opening bracket attached to the command (e.g., `(ts-bridge`), failing `is_command`. | Manually verified: `(ts-bridge connect --auth-key X)` returns exit 0 | UNTESTED | code + tests |
-| Major    | THEORETICAL | parser | `is_command` is case-sensitive, so Windows documentation using `.EXE` (e.g., `ts-bridge.EXE`) bypasses the guard. | Manually verified: `ts-bridge.EXE connect --auth-key X` returns exit 0 | UNTESTED | code + tests |
-| Minor    | THEORETICAL | parser | False positive: `ts-bridge --verbose init ...` with a nearby warning is flagged as forbidden because `scan_command` rigidly expects `init` to immediately follow the binary name. | Manually verified: `ts-bridge --verbose init --auth-key X` fails despite nearby warning | UNTESTED | code + tests |
-| Minor    | REAL    | parser | Command substitutions with spaces in env-var assignments (`FOO=$(echo val) ts-bridge`) bypass `strip_prefixes` because `[^[:space:]"\047]*` halts at the space, corrupting the segment. | Manually verified: `FOO=$(echo val) ts-bridge connect --auth-key X` returns exit 0 | UNTESTED | code + tests |
+| Blocker  | REAL    | parser | AC1 Violation: Nested lists in prose are falsely classified as indented code blocks (4 spaces). If a list item mentions `--auth-key <value>`, the guard fails it as a forbidden command. | `* Security:\n    * --auth-key <value>` returns exit 1. | UNTESTED | code + tests |
+| Major    | THEORETICAL | parser | Env var assignments and subshells containing the word `init` trick the guard into applying the `init` exception to `connect` commands, bypassing the check. | `VAR=" init " ts-bridge connect --auth-key secret` returns exit 0. | UNTESTED | code + tests |
+| Minor    | THEORETICAL | parser | Fenced block parser limits markers to 3 characters (`substr(..., 3)`). A 4-backtick ` ```` ` block containing a 3-backtick ` ``` ` block gets prematurely closed, treating commands as prose and bypassing the guard. | ` ```` ` wrapping ` ```bash ` returns exit 0. | UNTESTED | code |
+| Minor    | THEORETICAL | spec | Spec vs code mismatch: `proposal.md` "What" section claims the guard fails when a "`ts-bridge` command" passes a key. The implementation (and the added Threat Model) intentionally checks every command in a code block without `ts-bridge` recognition. | `other-tool --auth-key secret` is flagged. | UNTESTED | spec (`proposal.md` "What" section) |
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | C | Criteria partially met; substantial negative-path gaps (Windows paths, root prompts, subshells). |
-| Verification       | B | Evidence covers criteria and relies on a strong fixture suite, but misses several edge cases. |
-| Scope              | A | Diff matches proposal exactly; no scope creep. |
-| Reliability        | B | Most error paths handled; the bash script is resilient to missing files. |
-| Maintainability    | B | Acceptable structure for awk; logic is reasonably decomposed into functions. |
-| Handoff-readiness  | B | Spec updates and verification are clear. |
+| Correctness        | C | Criteria partially met; substantial negative-path gaps around nested lists and `init` parsing. |
+| Verification       | A | Verification artifacts provide reproducible commands and robust test cases. |
+| Scope              | A | Diff matches proposal closely; redesign is well documented in the threat model. |
+| Reliability        | B | Most error paths are handled appropriately; regex-based parsing has edge cases. |
+| Maintainability    | B | Script is clean and maintainable, though regex complexity is increasing. |
+| Handoff-readiness  | A | Spec updates and threat model additions clearly capture the new design context. |
 
 ### Verdict
 FAIL
 
 ### Recommended next steps
-- Fix `scripts/check-doc-authkey.sh` to correctly strip root prompts (`# `) and brackets (`(`, `{`).
-- Update `is_command` to handle quoted paths and spaces in paths, and make `.exe` matching case-insensitive.
-- Add tests to `scripts/tests/test-doc-authkey.sh` and corresponding fixtures for each of the UNTESTED findings.
-- Re-run `bash scripts/tests/test-doc-authkey.sh` to prove the gaps are closed, then re-review.
+- Fix the indented code block parser in `scripts/check-doc-authkey.sh` to distinguish between a 4-space markdown indented code block and a nested list item in prose (e.g., exclude lines starting with list markers).
+- Constrain the `init` exception regex so it only matches the actual command token, not strings within environment variable assignments or subshells.
+- Update the `proposal.md` "What" section to align with the Threat Model (clarifying that it checks all commands in code regions, not just `ts-bridge`).
+- Add tests for the nested list prose, `init` token parsing, and 4-backtick fenced blocks.

@@ -137,6 +137,24 @@ segment, so a second key in a subshell is a finding.
   and `init-subshell-two-keys` were already caught and pin behaviour that must not regress.
 - Real tree: `check-doc-authkey: OK (73 files)`; `shellcheck` clean.
 
+## Review round 4 (`agy/gemini-3.1-pro-high`, FAIL at `7603f59`) — fixes landed, round 5 pending
+
+The session that ran rounds 1-4 set itself a stop condition (one round after the redesign) and
+kept it: the spec stays `verifying`. The round-4 findings were cheap and are fixed with fixtures
+that failed first, so **round 5 reviews a tree with no known open finding**. No round 5 ran here.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Blocker (REAL, false positive): a nested list item indented 4 spaces is read as indented code | **Applied.** Indented code starts only after a blank line outside a list; an indented line inside a list is the item continuation. | `nested-list-mention` exited 1 against `7603f59`, 0 now; `connect-indented-code` still fails as it must |
+| Major (THEORETICAL): `VAR=" init " ts-bridge connect --auth-key …` gets the `init` exception | **Applied.** `init` counts only as a bare word; quoted strings, `$(…)` and backtick substitutions are removed first. | `init-word-in-quotes` |
+| Minor (THEORETICAL): a ```` fence is closed by an inner ``` line | **Applied.** A fence closes only on a bare run of the same character at least as long as the opener (CommonMark). | `connect-long-fence` exited 0 against `7603f59`, 1 now |
+| Minor (THEORETICAL): "What" still says "a `ts-bridge` command" | **Applied.** Reworded to the region rule, pointing at the threat model. | `proposal.md` |
+
+- GREEN: 68/68 (34 fixtures x bash + zsh); 34/34 under `busybox awk`; real tree `OK (73 files)`;
+  `shellcheck` clean.
+- **Next:** `dotf spec review CI-348-doc-auth-key-guard` (any live pool member; `deepseek` needs
+  `dotf secrets unlock`), then archive on PASS / PASS-WITH-GAPS.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
