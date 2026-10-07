@@ -51,7 +51,10 @@ while IFS= read -r -d '' dir; do
     if [ -f "$index" ]; then
       # Literal, whole-line comparison against the extracted targets: no regex is built
       # from the filename, so '+', '(' or a space in a name cannot change the match.
-      printf '%s\n' "$targets" | grep -qxF -- "$name" \
+      # A here-string, not `printf | grep -q`: under pipefail, grep exiting at its
+      # first match kills printf with SIGPIPE once the index outgrows one pipe write,
+      # and the 141 reads as "not indexed". Latent here (35 lessons fit), live upstream.
+      grep -qxF -- "$name" <<< "$targets" \
         || { echo "check-lessons: not in ${index#"$ROOT"/}: $name"; rc=1; }
     fi
   done < <(find "$dir" -maxdepth 1 -type f -name 'lesson-[0-9]*.md' -print0)
