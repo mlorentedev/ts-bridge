@@ -105,7 +105,7 @@ observability defect.
 ## Hostname Strategy
 
 - Auto mode generates a unique hostname each run for collision safety.
-- Use alias (TS_INSTANCE_NAME) as your stable operational identity in Vault.
+- Use the profile name (`office` above) as the stable operational identity. `TS_INSTANCE_NAME` is read only on the legacy `.env` / `--instance` path below.
 - If you need a stable hostname for admin visibility, set `TS_HOSTNAME` explicitly and treat it as managed configuration.
 
 ## Linux Compatibility Checklist (`.env` / `--instance`)
