@@ -152,6 +152,7 @@ that failed first, so **round 5 reviews a tree with no known open finding**. No 
 
 - GREEN: 68/68 (34 fixtures x bash + zsh); 34/34 under `busybox awk`; real tree `OK (73 files)`;
   `shellcheck` clean.
+- PR #421 PR-Agent (REAL, applied): a command left open by a dangling continuation was dropped when its fence closed, and an indented code block inside a list item was read as prose. The open command is now scanned before any fence transition, and inside a list only a nested list item stays prose. Fixtures `connect-fence-dangling-continuation`, `connect-list-indented-code` (exit 0 against `c4c7c5f`, 1 now); 36 fixtures green under bash and zsh, `mawk`, `busybox awk`; `nested-list-mention` still 0.
 - **Next:** `dotf spec review CI-348-doc-auth-key-guard` (any live pool member; `deepseek` needs
   `dotf secrets unlock`), then archive on PASS / PASS-WITH-GAPS.
 

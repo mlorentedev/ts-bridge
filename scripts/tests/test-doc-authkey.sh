@@ -38,6 +38,8 @@ connect-indented-code:1:inline --auth-key
 init-flag-before-subcommand:0:OK
 init-subshell-two-keys:1:inline --auth-key
 nested-list-mention:0:OK
+connect-list-indented-code:1:inline --auth-key
+connect-fence-dangling-continuation:1:inline --auth-key
 init-word-in-quotes:1:inline --auth-key
 connect-long-fence:1:inline --auth-key'
 

@@ -84,17 +84,21 @@ for file in "${files[@]}"; do
           # as the one that opened it, so a ```` block may contain ``` lines.
           if (match(line, /^[[:space:]]*(`{3,}|~{3,})/)) {
             run = substr(line, RSTART, RLENGTH); sub(/^[[:space:]]+/, "", run)
-            if (fence == "") { fence = run; command = "" }
+            # A command still open when a fence opens or closes (a dangling
+            # continuation) is scanned, never dropped.
+            if (command != "") { scan_command(command, first, i - 1); command = "" }
+            if (fence == "") fence = run
             else if (substr(run, 1, 1) == substr(fence, 1, 1) && length(run) >= length(fence) &&
-                     substr(line, RSTART + RLENGTH) ~ /^[[:space:]]*$/) { fence = ""; command = "" }
+                     substr(line, RSTART + RLENGTH) ~ /^[[:space:]]*$/) fence = ""
             continue
           }
           if (fence == "") {
             blank = line ~ /^[[:space:]]*$/
             indented = line ~ /^(    |\t)/
-            # Indented code is a block after a blank line outside a list; an
-            # indented line inside a list is the item continuation (prose).
-            if (indented && (icode || (prev_blank && !in_list))) icode = 1
+            # Indented code is a block after a blank line. Inside a list only a
+            # nested list item stays prose; any other indented line is code.
+            marker = line ~ /^[[:space:]]*([-*+]|[0-9]+\.)[[:space:]]/
+            if (indented && (icode || (prev_blank && (!in_list || !marker)))) icode = 1
             else if (!blank) {
               icode = 0
               if (!indented) in_list = line ~ /^([-*+]|[0-9]+\.)[[:space:]]/ || (in_list && !prev_blank)
