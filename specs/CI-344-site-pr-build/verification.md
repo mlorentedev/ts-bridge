@@ -52,6 +52,19 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 | Question: `site-build` is not a required status | **Informational.** Required contexts are an owner-side branch-protection setting, already tracked as hand-set state in #351. What the merge gate enforces is this guard, via the required `hygiene` job. | #351 |
 | Question: launcher review base spans other specs | **Informational, harness scope.** Not a defect of this change. | — |
 
+## Review round 2 (`agy/gemini-3.1-pro-high`, FAIL at `0e4cdac`)
+
+The round-1 fix made the job and its steps structural but left two blocks as whole-file greps:
+permissions and path filters. Round 2 found both.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Blocker (REAL): `contents: read` is asserted present, not exclusive, so `pull-requests: write` beside it, or job-level `contents: write`, passes | **Applied.** Top-level `permissions` must be exactly `contents: read` (allow-list), and any `permissions:` key inside `jobs` is a finding. | `elevated-permissions`, `job-permissions` exited 0 against `0e4cdac`; both fail now. `read-all-permissions` pins the inline form. |
+| Major (REAL): quoted keys or values (`"id-token": write`) bypass the deny-list | **Applied.** Quotes are stripped after comments, before every structural check (the raw text is kept only for the `# vN` pin comment). | `quoted-permissions` exited 0 against `0e4cdac`; fails now. |
+| Major (THEORETICAL): path filters asserted anywhere in the file, e.g. moved under `env:` | **Applied.** Both filters must be items of `on.pull_request.paths`, read with an indentation-aware block reader. | `paths-misplaced` exited 0 against `0e4cdac`; fails now. |
+
+- GREEN: `bash` and `zsh scripts/tests/test-site-pr-workflow.sh` -> `OK (14 fixtures + .github/workflows/site-pr.yml)`; same under `busybox awk`. `shellcheck` clean.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
