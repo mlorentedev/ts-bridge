@@ -86,7 +86,7 @@ The `office` profile connected this Windows workstation to
 | Bidirectional application probe | Valid 19-byte RDP X.224 Connection Confirm |
 | Network interruption | 73.76-second Wi-Fi outage; probe failed during outage |
 | Recovery | Same process recovered in 3.5 seconds after Wi-Fi returned |
-| Transient retries | Closed remote port produced 4 total attempts (1 initial + the default 3 retries, `--dial-retries` unset) with backoff |
+| Transient retries | Closed remote port produced 4 total attempts (1 initial + 3 retries, the `--dial-retries` default) with backoff |
 | Terminal failure | NXDOMAIN stopped after one attempt |
 | Sustained load | 1,000/1,000 RDP negotiations; 0 failures; 29.88 connections/s |
 | Latency | p50 26.39 ms; p95 38.35 ms; p99 85.27 ms |
