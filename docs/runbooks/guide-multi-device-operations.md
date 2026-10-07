@@ -105,7 +105,7 @@ observability defect.
 ## Hostname Strategy
 
 - Auto mode generates a unique hostname each run for collision safety.
-- Use the profile name (`office` above) as the stable operational identity. `TS_INSTANCE_NAME` is read only on the legacy `.env` / `--instance` path below.
+- Use the profile name (`office` above) as the stable operational identity. `--instance` / `TS_INSTANCE_NAME` only seeds the derived local port and hostname when neither is set explicitly; it is not an identity record.
 - If you need a stable hostname for admin visibility, set `TS_HOSTNAME` explicitly and treat it as managed configuration.
 
 ## Linux Compatibility Checklist (`.env` / `--instance`)
