@@ -80,6 +80,7 @@ under `env:` or `with:` read like a step key, and nothing barred a condition or 
 
 - GREEN: `bash` and `zsh scripts/tests/test-site-pr-workflow.sh` -> `OK (20 fixtures + .github/workflows/site-pr.yml)`; same under `mawk` and `busybox awk`. `shellcheck` clean.
 - PR #426 CodeRabbit (Minor, applied): `continue-on-error` on the job or a step turns a failed build green; it is now a finding, with `step-continue-on-error` and `job-continue-on-error` fixtures (22 in total, green under bash and zsh).
+- PR #426 PR-Agent (REAL, applied): `types:` or another `branches:` filter under `on.pull_request` narrowed the trigger to nothing; the block is now an allow-list (`branches: [master]` plus `paths`). Also applied: `needs:` on `site-build` is a finding (a skipped dependency skips the build), and the `# vN` comment must sit on the `uses:` line itself. Fixtures `trigger-types`, `trigger-branches`, `job-needs`, `pin-comment-detached` (26 in total, green under bash, zsh, mawk and busybox awk).
 - Status: the spec stays `verifying`. Round 4 (`dotf spec review CI-344-site-pr-build --reviewer <pool-id>`) is the next step before archive.
 
 ## Promotion candidates

@@ -113,6 +113,10 @@ check_workflow() {
   grep -qxE -- '- \.github/workflows/site-pr\.yml' <<<"$paths" || { echo "missing contract: self path filter under on.pull_request.paths"; return 1; }
   # Allow-list: any third entry (a `!site/**` negation above all) can only narrow the trigger.
   [ "$(grep -c . <<<"$paths")" -eq 2 ] || { echo "missing contract: on.pull_request.paths must hold exactly the two filters"; return 1; }
+  # The rest of the trigger is an allow-list too: `types:` or another branch filter can only
+  # narrow it until no pull request fires the build.
+  [ "$(yaml_block on/pull_request <<<"$text" | grep -v '^- ' | sed 's/[[:space:]]*$//')" = "branches: [master]
+paths:" ] || { echo "missing contract: on.pull_request must be exactly branches [master] plus paths"; return 1; }
 
   ! grep -qE 'pages:[[:space:]]*write' <<<"$text" || { echo "forbidden PR capability: Pages write permission"; return 1; }
   ! grep -qE 'id-token:[[:space:]]*write' <<<"$text" || { echo "forbidden PR capability: OIDC write permission"; return 1; }
@@ -130,6 +134,8 @@ check_workflow() {
   # continue-on-error turns a failed build into a green one, on a step or on the whole job.
   ! grep -qE '^(job\.)?continue-on-error:' <<<"$steps" ||
     { echo "forbidden PR capability: continue-on-error in job '$JOB'"; return 1; }
+  # A dependency can skip the build from outside the job: an `if: false` on the job it needs.
+  ! grep -qE '^job\.needs:' <<<"$steps" || { echo "forbidden PR capability: needs in job '$JOB'"; return 1; }
   step_has '^uses:[[:space:]]*actions/checkout@[0-9a-f]{40}' '^with\.persist-credentials:[[:space:]]*false[[:space:]]*$' <<<"$steps" ||
     { echo "missing contract: credential-less checkout in job '$JOB'"; return 1; }
   step_has '^uses:[[:space:]]*actions/setup-node@[0-9a-f]{40}' "^with\\.node-version:[[:space:]]*['\"]?22['\"]?[[:space:]]*$" <<<"$steps" ||
@@ -141,7 +147,7 @@ check_workflow() {
 
   # The version comment is the one comment that is contract: it names what the SHA pins.
   for action in checkout setup-node; do
-    grep -qE "actions/$action@[0-9a-f]{40}[[:space:]]+# v[0-9]+" <<<"$raw_steps" ||
+    grep -qE "^uses:[[:space:]]*actions/$action@[0-9a-f]{40}[[:space:]]+# v[0-9]+" <<<"$raw_steps" ||
       { echo "missing contract: SHA-pinned $action with a version comment in job '$JOB'"; return 1; }
   done
   echo "OK"
@@ -174,6 +180,10 @@ step-if:1:if condition
 job-if:1:if condition
 step-continue-on-error:1:continue-on-error
 job-continue-on-error:1:continue-on-error
+trigger-types:1:exactly branches [master] plus paths
+trigger-branches:1:exactly branches [master] plus paths
+job-needs:1:needs in job
+pin-comment-detached:1:SHA-pinned checkout with a version comment
 crlf:0:OK"
 
 failed=0
