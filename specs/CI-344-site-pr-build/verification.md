@@ -34,11 +34,60 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - A separate read-only PR workflow is safer than adding `pull_request` to `pages.yml`, whose Pages and OIDC write permissions are required only for deployment.
 - The workflow includes its own path so the introducing PR proves the check runs instead of waiting for the first later site edit.
 
+## Review round 1 (`nan/deepseek-v4-flash`, FAIL)
+
+`review.md` records one REAL Major and seven Minor/Question rows. The Major is fixed in
+`scripts/tests/test-site-pr-workflow.sh`; no contract file (`proposal.md`, `tasks.md`,
+`features.json`) changed, so the next round reviews the same contract digests.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Major: the guard asserts on file text, so a renamed job, `npm ci` kept only in a comment, and a checkout moved to another job all pass | **Applied.** The guard strips comments, cuts out the `site-build` job, and asserts per step (`run: npm ci` with `working-directory: site` in the same step; checkout with `persist-credentials: false` in the same step). Fixture suite under `scripts/tests/fixtures/site-pr/` in the style of `test-workflow-permissions.sh`. | RED: against the old guard, `renamed-job`, `npm-ci-in-comment` and `checkout-other-job` exited 0. GREEN: all 9 fixtures behave as specified under bash and zsh. Six mutants of the real `site-pr.yml` (job renamed, `npm ci` in a comment, build command changed, Node 20, pin comment dropped, `contents: write`) all exit 1. |
+| Minor: the guard pins the quoting of `node-version` | **Applied.** Quote-tolerant match; `node-unquoted` fixture must pass. | `node-unquoted` exited 1 against the old guard, 0 now. |
+| Minor: a comment naming a forbidden capability would red the guard | **Applied** (found while writing fixtures, same root cause as the Major). | `comment-mentions-forbidden` exited 1 against the old guard, 0 now. |
+| Minor: the recorded local proof (`npm ci --ignore-scripts`, Node 24) does not reproduce the gate | **Declined, with the gate as evidence.** The gate is the `site-build` job itself on Node 22 without `--ignore-scripts`; its green run on PR #381 is the reproduction. The local line stays as what it is: a smoke check, labelled as such here. | PR #381 `site-build` job |
+| Minor: `features.json` entries stay `pending` with empty `evidence` | **Declined for this spec.** Only the harness may set `passing` (tasks.md, "Pass-state gating"), and the review itself notes no `dotf spec archive` pre-flight executes them; that is harness scope, not this workflow. | `tasks.md` gating rule |
+| Minor (theoretical): no `timeout-minutes` on `site-build` | **Applied.** `timeout-minutes: 15`, in line with `pr-agent.yml`. | `actionlint .github/workflows/site-pr.yml` clean |
+| Minor (theoretical): `npm ci` runs lifecycle scripts on PR-controlled lockfiles | **Declined.** Residual only (no secrets, `contents: read`, no `id-token`, credential-less checkout), and `pages.yml` shares the posture: switching one arm alone creates the divergence the review warns about. Both arms change together or neither. | review.md row |
+| Question: `site-build` is not a required status | **Informational.** Required contexts are an owner-side branch-protection setting, already tracked as hand-set state in #351. What the merge gate enforces is this guard, via the required `hygiene` job. | #351 |
+| Question: launcher review base spans other specs | **Informational, harness scope.** Not a defect of this change. | — |
+
+## Review round 2 (`agy/gemini-3.1-pro-high`, FAIL at `0e4cdac`)
+
+The round-1 fix made the job and its steps structural but left two blocks as whole-file greps:
+permissions and path filters. Round 2 found both.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Blocker (REAL): `contents: read` is asserted present, not exclusive, so `pull-requests: write` beside it, or job-level `contents: write`, passes | **Applied.** Top-level `permissions` must be exactly `contents: read` (allow-list), and any `permissions:` key inside `jobs` is a finding. | `elevated-permissions`, `job-permissions` exited 0 against `0e4cdac`; both fail now. `read-all-permissions` pins the inline form. |
+| Major (REAL): quoted keys or values (`"id-token": write`) bypass the deny-list | **Applied.** Quotes are stripped after comments, before every structural check (the raw text is kept only for the `# vN` pin comment). | `quoted-permissions` exited 0 against `0e4cdac`; fails now. |
+| Major (THEORETICAL): path filters asserted anywhere in the file, e.g. moved under `env:` | **Applied.** Both filters must be items of `on.pull_request.paths`, read with an indentation-aware block reader. | `paths-misplaced` exited 0 against `0e4cdac`; fails now. |
+
+- GREEN: `bash` and `zsh scripts/tests/test-site-pr-workflow.sh` -> `OK (14 fixtures + .github/workflows/site-pr.yml)`; same under `busybox awk`. `shellcheck` clean.
+
+## Review round 3 (`agy/gemini-3.1-pro-high`, FAIL at `de7a911`)
+
+Round 2 made each block structural, but step lines were still matched by text, so a key nested
+under `env:` or `with:` read like a step key, and nothing barred a condition or a narrowing filter.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Blocker (REAL): `run: npm ci` parked under a step's `env:` satisfies `step_has` | **Applied.** `job_steps` keys every line by its position: step keys print bare, nested lines print as `<parent>.<key>`, job keys as `job.<key>`. Commands must match `^run:`, settings `^with\.<key>:`. | `run-under-env`, `persist-under-env` fixtures fail now. |
+| Blocker (REAL): `if: false` on a step or the job disables the build | **Applied.** Any `if:` at job or step level of `site-build` is a finding. | `step-if`, `job-if` fixtures fail now. |
+| Blocker (REAL): a third `paths` entry such as `!site/**` narrows the trigger | **Applied.** `on.pull_request.paths` must hold exactly the two filters (allow-list). | `paths-negated` fixture fails now. |
+| Major (REAL): CRLF line endings break the block reader | **Applied.** `\r` is stripped with the quotes, before every check, and from the raw text read for pin comments. | `crlf` fixture (CRLF copy of `valid.yml`) passes now. |
+| Major (THEORETICAL): `check-workflow-permissions.sh` accepts `persist-credentials: false` under `env:` | **Ticketed** as #427 (`CI-351`, Backlog/P2): a different guard, out of this spec's scope. | #427 |
+
+- GREEN: `bash` and `zsh scripts/tests/test-site-pr-workflow.sh` -> `OK (20 fixtures + .github/workflows/site-pr.yml)`; same under `mawk` and `busybox awk`. `shellcheck` clean.
+- PR #426 CodeRabbit (Minor, applied): `continue-on-error` on the job or a step turns a failed build green; it is now a finding, with `step-continue-on-error` and `job-continue-on-error` fixtures (22 in total, green under bash and zsh).
+- PR #426 PR-Agent (REAL, applied): `types:` or another `branches:` filter under `on.pull_request` narrowed the trigger to nothing; the block is now an allow-list (`branches: [master]` plus `paths`). Also applied: `needs:` on `site-build` is a finding (a skipped dependency skips the build), and the `# vN` comment must sit on the `uses:` line itself. Fixtures `trigger-types`, `trigger-branches`, `job-needs`, `pin-comment-detached` (26 in total, green under bash, zsh, mawk and busybox awk).
+- Status: the spec stays `verifying`. Round 4 (`dotf spec review CI-344-site-pr-build --reviewer <pool-id>`) is the next step before archive.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [x] Lesson for the repo's `docs/lessons/`? no: the workflow contract and regression guard fully encode the finding.
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-036-2026-10-06.md
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: this is a CI verification boundary, not a product architecture decision.
 - [x] New pattern candidate for `00_meta/patterns/`? no: PR-time documentation builds are established CI practice, not a new cross-project pattern.
 
