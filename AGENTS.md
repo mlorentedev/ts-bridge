@@ -16,7 +16,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | Path | Purpose |
 |------|---------|
 | `cmd/ts-bridge/main.go` | Thin entry point — wires flags/logger/signals and delegates to `cmd/cli` (ADR-010). No business logic. |
-| `cmd/cli/` | Cobra command tree (`root`, `browser`, `connect`, `init`, `status`, `host`, `discover`, `import`, `version`) + `args`/`run`/`signal` helpers, with per-command `*_test.go`. |
+| `cmd/cli/` | Cobra command tree (`root`, `auth`, `browser`, `connect`, `init`, `status`, `host`, `discover`, `import`, `version`) + `args`/`run`/`signal` helpers, with per-command `*_test.go`. |
 | `internal/config/` | Env-var parsing + `Config` struct + validation |
 | `internal/proxy/` | `Dialer` interface, `AcceptLoop`, `handleConn`, `proxyConnections`, `idleConn`, `ReconnectDialer` |
 | `internal/health/` | `/health/live`, `/health/ready`, `/metrics` HTTP server |
