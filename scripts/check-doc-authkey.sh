@@ -22,20 +22,33 @@ for file in "${files[@]}"; do
         sub(/^[[:space:]]*>[[:space:]]*/, "", segment)
         sub(/^[[:space:]]+/, "", segment)
         sub(/^[$][[:space:]]+/, "", segment)
+        sub(/^([-*+]|[0-9]+\.)[[:space:]]+/, "", segment)
         sub(/[[:space:]]+$/, "", segment)
         if (segment ~ /^`[^`]+`$/) {
           sub(/^`/, "", segment)
           sub(/`$/, "", segment)
         }
+        return strip_prefixes(segment)
+      }
+      # Wrappers that still run ts-bridge with the same arguments: the
+      # PowerShell call operator, sudo, env, and VAR=value assignments.
+      function strip_prefixes(segment, changed) {
+        do {
+          changed = 0
+          if (sub(/^&[[:space:]]+/, "", segment)) changed = 1
+          if (sub(/^sudo([[:space:]]+-[^[:space:]]+)*[[:space:]]+/, "", segment)) changed = 1
+          if (sub(/^env[[:space:]]+/, "", segment)) changed = 1
+          if (sub(/^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+/, "", segment)) changed = 1
+        } while (changed)
         return segment
       }
+      # Any path prefix counts: ./, .\, /usr/local/bin/, C:\tools\.
       function is_command(segment) {
         segment = normalize(segment)
-        return segment ~ /^ts-bridge(\.exe)?[[:space:]]/ ||
-               segment ~ /^\.[\/\\]ts-bridge(\.exe)?[[:space:]]/
+        return segment ~ /^([^[:space:]]*[\/\\])?ts-bridge(\.exe)?[[:space:]]/
       }
       function contains_command(text, parts, count, pos) {
-        count = split(text, parts, /(;|&&|\|\|)/)
+        count = split(text, parts, /(;|&&|\|\|?)/)
         for (pos = 1; pos <= count; pos++) {
           if (is_command(parts[pos])) return 1
         }
@@ -51,12 +64,12 @@ for file in "${files[@]}"; do
         return 0
       }
       function scan_command(text, first, last, parts, count, pos, segment) {
-        count = split(text, parts, /(;|&&|\|\|)/)
+        count = split(text, parts, /(;|&&|\|\|?)/)
         for (pos = 1; pos <= count; pos++) {
           segment = normalize(parts[pos])
           if (!is_command(segment) ||
               segment !~ /--auth-key([[:space:]]+|=)[^[:space:]`]+/) continue
-          if (segment ~ /^(\.[\/\\])?ts-bridge(\.exe)?[[:space:]]+init([[:space:]]|$)/) {
+          if (segment ~ /^([^[:space:]]*[\/\\])?ts-bridge(\.exe)?[[:space:]]+init([[:space:]]|$)/) {
             if (!has_warning(first, last)) {
               printf "%s:%d: init --auth-key example has no nearby process-table warning\n", file, last
             }
@@ -71,8 +84,10 @@ for file in "${files[@]}"; do
         first = 0
         for (i = 1; i <= FNR; i++) {
           line = lines[i]
-          continued = line ~ /[\\`][[:space:]]*$/
-          sub(/[\\`][[:space:]]*$/, "", line)
+          # A PowerShell continuation backtick follows whitespace; a backtick
+          # glued to the text closes an inline code span instead.
+          continued = line ~ /(\\|[[:space:]]`)[[:space:]]*$/
+          if (continued) sub(/[\\`][[:space:]]*$/, "", line)
           if (command == "" && contains_command(line)) {
             command = line
             first = i

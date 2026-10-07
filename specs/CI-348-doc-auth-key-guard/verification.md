@@ -76,6 +76,26 @@ created: "2026-09-30"
 | CodeRabbit Major: one `init` occurrence classified an entire compound line, allowing a later inline-key `connect` | **Applied.** Logical commands are split on `;`, `&&`, and `||`, then each `ts-bridge` invocation is classified independently. | `init-then-connect` failed before the fix and now reports the `connect` invocation. |
 | CodeRabbit Security Architecture Low: a PowerShell backtick between `--auth-key` and its value bypassed the physical-line matcher | **Applied as tightly coupled.** Continuation lines are normalized into one logical command before argument matching. | `connect-split-value` failed before the fix and now reports the inline key. |
 
+## Review round 1 (`agy/gemini-3.1-pro-high`, FAIL at `177355c`)
+
+`review.md` records two Blockers and one Major, all REAL and all reproduced as fixtures that
+returned exit 0 against `177355c` before the fix (RED 5, below). All three are fixed in
+`scripts/check-doc-authkey.sh`; no contract file (`proposal.md`, `tasks.md`, `features.json`)
+changed, so the next round reviews the same contract.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Blocker: `sudo`, `VAR=value` assignments and absolute paths bypass `is_command` | **Applied.** `strip_prefixes` removes the PowerShell call operator `&`, `sudo` (with its flags), `env` and leading assignments; the binary match accepts any path prefix (`/usr/local/bin/`, `C:\tools\`). `sudo -u <user>` keeps its argument and is not unwrapped: no doc uses it, and the guard prefers a narrow, explicit prefix list over guessing option arity. | `connect-sudo-prefix`, `connect-env-prefix`, `connect-absolute-path`, `connect-windows-path` |
+| Blocker: a whole-line inline code span ending in a backtick was read as a PowerShell continuation | **Applied.** A continuation backtick must follow whitespace (PowerShell's own rule); a backtick glued to text closes a code span. List markers (`-`, `*`, `+`, `1.`) are stripped so a span inside a list item is checked too. | `connect-inline-span`, `connect-list-inline-span`; the two existing PowerShell continuation fixtures stay green |
+| Major: a single pipe did not split segments | **Applied.** Segments split on `;`, `&&`, `||` and `|`. | `connect-piped`; `pipe-no-key` proves a safe pipe and a wrapped `--auth-key-file` example stay clean |
+
+- RED 5: the eight new fixtures against `177355c` -> the seven unsafe ones returned exit 0
+  instead of 1; `pipe-no-key` returned 0 as wanted.
+- GREEN: `bash scripts/tests/test-doc-authkey.sh` -> 38/38 (19 fixtures x bash + zsh), also
+  19/19 under `mawk` with `TDA_SHELLS=bash`.
+- Real tree: `bash scripts/check-doc-authkey.sh` -> `check-doc-authkey: OK (73 files)`.
+- `shellcheck scripts/check-doc-authkey.sh scripts/tests/test-doc-authkey.sh` -> no findings.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.

@@ -16,7 +16,15 @@ connect-powershell-multiline:1:inline --auth-key
 connect-split-value:1:inline --auth-key
 init-warning:0:OK
 init-no-warning:1:init --auth-key example has no nearby process-table warning
-init-then-connect:1:inline --auth-key'
+init-then-connect:1:inline --auth-key
+connect-sudo-prefix:1:inline --auth-key
+connect-env-prefix:1:inline --auth-key
+connect-absolute-path:1:inline --auth-key
+connect-windows-path:1:inline --auth-key
+connect-inline-span:1:inline --auth-key
+connect-list-inline-span:1:inline --auth-key
+connect-piped:1:inline --auth-key
+pipe-no-key:0:OK'
 
 failed=0
 for sh_name in ${TDA_SHELLS:-bash zsh}; do
