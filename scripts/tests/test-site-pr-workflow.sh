@@ -8,7 +8,9 @@
 # `node-version: 22` without quotes. So this version strips comments, cuts out the `site-build`
 # job, and asserts on each step of it. Round 2 found the same flaw in the two blocks still
 # grepped (permissions, path filters): permissions are now an allow-list and the filters must sit
-# under on.pull_request.paths.
+# under on.pull_request.paths. Round 3 found step lines still matched as text (a `run:` parked
+# under `env:` passed), an `if:` that switches the build off, a negated path filter and CRLF; each
+# step line is now keyed by its parent, and `if:` and extra filters are findings.
 #
 # Why fixtures: a guard pointed at one real tree only proves "today it is quiet". Each fixture
 # under scripts/tests/fixtures/site-pr/ is one way the contract can break (expected red) or one
@@ -51,8 +53,11 @@ yaml_block() {
   '
 }
 
-# Print the body of job $JOB (from its key to the next job key), one step per record:
-# every step begins with a line `@@STEP` so callers can test steps independently.
+# Print the body of job $JOB, one step per record: every step begins with a line `@@STEP`.
+# Lines are keyed by where they sit, not by what they say: a step key prints bare (`run: npm ci`),
+# anything nested under one prints with its parent (`with.persist-credentials: false`,
+# `env.run: npm ci`), and a job-level key prints as `job.<key>`. So `^run:` matches only a
+# step's own command, never a look-alike parked under `env:` or `with:`.
 job_steps() {
   awk -v job="$JOB" '
     /^jobs:[[:space:]]*$/ { in_jobs = 1; next }
@@ -61,11 +66,15 @@ job_steps() {
       key = $0; sub(/^  /, "", key); sub(/:[[:space:]]*$/, "", key)
       in_job = (key == job); step_indent = ""; next
     }
-    in_job {
-      if (match($0, /^[[:space:]]+- /) && (step_indent == "" || RLENGTH == step_indent)) {
-        step_indent = RLENGTH; print "@@STEP"
+    in_job && !/^[[:space:]]*$/ {
+      match($0, /^[[:space:]]*/); ind = RLENGTH; body = substr($0, ind + 1)
+      if (body ~ /^- / && (step_indent == "" || ind == step_indent)) {
+        step_indent = ind; print "@@STEP"
+        body = substr(body, 3); sub(/^[[:space:]]+/, "", body); ind += 2
       }
-      print
+      if (step_indent == "" || ind <= step_indent) { print "job." body; next }
+      if (ind == step_indent + 2) { parent = body; sub(/:.*/, "", parent); print body; next }
+      print parent "." body
     }
   '
 }
@@ -93,14 +102,17 @@ check_workflow() {
   local file="$1" text steps raw_steps action
   [ -f "$file" ] || { echo "workflow not found at $file"; return 1; }
   # Quotes are spelling, not structure: `"id-token": write` must read as `id-token: write`.
-  text="$(strip_comments "$file" | tr -d "\"'")"
+  # CR is line-ending spelling too: a CRLF checkout must read the same as LF.
+  text="$(strip_comments "$file" | tr -d "\"'\r")"
   steps="$(printf '%s\n' "$text" | job_steps)"
-  raw_steps="$(job_steps <"$file")"
+  raw_steps="$(tr -d '\r' <"$file" | job_steps)"
 
   paths="$(yaml_block on/pull_request/paths <<<"$text")"
   [ -n "$(yaml_block on/pull_request <<<"$text")" ] || { echo "missing contract: pull_request trigger"; return 1; }
   grep -qxE -- '- site/\*\*' <<<"$paths" || { echo "missing contract: site path filter under on.pull_request.paths"; return 1; }
   grep -qxE -- '- \.github/workflows/site-pr\.yml' <<<"$paths" || { echo "missing contract: self path filter under on.pull_request.paths"; return 1; }
+  # Allow-list: any third entry (a `!site/**` negation above all) can only narrow the trigger.
+  [ "$(grep -c . <<<"$paths")" -eq 2 ] || { echo "missing contract: on.pull_request.paths must hold exactly the two filters"; return 1; }
 
   ! grep -qE 'pages:[[:space:]]*write' <<<"$text" || { echo "forbidden PR capability: Pages write permission"; return 1; }
   ! grep -qE 'id-token:[[:space:]]*write' <<<"$text" || { echo "forbidden PR capability: OIDC write permission"; return 1; }
@@ -113,13 +125,15 @@ check_workflow() {
     { echo "forbidden PR capability: job-level permissions"; return 1; }
 
   [ -n "$steps" ] || { echo "missing contract: job '$JOB'"; return 1; }
-  step_has 'uses:[[:space:]]*actions/checkout@[0-9a-f]{40}' 'persist-credentials:[[:space:]]*false' <<<"$steps" ||
+  # A condition on the job or on any step can switch the build off while every line stays put.
+  ! grep -qE '^(job\.)?if:' <<<"$steps" || { echo "forbidden PR capability: if condition in job '$JOB'"; return 1; }
+  step_has '^uses:[[:space:]]*actions/checkout@[0-9a-f]{40}' '^with\.persist-credentials:[[:space:]]*false[[:space:]]*$' <<<"$steps" ||
     { echo "missing contract: credential-less checkout in job '$JOB'"; return 1; }
-  step_has 'uses:[[:space:]]*actions/setup-node@[0-9a-f]{40}' "node-version:[[:space:]]*['\"]?22['\"]?[[:space:]]*$" <<<"$steps" ||
+  step_has '^uses:[[:space:]]*actions/setup-node@[0-9a-f]{40}' "^with\\.node-version:[[:space:]]*['\"]?22['\"]?[[:space:]]*$" <<<"$steps" ||
     { echo "missing contract: Node 22 setup in job '$JOB'"; return 1; }
-  step_has '^[[:space:]]*run:[[:space:]]*npm ci[[:space:]]*$' 'working-directory:[[:space:]]*site[[:space:]]*$' <<<"$steps" ||
+  step_has '^run:[[:space:]]*npm ci[[:space:]]*$' '^working-directory:[[:space:]]*site[[:space:]]*$' <<<"$steps" ||
     { echo "missing contract: npm ci under site/ in job '$JOB'"; return 1; }
-  step_has '^[[:space:]]*run:[[:space:]]*npm run build[[:space:]]*$' 'working-directory:[[:space:]]*site[[:space:]]*$' <<<"$steps" ||
+  step_has '^run:[[:space:]]*npm run build[[:space:]]*$' '^working-directory:[[:space:]]*site[[:space:]]*$' <<<"$steps" ||
     { echo "missing contract: site build under site/ in job '$JOB'"; return 1; }
 
   # The version comment is the one comment that is contract: it names what the SHA pins.
@@ -149,7 +163,13 @@ elevated-permissions:1:exactly contents: read
 read-all-permissions:1:exactly contents: read
 job-permissions:1:job-level permissions
 quoted-permissions:1:OIDC write permission
-paths-misplaced:1:site path filter under on.pull_request.paths"
+paths-misplaced:1:site path filter under on.pull_request.paths
+paths-negated:1:exactly the two filters
+run-under-env:1:npm ci under site/
+persist-under-env:1:credential-less checkout
+step-if:1:if condition
+job-if:1:if condition
+crlf:0:OK"
 
 failed=0
 count=0

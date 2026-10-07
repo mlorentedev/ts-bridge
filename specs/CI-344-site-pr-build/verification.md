@@ -65,6 +65,22 @@ permissions and path filters. Round 2 found both.
 
 - GREEN: `bash` and `zsh scripts/tests/test-site-pr-workflow.sh` -> `OK (14 fixtures + .github/workflows/site-pr.yml)`; same under `busybox awk`. `shellcheck` clean.
 
+## Review round 3 (`agy/gemini-3.1-pro-high`, FAIL at `de7a911`)
+
+Round 2 made each block structural, but step lines were still matched by text, so a key nested
+under `env:` or `with:` read like a step key, and nothing barred a condition or a narrowing filter.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Blocker (REAL): `run: npm ci` parked under a step's `env:` satisfies `step_has` | **Applied.** `job_steps` keys every line by its position: step keys print bare, nested lines print as `<parent>.<key>`, job keys as `job.<key>`. Commands must match `^run:`, settings `^with\.<key>:`. | `run-under-env`, `persist-under-env` fixtures fail now. |
+| Blocker (REAL): `if: false` on a step or the job disables the build | **Applied.** Any `if:` at job or step level of `site-build` is a finding. | `step-if`, `job-if` fixtures fail now. |
+| Blocker (REAL): a third `paths` entry such as `!site/**` narrows the trigger | **Applied.** `on.pull_request.paths` must hold exactly the two filters (allow-list). | `paths-negated` fixture fails now. |
+| Major (REAL): CRLF line endings break the block reader | **Applied.** `\r` is stripped with the quotes, before every check, and from the raw text read for pin comments. | `crlf` fixture (CRLF copy of `valid.yml`) passes now. |
+| Major (THEORETICAL): `check-workflow-permissions.sh` accepts `persist-credentials: false` under `env:` | **Ticketed** as #427 (`CI-351`, Backlog/P2): a different guard, out of this spec's scope. | #427 |
+
+- GREEN: `bash` and `zsh scripts/tests/test-site-pr-workflow.sh` -> `OK (20 fixtures + .github/workflows/site-pr.yml)`; same under `mawk` and `busybox awk`. `shellcheck` clean.
+- Status: the spec stays `verifying`. Round 4 (`dotf spec review CI-344-site-pr-build --reviewer <pool-id>`) is the next step before archive.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.

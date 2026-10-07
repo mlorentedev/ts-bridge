@@ -1,7 +1,7 @@
 ---
 spec: "CI-344-site-pr-build"
 verdict: "FAIL"
-reviewed_sha: "0e4cdac93abf7cb55aca3b924f785d7ab2da3a38"
+reviewed_sha: "de7a911db0f586e957c757cea756f7624484974d"
 reviewer: "agy/gemini-3.1-pro-high"
 date: "2026-10-06"
 ---
@@ -9,37 +9,40 @@ date: "2026-10-06"
 ## Adversarial review
 
 **Scope**: CI-344-site-pr-build
-**Sources**: `specs/CI-344-site-pr-build/`, `.github/workflows/site-pr.yml`, `scripts/tests/test-site-pr-workflow.sh`
+**Sources**: specs/CI-344-site-pr-build/*, .github/workflows/site-pr.yml, scripts/tests/test-site-pr-workflow.sh, .github/workflows/repo-hygiene.yml
 
 ### Spec and task alignment
-- **Setup**: PR branch created, proposal and tasks complete.
-- **Implementation**: The PR workflow is added and tested with a bash-based contract guard.
-- **Security Posture**: The implementation asserts a read-only token, but the regex-based validation in the guard is incomplete and permits bypasses for elevated privileges.
+- Acceptance criteria require a read-only `site-build` job that checks out the proposed revision and uses `npm ci` and `npm run build`.
+- The implemented tests aim to enforce this contract structurally using `test-site-pr-workflow.sh`.
+- However, the structural checks are fragile and can be easily bypassed by a malicious pull request, failing to guarantee the acceptance criteria.
 
 ### Findings
 
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
 |----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Blocker  | REAL    | authz | The contract guard fails to enforce the "only `contents: read`" constraint (AC2). It asserts the presence of `contents: read` but does not deny elevated permissions (e.g., `contents: write`, `pull-requests: write`). Since `check-workflow-permissions.sh` only requires *a* `permissions:` block and no `write-all`, a PR can grant itself `write` permissions and pass all CI checks. | Fixture with job-level `contents: write` passes the guard test suite | UNTESTED (needs fixture like `elevated-permissions.yml`) | tests |
-| Major    | REAL    | authz | The explicit denylist for `pages: write` and `id-token: write` can be bypassed using standard YAML string quoting (e.g., `"pages": write` or `pages: 'write'`). The literal `grep` checks miss these, allowing a PR to grant itself OIDC/Pages capabilities, violating AC3. | Fixture with `"id-token": write` bypasses the `grep` check and exits 0 | UNTESTED (needs fixture like `quoted-permissions.yml`) | tests |
-| Major    | THEORETICAL | trigger | The guard checks for the path filters `- 'site/**'` and `- '.github/workflows/site-pr.yml'` anywhere in the file, not strictly under `on.pull_request.paths`. A PR author could move these filters to a dummy `env` array to bypass the PR trigger entirely while still passing the contract test. | Moving paths to `env:` passes the guard | UNTESTED (needs fixture for misplaced paths) | tests |
+| Blocker  | REAL    | validation | `step_has` grep-based assertion is bypassed if required commands are nested under `env:` or `with:`. A dummy action can declare `run: npm ci` in its `env` block and pass the guard without executing a build. | `test-site-pr-workflow.sh` uses line-by-line regex. Placing `run: npm ci` under `env` bypasses it. | UNTESTED | code + tests |
+| Blocker  | REAL    | validation | The guard does not forbid `if:` conditions. A malicious PR can disable the site build entirely by appending `if: false` to the `npm ci` step, while still passing the contract test. | `step_has` does not assert the absence of `if:` conditions. | UNTESTED | code + tests |
+| Blocker  | REAL    | validation | Path filters assert inclusion but allow exclusion. A malicious PR can add `- '!site/**'` to `paths`, entirely disabling the PR build for site changes. | The script checks `grep -qxE -- '- site/\*\*'` but ignores other lines in the `paths` block. | UNTESTED | code + tests |
+| Major    | REAL    | reliability | Windows CRLF breaks the test suite. `yaml_block` preserves `\r`, causing the path-filter assertion `[ "$paths" = ... ]` and `grep -x` to fail on valid workflows locally. | `sed -i 's/$/\r/' .github/workflows/site-pr.yml && bash scripts/tests/test-site-pr-workflow.sh` fails. | UNTESTED | code |
+| Major    | THEORETICAL | validation | `check-workflow-permissions.sh` (the repo's pre-existing guard) suffers from the same `env:` bypass. Placing `persist-credentials: false` under an `env:` block in the checkout step satisfies the guard but persists credentials. | Demonstrated locally with `bash scripts/check-workflow-permissions.sh`. | UNTESTED | code |
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | D | AC2 and AC3 are not securely met due to regex bypasses allowing permission escalation |
-| Verification       | B | Test fixtures exist but the bash-based structural assertions have logical gaps |
-| Scope              | A | Implementation is focused entirely on the site PR build workflow |
-| Reliability        | B | CI job handles caching and builds reliably, but guard script relies on brittle regex |
-| Maintainability    | B | Clear fixture-driven test design, though reaching the limits of what grep/awk can parse |
-| Handoff-readiness  | A | Spec is fully updated, verification records dispositions from previous rounds |
+| Correctness        | D | Security gate does not actually prevent bypasses, failing its primary purpose. |
+| Verification       | B | Test script and fixtures exist but lack negative tests for `env`, `if: false`, and path exclusions. |
+| Scope              | A | Implementation is strictly within the boundaries of the proposal. |
+| Reliability        | B | Handled edge cases except for CRLF line endings on Windows. |
+| Maintainability    | C | Custom awk/grep parsing is fragile and prone to bypasses compared to proper YAML parsing. |
+| Handoff-readiness  | A | Spec is complete and verification steps are logged. |
 
 ### Verdict
 FAIL
 
 ### Recommended next steps
-- **tests**: Update `scripts/tests/test-site-pr-workflow.sh` to forbid any occurrence of `write` (e.g., `! grep -qiE 'write'` outside benign contexts like comments) or enforce strict structural bounds for the `permissions:` block.
-- **tests**: Update the regex for forbidden capabilities to allow optional quotes: `['"]?(pages|id-token)['"]?:[[:space:]]*['"]?write['"]?`.
-- **tests**: Tighten the path filter assertions to ensure they appear under the `on:` block, rather than using a global `grep` across the whole file.
-- **tests**: Add named fixtures for these bypass vectors (`elevated-permissions.yml`, `quoted-permissions.yml`) and ensure they fail.
+- Update `test-site-pr-workflow.sh` to forbid `if:` in the `site-build` job steps.
+- Update `test-site-pr-workflow.sh` to assert that `run:` is not nested under `env:` or `with:`, perhaps by using a strict YAML parser (`yq`) or by improving the awk script to track YAML structure depth within steps.
+- Update `test-site-pr-workflow.sh` to forbid `!` exclusions in the path filters.
+- Strip `\r` carriage returns from the parsed text in `test-site-pr-workflow.sh` to fix Windows local execution.
+- Fix the same `env:` bypass in `scripts/check-workflow-permissions.sh`.
