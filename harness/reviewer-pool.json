@@ -48,14 +48,14 @@
       "why": "Provider-diverse: independent of both NaN and Anthropic. Pro tier at high effort; the flash tiers are excluded for the same reason the daily models are. agy has no --provider flag — the model id selects the family. AUTH IS LOGIN, not a key: agy holds an OAuth token and answers with no API key in the environment, so this arm must not be wired to a secret the registry does not declare (dotfiles #1156 found an arm that had never once run for exactly that reason)."
     },
     {
-      "id": "nan/mimo-v2.5",
+      "id": "nan/mimo-v2.6-flash",
       "runner": "pi",
       "provider": "nan",
-      "model": "mimo-v2.5",
+      "model": "mimo-v2.6-flash",
       "secret_id": "NAN_API_KEY",
       "role": "fallback",
-      "why": "Reasoning-class by profile (1M context, reasoning chain). Admitted in the SSOT on 2026-08-20 with its evidence boundary recorded honestly: a real, correct finding was demonstrated on a planted defect, but no quality ranking against deepseek was established, so this entry is not a claim of equivalence. Second fallback, after the provider-diverse arm, because provider diversity is the stronger property.",
-      "operational_note": "Reasoning models here emit reasoning_content BEFORE content. Under-provisioning max_tokens returns an empty body with finish_reason=length and no error — the same shape as a review that silently did not happen. Provision generously and check finish_reason."
+      "why": "Re-admitted 2026-09-30 on the bar this file requires, not renamed in. NaN retired its predecessor mimo-v2.5 that day: it hung, then answered 401 'This API key does not have access to the requested model' (AI-045, mlorentedev/dotfiles#1763). mimo-v2.5 had been admitted 2026-08-20 on a planted-defect test, and the successor was given the same one: the `((count++))` exit-status-1 case under `set -e` from the dotfiles prohibited-pattern table. mimo-v2.6-flash found it in 21 s and 772 completion tokens, named a failing input (count=0), and gave the fix (`count=$((count + 1))`). deepseek-v4-flash, run on the same prompt, found the same defect in 9 s. That is agreement on one planted defect, not a quality ranking, and it is stated as that. It stays a SECOND fallback, after the provider-diverse one, because provider diversity remains the stronger property. Profile: 1M context, reasoning chain, which is this pool's line against qwen3.6 and gemma4 at 262K.",
+      "operational_note": "Reasoning models here emit reasoning_content BEFORE content. Under-provisioning max_tokens returns an empty body with finish_reason=length and no error — the same shape as a review that silently did not happen (dotfiles lesson 213). Provision generously and check finish_reason. NaN recommends max_tokens >= 300 for this model and publishes a per-model concurrency limit of 5."
     }
   ]
 }
