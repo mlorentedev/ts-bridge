@@ -38,7 +38,10 @@ input:
 
 Use `--force` with `init` or `auth set` only when intentionally replacing an
 existing profile or rotated key. `.env` and `--auth-key-file` remain compatibility
-paths, not the preferred multi-device operating model.
+paths, not the preferred multi-device operating model. If a Windows client still
+uses `--auth-key-file`, trim the file's inheritance with
+`icacls <file> /inheritance:r /grant:r "$env:USERNAME:F"`; `chmod` has no effect
+on NTFS ACLs.
 
 When migrating an existing client, remove `TS_AUTHKEY` from its `.env` file and
 process environment before relying on the managed credential. Environment
