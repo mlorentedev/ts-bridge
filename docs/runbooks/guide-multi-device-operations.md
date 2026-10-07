@@ -48,8 +48,10 @@ process environment before relying on the managed credential. Environment
 variables have higher precedence and would otherwise keep the legacy key active
 after `auth set` stores or rotates the profile credential.
 
-Remove `TS_TARGET` the same way, together with any `target:` key in the YAML
-config file. Both rank above the profile, so either one silently replaces the
+Remove `TS_TARGET` the same way. If the client also launches with
+`--config <file>` (a legacy `ts-bridge.yaml` written by `init --format yaml`), drop
+`--config` or remove the `target:` key from that file; leave `profiles.yaml`
+alone. Both rank above the profile, so either one silently replaces the
 profile's target and `connect --profile office` reaches the wrong endpoint.
 
 ## Launch Commands
