@@ -86,18 +86,22 @@ The `office` profile connected this Windows workstation to
 | Bidirectional application probe | Valid 19-byte RDP X.224 Connection Confirm |
 | Network interruption | 73.76-second Wi-Fi outage; probe failed during outage |
 | Recovery | Same process recovered in 3.5 seconds after Wi-Fi returned |
-| Transient retries | Closed remote port produced 4 total attempts with backoff |
+| Transient retries | Closed remote port produced 4 total attempts (1 initial + the default 3 retries, `--dial-retries` unset) with backoff |
 | Terminal failure | NXDOMAIN stopped after one attempt |
 | Sustained load | 1,000/1,000 RDP negotiations; 0 failures; 29.88 connections/s |
 | Latency | p50 26.39 ms; p95 38.35 ms; p99 85.27 ms |
 | Interactive RDP payload | 8,096,109 bytes over 487.41 seconds; 0 errors; operator confirmed responsive use |
-| Resource stability | Working set 72.68-73.71 MiB; handles 1040-1042; threads 74-75 |
+| Resource stability | Working set 72.68-73.71 MiB; handles 1040-1042; threads 74-75, sampled across the 33.47-second load run |
 | Final state | `active_connections: 0`; readiness remained `ok` |
 
 The interactive session averaged 0.133 Mbps across active and idle periods.
 Byte totals became visible only after disconnect because live sessions are not
 yet reflected in `total_bytes_tx` / `total_bytes_rx`; #415 tracks that
 observability defect.
+
+The resource window is the 33.47-second load run, which shows no growth within it but is too
+short to rule out a slow leak. The 487-second interactive session stayed at about 42-44 MiB
+working set, 472-480 handles and 20 threads (second bridge instance; figures in #183).
 
 ## Windows Runtime Notes
 
