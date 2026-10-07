@@ -109,6 +109,34 @@ One REAL Blocker and two THEORETICAL Majors. Contract files unchanged again.
 - GREEN: `bash scripts/tests/test-doc-authkey.sh` -> 46/46 (23 fixtures x bash + zsh).
 - Real tree: `check-doc-authkey: OK (73 files)`; `shellcheck` clean.
 
+## Review round 3 (`agy/gemini-3.1-pro-high`, FAIL at `fe7f821`) and the redesign
+
+Round 3 found two more REAL Blockers and a REAL Major of the same kind as rounds 1 and 2 (a
+quoted executable path, a root `# ` prompt, a subshell), plus a case-sensitivity Major, a
+`--verbose init` false positive and a command-substitution assignment. Three rounds of bypasses
+of one matcher meant the approach was wrong, not the patches: enumerating invocations cannot close
+the class. The guard now classifies by **region** (see the threat model added to `proposal.md`,
+which moves the contract digest on purpose): every logical command in a fenced or indented code
+block is checked with no command recognition at all, and in prose only an inline code span that
+names `ts-bridge`. `init` keeps its warned exception only as the single key of an unsplittable
+segment, so a second key in a subshell is a finding.
+
+| Finding | Disposition | Evidence |
+|---|---|---|
+| Blocker: quoted executable paths and names | **Fixed by the redesign** | `connect-quoted-path` (exit 0 against `fe7f821`, 1 now) |
+| Blocker: root `# ` and `% ` prompts | **Fixed by the redesign** | `connect-root-prompt` |
+| Major: subshells and brace groups | **Fixed by the redesign**; two keys in one segment are a finding even under `init` | `connect-subshell`, `init-subshell-two-keys` |
+| Major (THEORETICAL): `.EXE` | **Fixed by the redesign** | `connect-upper-exe` |
+| Minor (THEORETICAL): `ts-bridge --verbose init` false positive | **Fixed by the redesign**: `init` is a token, not a position | `init-flag-before-subcommand` (exit 1 against `fe7f821`, 0 now) |
+| Minor: `FOO=$(echo val) ts-bridge` | **Fixed by the redesign** | `connect-command-substitution` |
+
+- `connect-indented-code` pins the indented-code region.
+- GREEN: `bash scripts/tests/test-doc-authkey.sh` -> 62/62 (31 fixtures x bash + zsh); 31/31
+  under `mawk` and under `busybox awk`.
+- RED against `fe7f821`: six of the eight new fixtures fail as described; `connect-indented-code`
+  and `init-subshell-two-keys` were already caught and pin behaviour that must not regress.
+- Real tree: `check-doc-authkey: OK (73 files)`; `shellcheck` clean.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.

@@ -18,43 +18,18 @@ for file in "${files[@]}"; do
   display="${file#"$SCAN_ROOT"/}"
   output="$(
     awk -v file="$display" '
-      function normalize(segment) {
-        sub(/^[[:space:]]*>[[:space:]]*/, "", segment)
-        sub(/^[[:space:]]+/, "", segment)
-        sub(/^[$][[:space:]]+/, "", segment)
-        sub(/^([-*+]|[0-9]+\.)[[:space:]]+/, "", segment)
-        sub(/[[:space:]]+$/, "", segment)
-        if (segment ~ /^`[^`]+`$/) {
-          sub(/^`/, "", segment)
-          sub(/`$/, "", segment)
+      # The guard asks where an inline key appears, not how ts-bridge was invoked:
+      # three review rounds showed a command matcher can always be wrapped
+      # (sudo, quotes, prompts, subshells, runners). So every logical command in
+      # a code region is checked, and in prose only an inline code span that
+      # names ts-bridge is.
+      function auth_key_count(text, n) {
+        n = 0
+        while (match(text, /--auth-key([[:space:]]+|=)[^[:space:]`]+/)) {
+          n++
+          text = substr(text, RSTART + RLENGTH)
         }
-        return strip_prefixes(segment)
-      }
-      # Wrappers that still run ts-bridge with the same arguments: the
-      # PowerShell call operator, sudo, env, go run, and VAR=value assignments
-      # (bare, "double-quoted" or 'single-quoted').
-      function strip_prefixes(segment, changed) {
-        do {
-          changed = 0
-          if (sub(/^&[[:space:]]+/, "", segment)) changed = 1
-          if (sub(/^sudo([[:space:]]+-[^[:space:]]+)*[[:space:]]+/, "", segment)) changed = 1
-          if (sub(/^env[[:space:]]+/, "", segment)) changed = 1
-          if (sub(/^go[[:space:]]+run[[:space:]]+/, "", segment)) changed = 1
-          if (sub(/^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|\047[^\047]*\047|[^[:space:]"\047]*)[[:space:]]+/, "", segment)) changed = 1
-        } while (changed)
-        return segment
-      }
-      # Any path prefix counts: ./, .\, /usr/local/bin/, C:\tools\.
-      function is_command(segment) {
-        segment = normalize(segment)
-        return segment ~ /^([^[:space:]]*[\/\\])?ts-bridge(\.exe)?([[:space:]]|$)/
-      }
-      function contains_command(text, parts, count, pos) {
-        count = split(text, parts, /(;|&&|\|\|?)/)
-        for (pos = 1; pos <= count; pos++) {
-          if (is_command(parts[pos])) return 1
-        }
-        return 0
+        return n
       }
       function has_warning(first, last, pos, warning) {
         first = first > 3 ? first - 3 : 1
@@ -65,13 +40,15 @@ for file in "${files[@]}"; do
         }
         return 0
       }
-      function scan_command(text, first, last, parts, count, pos, segment) {
+      # init may still take an inline key next to a process-table warning, but
+      # only when it is the one key in an unsplittable segment: a second key in
+      # the same segment (a subshell, a brace group) is a finding.
+      function scan_command(text, first, last, parts, count, pos, keys) {
         count = split(text, parts, /(;|&&|\|\|?)/)
         for (pos = 1; pos <= count; pos++) {
-          segment = normalize(parts[pos])
-          if (!is_command(segment) ||
-              segment !~ /--auth-key([[:space:]]+|=)[^[:space:]`]+/) continue
-          if (segment ~ /^([^[:space:]]*[\/\\])?ts-bridge(\.exe)?[[:space:]]+init([[:space:]]|$)/) {
+          keys = auth_key_count(parts[pos])
+          if (keys == 0) continue
+          if (keys == 1 && parts[pos] ~ /(^|[[:space:]])init([[:space:]]|$)/) {
             if (!has_warning(first, last)) {
               printf "%s:%d: init --auth-key example has no nearby process-table warning\n", file, last
             }
@@ -80,28 +57,44 @@ for file in "${files[@]}"; do
           }
         }
       }
+      function scan_prose(line, i, span) {
+        while (match(line, /`[^`]+`/)) {
+          span = substr(line, RSTART + 1, RLENGTH - 2)
+          line = substr(line, RSTART + RLENGTH)
+          if (span ~ /ts-bridge/) scan_command(span, i, i)
+        }
+      }
       { lines[FNR] = $0 }
       END {
         command = ""
         first = 0
+        fence = ""
         for (i = 1; i <= FNR; i++) {
           line = lines[i]
+          if (match(line, /^[[:space:]]*(```|~~~)/)) {
+            marker = substr(line, RSTART + RLENGTH - 3, 3)
+            if (fence == "") fence = marker
+            else if (marker == fence) fence = ""
+            command = ""
+            continue
+          }
+          if (fence == "" && line !~ /^(    |\t)/) {
+            if (command != "") { scan_command(command, first, i - 1); command = "" }
+            scan_prose(line, i)
+            continue
+          }
           # A PowerShell continuation backtick follows whitespace; a backtick
           # glued to the text closes an inline code span instead.
           continued = line ~ /(\\|[[:space:]]`)[[:space:]]*$/
           if (continued) sub(/[\\`][[:space:]]*$/, "", line)
-          if (command == "" && contains_command(line)) {
-            command = line
-            first = i
-          } else if (command != "") {
-            command = command " " line
-          }
-          if (command != "" && !continued) {
+          if (command == "") first = i
+          command = command == "" ? line : command " " line
+          if (!continued) {
             scan_command(command, first, i)
             command = ""
-            first = 0
           }
         }
+        if (command != "") scan_command(command, first, FNR)
       }
     ' "$file"
   )"

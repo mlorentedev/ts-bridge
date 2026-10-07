@@ -42,6 +42,14 @@ tests on every pull request and push to `master`.
 - The original issue predates #306. `init --auth-key-file` now exists and the real tree has no
   inline `init` examples, but the specified warning-gated exception remains covered as a regression
   contract rather than being exercised by current documentation.
+- **Threat model (added after three review rounds, 2026-10-06).** The guard is a regression lint
+  for examples maintainers write, the SEC-212 contract kept true by CI. It is not a defence against
+  documentation authored to evade it. So it classifies by *region*, not by recognising the
+  command: every logical command in a fenced or indented code block is checked, and in prose only
+  an inline code span that names `ts-bridge` is. A wrapper, prompt, quote or subshell therefore
+  cannot hide a key in a code block. What stays out of scope: inline keys in prose outside a code
+  span, and evasions that have neither an occurrence in the tree nor a plausible documentation use.
+  Findings of that kind are tracked as gaps, not blockers.
 - No blocking open questions remain.
 
 ## Acceptance criteria

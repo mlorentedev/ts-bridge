@@ -28,7 +28,15 @@ pipe-no-key:0:OK
 connect-split-after-binary:1:inline --auth-key
 connect-quoted-env:1:inline --auth-key
 connect-single-quoted-env:1:inline --auth-key
-connect-go-run:1:inline --auth-key'
+connect-go-run:1:inline --auth-key
+connect-quoted-path:1:inline --auth-key
+connect-root-prompt:1:inline --auth-key
+connect-subshell:1:inline --auth-key
+connect-upper-exe:1:inline --auth-key
+connect-command-substitution:1:inline --auth-key
+connect-indented-code:1:inline --auth-key
+init-flag-before-subcommand:0:OK
+init-subshell-two-keys:1:inline --auth-key'
 
 failed=0
 for sh_name in ${TDA_SHELLS:-bash zsh}; do

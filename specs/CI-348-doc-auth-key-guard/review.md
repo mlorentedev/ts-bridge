@@ -1,44 +1,48 @@
 ---
 spec: "CI-348-doc-auth-key-guard"
 verdict: "FAIL"
-reviewed_sha: "c5cceef8e023246b3bd6da40b3ac8149e3ff257c"
+reviewed_sha: "fe7f821646a17c20291a2bb44ccceca96ddb0d9e"
 reviewer: "agy/gemini-3.1-pro-high"
 date: "2026-10-06"
 ---
+
 ## Adversarial review
 
 **Scope**: CI-348-doc-auth-key-guard
-**Sources**: `specs/CI-348-doc-auth-key-guard/{proposal,tasks,verification}.md`, PR diff `0b23df6e9b8e1298b66f84d3c21d4116b420770d...HEAD`
+**Sources**: `specs/CI-348-doc-auth-key-guard/`, `git diff 0b23df6e9b8e1298b66f84d3c21d4116b420770d...HEAD`
 
 ### Spec and task alignment
-- `check-doc-authkey.sh` was introduced and wired into the GitHub Actions workflow successfully.
-- Tests exercise multiple shell syntaxes, but miss edge cases where commands are split at the binary name or executed via wrappers.
+- The guard successfully implements the core requirements: scanning `README.md` and `docs/`, flagging inline `--auth-key` usages, and providing an exception for warned `init` commands.
+- The `repo-hygiene.yml` integration ensures it runs automatically.
+- However, the `awk` regex-based command parser misses several common shell syntax patterns, allowing significant bypasses where an inline key would go unnoticed.
 
 ### Findings
 
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
 |----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Blocker  | REAL    | regex | `is_command` expects a trailing space after `ts-bridge`, so a line split immediately after the command (`ts-bridge \`) drops the space and bypasses the guard entirely. | `ts-bridge \ \n connect --auth-key tskey...` returns `OK`. | UNTESTED | code + tests |
-| Major    | THEORETICAL | wrapper | `strip_prefixes` fails to strip environment variables whose values contain spaces (e.g., `VAR="a b" ts-bridge`) because its regex `[^[:space:]]*` stops at the first space. | `VAR="value with spaces" ts-bridge ...` returns `OK`. | UNTESTED | code + tests |
-| Major    | THEORETICAL | wrapper | Execution via runners like `docker run` or `go run` bypasses `is_command` because the regex anchors `ts-bridge` to the start of the segment. A future doc using a runner will silently bypass the guard. | `docker run mlorentedev/ts-bridge connect ...` returns `OK`. | UNTESTED | code + tests |
+| Blocker  | REAL    | parser | Quoted executable paths and names (`"C:\Program Files\ts-bridge.exe"`, `"ts-bridge"`) bypass `is_command`. Spaces break `[^[:space:]]*`, and the closing quote breaks the `([[:space:]]\|$)` suffix check. | Manually verified: `"ts-bridge" connect --auth-key X` and `& "C:\Program Files\ts-bridge\ts-bridge.exe" connect --auth-key X` return exit 0 | UNTESTED | code + tests |
+| Blocker  | REAL    | parser | Root shell prompts (`# `) and alternative prompts (`% `) are not stripped by `normalize` (only `$ ` and `> ` are). This bypasses `is_command` completely, and also silently ignores commented-out examples. | Manually verified: `# ts-bridge connect --auth-key X` returns exit 0 | UNTESTED | code + tests |
+| Major    | REAL    | parser | Subshells `(...)` and brace groups `{ ... }` bypass the guard because `split` on `;`, `&&`, `\|\|`, `\|` leaves the opening bracket attached to the command (e.g., `(ts-bridge`), failing `is_command`. | Manually verified: `(ts-bridge connect --auth-key X)` returns exit 0 | UNTESTED | code + tests |
+| Major    | THEORETICAL | parser | `is_command` is case-sensitive, so Windows documentation using `.EXE` (e.g., `ts-bridge.EXE`) bypasses the guard. | Manually verified: `ts-bridge.EXE connect --auth-key X` returns exit 0 | UNTESTED | code + tests |
+| Minor    | THEORETICAL | parser | False positive: `ts-bridge --verbose init ...` with a nearby warning is flagged as forbidden because `scan_command` rigidly expects `init` to immediately follow the binary name. | Manually verified: `ts-bridge --verbose init --auth-key X` fails despite nearby warning | UNTESTED | code + tests |
+| Minor    | REAL    | parser | Command substitutions with spaces in env-var assignments (`FOO=$(echo val) ts-bridge`) bypass `strip_prefixes` because `[^[:space:]"\047]*` halts at the space, corrupting the segment. | Manually verified: `FOO=$(echo val) ts-bridge connect --auth-key X` returns exit 0 | UNTESTED | code + tests |
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | D | `ts-bridge \` parsing defect completely bypasses the guard for a common multi-line pattern. |
-| Verification       | B | Evidence covers criteria but misses several edge cases in command prefixes and splits. |
+| Correctness        | C | Criteria partially met; substantial negative-path gaps (Windows paths, root prompts, subshells). |
+| Verification       | B | Evidence covers criteria and relies on a strong fixture suite, but misses several edge cases. |
 | Scope              | A | Diff matches proposal exactly; no scope creep. |
-| Reliability        | B | Awk parser is mostly reliable but brittle around shell edge cases. |
-| Maintainability    | B | Clear naming and structure, but `strip_prefixes` regexes are hard to maintain. |
-| Handoff-readiness  | A | Spec updates and verification artifacts are present and well-documented. |
+| Reliability        | B | Most error paths handled; the bash script is resilient to missing files. |
+| Maintainability    | B | Acceptable structure for awk; logic is reasonably decomposed into functions. |
+| Handoff-readiness  | B | Spec updates and verification are clear. |
 
 ### Verdict
 FAIL
 
 ### Recommended next steps
-- Update `is_command` regex to allow `ts-bridge` at the end of the segment: `^([^[:space:]]*[\/\\])?ts-bridge(\.exe)?([[:space:]]|$)`
-- Update `strip_prefixes` to properly handle quoted strings in environment variables.
-- Update `is_command` or `contains_command` to detect `ts-bridge` when executed via common wrappers like `docker run` or `go run`.
-- Add fixtures for `ts-bridge \` (split), `VAR="with spaces"`, and `docker run` to `scripts/tests/fixtures/doc-authkey/` and ensure they fail without the fixes.
-- Do not run `/spec archive` until the code is fixed and a re-review passes.
+- Fix `scripts/check-doc-authkey.sh` to correctly strip root prompts (`# `) and brackets (`(`, `{`).
+- Update `is_command` to handle quoted paths and spaces in paths, and make `.exe` matching case-insensitive.
+- Add tests to `scripts/tests/test-doc-authkey.sh` and corresponding fixtures for each of the UNTESTED findings.
+- Re-run `bash scripts/tests/test-doc-authkey.sh` to prove the gaps are closed, then re-review.
