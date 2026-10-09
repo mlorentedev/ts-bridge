@@ -27,7 +27,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
 
       - name: Download dependencies
         run: go mod download
@@ -76,7 +76,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
 
       - name: Build
         run: go build -v ./...
@@ -104,7 +104,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
 
       - name: Build binary
         run: go build -o ts-bridge ./cmd/ts-bridge/
@@ -131,7 +131,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
 
       - name: Build for ${{ matrix.goos }}/${{ matrix.goarch }}
         env:
@@ -154,7 +154,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
@@ -162,7 +162,7 @@ jobs:
           # Pinned so local `golangci-lint run` and CI report identical findings.
           # Bump deliberately when the project upgrades; do not silently track latest.
           # v2.x is required by golangci-lint-action@v9 and uses the v2 config schema.
-          version: v2.12.2
+          version: v2.14.0
 
   security:
     runs-on: ubuntu-latest
@@ -173,11 +173,10 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
 
       - name: Run gosec
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           gosec ./...
-
 
