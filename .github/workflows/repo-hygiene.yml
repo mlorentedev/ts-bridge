@@ -41,9 +41,11 @@ jobs:
         run: bash scripts/tests/test-check-review-published.sh
       - name: Site changes keep their pull-request build gate
         run: bash scripts/tests/test-site-pr-workflow.sh
+      - name: Go workflows follow the module toolchain
+        run: bash scripts/tests/test-go-toolchain.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
       - name: Install actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       # ubuntu-latest ships shellcheck preinstalled; actionlint shells out to it to lint

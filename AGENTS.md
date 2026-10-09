@@ -4,7 +4,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 
 ## Tech Stack
 
-- **Language:** Go 1.26+
+- **Language:** Go 1.27.1+
 - **Key dependency:** `tailscale.com/tsnet` (userspace networking) — version pinned in `go.mod`
 - **Architecture:** Single binary, multi-package — `cmd/ts-bridge/main.go` (~40 lines, thin entry point) delegates to the `cmd/cli` Cobra tree (ADR-010) over eight `internal/` packages (ADR-007).
 - **Config:** Flags, environment variables, and YAML config files, in that precedence order, plus named profiles (ADR-011/012). `.env.example` documents the env-var surface; `init` writes either format.
@@ -44,7 +44,7 @@ go build -o ts-bridge ./cmd/ts-bridge/
 go test -race -v ./...
 
 # Lint (CI pins this version via golangci-lint-action@v9 — match it to avoid drift)
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 golangci-lint run
 
 # Security scan
