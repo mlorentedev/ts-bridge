@@ -7,9 +7,9 @@ created: "2026-10-09"
 
 ## Evidence
 
-- [x] Criterion 1 -> `go version` returned `go1.27.1 windows/amd64`; `go mod tidy` followed by `go mod verify` succeeded, and `git diff FETCH_HEAD -- go.mod go.sum --exit-code` confirmed the graph matches Dependabot #431. Module files had line-ending normalization only.
-- [x] Criterion 2 -> `bash scripts/tests/test-go-toolchain.sh` first failed on the original 1.26 CI pins, then passed on all four workflows; a conflicting `go-version` fixture first failed the test, then was rejected after the guard fix. `actionlint` succeeded on all four edited workflows.
-- [ ] Criterion 3 -> Windows `go build ./...`, `go vet ./...`, `go test -count=1 ./...` and pinned `golangci-lint v2.14.0 run` succeeded; all six cross-builds succeeded. Linux race and Windows CI checks remain pending until the PR runs.
+- [x] Criterion 1 -> `go version` returned `go1.27.1 windows/amd64`; `go mod tidy` followed by `go mod verify` succeeded, and `git diff --exit-code FETCH_HEAD -- go.mod go.sum` confirmed the graph matches Dependabot #431. Module files had line-ending normalization only.
+- [x] Criterion 2 -> `bash scripts/tests/test-go-toolchain.sh` first failed on the original 1.26 CI pins, then passed on all four workflows; conflicting-version, missing-setup and linter-mismatch fixtures are rejected. `actionlint` succeeded on all four edited workflows.
+- [ ] Criterion 3 -> Windows `go build ./...`, `go vet ./...`, `go test -count=1 ./...` and pinned `golangci-lint v2.14.0 run` succeeded; all six cross-builds succeeded. On PR #436 head `b8ff388`, Linux race, Windows, smoke, lint and all cross-build CI checks passed; recheck the head after the review fixes.
 - [x] Criterion 4 -> `AGENTS.md` declares Go 1.27.1+ and installs golangci-lint v2.14.0; `go.mod` and `.github/workflows/ci.yml` match.
 
 ## Test status
@@ -17,6 +17,7 @@ created: "2026-10-09"
 - `go test -count=1 ./...` -> PASS, all Go packages on Windows after the upgrade. The original `go test ./...` baseline had one load-dependent SSH readiness timeout; its isolated test passed 3/3 before any changes.
 - `go vet ./...`, `go build ./...`, `golangci-lint v2.14.0 run` -> PASS (`0 issues`). The pinned binary's published SHA256 matched its release checksums; it was built with Go 1.27.0.
 - `actionlint -shellcheck=shellcheck` on four workflows, `shellcheck scripts/tests/test-go-toolchain.sh`, `bash scripts/tests/test-go-toolchain.sh`, `bash scripts/check-lessons.sh` -> PASS.
+- The toolchain guard now checks each Go-running job for `setup-go` and rejects module Go versions newer than the approved linter's Go compiler or pins that drift from `AGENTS.md`.
 - Cross-compile `./cmd/ts-bridge/` for linux/windows/darwin on amd64/arm64 -> PASS (6/6).
 - Manual CLI smoke: `go run ./cmd/ts-bridge version` -> `ts-bridge dev (commit unknown)`.
 - `go test -race ./...` not run locally: this Windows workstation does not have the required C toolchain; Linux CI exercises the race build.
