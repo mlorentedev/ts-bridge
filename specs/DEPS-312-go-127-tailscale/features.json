@@ -1,0 +1,30 @@
+[
+  {
+    "id": "DEPS-312-go-127-tailscale-f1",
+    "behavior": "Go 1.27.1 and Tailscale v1.104.0 have a tidy module graph",
+    "verification": "go mod tidy && git diff --exit-code -- go.mod go.sum",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "DEPS-312-go-127-tailscale-f2",
+    "behavior": "Every Go workflow derives its toolchain from go.mod",
+    "verification": "bash scripts/tests/test-go-toolchain.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "DEPS-312-go-127-tailscale-f3",
+    "behavior": "The upgraded compiler and pinned linter build and check the project",
+    "verification": "go build ./... && go vet ./... && go test ./... && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "DEPS-312-go-127-tailscale-f4",
+    "behavior": "Operator instructions reflect the new minimum Go and lint versions",
+    "verification": "grep -q 'Go 1.27.1+' AGENTS.md && grep -q 'golangci-lint@v2.14.0' AGENTS.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
