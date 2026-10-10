@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.19.1](https://github.com/mlorentedev/ts-bridge/compare/v1.19.0...v1.19.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** close the doc auth-key guard bypasses found in review ([#421](https://github.com/mlorentedev/ts-bridge/issues/421)) ([ec34eb7](https://github.com/mlorentedev/ts-bridge/commit/ec34eb75343a8e1260c88eebf4ab9019840d0ce2))
+* **ci:** move PR-Agent off the retired mimo-v2.5 model ([#413](https://github.com/mlorentedev/ts-bridge/issues/413)) ([177355c](https://github.com/mlorentedev/ts-bridge/commit/177355cea297e6026a38234935dec463ae7d10bc))
+* **ci:** stop check-lessons reporting indexed lessons as missing ([#419](https://github.com/mlorentedev/ts-bridge/issues/419)) ([b098987](https://github.com/mlorentedev/ts-bridge/commit/b098987cd2dc2179628d282df2a00b826313e129))
+* **init:** require a control plane for Headscale keys ([#406](https://github.com/mlorentedev/ts-bridge/issues/406)) ([cea8341](https://github.com/mlorentedev/ts-bridge/commit/cea83417b0d1d398e5f7d03d4f8d816d1912444a))
+
 ## [1.19.0](https://github.com/mlorentedev/ts-bridge/compare/v1.18.0...v1.19.0) (2026-10-01)
 
 
