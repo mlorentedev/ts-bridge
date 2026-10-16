@@ -108,6 +108,19 @@ ts-bridge connect --profile home    # resolves target+port automatically
 When the profile has a managed `credential` reference, `connect --profile`
 loads it automatically; explicit key sources keep higher precedence.
 
+To store non-secret bootstrap, bind, hostname, state and health settings in an
+existing profile, import its local runtime YAML once:
+
+```bash
+ts-bridge init --profile home --config runtime.yaml --force
+ts-bridge connect --profile home
+```
+
+This preserves the existing target and managed credential when omitted. The
+daily command stays in the foreground and rejects an already active profile.
+See the [profile connection runbook](docs/runbooks/guide-profile-connections.md)
+for SSH diagnostics, listener isolation and a TLS-valid destination probe.
+
 ### 2. Host Setup (Admin)
 
 Ensure Tailscale is running on the target machine and RDP is enabled. Configure the host in three steps:

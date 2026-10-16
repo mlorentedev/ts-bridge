@@ -16,6 +16,7 @@ import (
 type PartialConfig struct {
 	Version            int               `yaml:"version"`
 	Target             string            `yaml:"target"`
+	LocalAddr          string            `yaml:"local_addr"`
 	SOCKS5Addr         string            `yaml:"socks5_addr"`
 	SOCKS5Routes       map[string]string `yaml:"socks5_routes"`
 	Hostname           string            `yaml:"hostname"`
@@ -258,6 +259,7 @@ func applyYAML(cfg *Config, yamlCfg PartialConfig) {
 	// String fields — apply if non-empty.
 	applyStringFields(cfg, yamlCfg.Target, yamlCfg.SOCKS5Addr, yamlCfg.Hostname,
 		yamlCfg.ControlURL, yamlCfg.StateDir, yamlCfg.HealthAddr, yamlCfg.LogFormat)
+	applyFlagString(&cfg.LocalAddr, yamlCfg.LocalAddr)
 	applyFlagString(&cfg.BootstrapSSH, yamlCfg.BootstrapSSH)
 	applyFlagString(&cfg.BootstrapSOCKSAddr, yamlCfg.BootstrapSOCKSAddr)
 	for source, destination := range yamlCfg.SOCKS5Routes {
