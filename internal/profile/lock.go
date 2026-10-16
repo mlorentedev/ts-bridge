@@ -18,11 +18,12 @@ func (s *Store) Lock(name string) (*os.File, error) {
 		return nil, fmt.Errorf("profile name must not be empty")
 	}
 	directory := filepath.Join(filepath.Dir(s.path), "locks")
+	// #nosec G703 -- root is the configured profile store; the directory suffix is fixed.
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return nil, fmt.Errorf("create profile ownership directory: %w", err)
 	}
 	path := filepath.Join(directory, fmt.Sprintf("%x.lock", sha256.Sum256([]byte(name))))
-	// #nosec G304 -- private store directory and a hashed, not path-interpreted, name.
+	// #nosec G304 G703 -- configured store root and a SHA-256 filename, never a path-interpreted profile name.
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open ownership file for profile %q: %w", name, err)

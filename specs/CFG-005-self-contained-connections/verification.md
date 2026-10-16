@@ -82,6 +82,27 @@ needed for that path. Workstation alert disposition remains separate.
   exercises auth-key-prefix rejection without a credential-shaped suffix.
   No real credential was read, published or used by these tests.
 
+### First CI result and lint disposition
+
+CI run `38951054818` tested published head `ab8e279`:
+
+- Linux `go test -v -race -coverprofile=coverage.out ./...` -> passed.
+- Native Windows `go test ./...` -> passed.
+- Linux/Windows `go vet ./...` and builds -> passed.
+- Smoke, security, hygiene and six release-target builds -> passed.
+- `golangci-lint run` -> failed with three gosec taint findings: G703 at
+  `Lock`'s `MkdirAll`/`OpenFile`, and G702 at the test helper subprocess.
+
+The production store path is supplied by `config.ProfileStorePath`; lock
+directory suffixes are fixed and profile names become SHA-256 filenames.
+`TestProfileLockLifecycle` already covers a traversal-shaped profile name.
+The subprocess executes this test binary with a fixed selector and no shell;
+`TestProfileLockReleasedAfterProcessExit` covers its ownership lifecycle.
+Record narrowly scoped G703/G702 justifications at those calls, following the
+existing repository annotation convention. Do not disable rules globally or
+change path/command behavior to appease the analyzer. Fresh CI is required
+after the annotation-only fix; the earlier run is not a lint pass.
+
 ## Related Findings and Disposition
 
 - Corrected the related SOCKS runbook's host-key-verification bypass; normal known_hosts storage and first-use fingerprint verification remain required.

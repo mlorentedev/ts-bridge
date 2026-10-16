@@ -57,7 +57,7 @@ func TestProfileLockReleasedAfterProcessExit(t *testing.T) {
 	storePath := filepath.Join(t.TempDir(), "profiles.yaml")
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-	// #nosec G204 -- fixed test selector and the current test executable.
+	// #nosec G204 G702 -- fixed test selector and the current test executable, without a shell.
 	child := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestProfileLockHelperProcess$")
 	child.Env = append(os.Environ(), "TS_BRIDGE_PROFILE_LOCK_HELPER="+storePath)
 	stdout, err := child.StdoutPipe()
