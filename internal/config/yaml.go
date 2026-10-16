@@ -19,6 +19,7 @@ func decodeYAML(data []byte, cfg *PartialConfig) error {
 	knownFields := map[string]bool{
 		"version":              true,
 		"target":               true,
+		"local_addr":           true,
 		"socks5_addr":          true,
 		"socks5_routes":        true,
 		"hostname":             true,

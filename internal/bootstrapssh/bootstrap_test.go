@@ -9,7 +9,9 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -91,6 +93,7 @@ func TestBuildSSHArgsRejectsNonLoopbackSOCKSAddress(t *testing.T) {
 }
 
 func TestStartWaitsForSOCKSAndClosesProcess(t *testing.T) {
+	t.Setenv("SSH_AUTH_SOCK", "")
 	started := make(chan struct{})
 	deps := dependencies{
 		lookPath: func(string) (string, error) { return "ssh", nil },
@@ -130,12 +133,17 @@ func TestStartWaitsForSOCKSAndClosesProcess(t *testing.T) {
 }
 
 func TestStartReportsEarlyExit(t *testing.T) {
+	var child *exec.Cmd
 	deps := dependencies{
-		lookPath: func(string) (string, error) { return "ssh", nil },
-		commandContext: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		lookPath: func(string) (string, error) { return "selected-openssh-client", nil },
+		commandContext: func(ctx context.Context, path string, args ...string) *exec.Cmd {
+			if path != "selected-openssh-client" {
+				t.Fatalf("unexpected SSH client %q", path)
+			}
 			//nolint:gosec // os.Args[0] and the test selector are fixed test-process inputs.
 			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=TestSSHHelperProcess")
 			cmd.Env = append(os.Environ(), "TS_BRIDGE_SSH_HELPER=exit")
+			child = cmd
 			return cmd
 		},
 		dialContext: func(context.Context, string, string) (net.Conn, error) {
@@ -151,6 +159,18 @@ func TestStartReportsEarlyExit(t *testing.T) {
 	}, deps)
 	if err == nil || !strings.Contains(err.Error(), "exited before SOCKS listener became ready") {
 		t.Fatalf("start() error = %v", err)
+	}
+	for _, hint := range []string{"selected-openssh-client", "ssh -v", "IdentityFile", "ssh-agent", "ssh-add -l", "interactively"} {
+		if !strings.Contains(err.Error(), hint) {
+			t.Errorf("SSH failure is missing %q guidance: %v", hint, err)
+		}
+	}
+	if child.Stdin != os.Stdin || child.Stdout != os.Stdout || child.Stderr != os.Stderr {
+		t.Fatal("SSH terminal streams must remain inherited for interactive unlock")
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("SSH failure lost the original exit error: %v", err)
 	}
 }
 
@@ -227,6 +247,27 @@ func TestStartReportsMissingOpenSSH(t *testing.T) {
 	}, deps)
 	if err == nil || !strings.Contains(err.Error(), "OpenSSH executable") {
 		t.Fatalf("start() error = %v", err)
+	}
+	if !strings.Contains(err.Error(), "install OpenSSH") || !errors.Is(err, exec.ErrNotFound) {
+		t.Fatalf("missing-client error must give installation/PATH guidance and retain its cause: %v", err)
+	}
+}
+
+func TestStartReportsUnlaunchableOpenSSH(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing-ssh")
+	_, err := start(t.Context(), Config{
+		Endpoint: "bastion.example.com", SOCKSAddr: "127.0.0.1:0",
+	}, dependencies{
+		lookPath:       func(string) (string, error) { return path, nil },
+		commandContext: exec.CommandContext,
+	})
+	if err == nil {
+		t.Fatal("expected an OpenSSH process startup error")
+	}
+	for _, hint := range []string{strconv.Quote(path), "IdentityFile", "ssh -v", "interactively"} {
+		if !strings.Contains(err.Error(), hint) {
+			t.Errorf("process startup failure lacks %q: %v", hint, err)
+		}
 	}
 }
 

@@ -56,6 +56,11 @@ func runBrowser(command *cobra.Command, _ []string) error {
 	if options.StartURL == "" {
 		return fmt.Errorf("browser URL is required (provide --url)")
 	}
+	release, err := lockCommandProfile(command)
+	if err != nil {
+		return err
+	}
+	defer release()
 	if LoggerInit != nil {
 		LoggerInit(cfg)
 	}
@@ -117,6 +122,7 @@ func applyBrowserProfile(yamlConfig *config.PartialConfig, flags *config.FlagSet
 	if yamlConfig.ControlURL == "" {
 		yamlConfig.ControlURL = selectedProfile.ControlURL
 	}
+	applyProfileRuntime(yamlConfig, selectedProfile)
 	if flags.AuthKey == "" {
 		flags.AuthKey, err = loadManagedProfileCredential(selectedProfile)
 		if err != nil {

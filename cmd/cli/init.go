@@ -35,6 +35,9 @@ name, and config format (YAML or .env).
 Non-interactive mode (with --auth-key-file or --auth-key, plus --target):
 writes config silently, useful for automation or CI.
 
+Profile mode: --profile NAME --config runtime.yaml --force imports non-secret
+connection settings once, preserving the existing target and managed credential.
+
 Security notes:
   - Auth key input is masked in interactive mode (no echo).
   - In YAML mode the auth key is written to .env, NOT to the YAML file.
@@ -64,6 +67,10 @@ Examples:
 
   # Custom output path
   ts-bridge init --auth-key-file /path/to/key --target 100.64.0.1:3389 --config /etc/ts-bridge.yaml
+
+  # One-time setup for an existing profile; daily use needs no --config
+  ts-bridge init --profile work --config runtime.yaml --force
+  ts-bridge connect --profile work
 `,
 		RunE: runInit,
 	}
@@ -74,7 +81,7 @@ Examples:
 	cmd.Flags().String("instance", "", "Instance name for auto-mode")
 	cmd.Flags().String("port-range", "", "Port range for auto mode (e.g. 33389-34388)")
 	cmd.Flags().String("format", "env", "Output format: yaml or env (default: env)")
-	cmd.Flags().String("config", "", "Output config file path (default: ./ts-bridge.yaml for yaml, ./.env for env)")
+	cmd.Flags().String("config", "", "Config output path, or non-secret YAML input with --profile")
 	cmd.Flags().Bool("force", false, "Overwrite existing config files without prompting")
 	cmd.Flags().String("profile", "", "Write a named profile to the profile store instead of a config file")
 	cmd.Flags().String("control-url", "", "Control plane URL (Headscale) — stored with the profile, or written to the config file")
@@ -152,11 +159,10 @@ func validateProfileModeFlags(cmd *cobra.Command, f initFlags) error {
 		{"auth-key-file", f.AuthKeyFile},
 		{"instance", f.Instance},
 		{"port-range", f.PortRange},
-		{"config", f.Config},
 	}
 	for _, ic := range incompatible {
 		if cmd.Flags().Changed(ic.flag) {
-			return fmt.Errorf("--%s is not compatible with --profile; profiles do not store auth keys or file paths", ic.flag)
+			return fmt.Errorf("--%s is not compatible with --profile; profiles do not store auth keys, credential file paths, or generated instance settings", ic.flag)
 		}
 	}
 	if cmd.Flags().Changed("format") {
@@ -168,25 +174,37 @@ func validateProfileModeFlags(cmd *cobra.Command, f initFlags) error {
 // runInitProfile writes a named profile to the profile store.
 // storePath is injected so tests can pass a temp path without touching the real store.
 func runInitProfile(storePath string, f initFlags) error {
-	if err := validateTarget(f.Target); err != nil {
+	s := profile.NewStore(storePath)
+	profiles, err := s.ListProfiles()
+	if err != nil {
+		return fmt.Errorf("load profile store: %w", err)
+	}
+	selected, exists := profiles[f.Profile]
+	if exists && !f.Force {
+		return fmt.Errorf("profile %q already exists in %s (use --force to overwrite)", f.Profile, storePath)
+	}
+	if f.Config != "" {
+		selected, err = importProfileConfig(f.Config, selected)
+		if err != nil {
+			return err
+		}
+	}
+	if f.Target != "" {
+		selected.Target = f.Target
+	}
+	if f.ControlURL != "" {
+		selected.ControlURL = f.ControlURL
+	}
+	if err := validateTarget(selected.Target); err != nil {
 		return fmt.Errorf("init --profile %q: %w", f.Profile, err)
 	}
 
-	s := profile.NewStore(storePath)
-
-	// Overwrite protection: check if profile already exists.
-	if !f.Force {
-		if _, err := s.Get(f.Profile); err == nil {
-			return fmt.Errorf("profile %q already exists in %s (use --force to overwrite)", f.Profile, storePath)
-		}
-	}
-
-	if err := s.Set(f.Profile, f.Target, f.ControlURL); err != nil {
+	if err := s.Configure(f.Profile, selected); err != nil {
 		return fmt.Errorf("write profile %q: %w", f.Profile, err)
 	}
 
 	fmt.Printf("\nProfile %q written to %s\n", f.Profile, storePath)
-	printNextSteps(f)
+	printProfileNextSteps(f.Profile, selected.Credential != "")
 	return nil
 }
 
@@ -720,9 +738,7 @@ func nowFormatted() string {
 
 func printNextSteps(f initFlags) {
 	if f.Profile != "" {
-		fmt.Println("\nNext steps:")
-		fmt.Printf("  ts-bridge auth set --profile %s\n", f.Profile)
-		fmt.Printf("  ts-bridge connect --profile %s\n\n", f.Profile)
+		printProfileNextSteps(f.Profile, false)
 		return
 	}
 	fmt.Println()
@@ -743,6 +759,14 @@ func printNextSteps(f initFlags) {
 	fmt.Println("  To avoid storing keys in environment variables, use --auth-key-file:")
 	fmt.Println("  ts-bridge connect --auth-key-file /path/to/keyfile")
 	fmt.Println()
+}
+
+func printProfileNextSteps(name string, hasCredential bool) {
+	fmt.Println("\nNext steps:")
+	if !hasCredential {
+		fmt.Printf("  ts-bridge auth set --profile %s\n", name)
+	}
+	fmt.Printf("  ts-bridge connect --profile %s\n\n", name)
 }
 
 // SanitizeHostnameLabel delegates to config.SanitizeHostnameLabel.

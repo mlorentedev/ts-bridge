@@ -1,0 +1,37 @@
+[
+  {
+    "id": "CFG-005-self-contained-connections-f1",
+    "behavior": "AC1: Profile runtime settings survive persistence and existing update paths.",
+    "verification": "go test ./internal/profile -run Runtime -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CFG-005-self-contained-connections-f2",
+    "behavior": "AC2: Profile-only runtime resolution and one-time configuration preserve precedence and credentials.",
+    "verification": "go test ./cmd/cli -run ProfileRuntime -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CFG-005-self-contained-connections-f3",
+    "behavior": "AC3: Profile ownership rejects duplicates, isolates profiles, and releases on process exit.",
+    "verification": "go test ./internal/profile ./cmd/cli -run ProfileLock -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CFG-005-self-contained-connections-f4",
+    "behavior": "AC4: OpenSSH startup failures include actionable client and authentication diagnostics.",
+    "verification": "go test ./internal/bootstrapssh -run 'TestStartReports(MissingOpenSSH|EarlyExit|UnlaunchableOpenSSH)' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CFG-005-self-contained-connections-f5",
+    "behavior": "AC5: A TLS-valid, unauthenticated real Gitea health probe returns status=pass; live duplicate/isolation observations are additionally required in verification.md.",
+    "verification": "powershell -NoProfile -Command \"if (-not [Environment]::GetEnvironmentVariable('TS_BRIDGE_PROBE_ORIGIN') -or -not [Environment]::GetEnvironmentVariable('TS_BRIDGE_PROBE_LOCAL')) { throw 'Set non-secret probe origin hostname and local address' }; if ((curl.exe --noproxy '*' --fail --connect-timeout 5 --max-time 15 --connect-to ([Environment]::GetEnvironmentVariable('TS_BRIDGE_PROBE_ORIGIN') + ':443:' + [Environment]::GetEnvironmentVariable('TS_BRIDGE_PROBE_LOCAL')) ('https://' + [Environment]::GetEnvironmentVariable('TS_BRIDGE_PROBE_ORIGIN') + '/api/healthz') | ConvertFrom-Json).status -ne 'pass') { throw 'Gitea health probe did not return status=pass' }\"",
+    "state": "pending",
+    "evidence": ""
+  }
+]
