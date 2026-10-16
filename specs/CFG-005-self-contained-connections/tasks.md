@@ -38,7 +38,7 @@ created: "2026-10-15"
 - [ ] No unrelated changes in the diff (no scope creep)
 - [ ] `verification.md` filled in
 - [ ] Independent review requested before archive; no archive or completion claim without live AC5 evidence
-- [ ] PR opened referencing this spec folder when authorized
+- [x] PR opened referencing this spec folder when authorized: #442 (draft)
 
 ## Pause - 2026-10-15
 
