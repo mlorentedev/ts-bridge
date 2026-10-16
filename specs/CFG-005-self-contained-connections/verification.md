@@ -71,6 +71,10 @@ needed for that path. Workstation alert disposition remains separate.
   attempt and unrelated-profile/process observations are still required.
 - Independent adversarial review -> not yet run; draft publication is not an
   archive, merge or completion claim.
+- Base integration: retain `master` at `06cfb87` and its dependency versions,
+  including `golang.org/x/sys v0.49.0` as a direct dependency for OS locking.
+  The merge conflict was only direct-versus-indirect placement/version context;
+  upstream `go.sum` is preserved without manually changing checksums.
 
 ## Related Findings and Disposition
 
