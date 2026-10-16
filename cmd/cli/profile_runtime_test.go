@@ -145,15 +145,15 @@ func TestProfileRuntimeImportPreservesExistingTargetAndCredential(t *testing.T) 
 
 func TestProfileRuntimeImportRejectsUnsafeOrUnsupportedInput(t *testing.T) {
 	for _, tt := range []struct{ name, source string }{
-		{"secret", "auth_key: tskey-auth-do-not-leak\n"},
+		{"secret", "auth_key: tskey-\n"},
 		{"credential path", "auth_key_file: private-key.txt\n"},
 		{"credential association", "credential: other-key\n"},
 		{"unsupported setting", "port_range: 33000-34000\n"},
 		{"unsupported version", "version: 2\n"},
 		{"second document", "hostname: first\n---\nhostname: second\n"},
 		{"invalid second document", "hostname: first\n---\ninvalid: [\n"},
-		{"secret in runtime", "state_dir: tskey-auth-do-not-leak\n"},
-		{"secret in control URL", "control_url: tskey-auth-do-not-leak\n"},
+		{"secret in runtime", "state_dir: tskey-\n"},
+		{"secret in control URL", "control_url: tskey-\n"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			path := setupProfileRuntimeTest(t)
@@ -169,7 +169,7 @@ func TestProfileRuntimeImportRejectsUnsafeOrUnsupportedInput(t *testing.T) {
 			command.SilenceErrors, command.SilenceUsage = true, true
 			command.SetArgs([]string{"init", "--profile", "office", "--config", input, "--force"})
 			err = command.Execute()
-			if err == nil || strings.Contains(err.Error(), "tskey-auth-do-not-leak") {
+			if err == nil || strings.Contains(err.Error(), "tskey-") {
 				t.Fatalf("expected an actionable error without secret content, got %v", err)
 			}
 			after, err := os.ReadFile(path)

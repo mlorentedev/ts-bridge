@@ -75,6 +75,12 @@ needed for that path. Workstation alert disposition remains separate.
   including `golang.org/x/sys v0.49.0` as a direct dependency for OS locking.
   The merge conflict was only direct-versus-indirect placement/version context;
   upstream `go.sum` is preserved without manually changing checksums.
+- Secret-scanning alert 33 points to the synthetic rejected-input fixture in
+  `cmd/cli/profile_runtime_test.go`. The detected value was compared privately:
+  it is a substring of that known test literal, not an issued credential.
+  Use only the incomplete `tskey-` marker in those negative cases; this still
+  exercises auth-key-prefix rejection without a credential-shaped suffix.
+  No real credential was read, published or used by these tests.
 
 ## Related Findings and Disposition
 
