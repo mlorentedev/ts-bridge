@@ -10,9 +10,10 @@ created: "2026-10-15"
 AC1-AC4 have Windows package-test evidence from 2026-10-15. Full Windows tests,
 vet, build, and ownership cross-builds passed on that checkout. On 2026-10-16
 the operator authorized draft-PR publication and automated validation through
-the existing GitHub Actions Linux/Windows runners. Published-revision CI,
-independent review and live AC5 remain open; no real profile has been migrated
-and no completion claim is made.
+the existing GitHub Actions Linux/Windows runners. Published-revision CI run
+`38952352232` passed on head `43da717`, and CodeRabbit reviewed that head on
+2026-10-19. Fresh independent archive review and live AC5 remain open; no real
+profile has been migrated and no completion claim is made.
 
 - [x] AC1 -> `TestProfileRuntimePreserved` covers reads, Set, descriptor Import, SetCredential, and ClearCredential. Existing profile/descriptor tests also pass.
 - [x] AC2 -> `TestProfileRuntimeConnectPrecedence`, `TestProfileRuntimeImportPreservesExistingTargetAndCredential`, `TestProfileRuntimeImportRejectsUnsafeOrUnsupportedInput`, and `TestProfileRuntimeBrowserDoesNotInheritTCPTarget`. Repeated configuration leaves identical store bytes and does not ask to replace an existing credential.
@@ -102,6 +103,28 @@ Record narrowly scoped G703/G702 justifications at those calls, following the
 existing repository annotation convention. Do not disable rules globally or
 change path/command behavior to appease the analyzer. Fresh CI is required
 after the annotation-only fix; the earlier run is not a lint pass.
+
+### Follow-up CI result
+
+CI run `38952352232` tested published head `43da717` and passed:
+
+- Linux `go test -v -race -coverprofile=coverage.out ./...` -> passed.
+- Native Windows `go test ./...` -> passed.
+- Linux/Windows `go vet ./...` and builds -> passed.
+- `golangci-lint run` v2.14.0 -> passed.
+- Smoke, security and all six platform builds -> passed.
+- Hygiene run `38952352200` and GitGuardian -> passed on the same head.
+
+### Code review - 2026-10-19
+
+CodeRabbit reviewed `43da717` and published one minor finding: this document
+had not recorded the successful follow-up CI run. The update above addresses
+that finding. Review dispositions are recorded on PR #442.
+
+PR-Agent run `39294183027` rejected `config.num_retries` as a forbidden
+command-line override and published no review; it provides no review coverage.
+CodeRabbit's review does not replace the fresh independent archive review
+artifact. Live Windows/Git Bash AC5 remains pending.
 
 ## Related Findings and Disposition
 
