@@ -1,0 +1,30 @@
+[
+  {
+    "id": "BUG-031-derp-socks-proxy-f1",
+    "behavior": "AC1: actual SDK control and DERP consumers work through SSH SOCKS with verified TLS",
+    "verification": "go test ./internal/bootstrapssh -run TestControlProxySDKConsumers -count=1",
+    "state": "passing",
+    "evidence": "Passes at HEAD; pre-fix run failed with 'incompatible SOCKS version' and malformed response \"\\x05\\xff\"."
+  },
+  {
+    "id": "BUG-031-derp-socks-proxy-f2",
+    "behavior": "AC2: host scope, fallback, HTTP forwarding and upstream errors",
+    "verification": "go test ./internal/bootstrapssh -run 'TestControlProxy(Selects|HTTP|Rejects|Upstream)' -count=1",
+    "state": "passing",
+    "evidence": "Passes at HEAD; scope-check mutation (EqualFold to Contains) reddens TestControlProxyRejectsUnrelatedDestinations."
+  },
+  {
+    "id": "BUG-031-derp-socks-proxy-f3",
+    "behavior": "AC3: cancellation and startup cleanup close all owned proxy resources",
+    "verification": "go test ./internal/bootstrapssh -run 'TestControlProxy(Cancel|Cleanup)' -count=1",
+    "state": "passing",
+    "evidence": "Passes at HEAD; removing the per-tunnel context.AfterFunc reddens TestControlProxyCleanupActiveTunnel."
+  },
+  {
+    "id": "BUG-031-derp-socks-proxy-f4",
+    "behavior": "AC4: Windows tests/build; live DERP acceptance deferred to #441",
+    "verification": "go test ./internal/bootstrapssh ./cmd/cli && go build ./cmd/ts-bridge",
+    "state": "passing",
+    "evidence": "go test -count=1 ./... all ok, go build ./... and go vet clean on Windows; live acceptance tracked by #441."
+  }
+]
