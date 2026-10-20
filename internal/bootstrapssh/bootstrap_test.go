@@ -239,6 +239,7 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 	_ = listener.Close()
 
 	var dialElapsed time.Duration
+	var dialRemaining time.Duration
 	var dialHasDeadline bool
 	deps := dependencies{
 		lookPath: func(string) (string, error) { return "ssh", nil },
@@ -249,7 +250,9 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 			return cmd
 		},
 		dialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			_, dialHasDeadline = ctx.Deadline()
+			var deadline time.Time
+			deadline, dialHasDeadline = ctx.Deadline()
+			dialRemaining = time.Until(deadline)
 			started := time.Now()
 			<-ctx.Done()
 			dialElapsed = time.Since(started)
@@ -269,10 +272,11 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 		t.Fatalf("start() error = %v", err)
 	}
 	// Helper process startup/teardown is not part of the readiness dial deadline.
-	// The dial blocks until its context expires, so a deadline must be set;
-	// elapsed time is only an upper bound because Windows clock resolution can read 0.
-	if !dialHasDeadline || dialElapsed > 200*time.Millisecond {
-		t.Fatalf("readiness dial deadline set = %t, took %s, want deadline and <= 200ms", dialHasDeadline, dialElapsed)
+	// The 5s parent also carries a deadline, so require the dial's own to be the 20ms readiness timeout.
+	// Elapsed time is only an upper bound because Windows clock resolution can read 0.
+	if !dialHasDeadline || dialRemaining > 20*time.Millisecond || dialElapsed > 200*time.Millisecond {
+		t.Fatalf("readiness dial deadline set = %t, remaining %s, took %s, want <= 20ms remaining and <= 200ms",
+			dialHasDeadline, dialRemaining, dialElapsed)
 	}
 }
 

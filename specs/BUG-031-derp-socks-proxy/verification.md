@@ -39,8 +39,10 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   startup and termination against a 200ms assertion for a configured 20ms
   readiness dial, and a later measurement revision read a `0s` duration because
   of coarse Windows clock resolution around a blocking call.
-- Final repair (test-only): the dial now records that its context carried a
-  deadline and keeps `dialElapsed <= 200ms` only as an upper bound.
+- Final repair (test-only): the dial now records its context deadline and
+  requires the remaining time to be at most the configured 20ms (an ancestor's
+  5s deadline would fail it), keeping `dialElapsed <= 200ms` only as an upper
+  bound.
   `go test ./internal/bootstrapssh -run TestStartEnforcesReadyTimeoutDuringDial
   -count=20` -> ok (7.0s).
 - At HEAD after the review fixes: `go test -count=1 ./...` -> every package ok
@@ -59,7 +61,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
 - Readiness test weakened deliberately: it moved from "whole `start()` <= 200ms"
-  to "the dial carried a deadline and took <= 200ms". Helper spawn/teardown is
+  to "the dial's own deadline is the 20ms readiness timeout and the dial took <= 200ms". Helper spawn/teardown is
   no longer bounded by the test. Retention evidence: removing the
   `context.WithTimeout` in `waitUntilReady` still reddens the test.
 - Review fixes: a `slog.Warn` on denied destinations, and the CONNECT dial now
