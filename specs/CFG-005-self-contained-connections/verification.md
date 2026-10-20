@@ -175,6 +175,24 @@ replaced. Git Bash selected Git for Windows OpenSSH.
   OpenSSH's SOCKS listener cannot accept that protocol; live logs show
   `CONNECT dial to vpn.kubelab.live:443: unexpected EOF` for region 999.
   This explains the relay failure, not necessarily the separate HTTPS stall.
+- Candidate acceptance (2026-10-20): a local-only merge of this branch with
+  master (including #444), commit `1af01a3`, SHA-256
+  `1E53D40EBC0647D4E0D9D3CAD470BCDF12C2117CDD224B2D03F0B4683E7AC590`, was run
+  alongside the operator's live office session without touching it.
+  `bootstrapssh` and `cmd/cli` tests passed (`-count=1`).
+  - Office profile with a distinct hostname: READY; the bridge returned the real
+    destination banner `SSH-2.0-OpenSSH_for_Windows_9.5`; `/health/ready` was
+    `ok` with zero errors.
+  - Gitea profile (control via SSH bootstrap): the SDK's HTTP CONNECT through
+    the loopback proxy returned `200 Connection Established` and the node
+    reached READY, so the DERP/control incompatibility is resolved by #444.
+  - Through the same bridge and port, `vpn.kubelab.live` answered HTTP 200 in
+    0.59s with verified TLS. Gitea still completes TLS (ALPN http/1.1) and
+    sends the request but returns no response within 20s, with either Host
+    header. The bridge is healthy, so the Gitea stall is attributed to the
+    backend or vhost on the VPS, not to ts-bridge. Gitea application response
+    remains unverified.
+  - The candidate worktree, binary and state were removed; nothing was pushed.
 - AC5 remains open. Do not weaken TLS/SSH, rotate keys or force login to hide
   these failures. Preserve the existing interactive RDP session: do not open
   another desktop login or disrupt the network during this check.
@@ -190,7 +208,7 @@ replaced. Git Bash selected Git for Windows OpenSSH.
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-038-windows-path-spelling-in-config-tests.md
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-039-windows-path-spelling-in-config-tests.md
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes: docs/adr/adr-016-self-contained-profile-connections.md
 - [x] New pattern candidate for `00_meta/patterns/`? no: this session establishes a project-specific connection contract, not a verified cross-project recurrence.
 

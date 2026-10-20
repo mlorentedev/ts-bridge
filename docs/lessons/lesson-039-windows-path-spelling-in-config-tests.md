@@ -1,5 +1,5 @@
 ---
-id: "lesson-038-windows-path-spelling-in-config-tests"
+id: "lesson-039-windows-path-spelling-in-config-tests"
 type: lesson
 status: active
 title: "Compare Path Semantics Without Changing Production Configuration"
