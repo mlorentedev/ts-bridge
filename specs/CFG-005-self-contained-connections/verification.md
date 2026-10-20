@@ -12,14 +12,16 @@ vet, build, and ownership cross-builds passed on that checkout. On 2026-10-16
 the operator authorized draft-PR publication and automated validation through
 the existing GitHub Actions Linux/Windows runners. Published-revision CI run
 `38952352232` passed on head `43da717`, and CodeRabbit reviewed that head on
-2026-10-19. Fresh independent archive review and live AC5 remain open; no real
-profile has been migrated and no completion claim is made.
+2026-10-19. Fresh independent archive review and live AC5 remain open.
+The authorized `projects-toolkit-gitea` runtime import is now complete;
+`office`, managed credentials and the installed binary remain unchanged.
+No feature-completion claim is made.
 
 - [x] AC1 -> `TestProfileRuntimePreserved` covers reads, Set, descriptor Import, SetCredential, and ClearCredential. Existing profile/descriptor tests also pass.
 - [x] AC2 -> `TestProfileRuntimeConnectPrecedence`, `TestProfileRuntimeImportPreservesExistingTargetAndCredential`, `TestProfileRuntimeImportRejectsUnsafeOrUnsupportedInput`, and `TestProfileRuntimeBrowserDoesNotInheritTCPTarget`. Repeated configuration leaves identical store bytes and does not ask to replace an existing credential.
 - [x] AC3 -> `TestProfileLockLifecycle`, `TestProfileLockReleasedAfterProcessExit`, `TestProfileLockRejectsDuplicateBeforeRunner`, and `TestProfileLockAllowsOtherProfile`. Windows tests use actual OS locks and a forcibly terminated test child; nested connect/browser invocations cannot initialize logging or a second runner.
 - [x] AC4 -> `TestStartReportsMissingOpenSSH`, `TestStartReportsEarlyExit`, and `TestStartReportsUnlaunchableOpenSSH`. Tests assert selected-client and IdentityFile/agent guidance, retained error causes, and inherited terminal streams. `TestStartWaitsForSOCKSAndClosesProcess` succeeds without SSH_AUTH_SOCK.
-- [ ] AC5 -> Draft profile runbook and README link written; operator-assisted real-service validation deliberately deferred at handoff. The real profile and installed binary remain unchanged.
+- [ ] AC5 -> The existing `office` profile passed live RDP negotiation and duplicate rejection. Gitea runtime import is idempotent; its live HTTPS probe and simultaneous-profile observations remain pending. The installed binary remains unchanged.
 
 ## Spec consistency
 
@@ -125,6 +127,57 @@ PR-Agent run `39294183027` rejected `config.num_retries` as a forbidden
 command-line override and published no review; it provides no review coverage.
 CodeRabbit's review does not replace the fresh independent archive review
 artifact. Live Windows/Git Bash AC5 remains pending.
+
+### Non-admin Windows live acceptance - 2026-10-19
+
+The operator authorized candidate execution on this laptop without elevation.
+A separate candidate was built from `61dc2d1`; the installed binary was not
+replaced. Git Bash selected Git for Windows OpenSSH.
+
+- The Windows token was not elevated. No services, agents, firewall, DNS or
+  system-proxy settings were changed.
+- `connect --profile office` reached `READY` on `127.0.0.1:33914`, targeting
+  `acemagic-office:45000` through Tailscale SaaS, without profile changes.
+- Two actual destination probes returned 19-byte RDP X.224 Connection Confirm
+  messages with negotiation response type 2 and selected protocol 2 (NLA).
+  These are service-level negotiations, not interactive desktop logins.
+- A second invocation of the same profile exited 1 with `already connected`,
+  without reaching `READY`. The original process still served the second RDP
+  probe; exactly one candidate process remained.
+- Profile-store bytes, all managed credential files and the installed binary
+  matched their pre-probe hashes. This includes the unrelated Gitea profile.
+- The operator then authorized importing only Gitea's supported runtime fields.
+  Repeating the import produced identical store bytes. The unrelated `office`
+  entry, Gitea target/control URL/credential reference, credential-file contents
+  and installed binary were preserved; the office process remained running.
+- The existing Gitea YAML contains browser-specific `socks5_routes`; it was not
+  imported directly. A separate non-secret input used the supported runtime
+  fields and distinct loopback bridge/health/bootstrap listeners.
+- A strict-host-key, noninteractive Git OpenSSH probe returned
+  `Permission denied (publickey)`, with no accessible agent. The operator then
+  unlocked the existing identity interactively in Git Bash and reached `READY`
+  without starting an agent or replacing a credential.
+- Both profiles ran concurrently. A duplicate Gitea invocation exited 1 before
+  `READY`, preserving both original processes; another real office RDP/NLA
+  negotiation passed. No interactive desktop login was attempted.
+- The operator stopped Gitea with Ctrl+C during an HTTPS probe. The resulting
+  reset was not evidence of a spontaneous crash. Its SSH child and listeners
+  exited, office still passed RDP negotiation, and a subsequent interactive
+  Gitea startup acquired the profile without a stale-lock error.
+- Live Gitea HTTPS has **not passed**. Windows and Git Bash curl (both Schannel)
+  timed out. An independent Go HTTPS probe negotiated HTTP/2 with a normally
+  verified certificate chain, but received no response headers within 15 seconds.
+  The same happened through the already-running SSH SOCKS proxy without the
+  mesh, so the application-response failure is not proven to be mesh-only.
+- A separate DERP proxy incompatibility is confirmed: `controlProxyFunc`
+  returns `socks5h` for the control host, while Tailscale v1.104.1's
+  `derphttp.Client.dialNodeUsingProxy` sends HTTP CONNECT to that endpoint.
+  OpenSSH's SOCKS listener cannot accept that protocol; live logs show
+  `CONNECT dial to vpn.kubelab.live:443: unexpected EOF` for region 999.
+  This explains the relay failure, not necessarily the separate HTTPS stall.
+- AC5 remains open. Do not weaken TLS/SSH, rotate keys or force login to hide
+  these failures. Preserve the existing interactive RDP session: do not open
+  another desktop login or disrupt the network during this check.
 
 ## Related Findings and Disposition
 
