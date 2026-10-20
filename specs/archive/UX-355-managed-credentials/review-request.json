@@ -1,0 +1,12 @@
+{
+  "reviewed_sha": "93cabc61ff34cd1f981605333c2174ef16b292f4",
+  "reviewer": "nan/deepseek-v4-flash",
+  "requested_at": "2026-10-02T19:48:58Z",
+  "review_digest_before": "a09243a5a8957adb9a65114c40443bc1f9f6b621b602ff233e5d60b8599afff5",
+  "base_sha": "8dfa4410a9bee7997fd72e0c614c34a3ff7e56bb",
+  "contract_digests": {
+    "features.json": "6877038fb86b7ad0ea83edb95e58de69aef1910ae25540a4b29b0b237aff88fb",
+    "proposal.md": "cefd8bd0eeb5f7bdd2e1a586c12da8540d64873a9051054b1380db123214667d",
+    "tasks.md": "d77ea4e5b221107988e07dbe897da1c5dcbfbffb895c307c29a01a9106bcda60"
+  }
+}
