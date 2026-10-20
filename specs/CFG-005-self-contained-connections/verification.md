@@ -12,7 +12,8 @@ vet, build, and ownership cross-builds passed on that checkout. On 2026-10-16
 the operator authorized draft-PR publication and automated validation through
 the existing GitHub Actions Linux/Windows runners. Published-revision CI run
 `38952352232` passed on head `43da717`, and CodeRabbit reviewed that head on
-2026-10-19. Fresh independent archive review and live AC5 remain open.
+2026-10-19. Fresh independent archive review remains open; live AC5 was
+satisfied on 2026-10-20 (see Live acceptance notes).
 The authorized `projects-toolkit-gitea` runtime import is now complete;
 `office`, managed credentials and the installed binary remain unchanged.
 No feature-completion claim is made.
@@ -21,7 +22,7 @@ No feature-completion claim is made.
 - [x] AC2 -> `TestProfileRuntimeConnectPrecedence`, `TestProfileRuntimeImportPreservesExistingTargetAndCredential`, `TestProfileRuntimeImportRejectsUnsafeOrUnsupportedInput`, and `TestProfileRuntimeBrowserDoesNotInheritTCPTarget`. Repeated configuration leaves identical store bytes and does not ask to replace an existing credential.
 - [x] AC3 -> `TestProfileLockLifecycle`, `TestProfileLockReleasedAfterProcessExit`, `TestProfileLockRejectsDuplicateBeforeRunner`, and `TestProfileLockAllowsOtherProfile`. Windows tests use actual OS locks and a forcibly terminated test child; nested connect/browser invocations cannot initialize logging or a second runner.
 - [x] AC4 -> `TestStartReportsMissingOpenSSH`, `TestStartReportsEarlyExit`, and `TestStartReportsUnlaunchableOpenSSH`. Tests assert selected-client and IdentityFile/agent guidance, retained error causes, and inherited terminal streams. `TestStartWaitsForSOCKSAndClosesProcess` succeeds without SSH_AUTH_SOCK.
-- [ ] AC5 -> The existing `office` profile passed live RDP negotiation and duplicate rejection. Gitea runtime import is idempotent; its live HTTPS probe and simultaneous-profile observations remain pending. The installed binary remains unchanged.
+- [x] AC5 -> The existing `office` profile passed live RDP negotiation and duplicate rejection. Gitea runtime import is idempotent and its live HTTPS probe passed on 2026-10-20 (HTTP 200, verified TLS) once the upstream was powered on. The installed binary remains unchanged.
 
 ## Spec consistency
 
@@ -164,7 +165,8 @@ replaced. Git Bash selected Git for Windows OpenSSH.
   reset was not evidence of a spontaneous crash. Its SSH child and listeners
   exited, office still passed RDP negotiation, and a subsequent interactive
   Gitea startup acquired the profile without a stale-lock error.
-- Live Gitea HTTPS has **not passed**. Windows and Git Bash curl (both Schannel)
+- Live Gitea HTTPS had **not passed** in the first run (superseded by the
+  2026-10-20 acceptance below, where the stall was a powered-off upstream). Windows and Git Bash curl (both Schannel)
   timed out. An independent Go HTTPS probe negotiated HTTP/2 with a normally
   verified certificate chain, but received no response headers within 15 seconds.
   The same happened through the already-running SSH SOCKS proxy without the
@@ -193,7 +195,13 @@ replaced. Git Bash selected Git for Windows OpenSSH.
     backend or vhost on the VPS, not to ts-bridge. Gitea application response
     remains unverified.
   - The candidate worktree, binary and state were removed; nothing was pushed.
-- AC5 remains open. Do not weaken TLS/SSH, rotate keys or force login to hide
+- Final acceptance (2026-10-20): after the Gitea upstream was powered on, a
+  binary built from this branch merged with master (`63d4e8c`; binary hash not
+  captured) reached READY for the Gitea profile. An HTTPS request through the
+  bridge returned HTTP 200 in 1.6s with verified TLS, zero bridge errors. The
+  earlier stall was the powered-off upstream (the VPS answered 200 locally
+  once it was on), not ts-bridge. AC5 live probe is satisfied.
+- AC5 is satisfied. Do not weaken TLS/SSH, rotate keys or force login to hide
   these failures. Preserve the existing interactive RDP session: do not open
   another desktop login or disrupt the network during this check.
 
