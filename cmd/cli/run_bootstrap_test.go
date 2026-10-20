@@ -110,7 +110,7 @@ func TestStartConfiguredBootstrapConfiguresControlProxy(t *testing.T) {
 		return tunnel, nil
 	}
 	var gotControlURL, gotSOCKSAddr string
-	controlProxyConfigurer = func(controlURL, socksAddr string) error {
+	controlProxyConfigurer = func(_ context.Context, controlURL, socksAddr string) error {
 		gotControlURL = controlURL
 		gotSOCKSAddr = socksAddr
 		return nil
