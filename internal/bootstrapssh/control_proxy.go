@@ -47,8 +47,10 @@ func startControlProxy(ctx context.Context, controlURL, socksAddr string) (*url.
 	}
 	stop := context.AfterFunc(ctx, closeProxy)
 	go serveControlProxy(server, listener, stop, closeProxy)
-	return &url.URL{Scheme: "http", Host: listener.Addr().String()}, closeProxy, nil
+	return &url.URL{Scheme: schemeHTTP, Host: listener.Addr().String()}, closeProxy, nil
 }
+
+const schemeHTTP = "http"
 
 func bootstrapSOCKSDialer(socksAddr string) (proxy.ContextDialer, error) {
 	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, new(net.Dialer))
@@ -91,7 +93,7 @@ func controlProxyHandler(ctx context.Context, hostname string, dialer proxy.Cont
 			}
 			return
 		}
-		if r.URL.Scheme != "http" {
+		if r.URL.Scheme != schemeHTTP {
 			http.Error(w, "bootstrap proxy requires an HTTP URL or CONNECT", http.StatusBadRequest)
 			return
 		}

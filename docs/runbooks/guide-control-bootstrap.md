@@ -28,8 +28,8 @@ administrator privileges are required.
   listener and active tunnels. The SSH child remains under the normal bootstrap
   lifecycle; do not kill or reuse an unrelated process.
 
-The local SOCKS and HTTP listeners are unauthenticated. Loopback prevents remote
-binding, not access by other local users/processes. Use a trusted client host;
+The local SOCKS and HTTP listeners are unauthenticated. Loopback binding prevents
+remote access, not access by other local users/processes. Use a trusted client host;
 never expose these listeners through port forwarding.
 
 ## Verification

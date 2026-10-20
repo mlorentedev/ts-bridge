@@ -265,7 +265,7 @@ func controlProxyFunc(
 	if err != nil {
 		return nil, err
 	}
-	proxyURL := &url.URL{Scheme: "http", Host: proxyAddr}
+	proxyURL := &url.URL{Scheme: schemeHTTP, Host: proxyAddr}
 
 	return func(requestURL *url.URL) (*url.URL, error) {
 		if strings.EqualFold(requestURL.Hostname(), hostname) {

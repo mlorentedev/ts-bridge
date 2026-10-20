@@ -101,7 +101,8 @@ func TestControlProxySDKConsumersHelper(t *testing.T) {
 
 func proxySDKFixture(t *testing.T) (*httptest.Server, string, string, <-chan string) {
 	t.Helper()
-	relay := derpserver.New(key.NewNode(), t.Logf)
+	// Connection goroutines in the SOCKS and DERP servers outlive the test body, so they must not use t.Logf.
+	relay := derpserver.New(key.NewNode(), discardLogf)
 	t.Cleanup(func() { _ = relay.Close() })
 	mux := http.NewServeMux()
 	mux.Handle("/derp", derpserver.Handler(relay))
@@ -125,9 +126,11 @@ func proxySDKFixture(t *testing.T) (*httptest.Server, string, string, <-chan str
 	return server, hostname, socksAddr, destinations
 }
 
+func discardLogf(string, ...any) {}
+
 func startTestSOCKS(t *testing.T, dial func(context.Context, string, string) (net.Conn, error)) string {
 	t.Helper()
-	socks := &socks5.Server{Logf: t.Logf, Dialer: dial}
+	socks := &socks5.Server{Logf: discardLogf, Dialer: dial}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -158,6 +161,7 @@ func assertSOCKSDestination(t *testing.T, destinations <-chan string, want strin
 
 func TestControlProxyHTTP(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		//nolint:gosec // Loopback test fixture echoing request fields to a plain-text client.
 		_, _ = io.WriteString(w, r.Host+" "+r.URL.Path)
 	}))
 	t.Cleanup(upstream.Close)
