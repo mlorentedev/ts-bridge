@@ -98,6 +98,27 @@ the dynamic SOCKS proxy. This preserves the original URL, TLS SNI, and
 certificate verification while moving DNS resolution and TCP establishment to
 the SSH server.
 
+### 2026-10-19 correction: shared proxy protocol
+
+The SDK proxy hook is consumed by more than the HTTP control client. In
+Tailscale v1.104.1, the DERP client assumes an HTTP CONNECT proxy even when the
+hook returns a SOCKS URL. Advertising OpenSSH's dynamic listener directly
+therefore breaks a custom DERP relay sharing the control hostname (#443).
+
+Advertise a process-owned HTTP proxy on an ephemeral IPv4 loopback port instead.
+Forward CONNECT streams and ordinary HTTP control requests through OpenSSH's
+existing SOCKS listener, retaining remote DNS, the original TLS stream and
+hostname scope. Unrelated hosts retain the existing fallback proxy selection.
+The adapter never patches the SDK, interprets TLS, or edits machine networking.
+Its owned cancellation context closes accepted tunnels as well as the listener;
+this also applies to failed hook installation.
+
+Compatibility is pinned by an offline integration test using the actual SDK
+DERP client and server, a synthetic SOCKS server and a normally verified TLS
+certificate. URL-only assertions are insufficient to prove protocol compatibility.
+The server fixture's additional SDK-pinned indirect dependencies are test-only;
+the production SOCKS dialer reuses the already-pinned `golang.org/x/net` module.
+
 This mode remains opt-in and fail-loud. It does not edit the hosts file, disable
 TLS verification, weaken SSH host-key checking, bundle an SSH implementation,
 or automatically switch routes after a failure. The SSH process is monitored
@@ -105,6 +126,8 @@ and terminated with ts-bridge. The SOCKS listener is unauthenticated: loopback
 binding prevents remote access, but other processes or users on the same machine
 can use it while the bridge is running. Run this mode only on a trusted client
 host and choose a dedicated local port.
+
+Operational details: [SSH control bootstrap](../runbooks/guide-control-bootstrap.md).
 
 ## Related
 

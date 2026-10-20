@@ -238,6 +238,8 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
+	var dialElapsed time.Duration
+	var dialHasDeadline bool
 	deps := dependencies{
 		lookPath: func(string) (string, error) { return "ssh", nil },
 		commandContext: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
@@ -247,14 +249,16 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 			return cmd
 		},
 		dialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			_, dialHasDeadline = ctx.Deadline()
+			started := time.Now()
 			<-ctx.Done()
+			dialElapsed = time.Since(started)
 			return nil, ctx.Err()
 		},
 		pollInterval: time.Millisecond,
 	}
 
-	startedAt := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	_, err = start(ctx, Config{
 		Endpoint:     "bastion.example.com",
@@ -264,8 +268,11 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "was not ready within 20ms") {
 		t.Fatalf("start() error = %v", err)
 	}
-	if elapsed := time.Since(startedAt); elapsed > 200*time.Millisecond {
-		t.Fatalf("readiness timeout took %s, want <= 200ms", elapsed)
+	// Helper process startup/teardown is not part of the readiness dial deadline.
+	// The dial blocks until its context expires, so a deadline must be set;
+	// elapsed time is only an upper bound because Windows clock resolution can read 0.
+	if !dialHasDeadline || dialElapsed > 200*time.Millisecond {
+		t.Fatalf("readiness dial deadline set = %t, took %s, want deadline and <= 200ms", dialHasDeadline, dialElapsed)
 	}
 }
 
@@ -285,7 +292,7 @@ func TestControlProxySelectsOnlyControlHostname(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.String() != "socks5h://127.0.0.1:1055" {
+	if got.String() != "http://127.0.0.1:1055" {
 		t.Fatalf("control proxy = %q", got)
 	}
 
@@ -300,7 +307,7 @@ func TestControlProxySelectsOnlyControlHostname(t *testing.T) {
 }
 
 func TestConfigureControlProxyInstallsHook(t *testing.T) {
-	if err := ConfigureControlProxy("https://vpn.example.com", "127.0.0.1:1055"); err != nil {
+	if err := ConfigureControlProxy(t.Context(), "https://vpn.example.com", "127.0.0.1:1055"); err != nil {
 		t.Fatalf("ConfigureControlProxy() error = %v", err)
 	}
 
@@ -309,8 +316,15 @@ func TestConfigureControlProxyInstallsHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProxyFromEnvironment() error = %v", err)
 	}
-	if got == nil || got.String() != "socks5h://127.0.0.1:1055" {
-		t.Fatalf("control proxy = %v, want socks5h://127.0.0.1:1055", got)
+	if got == nil || got.Scheme != "http" || got.Hostname() != "127.0.0.1" || got.Port() == "" {
+		t.Fatalf("control proxy = %v, want an ephemeral loopback HTTP proxy", got)
+	}
+	if err := ConfigureControlProxy(t.Context(), "https://other.example.com", "127.0.0.1:1055"); err == nil {
+		t.Fatal("replacing an initialized SDK proxy hook must fail")
+	}
+	unchanged, err := tshttpproxy.ProxyFromEnvironment(&http.Request{URL: requestURL})
+	if err != nil || unchanged == nil || unchanged.String() != got.String() {
+		t.Fatalf("failed installation changed the existing hook: proxy=%v error=%v", unchanged, err)
 	}
 }
 
@@ -334,7 +348,12 @@ func TestControlProxyPreservesHostnameThroughSOCKS(t *testing.T) {
 	hostSeen := make(chan string, 1)
 	go serveOneSOCKSHandshake(t, listener, hostSeen)
 
-	proxyFor, err := controlProxyFunc("https://vpn.example.com", listener.Addr().String(), nil)
+	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://vpn.example.com", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeProxy)
+	proxyFor, err := controlProxyFunc("https://vpn.example.com", proxyURL.Host, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

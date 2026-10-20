@@ -258,23 +258,17 @@ func exitBeforeReadyError(err error) error {
 
 func controlProxyFunc(
 	controlURL string,
-	socksAddr string,
+	proxyAddr string,
 	fallback func(*url.URL) (*url.URL, error),
 ) (func(*url.URL) (*url.URL, error), error) {
-	control, err := url.Parse(controlURL)
+	hostname, err := controlHostname(controlURL)
 	if err != nil {
-		return nil, fmt.Errorf("parse control URL %q: %w", controlURL, err)
+		return nil, err
 	}
-	if control.Hostname() == "" {
-		return nil, fmt.Errorf("control URL %q has no hostname", controlURL)
-	}
-	proxyURL, err := url.Parse("socks5h://" + socksAddr)
-	if err != nil {
-		return nil, fmt.Errorf("parse bootstrap SOCKS proxy: %w", err)
-	}
+	proxyURL := &url.URL{Scheme: "http", Host: proxyAddr}
 
 	return func(requestURL *url.URL) (*url.URL, error) {
-		if strings.EqualFold(requestURL.Hostname(), control.Hostname()) {
+		if strings.EqualFold(requestURL.Hostname(), hostname) {
 			return proxyURL, nil
 		}
 		if fallback == nil {
@@ -284,15 +278,32 @@ func controlProxyFunc(
 	}, nil
 }
 
-func ConfigureControlProxy(controlURL, socksAddr string) error {
-	fallback := func(requestURL *url.URL) (*url.URL, error) {
-		return http.ProxyFromEnvironment(&http.Request{URL: requestURL})
+func controlHostname(controlURL string) (string, error) {
+	control, err := url.Parse(controlURL)
+	if err != nil {
+		return "", fmt.Errorf("parse control URL %q: %w", controlURL, err)
 	}
-	proxyFor, err := controlProxyFunc(controlURL, socksAddr, fallback)
+	if control.Hostname() == "" {
+		return "", fmt.Errorf("control URL %q has no hostname", controlURL)
+	}
+	return control.Hostname(), nil
+}
+
+func ConfigureControlProxy(ctx context.Context, controlURL, socksAddr string) error {
+	proxyURL, closeProxy, err := startControlProxy(ctx, controlURL, socksAddr)
 	if err != nil {
 		return err
 	}
+	fallback := func(requestURL *url.URL) (*url.URL, error) {
+		return http.ProxyFromEnvironment(&http.Request{URL: requestURL})
+	}
+	proxyFor, err := controlProxyFunc(controlURL, proxyURL.Host, fallback)
+	if err != nil {
+		closeProxy()
+		return err
+	}
 	if err := tshttpproxy.SetProxyFunc(proxyFor); err != nil {
+		closeProxy()
 		return fmt.Errorf("configure Tailscale control proxy before network startup: %w", err)
 	}
 	return nil
