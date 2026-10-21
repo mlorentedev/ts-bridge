@@ -275,12 +275,21 @@ func TestLogDirFor(t *testing.T) {
 }
 
 // TestLogDirForPlatform checks the wiring: the exported function resolves the
-// running OS and the environment, and delegates the layout to logDirFor.
+// running OS and the environment. The expectation is a literal per OS, not a
+// call to logDirFor, so a wrapper passing the wrong OS cannot agree with it.
+// Only the native runner of each OS can catch a constant OS argument, which is
+// why test-windows and test-macos run this suite too.
 func TestLogDirForPlatform(t *testing.T) {
 	t.Setenv("HOME", "/home/test")
 	t.Setenv("LOCALAPPDATA", `C:\Users\test`)
 
-	want := logDirFor(runtime.GOOS, "/home/test", `C:\Users\test`)
+	want := map[string]string{
+		"windows": filepath.Join(`C:\Users\test`, "ts-bridge", "logs"),
+		"darwin":  filepath.Join("/home/test", "Library", "Logs", "ts-bridge"),
+	}[runtime.GOOS]
+	if want == "" {
+		want = filepath.Join("/home/test", ".local", "share", "ts-bridge", "logs")
+	}
 	if got := LogDirForPlatform(); got != want {
 		t.Errorf("LogDirForPlatform() = %q, want %q", got, want)
 	}
