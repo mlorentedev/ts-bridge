@@ -371,10 +371,12 @@ func (r *FileRotator) cleanup() {
 
 // LogDirForPlatform returns the platform-appropriate log directory.
 func LogDirForPlatform() string {
-	home := os.Getenv("HOME")
-	appData := os.Getenv("LOCALAPPDATA")
+	return logDirFor(runtime.GOOS, os.Getenv("HOME"), os.Getenv("LOCALAPPDATA"))
+}
 
-	switch runtime.GOOS {
+// logDirFor takes the OS as an input so every branch is testable on any runner.
+func logDirFor(goos, home, appData string) string {
+	switch goos {
 	case "windows":
 		return filepath.Join(appData, "ts-bridge", "logs")
 	case "darwin":

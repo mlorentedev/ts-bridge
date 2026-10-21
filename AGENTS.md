@@ -30,7 +30,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
 | `scripts/tests/` | CLI smoke tests (`smoke.bats`, BATS) exercising the built binary. Cross-platform CLI coverage belongs in Go tests under `cmd/cli/`, which the `test-windows` job already runs on Windows. |
 | `Makefile` | Dev task runner — mutation-testing targets (gremlins, install-only; see QA-014) |
-| `.github/workflows/ci.yml` | CI jobs: `test`, `test-windows`, `smoke` (bats), `build-matrix`, `lint`, `security` (gosec) |
+| `.github/workflows/ci.yml` | CI jobs: `test`, `test-windows`, `test-macos`, `smoke` (bats), `build-matrix`, `lint`, `security` (gosec) |
 | `.github/workflows/release.yml` | Automated releases via release-please (PAT-driven) |
 | `harness/` | Review gates read by `dotf`: `review-attestation.json` (which logins attest a review, the `## Review triage` marker, the release-please exemption signature) and `reviewer-pool.json` (models allowed to sign a `review.md`) |
 
