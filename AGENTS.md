@@ -22,10 +22,11 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `internal/health/` | `/health/live`, `/health/ready`, `/metrics` HTTP server |
 | `internal/telemetry/` | Atomic counters + read accessors |
 | `internal/discover/` | Tailnet device discovery via Tailscale and Headscale APIs |
-| `internal/host/` | Platform-specific host setup/check (firewall, RDP/xrdp, service) — `*_linux.go` / `*_windows.go` / `*_darwin.go` |
+| `internal/host/` | Platform-specific host setup/check (firewall, RDP/xrdp; no service install, see #307) — `*_linux.go` / `*_windows.go` / `*_darwin.go` |
 | `internal/logging/` | Structured slog logging: text to console + JSON to a rotating log file |
 | `internal/profile/` | Shareable connection descriptor (`tsb://`) + profile store behind `connect --profile` (ADR-011/012) |
 | `internal/browser/` | Loopback PAC generation/server plus isolated Edge discovery and launch arguments for allow-listed private origins. |
+| `docs/design/host-client-parity.md` | Host vs client gap inventory and per-OS host state (input to #450) |
 | `specs/` (and `specs/archive/`) | Per-feature SDD folders (proposal + tasks + verification) — see §Workflow Rules |
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
 | `scripts/tests/` | CLI smoke tests (`smoke.bats`, BATS) exercising the built binary. Cross-platform CLI coverage belongs in Go tests under `cmd/cli/`, which the `test-windows` job already runs on Windows. |
