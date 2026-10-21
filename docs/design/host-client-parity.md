@@ -32,15 +32,15 @@ the host *command*, not about running ts-bridge on the host.
 
 | # | Client has | Host has | Owner |
 |---|---|---|---|
-| G1 | Named profiles, YAML `--config`, `flags > env > YAML > profile > defaults` (ADR-012/016) | `.env` + `TS_HOST_*` env only; `--config` on `host setup` is "reserved for future use" | #450 |
-| G2 | `--profile` on `connect`, `init`, `browser` | No `--profile` | #450 |
-| G3 | `init` writes profiles or YAML; `.env` is the compatibility path being retired (#399) | `host init` writes only `.env`, the path #399 deprecates | #450, #399 |
+| G1 | Named profiles, YAML `--config`, `flags > env > YAML > profile > defaults` (ADR-012/016) | `.env` + `TS_HOST_*` env only; `--config` on `host setup` is "reserved for future use" | #458 (explicit host config file, ADR-017) |
+| G2 | `--profile` on `connect`, `init`, `browser` | No `--profile` | **Rejected** by ADR-017: per-user stores resolve to root/Administrator under elevation; replaced by `--config` (#458) |
+| G3 | `init` writes profiles or YAML; `.env` is the compatibility path being retired (#399) | `host init` writes only `.env`, the path #399 deprecates | #458 |
 | G4 | Control-plane awareness: `--control-url`, `config.ValidateControlPlane` (#406) | Descriptor always `cp=saas`, even on a Headscale host | **#453** |
-| G5 | `init` refuses to overwrite without confirmation or `--force` (BUG-019) | `host init` rewrites `.env` with no confirmation and no `--force` | #450 |
+| G5 | `init` refuses to overwrite without confirmation or `--force` (BUG-019) | `host init` rewrites `.env` with no confirmation and no `--force` | #458 |
 | G6 | Unreadable `.env` handling is a known defect (#408) | Same defect: an unreadable `.env` is treated as empty and overwritten, dropping every other variable | **#408** (second site) |
-| G7 | Logging to console plus a rotating JSON file (`internal/logging`, `LogDirForPlatform`) | stderr only; a command that mutates firewall and registry keeps no persistent record | #450 |
-| G8 | Global `-v/--verbose`, consistent `--log-format`, `--json` | Each host subcommand redeclares `--verbose` (no `-v`) and `--log-format`; `host init` has neither `--json` nor `--log-format` | #450 |
-| G9 | Every OS branch covered by Go tests and native CI on Windows and macOS (#447) | Per-OS logic reads `runtime.GOOS` / build tags; darwin branch was a stub never exercised | #450 |
+| G7 | Logging to console plus a rotating JSON file (`internal/logging`, `LogDirForPlatform`) | stderr only; a command that mutates firewall and registry keeps no persistent record | #457 |
+| G8 | Global `-v/--verbose`, consistent `--log-format`, `--json` | Each host subcommand redeclares `--verbose` (no `-v`) and `--log-format`; `host init` has neither `--json` nor `--log-format` | #457 |
+| G9 | Every OS branch covered by Go tests and native CI on Windows and macOS (#447) | Per-OS logic reads `runtime.GOOS` / build tags; darwin branch was a stub never exercised | #457 |
 
 ## Per-OS host state (2026-10-20)
 
@@ -99,7 +99,7 @@ the host *command*, not about running ts-bridge on the host.
 
 ## Related
 
-- #450 HOST-003 (parity epic, ADR pending), #453, #454, #455, #408, #307, #399, #451.
+- #450 HOST-003 (parity epic; decision in ADR-017, #460), #457, #458, #459, #453, #454, #455, #408, #307, #399, #451.
 - Reference audit (Ansible, RustDesk, Tailscale CLI, vendor docs): maintainer knowledge store, `prestudy/host-parity-reference-audit-matrix.md`.
 - [ADR-011](../adr/adr-011-shareable-connection-profile.md) (daemonless host, descriptor),
   [ADR-012](../adr/adr-012-config-profiles-model.md),
