@@ -64,3 +64,35 @@ func TestWriteHostEnv_UnreadableEnvRefusesToReplace(t *testing.T) {
 		t.Errorf(".env replaced despite the refusal:\n%s", got)
 	}
 }
+
+// A directory where the .env should be is the one unreadable case every OS and
+// root produce alike, so these run on the Windows job too.
+func TestWriteYAMLConfig_DirectoryAsEnvRefusesBeforeWriting(t *testing.T) {
+	dir := t.TempDir()
+	yamlPath := filepath.Join(dir, "ts-bridge.yaml")
+	envPath := filepath.Join(dir, ".env")
+	if err := os.Mkdir(envPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	err := writeYAMLConfig(&cobra.Command{}, initFlags{
+		AuthKey: "tskey-auth-test-secret", Target: "100.64.0.1:3389",
+		Format: "yaml", Config: yamlPath, Force: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), envPath) {
+		t.Fatalf("err = %v, want a read error naming %s", err, envPath)
+	}
+	if _, statErr := os.Stat(yamlPath); !os.IsNotExist(statErr) {
+		t.Errorf("YAML written despite the refusal (stat err = %v)", statErr)
+	}
+}
+
+func TestWriteHostEnv_DirectoryAsEnvRefuses(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	if err := os.Mkdir(envPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	err := writeHostEnv(hostInitFlags{Port: 3389, FirewallRule: "Rule", Config: envPath})
+	if err == nil || !strings.Contains(err.Error(), "read existing") {
+		t.Fatalf("err = %v, want a read error, not a write error", err)
+	}
+}
