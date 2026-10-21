@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -196,11 +197,17 @@ func writeHostEnv(f hostInitFlags) error {
 	// Read existing .env if it exists, preserving its (trimmed) lines so the file
 	// can be rewritten with the host section replaced rather than duplicated.
 	existingLines := []string{}
+	// A missing file starts empty; any other read failure stops here, because
+	// rewriting a file that could not be read would drop everything in it (#408).
 	// #nosec G304 -- envPath is from the --config flag (user-controlled), the user's own .env file.
-	if data, err := os.ReadFile(envPath); err == nil {
+	data, err := os.ReadFile(envPath)
+	switch {
+	case err == nil:
 		for _, line := range strings.Split(string(data), "\n") {
 			existingLines = append(existingLines, strings.TrimSpace(line))
 		}
+	case !errors.Is(err, os.ErrNotExist):
+		return fmt.Errorf("read existing %s: %w", envPath, err)
 	}
 
 	// Build new content: existing content + host vars at the end.
