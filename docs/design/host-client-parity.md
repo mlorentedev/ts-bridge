@@ -21,7 +21,8 @@ Between 2026-06-20 and 2026-10-20 the client paths took **35 commits** and the h
 paths **7**. None of the host commits since CFG-002 (#228, 2026-06-26) added host
 behaviour: they were a lint migration, the stderr log fix (#267), command-tree
 construction (#290, #293), docs reconciliation (#295) and a shared key-grammar change
-(#398). Client work shipped as new ADRs (012, 014, 015, 016); none of them listed
+(#398). Client work shipped as new ADRs (012, 014, 015, plus 016 decided with #442 and not yet
+in `docs/adr/`); none of them listed
 `host` among the commands they changed, so nothing prompted a host follow-up.
 
 The host is daemonless by design (ADR-011 C4): `host setup` configures the machine and
