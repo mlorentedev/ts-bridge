@@ -59,10 +59,11 @@ check_linter() {
     v2.14.0) built_go=1.27 ;;
     *) return 1 ;;
   esac
-  # The instructions point at the pin and never restate a version that could drift.
+  # The instructions carry the install command that reads the pin, and never
+  # restate a linter version in any spelling (`@v2.x`, `@2.x`, ` v2.x`).
   grep -Fq "Go $module_go+" "$4" &&
-    grep -Fq "mise.toml" "$4" &&
-    ! grep -Eq 'golangci-lint@v[0-9]' "$4" &&
+    grep -Eq '^mise install([[:space:]]|$)' "$4" &&
+    ! grep -Eiq 'golangci-lint[@[:space:]]+v?[0-9]+\.[0-9]+' "$4" &&
     awk -v required="$module_go" -v built="$built_go" '
       BEGIN {
         n = split(required, r, "\\.")
@@ -174,7 +175,7 @@ fi
 printf 'go 1.27.1\n' > "$tmp_mod"
 printf '          version: v2.14.0\n' > "$tmp_ci"
 printf '[tools]\ngolangci-lint = "2.14.0"\n' > "$tmp_mise"
-printf 'Go 1.27.1+\npinned in mise.toml\n' > "$tmp_docs"
+printf 'Go 1.27.1+\nmise install\ngolangci-lint run\n' > "$tmp_docs"
 if ! check_linter "$tmp_mod" "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
   echo "test-go-toolchain: rejected the compatible linter pin" >&2
   exit 1
@@ -190,18 +191,20 @@ if check_linter "$tmp_mod" "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
   exit 1
 fi
 printf '[tools]\ngolangci-lint = "2.14.0"\n' > "$tmp_mise"
-printf 'Go 1.27.1+\npinned in mise.toml\ngo install golangci-lint@v2.14.0\n' > "$tmp_docs"
+for restated in 'go install golangci-lint@v2.14.0' 'golangci-lint@2.12.2' 'golangci-lint v2.12.2'; do
+  printf 'Go 1.27.1+\nmise install\n%s\n' "$restated" > "$tmp_docs"
+  if check_linter "$tmp_mod" "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+    echo "test-go-toolchain: accepted instructions that restate the linter version ($restated)" >&2
+    exit 1
+  fi
+done
+printf 'Go 1.27.1+\nLocal tool pins live in mise.toml\ngolangci-lint run\n' > "$tmp_docs"
 if check_linter "$tmp_mod" "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
-  echo "test-go-toolchain: accepted instructions that restate the linter version" >&2
-  exit 1
-fi
-printf 'Go 1.27.1+\n' > "$tmp_docs"
-if check_linter "$tmp_mod" "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
-  echo "test-go-toolchain: accepted instructions that do not point at the pin" >&2
+  echo "test-go-toolchain: accepted instructions that mention mise.toml but drop mise install" >&2
   exit 1
 fi
 printf 'go 1.28.0\n' > "$tmp_mod"
-printf 'Go 1.28.0+\npinned in mise.toml\n' > "$tmp_docs"
+printf 'Go 1.28.0+\nmise install\n' > "$tmp_docs"
 if check_linter "$tmp_mod" "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
   echo "test-go-toolchain: accepted a module newer than the linter compiler" >&2
   exit 1
@@ -209,7 +212,7 @@ fi
 printf 'go 1.27.1\n' > "$tmp_mod"
 printf '          version: v2.12.2\n' > "$tmp_ci"
 printf '[tools]\ngolangci-lint = "2.12.2"\n' > "$tmp_mise"
-printf 'Go 1.27.1+\npinned in mise.toml\n' > "$tmp_docs"
+printf 'Go 1.27.1+\nmise install\ngolangci-lint run\n' > "$tmp_docs"
 if check_linter "$tmp_mod" "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
   echo "test-go-toolchain: accepted a linter built with an older Go" >&2
   exit 1
