@@ -194,15 +194,15 @@ instead of hiding it behind `SUDO_USER` resolution, which has no clean Windows e
 
 Each item is its own spec and atomic PR, in this order:
 
-1. Step/outcome model, seams and additive JSON, no behaviour change.
-2. Host configuration file and `host init` writing it (desired state).
-3. Linux convergence (#454), Windows convergence (#455), macOS host. These can run in
+1. Step/outcome model, seams and additive JSON, no behaviour change (#457).
+2. Host configuration file and `host init` writing it (desired state) (#458).
+3. Linux convergence (#454), Windows convergence (#455), macOS host (#459). These can run in
    parallel after 1 and 2.
 4. Per-service descriptors with control-plane detection (#453). Can start after 1.
 
 ## References
 
-- #450 (epic), #453, #454, #455, #307, #408, #451.
+- #450 (epic), #457, #458, #459, #453, #454, #455, #307, #408, #451.
 - [`docs/design/host-client-parity.md`](../design/host-client-parity.md).
 - [ADR-005](adr-005-headscale-compat.md), [ADR-011](adr-011-shareable-connection-profile.md),
   [ADR-012](adr-012-config-profiles-model.md), [ADR-013](adr-013-cli-tests-in-go.md).
