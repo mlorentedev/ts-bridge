@@ -82,7 +82,7 @@ Examples:
 	// Misc.
 	cmd.Flags().Bool("reset", false, "Reset state (manual mode only; no-op in auto mode)")
 	cmd.Flags().String("config", "", "Path to YAML config file (default: none)")
-	cmd.Flags().String("profile", "", "Named connection profile (overrides --target / TS_TARGET)")
+	cmd.Flags().String("profile", "", "Named profile defaults (flags, environment, and YAML take precedence)")
 	cmd.Flags().Bool("quiet", false, "Suppress the startup banner; the structured READY/ERROR lines still print")
 	return cmd
 }
@@ -147,6 +147,12 @@ func runConnect(cmd *cobra.Command, args []string) error {
 
 	// --reset is no-op in auto mode (ephemeral state by design).
 
+	release, err := lockCommandProfile(cmd)
+	if err != nil {
+		return err
+	}
+	defer release()
+
 	// Initialize logger.
 	if LoggerInit != nil {
 		LoggerInit(cfg)
@@ -170,6 +176,7 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 	if yamlCfg.ControlURL == "" {
 		yamlCfg.ControlURL = selectedProfile.ControlURL
 	}
+	applyProfileRuntime(yamlCfg, selectedProfile)
 	if flags.AuthKey != "" || flags.AuthKeyFile != "" || os.Getenv("TS_AUTHKEY") != "" {
 		return nil
 	}

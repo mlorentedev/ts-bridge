@@ -56,10 +56,12 @@ Add a wildcard host block in your `~/.ssh/config`:
 # Match all mesh IP addresses
 Host 100.64.0.* *.kubelab
     User root
-    StrictHostKeyChecking no
-    UserKnownHostsFile /dev/null
+    StrictHostKeyChecking ask
     ProxyCommand nc -X 5 -x 127.0.0.1:1080 %h %p
 ```
+
+Keep normal `known_hosts` storage and verify unfamiliar host fingerprints through
+a trusted channel; a mesh proxy does not replace SSH host authentication.
 
 On Windows without `nc`, use `connect-proxy` (included with Git for Windows):
 

@@ -18,6 +18,7 @@ type profileEntry struct {
 	Target     string `yaml:"target"`
 	ControlURL string `yaml:"control_url,omitempty"`
 	Credential string `yaml:"credential,omitempty"`
+	Runtime    `yaml:",inline"`
 }
 
 // storeFile is the on-disk YAML shape.
@@ -28,9 +29,20 @@ type storeFile struct {
 
 // Profile is the resolved, caller-facing view of a named profile.
 type Profile struct {
-	Target     string
-	ControlURL string
-	Credential string
+	Target     string `yaml:"target"`
+	ControlURL string `yaml:"control_url,omitempty"`
+	Credential string `yaml:"credential,omitempty"`
+	Runtime    `yaml:",inline"`
+}
+
+// Runtime holds non-secret, machine-local connection settings.
+type Runtime struct {
+	BootstrapSSH       string `yaml:"bootstrap_ssh,omitempty"`
+	BootstrapSOCKSAddr string `yaml:"bootstrap_socks_addr,omitempty"`
+	Hostname           string `yaml:"hostname,omitempty"`
+	StateDir           string `yaml:"state_dir,omitempty"`
+	LocalAddr          string `yaml:"local_addr,omitempty"`
+	HealthAddr         string `yaml:"health_addr,omitempty"`
 }
 
 // Store is a persistent, file-backed named-profile store.
@@ -59,6 +71,7 @@ func (s *Store) Import(name string, d Descriptor) error {
 		Target:     target,
 		ControlURL: d.ControlURL,
 		Credential: existing.Credential,
+		Runtime:    existing.Runtime,
 	}
 	data.DescriptorVersion = 1
 
@@ -72,6 +85,26 @@ var secretPrefixes = []string{"tskey-", "hskey-"}
 // Use this when no tsb:// descriptor is available (e.g. ts-bridge init --profile).
 // Returns an error if name is empty or if target contains a known secret prefix.
 func (s *Store) Set(name, target, controlURL string) error {
+	return s.set(name, target, controlURL, nil)
+}
+
+// Configure replaces connection settings while preserving the managed credential.
+func (s *Store) Configure(name string, selected Profile) error {
+	for _, value := range []string{
+		selected.ControlURL,
+		selected.BootstrapSSH, selected.BootstrapSOCKSAddr, selected.Hostname,
+		selected.StateDir, selected.LocalAddr, selected.HealthAddr,
+	} {
+		for _, prefix := range secretPrefixes {
+			if strings.Contains(value, prefix) {
+				return fmt.Errorf("profile configuration must not contain auth key material")
+			}
+		}
+	}
+	return s.set(name, selected.Target, selected.ControlURL, &selected.Runtime)
+}
+
+func (s *Store) set(name, target, controlURL string, settings *Runtime) error {
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("profile name must not be empty")
 	}
@@ -86,10 +119,14 @@ func (s *Store) Set(name, target, controlURL string) error {
 		return fmt.Errorf("load profile store: %w", err)
 	}
 	existing := data.Profiles[name]
+	if settings != nil {
+		existing.Runtime = *settings
+	}
 	data.Profiles[name] = profileEntry{
 		Target:     target,
 		ControlURL: controlURL,
 		Credential: existing.Credential,
+		Runtime:    existing.Runtime,
 	}
 	data.DescriptorVersion = 1
 	if err := s.save(data); err != nil {
@@ -169,6 +206,7 @@ func profileFromEntry(entry profileEntry) Profile {
 		Target:     entry.Target,
 		ControlURL: entry.ControlURL,
 		Credential: entry.Credential,
+		Runtime:    entry.Runtime,
 	}
 }
 

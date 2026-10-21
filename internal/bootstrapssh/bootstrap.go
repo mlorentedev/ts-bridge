@@ -50,7 +50,7 @@ func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) {
 	sshPath, err := deps.lookPath("ssh")
 	if err != nil {
-		return nil, fmt.Errorf("find OpenSSH executable %q in PATH: %w", "ssh", err)
+		return nil, fmt.Errorf("find OpenSSH executable %q in PATH (install OpenSSH or add its directory to PATH): %w", "ssh", err)
 	}
 
 	args, err := buildSSHArgs(cfg.Endpoint, cfg.SOCKSAddr)
@@ -72,7 +72,7 @@ func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) 
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		cancel()
-		return nil, fmt.Errorf("start OpenSSH bootstrap: %w", err)
+		return nil, startupError(sshPath, fmt.Errorf("start OpenSSH bootstrap: %w", err))
 	}
 
 	tunnel := &Tunnel{cancel: cancel, done: make(chan struct{})}
@@ -83,9 +83,14 @@ func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) 
 
 	if err := waitUntilReady(ctx, tunnel, cfg, deps); err != nil {
 		_ = tunnel.Close()
-		return nil, err
+		return nil, startupError(sshPath, err)
 	}
 	return tunnel, nil
+}
+
+func startupError(client string, err error) error {
+	return fmt.Errorf("OpenSSH client %q: %w; run this client's ssh -v for the configured endpoint; "+
+		"check IdentityFile or keys in its matching ssh-agent (ssh-add -l) and unlock interactively in this terminal", client, err)
 }
 
 func waitUntilReady(ctx context.Context, tunnel *Tunnel, cfg Config, deps dependencies) error {
