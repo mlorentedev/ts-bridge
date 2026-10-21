@@ -30,6 +30,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `specs/` (and `specs/archive/`) | Per-feature SDD folders (proposal + tasks + verification) — see §Workflow Rules |
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
 | `scripts/tests/` | CLI smoke tests (`smoke.bats`, BATS) exercising the built binary. Cross-platform CLI coverage belongs in Go tests under `cmd/cli/`, which the `test-windows` job already runs on Windows. |
+| `mise.toml` | Local tool pins (golangci-lint) that CI must match; checked by `scripts/tests/test-go-toolchain.sh` (#452) |
 | `Makefile` | Dev task runner — mutation-testing targets (gremlins, install-only; see QA-014) |
 | `.github/workflows/ci.yml` | CI jobs: `test`, `test-windows`, `test-macos`, `smoke` (bats), `build-matrix`, `lint`, `security` (gosec) |
 | `.github/workflows/release.yml` | Automated releases via release-please (PAT-driven) |
@@ -44,8 +45,8 @@ go build -o ts-bridge ./cmd/ts-bridge/
 # Test (CI runs -race on Linux; the Windows job omits it — it needs a C toolchain)
 go test -race -v ./...
 
-# Lint (CI pins this version via golangci-lint-action@v9 — match it to avoid drift)
-go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
+# Lint (the version is pinned in mise.toml, which CI must match; the toolchain guard checks both)
+mise install
 golangci-lint run
 
 # Security scan
