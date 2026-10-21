@@ -145,6 +145,17 @@ Edge with a separate user-data directory. It does not change the hosts file,
 system DNS, system proxy, or the normal Edge profile. The real route file and
 auth key remain local and unversioned.
 
+Without `--edge-path`, the command looks for Edge where each OS installs it:
+
+| OS | Searched, in order |
+|---|---|
+| Windows | `msedge` on `PATH`, then `Microsoft\Edge\Application\msedge.exe` under `%ProgramFiles(x86)%` and `%ProgramFiles%` |
+| macOS | `/Applications/Microsoft Edge.app` and `~/Applications/Microsoft Edge.app` (Edge puts nothing on `PATH`) |
+| Linux | `microsoft-edge`, then `microsoft-edge-stable` on `PATH` (the names the Microsoft packages install) |
+
+`--edge-path` always wins, and a `--edge-path` that does not name a file is an error,
+never a silent fallback to discovery.
+
 ---
 
 ## 4. Headscale / Tailscale ACL Policy Contract

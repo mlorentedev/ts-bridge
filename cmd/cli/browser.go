@@ -28,7 +28,7 @@ func newBrowserCmd() *cobra.Command {
 	}
 	command.Flags().String("url", "", "Private HTTPS URL to open")
 	command.Flags().String("user-data-dir", defaultBrowserUserDataDir(), "Isolated Edge user-data directory")
-	command.Flags().String("edge-path", "", "Path to msedge.exe (auto-detected when omitted)")
+	command.Flags().String("edge-path", "", "Path to the Microsoft Edge executable (auto-detected when omitted)")
 	command.Flags().String("pac-addr", "127.0.0.1:0", "Loopback address for the local PAC server")
 	command.Flags().String("socks5", "127.0.0.1:1080", "Loopback SOCKS5 listener address")
 	command.Flags().StringArray("route", nil, "Allow-listed route SOURCE_HOST:PORT=MESH_HOST:PORT (repeatable)")

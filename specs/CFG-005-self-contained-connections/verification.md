@@ -273,8 +273,35 @@ machine-readable gate. Feature states remain harness-owned and unchanged.
 | F8 | SPECULATIVE future serialization of caller-facing `Profile` | Declined: there is no production marshal/export path demonstrating this exposure. Shareable descriptors use a distinct type without runtime or credential-reference fields; removing tags or expanding the API is not justified by the hypothetical alone. |
 
 The follow-up issue comments and PR triage record carry these dispositions on
-GitHub. No merge or archive is claimed; #442 still requires conflict resolution
-and a deliberate decision on the review-scope qualification.
+GitHub. No merge or archive is claimed. The review above remains bound to its
+recorded head and scope; the later base integration is recorded separately below.
+
+## Publication and base integration - 2026-10-21
+
+Commit `75e064f` records the signed review, its launcher request and the approved
+documentation dispositions. The subsequent integration brings in `origin/master`
+at `7c5ead3cdf9bf7e5a9cebf63d86aa7d9187fc7fc` without rewriting published history.
+
+The only textual conflicts were `go.mod` and the lessons index. Keep upstream
+dependency versions and `go.sum`, retain `golang.org/x/sys v0.49.0` as a direct
+dependency for platform locking, and retain both lessons 039 and 040. The
+CFG-005 proposal, task contract and feature definitions are unchanged.
+
+Fresh validation after resolving those conflicts:
+
+- `go test -mod=readonly .\... -count=1` -> all tested packages passed.
+- `go vet -mod=readonly .\...` -> passed.
+- `go build -mod=readonly .\...` -> passed.
+- Git Bash `bash scripts/check-lessons.sh` -> passed (40 lessons).
+- Git Bash `bash scripts/check-doc-authkey.sh` -> passed (83 files).
+- `git diff --check` -> passed; no unresolved merge entries remain.
+
+No prevented lint executable or local race detector was run. CI and PR reviews
+must assess the new integrated head; the earlier signed report does not become
+a review of that head merely because its contract digests remain unchanged.
+The broader review-scope qualification and live f5 limitations above remain
+explicit. No live profile, installed binary, credential or unrelated connection
+was changed. Publication for review is not merge or archive approval.
 
 ## Promotion candidates
 

@@ -1,0 +1,5 @@
+# Repository tool pins. Inside this checkout they win over the machine-wide mise
+# pins, so a local `golangci-lint run` uses the version CI uses (#452).
+# scripts/tests/test-go-toolchain.sh fails when this pin and ci.yml disagree.
+[tools]
+golangci-lint = "2.14.0"

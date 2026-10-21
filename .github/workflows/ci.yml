@@ -87,6 +87,33 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+  # Native macOS job. `build-matrix` cross-compiles GOOS=darwin, which proves the
+  # darwin files compile, not that they behave: TestLogDirForPlatform failed on
+  # every Mac while CI stayed green (#447). Per-OS logic should take the OS as an
+  # input so the Linux job covers every branch; this job answers what only a real
+  # macOS can. The whole suite runs on every PR because it takes seconds, and
+  # -race works here (macOS ships clang). Not a required check yet: it becomes
+  # one after a run of green pushes on master (#351 owns branch protection).
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test -race ./...
+
   # POSIX CLI smoke tests (BATS). Builds the binary once, then exercises the
   # CLI surface end-to-end on a real Linux runner. Complements the Go unit
   # tests: it catches wiring regressions (a command that no longer registers,

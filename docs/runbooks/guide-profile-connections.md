@@ -13,7 +13,7 @@ Requires a build containing [ADR-016](../adr/adr-016-self-contained-profile-conn
 and #441. Older installed binaries do not support this runtime import. The
 [feature verification record](../../specs/CFG-005-self-contained-connections/verification.md)
 records successful Windows/Git Bash candidate acceptance on 2026-10-20.
-This runbook remains draft while #442 awaits final integration and delivery.
+This runbook remains draft while #442 awaits final review and delivery.
 
 ## One-Time Configuration
 

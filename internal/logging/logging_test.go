@@ -252,37 +252,46 @@ func TestFileRotator_Close(t *testing.T) {
 	}
 }
 
-func TestLogDirForPlatform(t *testing.T) {
-	// Save and restore env vars.
-	origHome := os.Getenv("HOME")
-	origAppData := os.Getenv("LOCALAPPDATA")
-	defer func() {
-		os.Setenv("HOME", origHome)
-		os.Setenv("LOCALAPPDATA", origAppData)
-	}()
-
-	// Set up env vars for all platforms.
-	os.Setenv("LOCALAPPDATA", "C:\\Users\\test")
-	os.Setenv("HOME", "/home/test")
-
-	// The function uses runtime.GOOS, so the result depends on the build target.
-	// We just verify it returns a valid path containing ts-bridge and logs.
-	dir := LogDirForPlatform()
-	if !strings.Contains(dir, "ts-bridge") || !strings.Contains(dir, "logs") {
-		t.Errorf("expected path containing ts-bridge and logs, got %s", dir)
+// TestLogDirFor covers every platform branch on any runner: the OS is an
+// input, so a darwin-only path no longer needs a darwin host to be tested.
+func TestLogDirFor(t *testing.T) {
+	const home, appData = "/home/test", `C:\Users\test`
+	tests := []struct {
+		goos string
+		want string
+	}{
+		{"windows", filepath.Join(appData, "ts-bridge", "logs")},
+		{"darwin", filepath.Join(home, "Library", "Logs", "ts-bridge")},
+		{"linux", filepath.Join(home, ".local", "share", "ts-bridge", "logs")},
+		{"freebsd", filepath.Join(home, ".local", "share", "ts-bridge", "logs")},
 	}
+	for _, tt := range tests {
+		t.Run(tt.goos, func(t *testing.T) {
+			if got := logDirFor(tt.goos, home, appData); got != tt.want {
+				t.Errorf("logDirFor(%q) = %q, want %q", tt.goos, got, tt.want)
+			}
+		})
+	}
+}
 
-	// Verify the path structure is correct for the detected platform.
-	switch runtime.GOOS {
-	case "windows":
-		if !strings.Contains(dir, filepath.Join("ts-bridge", "logs")) {
-			t.Errorf("expected Windows path, got %s", dir)
-		}
-	default:
-		// Linux/darwin: verify it contains the expected segments.
-		if !strings.Contains(dir, "ts-bridge") {
-			t.Errorf("expected ts-bridge in path, got %s", dir)
-		}
+// TestLogDirForPlatform checks the wiring: the exported function resolves the
+// running OS and the environment. The expectation is a literal per OS, not a
+// call to logDirFor, so a wrapper passing the wrong OS cannot agree with it.
+// Only the native runner of each OS can catch a constant OS argument, which is
+// why test-windows and test-macos run this suite too.
+func TestLogDirForPlatform(t *testing.T) {
+	t.Setenv("HOME", "/home/test")
+	t.Setenv("LOCALAPPDATA", `C:\Users\test`)
+
+	want := map[string]string{
+		"windows": filepath.Join(`C:\Users\test`, "ts-bridge", "logs"),
+		"darwin":  filepath.Join("/home/test", "Library", "Logs", "ts-bridge"),
+	}[runtime.GOOS]
+	if want == "" {
+		want = filepath.Join("/home/test", ".local", "share", "ts-bridge", "logs")
+	}
+	if got := LogDirForPlatform(); got != want {
+		t.Errorf("LogDirForPlatform() = %q, want %q", got, want)
 	}
 }
 
