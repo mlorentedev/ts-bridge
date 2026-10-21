@@ -1,7 +1,10 @@
 // Package host provides platform-specific host setup and check operations.
 package host
 
-import "log/slog"
+import (
+	"log/slog"
+	"runtime"
+)
 
 // SetupFlags holds configuration for host setup (legacy alias).
 // Deprecated: use Config or Flags instead.
@@ -13,17 +16,22 @@ type SetupResult struct {
 	Steps   []SetupStep
 }
 
-// SetupStep describes a single setup step and its outcome.
+// SetupStep describes a single setup step and its outcome. Success is
+// Outcome.Succeeded(), kept for the existing JSON contract.
 type SetupStep struct {
 	Name    string
+	Outcome Outcome
 	Success bool
 	Message string
+	Fix     string // the action that would resolve a non-success outcome
 }
 
 // Setup performs platform-specific host setup.
 // The logger may be nil — callers that don't need structured output can pass nil.
 func Setup(cfg Config, logger *slog.Logger) (SetupResult, error) {
-	return setupImpl(cfg, logger)
+	result := setupFor(runtime.GOOS, cfg, execRunner{})
+	logSetupSteps(logger, result.Steps)
+	return result, nil
 }
 
 // CheckResult holds the result of a host check operation.
@@ -40,12 +48,21 @@ type CheckResult struct {
 // host's actual setup instead of assuming defaults.
 // The logger may be nil — callers that don't need structured output can pass nil.
 func Check(cfg Config, logger *slog.Logger) (CheckResult, error) {
-	return checkImpl(cfg, logger)
+	result := checkFor(runtime.GOOS, cfg, execRunner{})
+	if logger != nil {
+		logger.Info("host check",
+			"tailscale_up", result.TailscaleUp,
+			"rdp_port", result.RDPPort,
+			"rdp_enabled", result.RDPEnabled,
+			"firewall_ok", result.FirewallOK,
+		)
+	}
+	return result, nil
 }
 
 // TailscaleIP returns the Tailscale IPv4 address, or empty string on failure.
 func TailscaleIP() string {
-	return tailscaleIPImpl()
+	return tailscaleIP(execRunner{})
 }
 
 // IsElevated returns true if the current process has admin/root privileges.
