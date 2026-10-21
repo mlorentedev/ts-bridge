@@ -22,10 +22,11 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `internal/health/` | `/health/live`, `/health/ready`, `/metrics` HTTP server |
 | `internal/telemetry/` | Atomic counters + read accessors |
 | `internal/discover/` | Tailnet device discovery via Tailscale and Headscale APIs |
-| `internal/host/` | Platform-specific host setup/check (firewall, RDP/xrdp, service) — `*_linux.go` / `*_windows.go` / `*_darwin.go` |
+| `internal/host/` | Platform-specific host setup/check (firewall, RDP/xrdp; no service install, see #307) — `*_linux.go` / `*_windows.go` / `*_darwin.go` |
 | `internal/logging/` | Structured slog logging: text to console + JSON to a rotating log file |
 | `internal/profile/` | Shareable connection descriptor (`tsb://`) + profile store behind `connect --profile` (ADR-011/012) |
 | `internal/browser/` | Loopback PAC generation/server plus isolated Edge discovery and launch arguments for allow-listed private origins. |
+| `docs/design/host-client-parity.md` | Host vs client gap inventory and per-OS host state (input to #450) |
 | `specs/` (and `specs/archive/`) | Per-feature SDD folders (proposal + tasks + verification) — see §Workflow Rules |
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
 | `scripts/tests/` | CLI smoke tests (`smoke.bats`, BATS) exercising the built binary. Cross-platform CLI coverage belongs in Go tests under `cmd/cli/`, which the `test-windows` job already runs on Windows. |
@@ -62,6 +63,7 @@ gosec ./...
 - **ADR-013:** CLI coverage lives in Go tests under `cmd/cli/`, not a second native suite — `smoke.bats` is frozen as the Linux wiring check
 - **ADR-014:** SOCKS5 dynamic mesh proxy for multi-target connectivity (SSH, kubectl, curl, and isolated private-browser access) — implemented via `connect --socks5` and `browser`, with allow-listed origin-to-mesh routes. Tracked as #186; live mesh validation remains open.
 - **ADR-015:** Profile-scoped credential management — `auth set` owns masked, per-user credential storage and profile references; provider-specific `auth create/rotate` is a separate optional layer that never persists administrative credentials by default. Tracked by #355/#368/#383.
+- **ADR-017:** Declarative, daemonless host setup — `host setup` converges a declared state (explicit `--config`), `host check` diffs it; steps report `ok/changed/failed/manual/unverified`; adds `services[]` and keeps the RDP-only keys as derived legacy fields; one `tsb://` per service with `svc=`. macOS: Remote Login automated with root+FDA, Screen Sharing verified and guided. Tracked by #450.
 - Full ADR index: [`docs/adr/`](docs/adr/) (project-bound knowledge, docs-as-code)
 
 ## Documentation
