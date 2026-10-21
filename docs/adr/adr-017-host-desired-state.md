@@ -89,7 +89,7 @@ host:
     rule: Tailscale-RDP-Ingress
   power:
     prevent_sleep: true
-  control_url: ""      # optional override of the detected control plane (C5)
+  # control_url: https://headscale.example   # optional override of the detected control plane (C5)
 ```
 
 Without a file, the declared state is the per-OS default: Windows `rdp`, Linux `rdp`
@@ -136,12 +136,14 @@ read counts as false). `steps[].success` stays as `outcome in {ok, changed}`.
 ### 4. One descriptor per service, carrying the real control plane
 
 The host emits one `tsb://` descriptor per declared service, adding a `svc=<kind>` query
-parameter. Clients already ignore unknown parameters, so older clients keep importing the
+parameter. Clients already ignore unknown parameters (`TestParse_ToleratesUnknownQueryParams`
+in `internal/profile`), so older clients keep importing the
 target and port, and the profile store does not keep `svc`: to an older client every
 descriptor is a plain TCP target. That is all the bridge needs (it forwards bytes), so
 `ssh` and `vnc` descriptors work through any client; only a client that reads `svc` can
 launch the matching viewer. The control plane is detected from the local Tailscale and overridable
-by `control_url`; an undetectable control plane is reported, never silently encoded as
+by `control_url`. An absent key means "detect"; an empty `control_url` is a configuration
+error, so unset and empty cannot be confused (#282). An undetectable control plane is reported, never silently encoded as
 SaaS (C5, #453). The legacy single `descriptor` key carries the first declared service.
 
 ### 5. OS boundaries
