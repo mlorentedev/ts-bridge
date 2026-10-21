@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -87,27 +88,65 @@ func EdgeArgs(cfg LaunchConfig) ([]string, error) {
 	}, nil
 }
 
+// FindEdge returns explicitPath when it names a file, otherwise the first Edge
+// install found for the running OS.
 func FindEdge(explicitPath string) (string, error) {
+	home, _ := os.UserHomeDir()
+	return findEdgeIn(explicitPath, edgeSearchFor(runtime.GOOS, home, os.Getenv), exec.LookPath, isFile)
+}
+
+// edgeSearch is where Edge installs on one OS: executable names looked up on
+// PATH, then absolute install paths, each in order.
+type edgeSearch struct {
+	names []string
+	paths []string
+}
+
+// edgeSearchFor takes the OS as an input so every branch is testable on any
+// runner (lesson 040). macOS installs an app bundle and puts nothing on PATH;
+// Linux packages put microsoft-edge and microsoft-edge-stable on PATH.
+func edgeSearchFor(goos, home string, getenv func(string) string) edgeSearch {
+	switch goos {
+	case "windows":
+		var paths []string
+		for _, root := range []string{getenv("PROGRAMFILES(X86)"), getenv("PROGRAMFILES")} {
+			if root != "" {
+				paths = append(paths, filepath.Join(root, "Microsoft", "Edge", "Application", "msedge.exe"))
+			}
+		}
+		return edgeSearch{names: []string{"msedge"}, paths: paths}
+	case "darwin":
+		bundle := filepath.Join("Microsoft Edge.app", "Contents", "MacOS", "Microsoft Edge")
+		return edgeSearch{paths: []string{filepath.Join("/Applications", bundle), filepath.Join(home, "Applications", bundle)}}
+	default:
+		return edgeSearch{names: []string{"microsoft-edge", "microsoft-edge-stable"}}
+	}
+}
+
+func findEdgeIn(explicitPath string, search edgeSearch, lookPath func(string) (string, error), isFile func(string) bool) (string, error) {
 	if explicitPath != "" {
-		if info, err := os.Stat(explicitPath); err != nil || info.IsDir() {
+		if !isFile(explicitPath) {
 			return "", fmt.Errorf("Edge executable not found: %s", explicitPath)
 		}
 		return explicitPath, nil
 	}
-	if path, err := exec.LookPath("msedge"); err == nil {
-		return path, nil
-	}
-	for _, root := range []string{os.Getenv("PROGRAMFILES(X86)"), os.Getenv("PROGRAMFILES")} {
-		if root == "" {
-			continue
+	for _, name := range search.names {
+		if path, err := lookPath(name); err == nil {
+			return path, nil
 		}
-		path := filepath.Join(root, "Microsoft", "Edge", "Application", "msedge.exe")
-		// #nosec G703 -- root comes from OS-owned Program Files variables and the suffix is fixed.
-		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+	}
+	for _, path := range search.paths {
+		if isFile(path) {
 			return path, nil
 		}
 	}
 	return "", fmt.Errorf("Microsoft Edge executable not found; provide --edge-path")
+}
+
+func isFile(path string) bool {
+	// #nosec G703 -- path is the operator's --edge-path or a fixed per-OS install location.
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func StartEdge(path string, args []string) error {
