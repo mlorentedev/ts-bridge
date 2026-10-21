@@ -117,7 +117,11 @@ func edgeSearchFor(goos, home string, getenv func(string) string) edgeSearch {
 		return edgeSearch{names: []string{"msedge"}, paths: paths}
 	case "darwin":
 		bundle := filepath.Join("Microsoft Edge.app", "Contents", "MacOS", "Microsoft Edge")
-		return edgeSearch{paths: []string{filepath.Join("/Applications", bundle), filepath.Join(home, "Applications", bundle)}}
+		paths := []string{filepath.Join("/Applications", bundle)}
+		if home != "" {
+			paths = append(paths, filepath.Join(home, "Applications", bundle))
+		}
+		return edgeSearch{paths: paths}
 	default:
 		return edgeSearch{names: []string{"microsoft-edge", "microsoft-edge-stable"}}
 	}

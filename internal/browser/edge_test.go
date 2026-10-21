@@ -51,6 +51,16 @@ func TestEdgeSearchForSkipsUnsetProgramFiles(t *testing.T) {
 	}
 }
 
+// An empty home would turn the per-user bundle into a path relative to the
+// working directory, so a binary planted there could be launched as Edge.
+func TestEdgeSearchForSkipsPerUserBundleWithoutHome(t *testing.T) {
+	got := edgeSearchFor("darwin", "", func(string) string { return "" })
+	want := []string{filepath.Join("/Applications", "Microsoft Edge.app", "Contents", "MacOS", "Microsoft Edge")}
+	if !reflect.DeepEqual(got.paths, want) {
+		t.Errorf("paths = %v, want only the system bundle %v", got.paths, want)
+	}
+}
+
 func TestFindEdgeIn(t *testing.T) {
 	search := edgeSearch{names: []string{"edge-on-path"}, paths: []string{"/first", "/second"}}
 	tests := []struct {
