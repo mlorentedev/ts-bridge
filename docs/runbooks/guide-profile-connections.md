@@ -10,8 +10,10 @@ owner: manu
 # Daily Foreground Profile Connections
 
 Requires a build containing [ADR-016](../adr/adr-016-self-contained-profile-connections.md)
-and #441. Older installed binaries do not support this runtime import. Live
-Windows/Git Bash acceptance remains pending in the feature's verification record.
+and #441. Older installed binaries do not support this runtime import. The
+[feature verification record](../../specs/CFG-005-self-contained-connections/verification.md)
+records successful Windows/Git Bash candidate acceptance on 2026-10-20.
+This runbook remains draft while #442 awaits final integration and delivery.
 
 ## One-Time Configuration
 
@@ -44,6 +46,8 @@ Import once, with the intended binary:
 
 `target` and `control_url` may also be supplied in the input. Omitted settings,
 the existing target and the managed credential association are preserved.
+Empty values also preserve existing settings; this import cannot clear a runtime
+field. An explicit clearing operation is follow-up work tracked under #399.
 Repeating this command with the same input is idempotent. `--force` authorizes
 updating this profile, not replacing its credential or changing another profile.
 The command does not generate a `.env` sidecar in profile mode.
@@ -108,10 +112,12 @@ client interactively.
 
 ## Duplicate Ownership and Listener Conflicts
 
-A second `connect` or `browser` using the same profile fails before initializing
-logging or another runtime/SSH child. Close the owning profile's foreground
-terminal normally before retrying. Different profile names have independent
-ownership locks; they still need non-conflicting runtime settings.
+A second `connect` or `browser` selecting the same `--profile` name fails before
+initializing logging or another runtime/SSH child. Close the owning profile's
+foreground terminal normally before retrying. Different profile names have
+independent ownership locks; they still need non-conflicting runtime settings.
+Invocations without `--profile`, configured only through flags, environment or
+YAML, do not acquire a named-profile lock; ordinary listener conflicts still apply.
 
 Persistent files under the profile store's `locks` directory are normal. Their
 presence does not indicate a running process: the operating system owns the lock

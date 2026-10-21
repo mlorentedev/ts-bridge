@@ -207,10 +207,74 @@ replaced. Git Bash selected Git for Windows OpenSSH.
 
 ## Related Findings and Disposition
 
+- Independent review on 2026-10-21: see the dedicated review and disposition
+  section below. Its signed result is PASS-WITH-GAPS for the feature-only diff;
+  it is not evidence that the broader launcher range was reviewed in full.
 - Corrected the related SOCKS runbook's host-key-verification bypass; normal known_hosts storage and first-use fingerprint verification remain required.
 - Existing context toolchain-label drift and ADR-009 status reconciliation are tracked on #412, with root cause and fix options recorded there. Do not change the human-owned context body through context-refresh.
 - `status`/readiness remain informational contracts, not proof of application reachability; the runbook explicitly requires a destination-service probe. No status-exit-code redesign is part of this feature.
 - #417's misleading profile help is corrected in this change; its broader source-diagnostics work remains separate.
+
+## Independent review and disposition - 2026-10-21
+
+`dotf spec review CFG-005-self-contained-connections --reviewer nan/deepseek-v4-flash --foreground`
+completed with exit 0 and wrote `review.md` plus `review-request.json` for head
+`3c61bd2db1abe6b09523fc68934f7b691f74bea9`. The signed verdict is
+**PASS-WITH-GAPS**: one THEORETICAL Major, no Blocker, and seven Minor findings.
+The operator approved the documentation-only dispositions below. No production
+code, tests, installed binary, runtime profile or managed credential was changed.
+
+### Scope qualification
+
+The launcher specified `c2e598eb9dd39e2f9ccb158fe59cc4e34f29f9d3...HEAD`
+(44 files, including inherited BUG-031 and archived review-request changes).
+The signed report instead describes `ecfa215...HEAD` (the 26-file CFG-005
+feature diff). These ranges are not equivalent. Preserve the signed report
+unchanged, but do not claim full coverage of the launcher-requested range or
+treat this disposition as final integration/merge approval. BUG-031 has its own
+review under #443/#444; that does not silently enlarge this review's scope.
+
+### Current-head CI and fresh review evidence
+
+GitHub Actions CI run `39492831677` and hygiene run `39492831746` passed on
+`3c61bd2`. Linux race tests, native Windows tests, lint, security, smoke, all six
+platform builds, hygiene and GitGuardian reported success. The Linux job runs
+the ownership tests, so Unix lock behavior and race validation have CI evidence;
+the earlier statements about these not running refer only to the local Windows
+checkout. No local race-detector or prevented lint executable was run.
+The PR-Agent job on this head was SKIPPED, not a review. CodeRabbit's earlier
+finding was already resolved; its latest draft-skip notice is not fresh coverage.
+
+The independent review transcript records fresh Windows runs:
+
+- `go test ./internal/profile -run Runtime -count=1` -> passed.
+- `go test ./cmd/cli -run ProfileRuntime -count=1` -> passed.
+- `go test ./internal/profile ./cmd/cli -run ProfileLock -count=1` -> both passed.
+- `go test ./internal/bootstrapssh -run 'TestStartReports(MissingOpenSSH|EarlyExit|UnlaunchableOpenSSH)' -count=1` -> passed.
+- `go test ./... -count=1` -> all tested packages passed.
+- `go build ./...` and `go vet ./...` -> passed.
+
+The live f5 command was not rerun by the reviewer. Its required Gitea JSON
+`status=pass` output was not independently captured in this review; the historical
+HTTP 200/TLS-valid acceptance narrative above is not a new execution of that
+machine-readable gate. Feature states remain harness-owned and unchanged.
+
+### Finding dispositions
+
+| ID | Finding | Disposition |
+|---|---|---|
+| F1 | THEORETICAL Major: profile-store writes can race or be interrupted | Deferred to existing #391 with the concrete CFG-005 mutation paths. The store has multiple writers, not only `init`; a runtime ownership lock is not a store-wide transaction. Cross-process mutation serialization and atomic/recoverable writes need focused tests and remain outside this feature's approved scope. No corruption was reproduced here. |
+| F2 | Runbook incorrectly says live acceptance is still pending | Applied: the runbook points to the recorded 2026-10-20 candidate acceptance. It remains draft because final integration/delivery is pending, not because the historical live probe is unperformed. |
+| F3 | Current-head CI and platform evidence are missing | Applied in the current-head evidence section above. Local Windows limitations and successful Linux CI are distinguished rather than conflated. |
+| F4 | Contract checkboxes and feature states remain pending | Deferred to feature closure. No contract text or feature state was changed. Only a harness may set `passing`; do not certify f5 without its required captured result. |
+| F5 | THEORETICAL Minor: generic URL userinfo is not rejected by the non-secret profile guard | Deferred under existing #399 for explicit URL-userinfo validation and synthetic negative tests. Keep normal OpenSSH `user@host` syntax valid. No real credential was inspected or persisted to investigate this finding. |
+| F6 | Runtime imports cannot clear an existing setting | Applied as a documented limitation; explicit unset semantics are follow-up work under #399. The current preserve-omitted/empty contract is intentional and remains unchanged. |
+| F7 | Duplicate-ownership wording is broader than the implementation | Applied: the runbook scopes ownership to explicit `--profile` selection and distinguishes listener conflicts for other configuration paths. |
+| F8 | SPECULATIVE future serialization of caller-facing `Profile` | Declined: there is no production marshal/export path demonstrating this exposure. Shareable descriptors use a distinct type without runtime or credential-reference fields; removing tags or expanding the API is not justified by the hypothetical alone. |
+
+The follow-up issue comments and PR triage record carry these dispositions on
+GitHub. No merge or archive is claimed; #442 still requires conflict resolution
+and a deliberate decision on the review-scope qualification.
 
 ## Promotion candidates
 
