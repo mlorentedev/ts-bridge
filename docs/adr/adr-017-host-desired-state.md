@@ -101,6 +101,11 @@ The host configuration is **machine-scoped and explicit**. Host commands do not 
 per-user profile or credential store: under elevation those resolve to the elevated
 user's directories (C9), and the host needs no credential.
 
+The file is validated against the target OS before any step runs. A declared entry the OS
+has no step for (a `kind` outside its row in §5, or `power` where §5 lists no power step)
+is a configuration error naming the entry and the OS; it is never skipped, so `check`
+cannot report a host converged while part of its declared state was ignored.
+
 ### 2. `setup` converges, `check` diffs, using the same steps
 
 Each OS contributes an ordered list of steps. Every step reads the current state first,
@@ -124,14 +129,18 @@ converged host reports only `ok` (C3). `check` exits zero only when every step i
 `host check --json` gains a `services` array
 (`kind`, `port`, `enabled`, `active`, `firewall_ok`) and `steps[].outcome` / `steps[].fix`.
 The existing keys stay and are derived (C2): `rdp_port` / `rdp_enabled` from the `rdp`
-service (zero/false when absent), `firewall_ok` true only when every declared service's
-firewall state is verified. `steps[].success` stays as `outcome in {ok, changed}`.
+service (zero/false when absent), `firewall_ok` true only when at least one service is
+declared and every declared service has `firewall_ok == true` (an `unverified` firewall
+read counts as false). `steps[].success` stays as `outcome in {ok, changed}`.
 
 ### 4. One descriptor per service, carrying the real control plane
 
 The host emits one `tsb://` descriptor per declared service, adding a `svc=<kind>` query
 parameter. Clients already ignore unknown parameters, so older clients keep importing the
-target and port. The control plane is detected from the local Tailscale and overridable
+target and port, and the profile store does not keep `svc`: to an older client every
+descriptor is a plain TCP target. That is all the bridge needs (it forwards bytes), so
+`ssh` and `vnc` descriptors work through any client; only a client that reads `svc` can
+launch the matching viewer. The control plane is detected from the local Tailscale and overridable
 by `control_url`; an undetectable control plane is reported, never silently encoded as
 SaaS (C5, #453). The legacy single `descriptor` key carries the first declared service.
 
@@ -142,6 +151,10 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 | Windows | `rdp` (+ `ssh` via OpenSSH Server when declared) | RDP enable honouring Group Policy precedence, firewall rule (state-first), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
 | Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, firewall INPUT rule (ufw `allow` / iptables `-C` then `-A`) | none |
 | macOS | `ssh` (Remote Login), `vnc` (Screen Sharing) | Remote Login when elevated and Full Disk Access is granted | Screen Sharing; Remote Login without Full Disk Access; application-firewall "block all" |
+
+On macOS, `check` reads Remote Login without root from the launchd override for
+`com.openssh.sshd` and, when no override exists, from the `Disabled` key of its launch
+daemon plist (shipped `true`), so a missing override reads as off.
 
 ### 6. Testability
 
