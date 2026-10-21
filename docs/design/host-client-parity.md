@@ -32,8 +32,8 @@ the host *command*, not about running ts-bridge on the host.
 
 | # | Client has | Host has | Owner |
 |---|---|---|---|
-| G1 | Named profiles, YAML `--config`, `flags > env > YAML > profile > defaults` (ADR-012/016) | `.env` + `TS_HOST_*` env only; `--config` on `host setup` is "reserved for future use" | #458 (explicit host config file, ADR-017) |
-| G2 | `--profile` on `connect`, `init`, `browser` | No `--profile` | **Rejected** by ADR-017: per-user stores resolve to root/Administrator under elevation; replaced by `--config` (#458) |
+| G1 | Named profiles and YAML `--config`, merged `flags > env > YAML > defaults` (`config.Merge`); a `--profile` takes the YAML file's place (ADR-012) | `.env` + `TS_HOST_*` env only; `--config` on `host setup` is "reserved for future use" | #458 (explicit host config file, proposed in ADR-017, #460) |
+| G2 | `--profile` on `connect`, `init`, `browser` | No `--profile` | Proposed for rejection in ADR-017 (#460): per-user stores resolve to root/Administrator under elevation; replaced by `--config` (#458). Stays open on #450 until #460 merges |
 | G3 | `init` writes profiles or YAML; `.env` is the compatibility path being retired (#399) | `host init` writes only `.env`, the path #399 deprecates | #458 |
 | G4 | Control-plane awareness: `--control-url`, `config.ValidateControlPlane` (#406) | Descriptor always `cp=saas`, even on a Headscale host | **#453** |
 | G5 | `init` refuses to overwrite without confirmation or `--force` (BUG-019) | `host init` rewrites `.env` with no confirmation and no `--force` | #458 |
@@ -78,8 +78,11 @@ the host *command*, not about running ts-bridge on the host.
 ### macOS facts that bound the design
 
 - Enabling Remote Login (`systemsetup -setremotelogin on`) needs root **and** Full Disk
-  Access; reading it without admin fails. `launchctl print-disabled system` reads the
-  sshd state without root.
+  Access; reading it without admin fails. Without root, the state is the launchd
+  override for `com.openssh.sshd` in `launchctl print-disabled system` when one exists,
+  and otherwise the `Disabled` key of `/System/Library/LaunchDaemons/ssh.plist`, which
+  ships `true`. Absence from the override list therefore means **off**, never on
+  (observed on macOS 27: override `enabled`, plist `Disabled = true`, port 22 open).
 - Screen Sharing cannot be enabled from the command line since macOS 12.1 (Apple: only
   MDM); `kickstart` is view-only since 10.14. Setup must report a manual action with a
   System Settings deep link, not attempt it.
@@ -103,4 +106,4 @@ the host *command*, not about running ts-bridge on the host.
 - Reference audit (Ansible, RustDesk, Tailscale CLI, vendor docs): maintainer knowledge store, `prestudy/host-parity-reference-audit-matrix.md`.
 - [ADR-011](../adr/adr-011-shareable-connection-profile.md) (daemonless host, descriptor),
   [ADR-012](../adr/adr-012-config-profiles-model.md),
-  ADR-016 (self-contained profile connections, lands with #442).
+  ADR-016 (self-contained profile connections; not yet in `docs/adr/`, lands with #442).
