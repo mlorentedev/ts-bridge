@@ -62,6 +62,7 @@ gosec ./...
 - **ADR-013:** CLI coverage lives in Go tests under `cmd/cli/`, not a second native suite — `smoke.bats` is frozen as the Linux wiring check
 - **ADR-014:** SOCKS5 dynamic mesh proxy for multi-target connectivity (SSH, kubectl, curl, and isolated private-browser access) — implemented via `connect --socks5` and `browser`, with allow-listed origin-to-mesh routes. Tracked as #186; live mesh validation remains open.
 - **ADR-015:** Profile-scoped credential management — `auth set` owns masked, per-user credential storage and profile references; provider-specific `auth create/rotate` is a separate optional layer that never persists administrative credentials by default. Tracked by #355/#368/#383.
+- **ADR-017:** Declarative, daemonless host setup — `host setup` converges a declared state (explicit `--config`), `host check` diffs it; steps report `ok/changed/failed/manual/unverified`; `services[]` replaces RDP-only fields additively; one `tsb://` per service with `svc=`. macOS: Remote Login automated with root+FDA, Screen Sharing verified and guided. Tracked by #450.
 - Full ADR index: [`docs/adr/`](docs/adr/) (project-bound knowledge, docs-as-code)
 
 ## Documentation
