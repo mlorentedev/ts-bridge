@@ -61,7 +61,7 @@ const (
 	enableXRDP = "systemctl enable --now xrdp"
 )
 
-var xrdpReads = []string{"lookpath xrdp", "lookpath systemctl", "output " + isEnabled, "output " + isActive}
+var xrdpReads = []string{"lookpath systemctl", "output " + isEnabled, "output " + isActive}
 
 // TestIptablesRule pins the iptables read (AC2, AC5): only exit 0 and exit 1
 // of -C are answers; any other result is an unknown state.
@@ -103,8 +103,24 @@ func TestXRDP(t *testing.T) {
 		{"enabled, not running", &recordingRunner{onPath: map[string]bool{"xrdp": true, "systemctl": true},
 			output: map[string]string{isEnabled: "enabled\n", isActive: "failed\n"}, exit: map[string]int{isActive: 3}},
 			xrdpState{installed: true, readable: true, enabled: true}},
-		{"not installed", &recordingRunner{onPath: map[string]bool{"systemctl": true}}, xrdpState{}},
+		{"not installed", &recordingRunner{onPath: map[string]bool{"systemctl": true},
+			output: map[string]string{isEnabled: "not-found\n"}, exit: map[string]int{isEnabled: 4}}, xrdpState{}},
+		{"sbin off PATH: systemd still finds the unit", &recordingRunner{onPath: map[string]bool{"systemctl": true}, output: up},
+			xrdpState{installed: true, readable: true, enabled: true, active: true}},
+		{"static unit", &recordingRunner{onPath: map[string]bool{"systemctl": true},
+			output: map[string]string{isEnabled: "static\n", isActive: "active\n"}},
+			xrdpState{installed: true, readable: true, enabled: true, active: true}},
+		{"indirect unit", &recordingRunner{onPath: map[string]bool{"systemctl": true},
+			output: map[string]string{isEnabled: "indirect\n", isActive: "active\n"}},
+			xrdpState{installed: true, readable: true, enabled: true, active: true}},
+		{"enabled for this boot only", &recordingRunner{onPath: map[string]bool{"systemctl": true},
+			output: map[string]string{isEnabled: "enabled-runtime\n", isActive: "active\n"}},
+			xrdpState{installed: true, readable: true, active: true}},
+		{"masked", &recordingRunner{onPath: map[string]bool{"systemctl": true},
+			output: map[string]string{isEnabled: "masked\n", isActive: "inactive\n"}, exit: map[string]int{isEnabled: 1, isActive: 3}},
+			xrdpState{installed: true, readable: true, masked: true}},
 		{"no systemctl", &recordingRunner{onPath: map[string]bool{"xrdp": true}}, xrdpState{installed: true}},
+		{"no systemctl, no xrdp", &recordingRunner{}, xrdpState{}},
 		{"systemctl prints nothing", &recordingRunner{onPath: map[string]bool{"xrdp": true, "systemctl": true},
 			fail: map[string]bool{isEnabled: true, isActive: true}}, xrdpState{installed: true}},
 	}
@@ -158,6 +174,12 @@ func TestSetupForLinux(t *testing.T) {
 			outcomes: []Outcome{OutcomeChanged, OutcomeOK, OutcomeOK},
 		},
 		{
+			name:     "xrdp masked: no enable, fix names unmask",
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isEnabled: "masked\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isEnabled: 1, isActive: 3}},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeFailed, OutcomeOK, OutcomeOK},
+		},
+		{
 			name:     "iptables, converged",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(nil)},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "run "+iptCheck, "output tailscale ip -4"),
@@ -184,13 +206,13 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "xrdp missing, no systemctl, no backend, Tailscale down",
 			runner:   &recordingRunner{elevated: true, fail: map[string]bool{"tailscale ip -4": true}},
-			calls:    []string{"lookpath xrdp", "lookpath ufw", "lookpath iptables", "output tailscale ip -4"},
+			calls:    []string{"lookpath systemctl", "lookpath xrdp", "lookpath ufw", "lookpath iptables", "output tailscale ip -4"},
 			outcomes: []Outcome{OutcomeFailed, OutcomeFailed, OutcomeFailed},
 		},
 		{
 			name:     "no systemctl",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(map[string]string{ufwAdded: "ufw allow 3389/tcp"})},
-			calls:    []string{"lookpath xrdp", "lookpath systemctl", "lookpath ufw", "output " + ufwAdded, "output tailscale ip -4"},
+			calls:    []string{"lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded, "output tailscale ip -4"},
 			outcomes: []Outcome{OutcomeFailed, OutcomeOK, OutcomeOK},
 		},
 	}
@@ -268,7 +290,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "no systemctl, ufw unreadable",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(nil), fail: map[string]bool{ufwAdded: true}},
-			calls:    []string{"output tailscale ip -4", "lookpath xrdp", "lookpath systemctl", "lookpath ufw", "output " + ufwAdded},
+			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded},
 			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
@@ -276,7 +298,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "xrdp not installed",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: linuxUp(nil), exit: map[string]int{iptCheck: 1}},
-			calls:    []string{"output tailscale ip -4", "lookpath xrdp", "lookpath ufw", "lookpath iptables", "run " + iptCheck},
+			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "lookpath iptables", "run " + iptCheck},
 			steps:    []string{"Tailscale IP=ok", "xrdp service=failed", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
