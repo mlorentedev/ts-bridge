@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -87,6 +88,11 @@ Outputs:
   - Firewall rule status
 
 Use --json for machine-readable output.
+
+Exit status:
+  0  every step is ok
+  1  the check could not run
+  2  the check ran and at least one step is not ok (its fix is printed)
 
 Examples:
   ts-bridge host check
@@ -217,11 +223,33 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	if jsonOut {
-		return printCheckJSON(result)
+		if err := printCheckJSON(result); err != nil {
+			return err
+		}
+	} else {
+		printCheckText(result)
 	}
+	return checkConvergence(result.Steps)
+}
 
-	printCheckText(result)
-	return nil
+// exitNotConverged is check's exit status when it ran but a step is not ok,
+// as `terraform plan -detailed-exitcode` uses 2 for "changes present".
+const exitNotConverged = 2
+
+// checkConvergence returns an ExitError with exitNotConverged unless every
+// step is ok (ADR-017 §2). In check, changed means setup would change it.
+func checkConvergence(steps []host.SetupStep) error {
+	var pending []string
+	for _, s := range steps {
+		if s.Outcome != host.OutcomeOK {
+			pending = append(pending, fmt.Sprintf("%s (%s)", s.Name, s.Outcome))
+		}
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	return &ExitError{Code: exitNotConverged, Err: fmt.Errorf("host not converged: %d of %d steps not ok: %s",
+		len(pending), len(steps), strings.Join(pending, ", "))}
 }
 
 // ─── Logger initialization ──────────────────────────────────────

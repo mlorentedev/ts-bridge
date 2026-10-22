@@ -123,6 +123,9 @@ outcome:
 `check` runs the read half of every step and never mutates. `setup` requires elevation;
 `check` does not and degrades to `unverified` instead of guessing. A second `setup` on a
 converged host reports only `ok` (C3). `check` exits zero only when every step is `ok`.
+Exit status, as `terraform plan -detailed-exitcode`: 0 every step `ok`, 1 the check could
+not run, 2 it ran and at least one step is not `ok`. Before HOST-004 PR B2, `check` exited
+0 whatever it found; `host check && ...` changes meaning from that release.
 
 ### 3. Services, not RDP fields
 

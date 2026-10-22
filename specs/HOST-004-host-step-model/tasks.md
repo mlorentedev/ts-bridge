@@ -33,7 +33,7 @@ created: "2026-10-21"
 
 ## Implementation — PR B2 (exit code)
 
-- [ ] [AC5] `check` exit code from step outcomes; update `smoke.bats` and `docs/qa-coverage.md`
+- [x] [AC5] `check` exit code from step outcomes; update `smoke.bats` and `docs/qa-coverage.md`
 
 ## Closing
 

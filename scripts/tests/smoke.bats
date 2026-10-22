@@ -452,8 +452,10 @@ TARGET="100.64.0.1:3389"
 # Unlike host setup, host check is READ-ONLY: it has no elevation guard and only
 # reads state (Tailscale IP via `tailscale ip`, RDP port, firewall status). Every
 # probe fails fast on the CI runner — tailscale/xrdp aren't installed, and
-# ufw/iptables error without root — so check exits 0 and reports "not OK" without
-# mutating or hanging. That makes its happy path safe to exercise directly here.
+# ufw/iptables error without root — so check reports "not OK" without mutating or
+# hanging. Its exit status is 0 when every step is ok and 2 when one is not
+# (HOST-004); 1 would mean the check itself failed. The cases accept 0 or 2 so
+# they do not depend on what the runner has installed.
 
 @test "host check --help: reachable, documents --json and read-only" {
   run "${BIN}" host check --help
@@ -463,11 +465,11 @@ TARGET="100.64.0.1:3389"
 }
 
 @test "host check: read-only, runs without admin and prints the status block" {
-  # No elevation guard: it exits 0 on the non-root CI runner (proving the
-  # read-only/no-admin path) and prints every status label even when nothing is
-  # installed (the 'Tailscale not installed' edge case reports rather than fails).
+  # No elevation guard: it runs to a verdict on the non-root CI runner (proving
+  # the read-only/no-admin path) and prints every status label even when nothing
+  # is installed (the 'Tailscale not installed' edge case reports rather than fails).
   run "${BIN}" host check
-  assert_success
+  assert_status_in 0 2
   assert_contains "HOST CHECK"
   assert_contains "Platform:"
   assert_contains "Tailscale:"
@@ -482,7 +484,7 @@ TARGET="100.64.0.1:3389"
 
 @test "host check --json: emits the documented JSON fields" {
   run bash -c '"${BIN}" host check --json 2>/dev/null'
-  assert_success
+  assert_status_in 0 2
   assert_contains "\"platform\""
   assert_contains "\"tailscale_ip\""
   assert_contains "\"rdp_port\""
@@ -495,7 +497,7 @@ TARGET="100.64.0.1:3389"
   # Regression guard for #254: the logger used to write to stdout ahead of the
   # payload, so `host check --json | jq .` failed on the interleaved line.
   run bash -c '"${BIN}" host check --json 2>/dev/null'
-  assert_success
+  assert_status_in 0 2
   assert_json_object
 }
 
@@ -505,7 +507,7 @@ TARGET="100.64.0.1:3389"
   # output was two concatenated objects, which `jq -e .` accepts as a valid
   # stream. Only an "exactly one value" assertion catches it.
   run bash -c '"${BIN}" host check --json --log-format json 2>/dev/null'
-  assert_success
+  assert_status_in 0 2
   assert_json_object
 }
 
@@ -519,7 +521,7 @@ TARGET="100.64.0.1:3389"
   # be portable. That logs reach stderr rather than stdout is pinned
   # deterministically by TestHostInitLogger_WritesToStderrNotStdout.
   run bash -c '"${BIN}" host check --json 2>&1 >/dev/null'
-  assert_success
+  assert_status_in 0 2
   refute_contains "\"tailscale_ip\""
   refute_contains "\"rdp_port\""
 }

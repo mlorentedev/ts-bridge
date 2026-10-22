@@ -63,3 +63,8 @@ func CheckJSONForTest(r host.CheckResult) ([]byte, error) {
 func SetupJSONForTest(result host.SetupResult) ([]byte, error) {
 	return setupJSON(result)
 }
+
+// CheckConvergenceForTest is a test-only wrapper for checkConvergence.
+func CheckConvergenceForTest(steps []host.SetupStep) error {
+	return checkConvergence(steps)
+}

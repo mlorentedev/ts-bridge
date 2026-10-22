@@ -236,6 +236,9 @@ ts-bridge host check
 ts-bridge host check --json
 ```
 
+Exit status: `0` when every step is `ok`, `2` when the check ran and at least one step
+is not `ok` (each one is printed with its fix), `1` when the check could not run.
+
 ## `ts-bridge version`
 
 Print version information.
