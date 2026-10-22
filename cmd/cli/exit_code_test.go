@@ -64,3 +64,19 @@ func TestCheckConvergence(t *testing.T) {
 		})
 	}
 }
+
+// TestReportCheck pins the wiring from a check result to the command's exit
+// status, in both output modes: the smoke suite accepts 0 or 2 on any runner,
+// so only this test fails if check stops reporting a host that needs work.
+func TestReportCheck(t *testing.T) {
+	converged := host.CheckResult{Steps: []host.SetupStep{{Name: "Tailscale IP", Outcome: host.OutcomeOK}}}
+	drift := host.CheckResult{Steps: []host.SetupStep{{Name: "Firewall rule", Outcome: host.OutcomeChanged, Fix: "run ts-bridge host setup"}}}
+	for _, jsonOut := range []bool{false, true} {
+		if got := cmdpkg.ExitCode(cmdpkg.ReportCheckForTest(converged, jsonOut)); got != 0 {
+			t.Errorf("json=%v converged: exit %d, want 0", jsonOut, got)
+		}
+		if got := cmdpkg.ExitCode(cmdpkg.ReportCheckForTest(drift, jsonOut)); got != 2 {
+			t.Errorf("json=%v drift: exit %d, want 2", jsonOut, got)
+		}
+	}
+}

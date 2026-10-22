@@ -222,6 +222,11 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("host check failed: %w", err)
 	}
 
+	return reportCheck(result, jsonOut)
+}
+
+// reportCheck prints the check result and returns its exit status as an error.
+func reportCheck(result host.CheckResult, jsonOut bool) error {
 	if jsonOut {
 		if err := printCheckJSON(result); err != nil {
 			return err

@@ -68,3 +68,8 @@ func SetupJSONForTest(result host.SetupResult) ([]byte, error) {
 func CheckConvergenceForTest(steps []host.SetupStep) error {
 	return checkConvergence(steps)
 }
+
+// ReportCheckForTest is a test-only wrapper for reportCheck.
+func ReportCheckForTest(r host.CheckResult, jsonOut bool) error {
+	return reportCheck(r, jsonOut)
+}
