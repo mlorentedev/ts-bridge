@@ -19,16 +19,16 @@ created: "2026-10-22"
 
 ## Implementation
 
-- [ ] [AC3] Failing tests for the `ufw show added` parser: `allow <port>/tcp`, `allow <port>` and an interface-scoped allow match; `33890`, `out`, `route` and `deny` do not
-- [ ] [AC3] Implement the ufw status parser
-- [ ] [AC2] [AC5] Failing tests for the iptables read: `-C` exit 0 present, exit 1 absent, other exit or no exit code unreadable
-- [ ] [AC2] [AC5] Implement the exit-code read through the `Runner`
-- [ ] [AC1] [AC2] Failing `TestSetupFor` cases: converged host makes no `run` call; missing rule runs `ufw allow <port>/tcp` or `iptables -A` once; unreadable state is `failed`
-- [ ] [AC1] [AC2] Implement the state-first firewall step for setup, sharing the read with check
-- [ ] [AC4] Failing tests for xrdp: not installed, enabled+active, disabled, inactive, unreadable, for setup and check
-- [ ] [AC4] Implement the xrdp service step (`systemctl is-enabled` / `is-active`, `enable --now`) and fill `services[].enabled` / `active`
-- [ ] [AC5] Update `TestCheckFor` golden argv and outcomes for the single-backend read
-- [ ] Update `docs/design/host-client-parity.md` (L1 to L4 closed) and the `host` help text
+- [x] [AC3] Failing tests for the `ufw show added` parser: `allow <port>/tcp`, `allow <port>` and an interface-scoped allow match; `33890`, `out`, `route` and `deny` do not
+- [x] [AC3] Implement the ufw status parser
+- [x] [AC2] [AC5] Failing tests for the iptables read: `-C` exit 0 present, exit 1 absent, other exit or no exit code unreadable
+- [x] [AC2] [AC5] Implement the exit-code read through the `Runner`
+- [x] [AC1] [AC2] Failing `TestSetupFor` cases: converged host makes no `run` call; missing rule runs `ufw allow <port>/tcp` or `iptables -A` once; unreadable state is `failed`
+- [x] [AC1] [AC2] Implement the state-first firewall step for setup, sharing the read with check
+- [x] [AC4] Failing tests for xrdp: not installed, enabled+active, disabled, inactive, unreadable, for setup and check
+- [x] [AC4] Implement the xrdp service step (`systemctl is-enabled` / `is-active`, `enable --now`) and fill `services[].enabled` / `active`
+- [x] [AC5] Update `TestCheckFor` golden argv and outcomes for the single-backend read
+- [x] Update `docs/design/host-client-parity.md` (L1 to L4 closed) and the `host` help text
 
 ## Closing
 

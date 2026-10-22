@@ -29,6 +29,8 @@ type Runner interface {
 	Run(name string, args ...string) error
 	Output(name string, args ...string) ([]byte, error)
 	LookPath(name string) (string, error)
+	// Elevated reports whether the process runs as root or Administrator.
+	Elevated() bool
 }
 
 type execRunner struct{}
@@ -45,6 +47,10 @@ func (execRunner) Output(name string, args ...string) ([]byte, error) {
 
 func (execRunner) LookPath(name string) (string, error) {
 	return exec.LookPath(name)
+}
+
+func (execRunner) Elevated() bool {
+	return isElevatedImpl()
 }
 
 func newStep(name string, outcome Outcome, message, fix string) SetupStep {

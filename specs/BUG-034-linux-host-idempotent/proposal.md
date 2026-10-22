@@ -29,7 +29,7 @@ template_version: "1.0"
   - `systemctl` missing (a non-systemd host): `unverified` in check, `failed` in setup.
   - Enabled and active: `ok`.
   - Anything else: setup runs `systemctl enable --now xrdp` and reports `changed`; check reports `changed`.
-- **Services and legacy keys.** `services[].enabled` and `services[].active` come from those reads, so `active` stops being `null` on Linux. As a result, the legacy `rdp_enabled` changes meaning on Linux. It used to mean "xrdp binary on `PATH`" and now means `is-enabled == enabled`, so a host with xrdp installed but disabled flips from `true` to `false`. ADR-017 §3 derives the legacy keys from the services, so this follows the rule. An `unverified` firewall leaves `firewall_ok` false (ADR-017 §3).
+- **Services and legacy keys.** `services[].enabled` and `services[].active` come from those reads, so `active` stops being `null` on Linux. As a result, the legacy `rdp_enabled` changes meaning on Linux. It used to mean "xrdp binary on `PATH`" and now means `is-enabled == enabled`, so a host with xrdp installed but disabled flips from `true` to `false`. ADR-017 §3 derives the legacy keys from the services, so this follows the rule. For the same reason, `rdp_port` reads 0 while xrdp is disabled, as it already did when the xrdp binary was missing. An `unverified` firewall leaves `firewall_ok` false (ADR-017 §3).
 - **Idempotence.** A second `host setup` on a converged host reports every step `ok` and runs no mutating command.
 
 Measured on Ubuntu 24.04 (ufw 0.36.2, iptables 1.8.10 nf_tables), 2026-10-22:

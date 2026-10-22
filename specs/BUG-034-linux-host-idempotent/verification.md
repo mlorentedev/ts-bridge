@@ -7,24 +7,30 @@ created: "2026-10-22"
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
-
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [x] AC1 (read first, a second run changes nothing) -> `TestSetupForLinux/ufw,_converged` and `iptables,_converged` record no `run` call except the read-only `-C`. In the container, two real `host setup` runs left exactly one rule on each backend.
+- [x] AC2 (ufw `allow`, iptables `-C` before `-A`) -> `TestSetupForLinux/ufw,_nothing_configured` and `iptables,_rule_missing` (golden argv); `TestIptablesRule`.
+- [x] AC3 (exact port, inbound only) -> `TestUFWAllows`: `33890`, `338`, `udp`, `out`, `route`, `deny` and `limit` do not match; `3389/tcp`, `3389`, `to any port 3389` and `in on tailscale0 ... port 3389 proto tcp` do.
+- [x] AC4 (xrdp through `systemctl`) -> `TestXRDP` (enabled+active, disabled+inactive, enabled+failed, not installed, no systemctl, empty answer); `TestSetupForLinux` and `TestCheckForLinux`.
+- [x] AC5 (unreadable means `unverified` or `failed`, with no mutation) -> `TestSetupForLinux/not_root:_no_firewall_command_runs`, `iptables_-C_fails_with_another_status`, `no_systemctl`; `TestCheckForLinux/not_root,_iptables_host` and `no_systemctl,_ufw_unreadable`; `TestCheckForLinux` asserts that check never runs a mutating command.
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `go test -race -count=1 ./...` -> ok
+- `GOOS=linux|windows|darwin go vet ./...` -> clean
+- `golangci-lint run` and `GOOS=linux golangci-lint run ./internal/host/...` -> 0 issues
+- End to end in an `ubuntu:24.04` container (ufw 0.36.2, iptables 1.8.10 nf_tables), with the `GOOS=linux` binary:
+  - ufw: first setup reports "Firewall rule added: TCP 3389 (ufw)", the second "Firewall allows TCP 3389 (ufw)", and `ufw show added` lists one rule.
+  - Removing ufw switches to iptables: same two messages, and `iptables -S INPUT` shows one `--dport 3389` rule.
+  - `host check --json` as root reports the firewall `ok` (`firewall_ok: true`). As a non-root user it reports `Firewall configuration unverified | run ts-bridge host check as root`.
+- No regressions: the Windows `TestSetupFor` / `TestCheckFor` cases pass unchanged. The fake runner only gained `exit` and `elevated`.
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
-
--
--
+- Elevation is part of the `Runner` (`Elevated()`), so the gate is table-tested like any other input (lesson 040). It is checked before any firewall command, because legacy iptables may exit 1, the "absent" answer, on permission denied.
+- ufw is read with `ufw show added`, not `ufw status`, because `status` lists no rules while ufw is inactive. The container run showed that.
+- An interface-scoped allow (`in on tailscale0`) counts as allowing the port. For a Tailscale host it is the narrower and better rule.
+- `cfg.FirewallRule` no longer appears in the Linux messages. Neither ufw nor iptables names rules, so the old message named a rule that does not exist.
+- The step is renamed from `xrdp detection` to `xrdp service`, since it now reads the service and not the binary. `steps[].name` is not a key consumers match on (ADR-017 §3 pins `outcome`), so the rename is not a contract break.
 
 ## Promotion candidates
 
