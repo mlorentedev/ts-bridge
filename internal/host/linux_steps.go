@@ -1,8 +1,8 @@
 package host
 
 import (
-	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -141,27 +141,50 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 	if _, err := r.LookPath(backendIPT); err != nil {
 		return firewallRead{noBackend: true, reason: "neither ufw nor iptables is installed"}
 	}
-	err := r.Run(backendIPT, iptablesRule("-C", port)...)
-	switch {
-	case err == nil:
+	out, err := r.Output(backendIPT, "-S", "INPUT")
+	if err != nil {
+		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
+	}
+	if iptablesCovers(string(out), port) {
 		return firewallRead{state: rulePresent, backend: backendIPT}
-	case exitCode(err) == 1:
-		return firewallRead{state: ruleAbsent, backend: backendIPT}
 	}
-	return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -C: %v", err)}
+	return firewallRead{state: ruleAbsent, backend: backendIPT}
 }
 
-func iptablesRule(op string, port int) []string {
-	return []string{op, "INPUT", "-p", protoTCP, "--dport", strconv.Itoa(port), "-j", "ACCEPT"}
+// iptComment matches a `--comment "..."` value, escaped quotes included, so a
+// comment cannot pose as a flag once the line is split.
+var iptComment = regexp.MustCompile(`--comment "(?:[^"\\]|\\.)*"`)
+
+// iptablesCovers reports whether `iptables -S` output holds an ACCEPT for TCP
+// whose destination port list contains port. Interface, source and match
+// qualifiers are the operator's scope and do not matter; a negated port, a
+// source port, a jump or a rule without a destination port never counts.
+func iptablesCovers(rules string, port int) bool {
+	for _, line := range strings.Split(rules, "\n") {
+		f := strings.Fields(iptComment.ReplaceAllString(line, ""))
+		if len(f) == 0 || f[0] != "-A" || iptFlag(f, "-j") != "ACCEPT" || iptFlag(f, "-p") != protoTCP {
+			continue
+		}
+		for _, flag := range []string{"--dport", "--dports", "--ports"} {
+			if portListHas(iptFlag(f, flag), port) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
-// exitCode returns the exit status an error carries (*exec.ExitError does), or -1.
-func exitCode(err error) int {
-	var e interface{ ExitCode() int }
-	if errors.As(err, &e) {
-		return e.ExitCode()
+// iptFlag returns the value of flag in f, or "" when it is absent or negated.
+func iptFlag(f []string, flag string) string {
+	i := slices.Index(f, flag)
+	if i < 0 || i+1 >= len(f) || (i > 0 && f[i-1] == "!") {
+		return ""
 	}
-	return -1
+	return f[i+1]
+}
+
+func iptablesAppend(port int) []string {
+	return []string{"-A", "INPUT", "-p", protoTCP, "--dport", strconv.Itoa(port), "-j", "ACCEPT"}
 }
 
 // ufwAllows reports whether `ufw show added` holds an inbound allow for TCP
@@ -196,9 +219,16 @@ func ufwRuleMatchesPort(f []string, port int) bool {
 		return (proto == "" || proto == protoTCP) && portListHas(ports, port)
 	}
 	i := destPortIndex(f)
-	if i < 0 || i+1 >= len(f) || !portListHas(f[i+1], port) {
-		return false
+	if i < 0 {
+		// No destination port: the rule allows every port, unless a source
+		// port or an application profile narrows it.
+		return !slices.Contains(f, "port") && !slices.Contains(f, "app") && ufwProtoTCP(f)
 	}
+	return i+1 < len(f) && portListHas(f[i+1], port) && ufwProtoTCP(f)
+}
+
+// ufwProtoTCP reports whether a ufw rule applies to TCP: `proto tcp` or none.
+func ufwProtoTCP(f []string) bool {
 	j := slices.Index(f, "proto")
 	return j < 0 || (j+1 < len(f) && f[j+1] == protoTCP)
 }
@@ -247,7 +277,7 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 	if read.backend == backendUFW {
 		err = r.Run(backendUFW, "allow", fmt.Sprintf("%d/tcp", port))
 	} else {
-		err = r.Run(backendIPT, iptablesRule("-A", port)...)
+		err = r.Run(backendIPT, iptablesAppend(port)...)
 	}
 	if err != nil {
 		return newStep(linuxFwName, OutcomeFailed, fmt.Sprintf("Could not add the firewall rule: %v", err),
