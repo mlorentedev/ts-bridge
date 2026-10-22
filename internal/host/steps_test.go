@@ -153,39 +153,63 @@ func TestSetupForWindowsRDPFailureFallsBackToDefaultPort(t *testing.T) {
 	}
 }
 
+// TestCheckFor pins check as the read half of the setup steps (AC3): the
+// recorded argv is today's read sequence, no call is a Run (the runner's only
+// mutating verb), each step reports an outcome, and the legacy keys are derived
+// from services (ADR-017 §3).
 func TestCheckFor(t *testing.T) {
+	active := (*bool)(nil)
 	tests := []struct {
-		name   string
-		goos   string
-		cfg    Config
-		runner *recordingRunner
-		calls  []string
-		want   CheckResult
+		name     string
+		goos     string
+		cfg      Config
+		runner   *recordingRunner
+		calls    []string
+		steps    []string // "name=outcome", in order
+		services []Service
+		legacy   CheckResult // only the pre-HOST-004 fields
 	}{
 		{
 			name: "linux, port found in ufw", goos: "linux", cfg: Config{Port: 3389},
 			runner: &recordingRunner{onPath: map[string]bool{"xrdp": true},
 				output: map[string]string{"tailscale ip -4": "100.64.0.5", "ufw status": "3389/tcp ALLOW"}},
-			calls: []string{"output tailscale ip -4", "lookpath xrdp", "output ufw status"},
-			want:  CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+			calls:    []string{"output tailscale ip -4", "lookpath xrdp", "output ufw status"},
+			steps:    []string{"Tailscale IP=ok", "xrdp detection=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: active, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
 		},
 		{
 			name: "linux, nothing", goos: "linux", cfg: Config{},
-			runner: &recordingRunner{fail: map[string]bool{"tailscale ip -4": true, "ufw status": true}},
-			calls:  []string{"output tailscale ip -4", "lookpath xrdp", "output ufw status", "output iptables -L INPUT -n"},
-			want:   CheckResult{},
+			runner:   &recordingRunner{fail: map[string]bool{"tailscale ip -4": true, "ufw status": true}},
+			calls:    []string{"output tailscale ip -4", "lookpath xrdp", "output ufw status", "output iptables -L INPUT -n"},
+			steps:    []string{"Tailscale IP=failed", "xrdp detection=failed", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Active: active}},
+			legacy:   CheckResult{},
 		},
 		{
 			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule"},
-			runner: &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psFwCheck: "Name: Rule"}},
-			calls:  []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
-			want:   CheckResult{TailscaleIP: "100.64.0.9", TailscaleUp: true, RDPPort: 3390, RDPEnabled: true, FirewallOK: true},
+			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psFwCheck: "Name: Rule"}},
+			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
+			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=ok"},
+			services: []Service{{Kind: "rdp", Port: 3390, Enabled: true, Active: active, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.9", TailscaleUp: true, RDPPort: 3390, RDPEnabled: true, FirewallOK: true},
 		},
 		{
+			name: "windows, registry unreadable and no rule", goos: "windows", cfg: Config{FirewallRule: "Rule"},
+			runner:   &recordingRunner{fail: map[string]bool{"tailscale ip -4": true, psPrefix + psPort: true}},
+			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
+			steps:    []string{"Tailscale IP=failed", "RDP configuration=failed", "Firewall rule=changed"},
+			services: []Service{{Kind: "rdp", Active: active}},
+			legacy:   CheckResult{},
+		},
+		{
+			// No service is declared on macOS until #459, so the hard-coded
+			// rdp_port 3389 this branch used to report is gone.
 			name: "darwin stub", goos: "darwin", cfg: Config{},
 			runner: &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.7"}},
 			calls:  []string{"output tailscale ip -4"},
-			want:   CheckResult{TailscaleIP: "100.64.0.7", TailscaleUp: true, RDPPort: 3389},
+			steps:  []string{"Tailscale IP=ok"},
+			legacy: CheckResult{TailscaleIP: "100.64.0.7", TailscaleUp: true},
 		},
 	}
 	for _, tt := range tests {
@@ -194,8 +218,27 @@ func TestCheckFor(t *testing.T) {
 			if !reflect.DeepEqual(tt.runner.calls, tt.calls) {
 				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
 			}
-			if got != tt.want {
-				t.Errorf("result = %+v, want %+v", got, tt.want)
+			for _, c := range tt.runner.calls {
+				if strings.HasPrefix(c, "run ") {
+					t.Errorf("check issued a mutating command: %q", c)
+				}
+			}
+			var steps []string
+			for _, s := range got.Steps {
+				steps = append(steps, s.Name+"="+string(s.Outcome))
+				if s.Outcome != OutcomeOK && s.Fix == "" {
+					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
+				}
+			}
+			if !reflect.DeepEqual(steps, tt.steps) {
+				t.Errorf("steps = %q, want %q", steps, tt.steps)
+			}
+			if !reflect.DeepEqual(got.Services, tt.services) {
+				t.Errorf("services = %+v, want %+v", got.Services, tt.services)
+			}
+			got.Steps, got.Services = nil, nil
+			if !reflect.DeepEqual(got, tt.legacy) {
+				t.Errorf("legacy keys = %+v, want %+v", got, tt.legacy)
 			}
 		})
 	}

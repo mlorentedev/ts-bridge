@@ -357,30 +357,47 @@ type setupJSONOutput struct {
 
 type setupStepJSON struct {
 	Name    string `json:"name"`
+	Outcome string `json:"outcome"`
 	Success bool   `json:"success"`
 	Message string `json:"message"`
+	Fix     string `json:"fix"`
 }
 
-func printSetupJSON(result host.SetupResult) error {
+// serviceJSON is one entry of check's services[] (ADR-017 §3). Active is null
+// until a step reads the service state.
+type serviceJSON struct {
+	Kind       string `json:"kind"`
+	Port       int    `json:"port"`
+	Enabled    bool   `json:"enabled"`
+	Active     *bool  `json:"active"`
+	FirewallOK bool   `json:"firewall_ok"`
+}
+
+func stepsJSON(steps []host.SetupStep) []setupStepJSON {
+	out := make([]setupStepJSON, 0, len(steps))
+	for _, s := range steps {
+		out = append(out, setupStepJSON{Name: s.Name, Outcome: string(s.Outcome), Success: s.Success, Message: s.Message, Fix: s.Fix})
+	}
+	return out
+}
+
+func setupJSON(result host.SetupResult) ([]byte, error) {
 	output := setupJSONOutput{
 		RDPPort:  result.RDPPort,
-		Steps:    make([]setupStepJSON, 0, len(result.Steps)),
+		Steps:    stepsJSON(result.Steps),
 		Warnings: []string{},
 		Errors:   []string{},
 	}
-
 	for _, step := range result.Steps {
-		output.Steps = append(output.Steps, setupStepJSON{
-			Name:    step.Name,
-			Success: step.Success,
-			Message: step.Message,
-		})
 		if !step.Success {
 			output.Warnings = append(output.Warnings, step.Message)
 		}
 	}
+	return json.MarshalIndent(output, "", "  ")
+}
 
-	data, err := json.MarshalIndent(output, "", "  ")
+func printSetupJSON(result host.SetupResult) error {
+	data, err := setupJSON(result)
 	if err != nil {
 		return fmt.Errorf("marshal setup result: %w", err)
 	}
@@ -397,6 +414,11 @@ func printCheckText(r host.CheckResult) {
 	fmt.Printf("  Tailscale IP:  %s\n", r.TailscaleIP)
 	fmt.Printf("  RDP:           %s (port %d)\n", statusStr(r.RDPEnabled), r.RDPPort)
 	fmt.Printf("  Firewall:      %s\n", statusStr(r.FirewallOK))
+	for _, step := range r.Steps {
+		if step.Outcome != host.OutcomeOK {
+			fmt.Printf("  ! %s (%s): %s\n", step.Name, step.Outcome, step.Fix)
+		}
+	}
 	if desc := buildDescriptorLine(r.TailscaleIP, r.RDPPort, ""); desc != "" {
 		fmt.Printf("  Descriptor:    %s\n", desc)
 	}
@@ -404,15 +426,17 @@ func printCheckText(r host.CheckResult) {
 	fmt.Println()
 }
 
-func printCheckJSON(r host.CheckResult) error {
+func checkJSON(r host.CheckResult) ([]byte, error) {
 	type jsonOutput struct {
-		TailscaleIP string `json:"tailscale_ip"`
-		RDPPort     int    `json:"rdp_port"`
-		RDPEnabled  bool   `json:"rdp_enabled"`
-		FirewallOK  bool   `json:"firewall_ok"`
-		TailscaleUp bool   `json:"tailscale_up"`
-		Platform    string `json:"platform"`
-		Descriptor  string `json:"descriptor,omitempty"`
+		TailscaleIP string          `json:"tailscale_ip"`
+		RDPPort     int             `json:"rdp_port"`
+		RDPEnabled  bool            `json:"rdp_enabled"`
+		FirewallOK  bool            `json:"firewall_ok"`
+		TailscaleUp bool            `json:"tailscale_up"`
+		Platform    string          `json:"platform"`
+		Descriptor  string          `json:"descriptor,omitempty"`
+		Services    []serviceJSON   `json:"services"`
+		Steps       []setupStepJSON `json:"steps"`
 	}
 
 	out := jsonOutput{
@@ -423,9 +447,17 @@ func printCheckJSON(r host.CheckResult) error {
 		TailscaleUp: r.TailscaleUp,
 		Platform:    runtime.GOOS,
 		Descriptor:  buildDescriptorLine(r.TailscaleIP, r.RDPPort, ""),
+		Services:    make([]serviceJSON, 0, len(r.Services)),
+		Steps:       stepsJSON(r.Steps),
 	}
+	for _, svc := range r.Services {
+		out.Services = append(out.Services, serviceJSON(svc))
+	}
+	return json.MarshalIndent(out, "", "  ")
+}
 
-	data, err := json.MarshalIndent(out, "", "  ")
+func printCheckJSON(r host.CheckResult) error {
+	data, err := checkJSON(r)
 	if err != nil {
 		return fmt.Errorf("marshal check result: %w", err)
 	}

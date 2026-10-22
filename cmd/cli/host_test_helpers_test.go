@@ -53,3 +53,13 @@ func HostInitLoggerForTest(cfg host.Config) *slog.Logger {
 func NewHostLoggerForTest(cfg host.Config, w io.Writer) *slog.Logger {
 	return newHostLogger(cfg, w)
 }
+
+// CheckJSONForTest is a test-only wrapper for checkJSON.
+func CheckJSONForTest(r host.CheckResult) ([]byte, error) {
+	return checkJSON(r)
+}
+
+// SetupJSONForTest is a test-only wrapper for setupJSON.
+func SetupJSONForTest(result host.SetupResult) ([]byte, error) {
+	return setupJSON(result)
+}

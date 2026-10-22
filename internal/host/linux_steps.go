@@ -44,11 +44,10 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 	if rdpPort == 0 {
 		rdpPort = defaultRDPPort
 	}
-	if _, err := r.LookPath("xrdp"); err == nil {
-		result.RDPEnabled = true
-		result.RDPPort = rdpPort
-	}
-	result.FirewallOK = linuxFirewallAllows(r, rdpPort)
+	xrdp := stepXRDP(r)
+	allowed := linuxFirewallAllows(r, rdpPort)
+	result.Steps = append(result.Steps, xrdp, firewallReadStep("Firewall configuration", allowed, rdpPort))
+	result.Services = []Service{{Kind: ServiceRDP, Port: rdpPort, Enabled: xrdp.Outcome == OutcomeOK, FirewallOK: allowed}}
 }
 
 // linuxFirewallAllows matches the port as a substring of the rule listing; L3 (#454) fixes that.
