@@ -1,7 +1,7 @@
 ---
 id: "BUG-031-derp-socks-proxy"
 type: spec
-status: implementing
+status: archived
 created: "2026-10-19"
 issue: "mlorentedev/ts-bridge#443"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
