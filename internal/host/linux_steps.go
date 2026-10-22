@@ -45,17 +45,29 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 		rdpPort = defaultRDPPort
 	}
 	xrdp := stepXRDP(r)
-	allowed := linuxFirewallAllows(r, rdpPort)
-	result.Steps = append(result.Steps, xrdp, firewallReadStep("Firewall configuration", allowed, rdpPort))
+	allowed, readable := linuxFirewallAllows(r, rdpPort)
+	const fwName = "Firewall configuration"
+	fw := firewallReadStep(fwName, allowed, rdpPort)
+	if !readable {
+		fw = newStep(fwName, OutcomeUnverified, "Could not read the firewall rules (ufw status and iptables -L need root)",
+			"run ts-bridge host check as root")
+	}
+	result.Steps = append(result.Steps, xrdp, fw)
 	result.Services = []Service{{Kind: ServiceRDP, Port: rdpPort, Enabled: xrdp.Outcome == OutcomeOK, FirewallOK: allowed}}
 }
 
 // linuxFirewallAllows matches the port as a substring of the rule listing; L3 (#454) fixes that.
-func linuxFirewallAllows(r Runner, port int) bool {
+// readable is false only when neither listing could be read, so "no rule" and
+// "cannot tell" stay distinct.
+func linuxFirewallAllows(r Runner, port int) (allowed, readable bool) {
 	portStr := fmt.Sprint(port)
-	if out, err := r.Output("ufw", "status"); err == nil && strings.Contains(string(out), portStr) {
-		return true
+	out, ufwErr := r.Output("ufw", "status")
+	if ufwErr == nil && strings.Contains(string(out), portStr) {
+		return true, true
 	}
 	out, err := r.Output("iptables", "-L", "INPUT", "-n")
-	return err == nil && strings.Contains(string(out), portStr)
+	if err != nil {
+		return false, ufwErr == nil
+	}
+	return strings.Contains(string(out), portStr), true
 }
