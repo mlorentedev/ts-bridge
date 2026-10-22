@@ -14,6 +14,7 @@ const (
 	xrdpFixSetup = "run ts-bridge host setup as root"
 	backendUFW   = "ufw"
 	backendIPT   = "iptables"
+	protoTCP     = "tcp"
 )
 
 func linuxPort(cfg Config) int {
@@ -151,7 +152,7 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 }
 
 func iptablesRule(op string, port int) []string {
-	return []string{op, "INPUT", "-p", "tcp", "--dport", strconv.Itoa(port), "-j", "ACCEPT"}
+	return []string{op, "INPUT", "-p", protoTCP, "--dport", strconv.Itoa(port), "-j", "ACCEPT"}
 }
 
 // exitCode returns the exit status an error carries (*exec.ExitError does), or -1.
@@ -191,14 +192,14 @@ func ufwRuleMatchesPort(f []string, port int) bool {
 	}
 	if len(f) == 1 {
 		ports, proto, _ := strings.Cut(f[0], "/")
-		return (proto == "" || proto == "tcp") && portListHas(ports, port)
+		return (proto == "" || proto == protoTCP) && portListHas(ports, port)
 	}
 	i := slices.Index(f, "port")
 	if i < 0 || i+1 >= len(f) || !portListHas(f[i+1], port) {
 		return false
 	}
 	j := slices.Index(f, "proto")
-	return j < 0 || (j+1 < len(f) && f[j+1] == "tcp")
+	return j < 0 || (j+1 < len(f) && f[j+1] == protoTCP)
 }
 
 // portListHas reports whether a ufw port list (`3389`, `22,3389`, `3380:3390`)
