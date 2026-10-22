@@ -330,9 +330,13 @@ func TestPrintSetupJSON_Serialization(t *testing.T) {
 			{Name: "Step 3", Success: true, Message: "Also OK"},
 		},
 	}
-	err := cmdpkg.PrintSetupJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintSetupJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
+	}
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("output is not valid JSON:\n%s", out.String())
 	}
 
 	// Verify the JSON structure by parsing it.
@@ -349,9 +353,13 @@ func TestPrintSetupJSON_EmptySteps(t *testing.T) {
 		RDPPort: 3389,
 		Steps:   []host.SetupStep{},
 	}
-	err := cmdpkg.PrintSetupJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintSetupJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
+	}
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("output is not valid JSON:\n%s", out.String())
 	}
 }
 
@@ -364,9 +372,13 @@ func TestPrintSetupJSON_AllWarnings(t *testing.T) {
 			{Name: "Step 2", Success: false, Message: "Warning 2"},
 		},
 	}
-	err := cmdpkg.PrintSetupJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintSetupJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
+	}
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("output is not valid JSON:\n%s", out.String())
 	}
 
 	// Verify the structure.
@@ -390,9 +402,13 @@ func TestPrintCheckJSON_Serialization(t *testing.T) {
 		TailscaleUp: true,
 	}
 
-	err := cmdpkg.PrintCheckJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintCheckJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printCheckJSON error: %v", err)
+	}
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("output is not valid JSON:\n%s", out.String())
 	}
 
 	// Verify the structure.
@@ -417,9 +433,13 @@ func TestPrintCheckJSON_Disconnected(t *testing.T) {
 		TailscaleUp: false,
 	}
 
-	err := cmdpkg.PrintCheckJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintCheckJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printCheckJSON error: %v", err)
+	}
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("output is not valid JSON:\n%s", out.String())
 	}
 
 	if result.TailscaleIP != "" {
