@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -161,12 +162,12 @@ func runHostInitInteractive(cmd *cobra.Command, f hostInitFlags) error {
 		return err
 	}
 
-	printHostInitSummary(f)
+	printHostInitSummary(cmd.OutOrStdout(), f)
 	return nil
 }
 
 // runHostInitNonInteractive writes configuration silently from flags.
-func runHostInitNonInteractive(_ *cobra.Command, f hostInitFlags) error {
+func runHostInitNonInteractive(cmd *cobra.Command, f hostInitFlags) error {
 	// Apply defaults for unset values.
 	if f.Port < 1 {
 		f.Port = host.DefaultRDPPort()
@@ -185,7 +186,7 @@ func runHostInitNonInteractive(_ *cobra.Command, f hostInitFlags) error {
 		return err
 	}
 
-	printHostInitSummary(f)
+	printHostInitSummary(cmd.OutOrStdout(), f)
 	return nil
 }
 
@@ -288,21 +289,21 @@ func hasNonBlank(lines []string) bool {
 }
 
 // printHostInitSummary displays the configuration written.
-func printHostInitSummary(f hostInitFlags) {
-	fmt.Println()
-	fmt.Println("  ---------------------------------------")
-	fmt.Println("  HOST CONFIGURED")
-	fmt.Println("  ---------------------------------------")
-	fmt.Printf("  RDP Port:       %d\n", f.Port)
-	fmt.Printf("  Firewall Rule:  %s\n", f.FirewallRule)
-	fmt.Printf("  Disable Sleep:  %v\n", !f.NoSleep)
-	fmt.Println()
+func printHostInitSummary(w io.Writer, f hostInitFlags) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  ---------------------------------------")
+	fmt.Fprintln(w, "  HOST CONFIGURED")
+	fmt.Fprintln(w, "  ---------------------------------------")
+	fmt.Fprintf(w, "  RDP Port:       %d\n", f.Port)
+	fmt.Fprintf(w, "  Firewall Rule:  %s\n", f.FirewallRule)
+	fmt.Fprintf(w, "  Disable Sleep:  %v\n", !f.NoSleep)
+	fmt.Fprintln(w)
 
 	absPath, _ := filepath.Abs(f.Config)
-	fmt.Printf("  Config: %s\n", absPath)
-	fmt.Println()
-	fmt.Println("  Next steps:")
-	fmt.Println("  1. Run: ts-bridge host setup")
-	fmt.Println("  2. Connect from client: ts-bridge connect")
-	fmt.Println()
+	fmt.Fprintf(w, "  Config: %s\n", absPath)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  Next steps:")
+	fmt.Fprintln(w, "  1. Run: ts-bridge host setup")
+	fmt.Fprintln(w, "  2. Connect from client: ts-bridge connect")
+	fmt.Fprintln(w)
 }

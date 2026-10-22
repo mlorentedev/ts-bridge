@@ -1,6 +1,7 @@
 package cmd_test
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -70,7 +71,9 @@ func TestCheckConvergence(t *testing.T) {
 // TestHostCheckCmd_ExitStatus drives the host check command end to end with an
 // injected result, in text and JSON mode. The smoke suite accepts 0 or 2 on any
 // runner, so this is the test that fails if check stops reporting a host that
-// needs work, whether in checkConvergence, reportCheck or runHostCheck.
+// needs work, whether in checkConvergence, reportCheck or runHostCheck. It also
+// pins that the result goes to the command's writer, not the process stdout
+// (#472).
 func TestHostCheckCmd_ExitStatus(t *testing.T) {
 	t.Chdir(t.TempDir()) // no .env from the working tree
 	converged := host.CheckResult{Steps: []host.SetupStep{{Name: "Tailscale IP", Outcome: host.OutcomeOK}}}
@@ -80,20 +83,25 @@ func TestHostCheckCmd_ExitStatus(t *testing.T) {
 		result host.CheckResult
 		args   []string
 		want   int
+		stdout string
 	}{
-		{"converged, text", converged, nil, 0},
-		{"converged, json", converged, []string{"--json"}, 0},
-		{"drift, text", drift, nil, 2},
-		{"drift, json", drift, []string{"--json"}, 2},
+		{"converged, text", converged, nil, 0, "HOST CHECK"},
+		{"converged, json", converged, []string{"--json"}, 0, `"steps"`},
+		{"drift, text", drift, nil, 2, "! Firewall rule (changed): run ts-bridge host setup"},
+		{"drift, json", drift, []string{"--json"}, 2, `"outcome": "changed"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := cmdpkg.HostCheckCmdForTest(t, func(host.Config, *slog.Logger) (host.CheckResult, error) { return tt.result, nil })
 			c.SetArgs(tt.args)
-			c.SetOut(io.Discard)
+			var out bytes.Buffer
+			c.SetOut(&out)
 			c.SetErr(io.Discard)
 			if got := cmdpkg.ExitCode(c.Execute()); got != tt.want {
 				t.Errorf("exit %d, want %d", got, tt.want)
+			}
+			if !strings.Contains(out.String(), tt.stdout) {
+				t.Errorf("stdout = %q, want it to contain %q", out.String(), tt.stdout)
 			}
 		})
 	}

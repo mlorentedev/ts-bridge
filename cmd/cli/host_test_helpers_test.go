@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"io"
 	"log/slog"
+	"os"
 
 	"ts-bridge/internal/host"
 )
@@ -36,12 +37,12 @@ type SetupStepJSONForTest = setupStepJSON
 
 // PrintSetupJSONForTest is a test-only wrapper for printSetupJSON.
 func PrintSetupJSONForTest(result host.SetupResult) error {
-	return printSetupJSON(result)
+	return printSetupJSON(os.Stdout, result)
 }
 
 // PrintCheckJSONForTest is a test-only wrapper for printCheckJSON.
 func PrintCheckJSONForTest(r host.CheckResult) error {
-	return printCheckJSON(r)
+	return printCheckJSON(os.Stdout, r)
 }
 
 // HostInitLoggerForTest is a test-only wrapper for hostInitLogger. It exercises
