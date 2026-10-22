@@ -187,6 +187,18 @@ func TestCheckFor(t *testing.T) {
 			legacy:   CheckResult{},
 		},
 		{
+			// Without root both listings fail: the rules are unknown, not absent,
+			// so check must not send the operator to setup (ADR-017 §2).
+			name: "linux, firewall unreadable without root", goos: "linux", cfg: Config{Port: 3389},
+			runner: &recordingRunner{onPath: map[string]bool{"xrdp": true},
+				output: map[string]string{"tailscale ip -4": "100.64.0.5"},
+				fail:   map[string]bool{"ufw status": true, "iptables -L INPUT -n": true}},
+			calls:    []string{"output tailscale ip -4", "lookpath xrdp", "output ufw status", "output iptables -L INPUT -n"},
+			steps:    []string{"Tailscale IP=ok", "xrdp detection=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: active}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+		},
+		{
 			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule"},
 			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psFwCheck: "Name: Rule"}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
