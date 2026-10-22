@@ -33,17 +33,38 @@ created: "2026-10-21"
 - Logging moved to `host.Setup` and `host.Check` (one line per step, plus one `host check` line), so Linux now logs the same shape Windows did. This is the only observable change, as declared in the proposal.
 - PR A stays under the LOC cap (non-test diff: +311 / -391 including comments), so Windows was not split out.
 
+## Review round 1 (nan/deepseek-v4-flash, FAIL at 166033f)
+
+#471 merged before this verdict arrived, so its fixes land in a follow-up PR.
+
+- **Major, F1 (an unreadable Linux firewall is reported as `changed`): applied.** `linuxFirewallAllows` now also returns whether either listing could be read. When neither `ufw status` nor `iptables -L` can be read (no root), the step reports `unverified` with the fix "run ts-bridge host check as root". It no longer reports `changed` and points the operator at setup. The new case `TestCheckFor/linux, firewall unreadable without root` failed before the change and passes after it. The existing `linux, nothing` case stays `changed`, because there `iptables -L` is readable and lists no rule. An `unverified` step still makes `check` exit 2, as AC5 requires: exit 0 only when every step is ok.
+- **Minor, stdout leak in `TestHostCheckCmd_ExitStatus`: ticketed as #472.** Every write in `cmd/cli/host.go` uses `fmt.Print*`, so the fix is a refactor of the whole command and falls outside this spec.
+- **Minor, `manual` and `unverified` have no producer: partly applied.** `unverified` now has one (F1). `manual` gets its first producer with the macOS steps (#459).
+- **Minor, Windows reports RDP enabled when `fDenyTSConnections=1`: already owned by #455 (W2).** The gap is unchanged from the base. Until #455 lands, exit 0 on Windows does not prove RDP is on.
+- **Minor, the darwin `descriptor` disappears with `rdp_port` 0: accepted.** A descriptor for port 0 would name a service that does not exist. #459 brings the macOS services and their descriptors.
+
+## Review round 2 (nan/deepseek-v4-flash, PASS-WITH-GAPS at f381542)
+
+- **F1, `Success` not asserted for check steps: applied.** `TestCheckFor` now asserts `Success == Outcome.Succeeded()` for every step, as `TestSetupFor` already did. That catches the reviewer's M7 mutant.
+- **F2, readable ufw plus unreadable iptables still reports `changed`: ticketed as #475.**
+- **F3, exit status missing from the user docs: applied.** `getting-started.md` (Windows and Linux "Verify") and both runbooks now state exit 0 / 2 / 1.
+- **F4, `port 0` in the text output: ticketed as #475.**
+- **F5, smoke widened to `assert_status_in 0 2`: accepted, as the reviewer recommends.** `TestHostCheckCmd_ExitStatus` pins 0 and 2 in Go.
+- **F6, `host setup` exits 0 with a failed step: ticketed as #476.**
+- **F7, promotions unanswered: applied below.** The contract set is left untouched so the verdict stays fresh.
+- **F8, digest normalization question: not a spec defect.** It concerns the archive gate in dotf. If `dotf spec archive` refuses the review as stale, that goes to dotfiles.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-041-2026-10-22.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-017 §2 already records the outcome set and the exit-status contract
+- [x] New pattern candidate for `00_meta/patterns/`? no: single-project mechanism (one CLI's check semantics)
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/HOST-004-host-step-model/` -> `specs/archive/HOST-004-host-step-model/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/HOST-004-host-step-model/` -> `specs/archive/HOST-004-host-step-model/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)

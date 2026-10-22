@@ -27,7 +27,7 @@ The ts-bridge CLI automates all steps. Run as Administrator:
 ```powershell
 # Configure everything: RDP, firewall, Tailscale, power settings
 ts-bridge host setup
-# Verify readiness (read-only)
+# Verify readiness (read-only; exit 0 = ready, 2 = a step is not ok)
 ts-bridge host check
 ```
 

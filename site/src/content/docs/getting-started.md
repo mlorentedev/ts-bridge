@@ -337,6 +337,8 @@ ts-bridge host check
 ts-bridge host check --json
 ```
 
+`host check` exits 0 when every step is ok, 2 when any step is not (it would change, failed, needs a manual action or could not be read), and 1 on error.
+
 ### Custom firewall rule
 
 ```powershell
@@ -371,6 +373,8 @@ ts-bridge host check
 # JSON output for automation
 ts-bridge host check --json
 ```
+
+`host check` exits 0 when every step is ok, 2 when any step is not (it would change, failed, needs a manual action or could not be read), and 1 on error.
 
   </TabItem>
   <TabItem label="macOS">

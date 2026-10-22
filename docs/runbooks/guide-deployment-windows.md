@@ -85,7 +85,7 @@ The target machine (host) needs Tailscale installed natively. Use the CLI to aut
 # Configure host for RDP (run as Administrator)
 ts-bridge host setup
 
-# Verify host readiness (read-only)
+# Verify host readiness (read-only; exit 0 = ready, 2 = a step is not ok)
 ts-bridge host check
 
 # Custom firewall rule name

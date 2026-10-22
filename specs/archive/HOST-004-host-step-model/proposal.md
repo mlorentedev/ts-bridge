@@ -1,7 +1,7 @@
 ---
 id: "HOST-004-host-step-model"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-21"
 issue: "mlorentedev/ts-bridge#457"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, host, cross-platform]
