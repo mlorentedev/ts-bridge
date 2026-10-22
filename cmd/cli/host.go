@@ -51,8 +51,8 @@ On Windows:
   - Optionally disables sleep mode
 
 On Linux:
-  - Detects xrdp installation
-  - Configures UFW/iptables firewall rule for RDP port
+  - Enables and starts xrdp (systemctl enable --now) when it is not already
+  - Allows the RDP port inbound with ufw (or iptables) when no rule allows it yet
   - Prints Tailscale IP
 
 On macOS:

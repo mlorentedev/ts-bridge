@@ -3,6 +3,7 @@ package host
 import (
 	"errors"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -16,7 +17,18 @@ type recordingRunner struct {
 	fail   map[string]bool   // joined command -> Run/Output returns an error
 	output map[string]string // joined command -> Output stdout
 	onPath map[string]bool   // LookPath hits
+	exit   map[string]int    // joined command -> Run/Output fails with this exit status
+	// elevated is what Elevated reports; it records no call.
+	elevated bool
 }
+
+// exitError carries an exit status the way *exec.ExitError does.
+type exitError int
+
+func (e exitError) Error() string { return "exit status " + strconv.Itoa(int(e)) }
+func (e exitError) ExitCode() int { return int(e) }
+
+func (r *recordingRunner) Elevated() bool { return r.elevated }
 
 func (r *recordingRunner) record(kind, name string, args []string) string {
 	cmd := strings.Join(append([]string{name}, args...), " ")
@@ -25,7 +37,11 @@ func (r *recordingRunner) record(kind, name string, args []string) string {
 }
 
 func (r *recordingRunner) Run(name string, args ...string) error {
-	if r.fail[r.record("run", name, args)] {
+	cmd := r.record("run", name, args)
+	if code, ok := r.exit[cmd]; ok {
+		return exitError(code)
+	}
+	if r.fail[cmd] {
 		return errors.New("exit status 1")
 	}
 	return nil
@@ -33,6 +49,9 @@ func (r *recordingRunner) Run(name string, args ...string) error {
 
 func (r *recordingRunner) Output(name string, args ...string) ([]byte, error) {
 	cmd := r.record("output", name, args)
+	if code, ok := r.exit[cmd]; ok {
+		return []byte(r.output[cmd]), exitError(code) // stdout survives a non-zero exit, as with exec
+	}
 	if r.fail[cmd] {
 		return nil, errors.New("exit status 1")
 	}
@@ -88,19 +107,6 @@ func TestSetupFor(t *testing.T) {
 		port     int
 		outcomes []Outcome
 	}{
-		{
-			name: "linux with ufw", goos: "linux", cfg: cfg,
-			runner: &recordingRunner{onPath: map[string]bool{"xrdp": true, "ufw": true},
-				output: map[string]string{"tailscale ip -4": "100.64.0.5\n"}},
-			calls: []string{"lookpath xrdp", "lookpath ufw", "run ufw route allow in to any port 3389 proto tcp", "output tailscale ip -4"},
-			port:  3389, outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
-		},
-		{
-			name: "linux without ufw or xrdp, Tailscale down", goos: "linux", cfg: Config{FirewallRule: "Rule"},
-			runner: &recordingRunner{fail: map[string]bool{"tailscale ip -4": true}},
-			calls:  []string{"lookpath xrdp", "lookpath ufw", "run iptables -A INPUT -p tcp --dport 3389 -j ACCEPT", "output tailscale ip -4"},
-			port:   3389, outcomes: []Outcome{OutcomeFailed, OutcomeChanged, OutcomeFailed},
-		},
 		{
 			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule"},
 			runner: &recordingRunner{output: map[string]string{"sc query Tailscale": "STATE : 4 RUNNING", psPrefix + psEnable: "3390\r\n"}},
@@ -169,35 +175,6 @@ func TestCheckFor(t *testing.T) {
 		services []Service
 		legacy   CheckResult // only the pre-HOST-004 fields
 	}{
-		{
-			name: "linux, port found in ufw", goos: "linux", cfg: Config{Port: 3389},
-			runner: &recordingRunner{onPath: map[string]bool{"xrdp": true},
-				output: map[string]string{"tailscale ip -4": "100.64.0.5", "ufw status": "3389/tcp ALLOW"}},
-			calls:    []string{"output tailscale ip -4", "lookpath xrdp", "output ufw status"},
-			steps:    []string{"Tailscale IP=ok", "xrdp detection=ok", "Firewall configuration=ok"},
-			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: active, FirewallOK: true}},
-			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
-		},
-		{
-			name: "linux, nothing", goos: "linux", cfg: Config{},
-			runner:   &recordingRunner{fail: map[string]bool{"tailscale ip -4": true, "ufw status": true}},
-			calls:    []string{"output tailscale ip -4", "lookpath xrdp", "output ufw status", "output iptables -L INPUT -n"},
-			steps:    []string{"Tailscale IP=failed", "xrdp detection=failed", "Firewall configuration=changed"},
-			services: []Service{{Kind: "rdp", Port: 3389, Active: active}},
-			legacy:   CheckResult{},
-		},
-		{
-			// Without root both listings fail: the rules are unknown, not absent,
-			// so check must not send the operator to setup (ADR-017 §2).
-			name: "linux, firewall unreadable without root", goos: "linux", cfg: Config{Port: 3389},
-			runner: &recordingRunner{onPath: map[string]bool{"xrdp": true},
-				output: map[string]string{"tailscale ip -4": "100.64.0.5"},
-				fail:   map[string]bool{"ufw status": true, "iptables -L INPUT -n": true}},
-			calls:    []string{"output tailscale ip -4", "lookpath xrdp", "output ufw status", "output iptables -L INPUT -n"},
-			steps:    []string{"Tailscale IP=ok", "xrdp detection=ok", "Firewall configuration=unverified"},
-			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: active}},
-			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
-		},
 		{
 			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule"},
 			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psFwCheck: "Name: Rule"}},

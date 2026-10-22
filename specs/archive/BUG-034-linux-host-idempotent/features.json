@@ -1,0 +1,37 @@
+[
+  {
+    "id": "BUG-034-linux-host-idempotent-f1",
+    "behavior": "A second setup on a converged Linux host reports every step ok and runs no mutating command",
+    "verification": "go test ./internal/host -run 'TestSetupFor' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-034-linux-host-idempotent-f2",
+    "behavior": "ufw adds an INPUT allow rule; iptables runs -C before -A and never -A when -C exits 0",
+    "verification": "go test ./internal/host -run 'TestSetupFor|TestIptablesRule' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-034-linux-host-idempotent-f3",
+    "behavior": "The firewall read matches the exact port and an inbound rule, never a substring or a FWD rule",
+    "verification": "go test ./internal/host -run 'TestUFWAllows' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-034-linux-host-idempotent-f4",
+    "behavior": "xrdp readiness uses systemctl is-enabled and is-active through the injected Runner",
+    "verification": "go test ./internal/host -run 'TestXRDP|TestCheckFor|TestSetupFor' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-034-linux-host-idempotent-f5",
+    "behavior": "An unreadable state is unverified in check and failed in setup",
+    "verification": "go test ./internal/host -run 'TestCheckFor|TestSetupFor' -count=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]

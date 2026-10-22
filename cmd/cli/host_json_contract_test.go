@@ -64,11 +64,11 @@ func TestCheckJSON_EmptyListsAreArraysNotNull(t *testing.T) {
 
 func TestSetupJSON_StepsCarryOutcomeAndFix(t *testing.T) {
 	data, err := cmdpkg.SetupJSONForTest(host.SetupResult{RDPPort: 3389, Steps: []host.SetupStep{
-		{Name: "xrdp detection", Outcome: host.OutcomeFailed, Message: "xrdp not installed", Fix: "sudo apt install xrdp"},
+		{Name: "xrdp service", Outcome: host.OutcomeFailed, Message: "xrdp not installed", Fix: "sudo apt install xrdp"},
 	}})
 	m := decode(t, data, err)
 	step := m["steps"].([]any)[0].(map[string]any)
-	want := map[string]any{"name": "xrdp detection", "outcome": "failed", "success": false, "message": "xrdp not installed", "fix": "sudo apt install xrdp"}
+	want := map[string]any{"name": "xrdp service", "outcome": "failed", "success": false, "message": "xrdp not installed", "fix": "sudo apt install xrdp"}
 	if !reflect.DeepEqual(step, want) {
 		t.Errorf("step = %v, want %v", step, want)
 	}

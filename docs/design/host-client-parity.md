@@ -47,14 +47,16 @@ the host *command*, not about running ts-bridge on the host.
 
 | Capability | Windows | Linux | macOS |
 |---|---|---|---|
-| Remote-access service | RDP: port read from registry; enabled state not read (W2) | xrdp: detected by binary on `PATH`, not by service state | **none** (stub) |
-| Firewall | Named rule via PowerShell (W3) | `ufw` / `iptables` (L1-L3) | not inspected |
+| Remote-access service | RDP: port read from registry; enabled state not read (W2) | xrdp: `systemctl is-enabled` / `is-active`, enabled with `enable --now` (#454) | **none** (stub) |
+| Firewall | Named rule via PowerShell (W3) | `ufw allow` / `iptables -C` then `-A`, read first (#454) | not inspected |
 | Tailscale | unattended mode + service start | IP only | IP only |
 | Power / sleep | disabled unless `--no-sleep` | not handled | not handled |
-| Idempotent re-run | not reported (no "already configured" state) | **no** (see L1) | n/a |
+| Idempotent re-run | not reported (no "already configured" state) | yes: a converged host reports every step `ok` (#454; iptables rules last until reboot) | n/a |
 | `host check` port | registry | config value, not the listener | 0: no service declared until #459 (was a hard-coded 3389) |
 
-### Linux defects found in the audit (#454)
+### Linux defects found in the audit (#454, fixed)
+
+All four are fixed by #454 (`specs/archive/BUG-034-linux-host-idempotent/` once archived). Kept here as the record of what the audit found.
 
 - **L1:** `iptables -A INPUT ... -j ACCEPT` runs without a prior `-C` check, so every
   re-run appends a duplicate rule.

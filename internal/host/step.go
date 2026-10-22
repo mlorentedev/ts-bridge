@@ -29,6 +29,8 @@ type Runner interface {
 	Run(name string, args ...string) error
 	Output(name string, args ...string) ([]byte, error)
 	LookPath(name string) (string, error)
+	// Elevated reports whether the process runs as root or Administrator.
+	Elevated() bool
 }
 
 type execRunner struct{}
@@ -47,6 +49,10 @@ func (execRunner) LookPath(name string) (string, error) {
 	return exec.LookPath(name)
 }
 
+func (execRunner) Elevated() bool {
+	return isElevatedImpl()
+}
+
 func newStep(name string, outcome Outcome, message, fix string) SetupStep {
 	return SetupStep{Name: name, Outcome: outcome, Success: outcome.Succeeded(), Message: message, Fix: fix}
 }
@@ -63,7 +69,8 @@ func setupFor(goos string, cfg Config, r Runner) SetupResult {
 	}
 }
 
-// checkFor runs the read half of goos's setup steps and never calls Run.
+// checkFor runs the read half of goos's setup steps and runs no mutating
+// command (the Linux iptables read is a read-only `iptables -C` through Run).
 // darwin declares no service until #459.
 func checkFor(goos string, cfg Config, r Runner) CheckResult {
 	result := CheckResult{TailscaleIP: tailscaleIP(r)}
