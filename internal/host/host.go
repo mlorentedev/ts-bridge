@@ -50,7 +50,8 @@ type CheckResult struct {
 const ServiceRDP = "rdp"
 
 // Service is the read state of one remote-access service the host declares.
-// Active is nil until a step reads the service state (#454, #455).
+// Active is nil when the service state cannot be read: on Linux when systemctl
+// does not answer, on Windows until #455.
 type Service struct {
 	Kind       string
 	Port       int

@@ -38,6 +38,8 @@ func TestUFWAllows(t *testing.T) {
 		{"source port only", "ufw allow from any port 3389 proto tcp", false},
 		{"source port, other destination", "ufw allow from any port 3389 to any port 22 proto tcp", false},
 		{"source and destination port", "ufw allow from any port 1234 to any port 3389 proto tcp", true},
+		{"logged", "ufw allow log 3389/tcp", true},
+		{"logged all, full form", "ufw allow in log-all on tailscale0 to any port 3389 proto tcp", true},
 		{"app profile", "ufw allow OpenSSH", false},
 		{"among others", "ufw allow 22/tcp\nufw allow 3389/tcp\nufw deny 4000/tcp", true},
 	}

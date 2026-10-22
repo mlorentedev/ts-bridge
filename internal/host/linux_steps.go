@@ -182,11 +182,12 @@ func ufwAllows(added string, port int) bool {
 
 // ufwRuleMatchesPort matches the short form (`3389/tcp`, `3389`, `in 3389/tcp`)
 // and the full form (`... port 3389 [proto tcp]`). A trailing `comment '...'` is
-// ignored, and the port may sit in a list or range (`22,3389/tcp`, `3380:3390/tcp`).
+// ignored, as is a `log`/`log-all` modifier, and the port may sit in a list or range (`22,3389/tcp`, `3380:3390/tcp`).
 func ufwRuleMatchesPort(f []string, port int) bool {
 	if i := slices.Index(f, "comment"); i >= 0 {
 		f = f[:i]
 	}
+	f = slices.DeleteFunc(slices.Clone(f), func(w string) bool { return w == "log" || w == "log-all" })
 	if len(f) == 2 && f[0] == "in" {
 		f = f[1:]
 	}

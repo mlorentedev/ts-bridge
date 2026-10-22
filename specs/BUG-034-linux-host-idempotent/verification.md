@@ -42,6 +42,15 @@ created: "2026-10-22"
 - Minor, SPECULATIVE (deletion record): applied below.
 - Minor, THEORETICAL (xrdp `LookPath`, `static` units): already #478.
 
+## Review round 3 (nan/deepseek-v4-flash, PASS-WITH-GAPS at 1afc554)
+
+- Minor, REAL (`ufw allow log 3389/tcp` read as absent): applied. `ufwRuleMatchesPort` drops `log`/`log-all`; two `TestUFWAllows` cases (shorthand and full form).
+- Minor, THEORETICAL (source-only allow `from 100.64.0.0/10` reads as absent): ticketed on #479, which decides "does an existing allow cover the port" for both backends.
+- Minor, REAL (duplicates left by the pre-fix code go unreported): ticketed as #480. Idempotence here means setup adds no new rule; it starts from what the tool writes, not from rules the old code already duplicated.
+- Minor, REAL (deletion record incomplete): applied in the section below.
+- Minor, REAL (`Service.Active` comment stale): applied in `internal/host/host.go`.
+- Question (`[AGENT-DRAFT]` in the gitignored review transcript): the transcript is removed before `dotf spec archive`.
+
 ## Test deletions
 
 Five Linux cases left `internal/host/steps_test.go`; they guarded the pre-#454 behaviour this spec replaces.
@@ -53,6 +62,10 @@ Five Linux cases left `internal/host/steps_test.go`; they guarded the pre-#454 b
 | `TestCheckFor/linux, port found in ufw` | `TestCheckForLinux/converged` | equivalent, through `ufw show added` |
 | `TestCheckFor/linux, firewall unreadable without root` | `TestCheckForLinux/not root, iptables host` | stricter: pins that no firewall command runs |
 | `TestCheckFor/linux, nothing` | none on Linux | The all-zero legacy keys with Tailscale down are an OS-independent derivation (ADR-017 §3), asserted by `TestCheckFor/windows, registry unreadable and no rule`; the Linux reads it depended on are covered by `xrdp not installed` |
+
+What the removed cases could detect: a Linux setup that skipped the firewall or xrdp step, a check that read the port from `ufw status`, and a check that ran a firewall command without root. Each successor goes red under a shown mutation: dropping the `!r.Elevated()` gate fails `TestSetupForLinux/not root` and `TestCheckForLinux/not root, iptables host` (round 1); `x.enabled && x.active` to `x.enabled` fails both `xrdp enabled, not running` cases (round 2); the reviewer's mutation 4 fails `TestSetupForLinux/ufw, converged` (round 3).
+
+Focused command: `go test -race ./internal/host -run 'TestUFWAllows|TestIptablesRule|TestXRDP|TestSetupForLinux|TestCheckForLinux|TestSetupFor|TestCheckFor'`
 
 ## Decisions made during implementation
 
