@@ -1,7 +1,7 @@
 ---
 id: "CFG-005-self-contained-connections"
 type: spec
-status: implementing
+status: archived
 created: "2026-10-15"
 issue: "mlorentedev/ts-bridge#441"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
