@@ -43,13 +43,24 @@ created: "2026-10-21"
 - **Minor, Windows reports RDP enabled when `fDenyTSConnections=1`: already owned by #455 (W2).** The gap is unchanged from the base. Until #455 lands, exit 0 on Windows does not prove RDP is on.
 - **Minor, the darwin `descriptor` disappears with `rdp_port` 0: accepted.** A descriptor for port 0 would name a service that does not exist. #459 brings the macOS services and their descriptors.
 
+## Review round 2 (nan/deepseek-v4-flash, PASS-WITH-GAPS at f381542)
+
+- **F1, `Success` not asserted for check steps: applied.** `TestCheckFor` now asserts `Success == Outcome.Succeeded()` for every step, as `TestSetupFor` already did. That catches the reviewer's M7 mutant.
+- **F2, readable ufw plus unreadable iptables still reports `changed`: ticketed as #475.**
+- **F3, exit status missing from the user docs: applied.** `getting-started.md` (Windows and Linux "Verify") and both runbooks now state exit 0 / 2 / 1.
+- **F4, `port 0` in the text output: ticketed as #475.**
+- **F5, smoke widened to `assert_status_in 0 2`: accepted, as the reviewer recommends.** `TestHostCheckCmd_ExitStatus` pins 0 and 2 in Go.
+- **F6, `host setup` exits 0 with a failed step: ticketed as #476.**
+- **F7, promotions unanswered: applied below.** The contract set is left untouched so the verdict stays fresh.
+- **F8, digest normalization question: not a spec defect.** It concerns the archive gate in dotf. If `dotf spec archive` refuses the review as stale, that goes to dotfiles.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-041-2026-10-22.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-017 §2 already records the outcome set and the exit-status contract
+- [x] New pattern candidate for `00_meta/patterns/`? no: single-project mechanism (one CLI's check semantics)
 
 ## Archive checklist
 
