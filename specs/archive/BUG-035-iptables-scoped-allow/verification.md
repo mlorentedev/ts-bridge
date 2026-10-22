@@ -58,3 +58,7 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - [x] Folder moved: `specs/BUG-035-iptables-scoped-allow/` -> `specs/archive/BUG-035-iptables-scoped-allow/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [x] Promotions above executed (if any)
+
+## Post-review amendment (2026-10-22, PR #482 bot review)
+
+CodeRabbit found that the parser removed only `--comment` values. A string match prints its value quoted as well (`-m string --string "marker -j DROP here"`), and `slices.Index` then read the quoted `-j DROP` as the target, so a scoped allow read as absent and setup appended an unrestricted ACCEPT. Now every quoted value is replaced by an empty `""` placeholder, which keeps the argument slot, before the fields are split. New `TestIptablesCovers` cases: "quoted string holding -j DROP" (red before the fix) and "quoted string holding -j ACCEPT on a drop". This change came after the PASS-WITH-GAPS round 2 and was not independently reviewed.

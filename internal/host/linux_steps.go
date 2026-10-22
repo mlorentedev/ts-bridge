@@ -151,9 +151,9 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 	return firewallRead{state: ruleAbsent, backend: backendIPT}
 }
 
-// iptComment matches a `--comment "..."` value, escaped quotes included, so a
-// comment cannot pose as a flag once the line is split.
-var iptComment = regexp.MustCompile(`--comment "(?:[^"\\]|\\.)*"`)
+// iptQuoted matches a quoted value (a `--comment` or `--string`), escaped
+// quotes included, so its words cannot pose as flags once the line is split.
+var iptQuoted = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
 
 // iptablesCovers reports whether `iptables -S` output holds an ACCEPT for TCP
 // whose destination port list contains port. Interface, source and match
@@ -161,7 +161,7 @@ var iptComment = regexp.MustCompile(`--comment "(?:[^"\\]|\\.)*"`)
 // source port, a jump or a rule without a destination port never counts.
 func iptablesCovers(rules string, port int) bool {
 	for _, line := range strings.Split(rules, "\n") {
-		f := strings.Fields(iptComment.ReplaceAllString(line, ""))
+		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
 		if len(f) == 0 || f[0] != "-A" || iptFlag(f, "-j") != "ACCEPT" || iptFlag(f, "-p") != protoTCP {
 			continue
 		}
