@@ -55,7 +55,6 @@ assert_failure() {
   fi
 }
 
-# assert_contains fails the test if $output does not contain the given substring.
 # assert_status_in CODE... passes when the last `run` exited with one of CODEs.
 assert_status_in() {
   local code
@@ -66,6 +65,7 @@ assert_status_in() {
   return 1
 }
 
+# assert_contains fails the test if $output does not contain the given substring.
 assert_contains() {
   if [[ "${output}" != *"$1"* ]]; then
     printf 'expected output to contain: %s\n--- output ---\n%s\n' "$1" "${output}" >&2
