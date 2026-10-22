@@ -33,6 +33,16 @@ created: "2026-10-21"
 - Logging moved to `host.Setup` and `host.Check` (one line per step, plus one `host check` line), so Linux now logs the same shape Windows did. This is the only observable change, as declared in the proposal.
 - PR A stays under the LOC cap (non-test diff: +311 / -391 including comments), so Windows was not split out.
 
+## Review round 1 (nan/deepseek-v4-flash, FAIL at 166033f)
+
+#471 merged before this verdict arrived, so its fixes land in a follow-up PR.
+
+- **Major, F1 (an unreadable Linux firewall is reported as `changed`): applied.** `linuxFirewallAllows` now also returns whether either listing could be read. When neither `ufw status` nor `iptables -L` can be read (no root), the step reports `unverified` with the fix "run ts-bridge host check as root". It no longer reports `changed` and points the operator at setup. The new case `TestCheckFor/linux, firewall unreadable without root` failed before the change and passes after it. The existing `linux, nothing` case stays `changed`, because there `iptables -L` is readable and lists no rule. An `unverified` step still makes `check` exit 2, as AC5 requires: exit 0 only when every step is ok.
+- **Minor, stdout leak in `TestHostCheckCmd_ExitStatus`: ticketed as #472.** Every write in `cmd/cli/host.go` uses `fmt.Print*`, so the fix is a refactor of the whole command and falls outside this spec.
+- **Minor, `manual` and `unverified` have no producer: partly applied.** `unverified` now has one (F1). `manual` gets its first producer with the macOS steps (#459).
+- **Minor, Windows reports RDP enabled when `fDenyTSConnections=1`: already owned by #455 (W2).** The gap is unchanged from the base. Until #455 lands, exit 0 on Windows does not prove RDP is on.
+- **Minor, the darwin `descriptor` disappears with `rdp_port` 0: accepted.** A descriptor for port 0 would name a service that does not exist. #459 brings the macOS services and their descriptors.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
