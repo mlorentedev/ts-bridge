@@ -203,6 +203,16 @@ func TestCheckFor(t *testing.T) {
 			legacy:   CheckResult{},
 		},
 		{
+			// readPortPS maps a read below 1 to 3389, so a successful read
+			// never yields an enabled service on port 0.
+			name: "windows, registry reads 0", goos: "windows", cfg: Config{FirewallRule: "Rule"},
+			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "0"}},
+			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
+			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: active}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.9", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+		},
+		{
 			// No service is declared on macOS until #459, so the hard-coded
 			// rdp_port 3389 this branch used to report is gone.
 			name: "darwin stub", goos: "darwin", cfg: Config{},
@@ -226,6 +236,9 @@ func TestCheckFor(t *testing.T) {
 			var steps []string
 			for _, s := range got.Steps {
 				steps = append(steps, s.Name+"="+string(s.Outcome))
+				if strings.Contains(s.Message, "port 0") {
+					t.Errorf("step %q names port 0 for an unknown port: %q", s.Name, s.Message)
+				}
 				if s.Outcome != OutcomeOK && s.Fix == "" {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}

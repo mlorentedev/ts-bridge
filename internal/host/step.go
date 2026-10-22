@@ -95,11 +95,16 @@ func deriveLegacy(result *CheckResult) {
 
 // firewallReadStep is the read half of a firewall step: "changed" means
 // setup would change it.
+// port 0 means the service port could not be read, so the message omits it.
 func firewallReadStep(name string, allowed bool, port int) SetupStep {
-	if allowed {
-		return newStep(name, OutcomeOK, fmt.Sprintf("Port %d allowed", port), "")
+	target := fmt.Sprintf("port %d", port)
+	if port == 0 {
+		target = "the service port (unknown)"
 	}
-	return newStep(name, OutcomeChanged, fmt.Sprintf("No rule found for port %d", port), "run ts-bridge host setup as an administrator")
+	if allowed {
+		return newStep(name, OutcomeOK, "Firewall allows "+target, "")
+	}
+	return newStep(name, OutcomeChanged, "No firewall rule found for "+target, "run ts-bridge host setup as an administrator")
 }
 
 func tailscaleIP(r Runner) string {
