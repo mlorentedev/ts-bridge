@@ -3,6 +3,8 @@ package cmd_test
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -65,18 +67,34 @@ func TestCheckConvergence(t *testing.T) {
 	}
 }
 
-// TestReportCheck pins the wiring from a check result to the command's exit
-// status, in both output modes: the smoke suite accepts 0 or 2 on any runner,
-// so only this test fails if check stops reporting a host that needs work.
-func TestReportCheck(t *testing.T) {
+// TestHostCheckCmd_ExitStatus drives the host check command end to end with an
+// injected result, in text and JSON mode. The smoke suite accepts 0 or 2 on any
+// runner, so this is the test that fails if check stops reporting a host that
+// needs work, whether in checkConvergence, reportCheck or runHostCheck.
+func TestHostCheckCmd_ExitStatus(t *testing.T) {
+	t.Chdir(t.TempDir()) // no .env from the working tree
 	converged := host.CheckResult{Steps: []host.SetupStep{{Name: "Tailscale IP", Outcome: host.OutcomeOK}}}
 	drift := host.CheckResult{Steps: []host.SetupStep{{Name: "Firewall rule", Outcome: host.OutcomeChanged, Fix: "run ts-bridge host setup"}}}
-	for _, jsonOut := range []bool{false, true} {
-		if got := cmdpkg.ExitCode(cmdpkg.ReportCheckForTest(converged, jsonOut)); got != 0 {
-			t.Errorf("json=%v converged: exit %d, want 0", jsonOut, got)
-		}
-		if got := cmdpkg.ExitCode(cmdpkg.ReportCheckForTest(drift, jsonOut)); got != 2 {
-			t.Errorf("json=%v drift: exit %d, want 2", jsonOut, got)
-		}
+	tests := []struct {
+		name   string
+		result host.CheckResult
+		args   []string
+		want   int
+	}{
+		{"converged, text", converged, nil, 0},
+		{"converged, json", converged, []string{"--json"}, 0},
+		{"drift, text", drift, nil, 2},
+		{"drift, json", drift, []string{"--json"}, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := cmdpkg.HostCheckCmdForTest(t, func(host.Config, *slog.Logger) (host.CheckResult, error) { return tt.result, nil })
+			c.SetArgs(tt.args)
+			c.SetOut(io.Discard)
+			c.SetErr(io.Discard)
+			if got := cmdpkg.ExitCode(c.Execute()); got != tt.want {
+				t.Errorf("exit %d, want %d", got, tt.want)
+			}
+		})
 	}
 }

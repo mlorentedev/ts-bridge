@@ -11,7 +11,7 @@ created: "2026-10-21"
 - [x] AC2 (PR A) -> `TestSetupFor`, `TestSetupForWindowsRDPFailureFallsBackToDefaultPort`, `TestCheckFor`: exact argv per OS, copied from the pre-HOST-004 tagged code, all run on any runner
 - [x] AC3 (PR B1) -> `TestCheckFor`: exact read argv per OS, no `run` call in any case, every non-`ok` step carries a fix
 - [x] AC4 (PR B1) -> `TestCheckFor` (services and legacy keys derived), `TestCheckJSON_AddsServicesAndSteps`, `TestCheckJSON_EmptyListsAreArraysNotNull`, `TestSetupJSON_StepsCarryOutcomeAndFix`; `smoke.bats` untouched and every `host check` case passes
-- [x] AC5 (PR B2) -> `TestExitCode` (0/1/2, wrapped errors), `TestCheckConvergence` (`changed`, `failed`, `unverified` all exit 2, the message names each step), `TestReportCheck` (exit status through the reporting path, text and JSON); `smoke.bats` host check cases assert exit in {0, 2}, which fails if `main.go` still exits 1
+- [x] AC5 (PR B2) -> `TestExitCode` (0/1/2, wrapped errors), `TestCheckConvergence` (`changed`, `failed`, `unverified` all exit 2, the message names each step), `TestHostCheckCmd_ExitStatus` (the command end to end with an injected result, text and JSON); `smoke.bats` host check cases assert exit in {0, 2}, which fails if `main.go` still exits 1
 
 ## Test status
 

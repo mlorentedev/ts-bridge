@@ -41,7 +41,7 @@ a smoke suite invoked as a subprocess is invisible to both.
 | `connect` | flag parsing + config-validation errors (target/auth/auth-key-file/bad flag), auth-key warning | 🔶 | QA-007 (#176) |
 | `discover` | required auth/tailnet errors, `--port` validation, `--json` no-auth path, flag surface | 🔶 | QA-008 (#177) |
 | `host setup` | `--help` flags + all platforms, non-root elevation guard, `--port` parse error | 🔶 | QA-009 (#178) |
-| `host check` | `--help`, read-only status block (no admin; smoke accepts exit 0 or 2, the exit-status mapping is pinned in Go by `TestReportCheck`), `--json` fields, stdout is exactly one JSON object | ✅ | QA-010 (#179) |
+| `host check` | `--help`, read-only status block (no admin; smoke accepts exit 0 or 2, the exit-status mapping is pinned in Go by `TestHostCheckCmd_ExitStatus`), `--json` fields, stdout is exactly one JSON object | ✅ | QA-010 (#179) |
 | *(cross-cutting)* | config precedence (flags > env > YAML > defaults) | ⬜ Go¹ | QA-011 (#181) |
 | *(cross-cutting)* | error handling (missing key, bad target/ports, timeouts) | ✅ | QA-012 (#182) |
 | *(e2e)* | multi-device real mesh, bidirectional forwarding | 👤 | QA-013 (#183) |

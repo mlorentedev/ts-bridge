@@ -216,7 +216,7 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 
-	result, err := host.Check(cfg, logger)
+	result, err := hostCheck(cfg, logger)
 	if err != nil {
 		logger.Error("host check failed", "error", err)
 		return fmt.Errorf("host check failed: %w", err)
@@ -236,6 +236,10 @@ func reportCheck(result host.CheckResult, jsonOut bool) error {
 	}
 	return checkConvergence(result.Steps)
 }
+
+// hostCheck is the check host check runs; tests replace it to drive the
+// command end to end without the machine's real state.
+var hostCheck = host.Check
 
 // exitNotConverged is check's exit status when it ran but a step is not ok,
 // as `terraform plan -detailed-exitcode` uses 2 for "changes present".

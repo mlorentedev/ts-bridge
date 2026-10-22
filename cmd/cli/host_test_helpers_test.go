@@ -6,6 +6,7 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
 	"io"
 	"log/slog"
 
@@ -69,7 +70,11 @@ func CheckConvergenceForTest(steps []host.SetupStep) error {
 	return checkConvergence(steps)
 }
 
-// ReportCheckForTest is a test-only wrapper for reportCheck.
-func ReportCheckForTest(r host.CheckResult, jsonOut bool) error {
-	return reportCheck(r, jsonOut)
+// HostCheckCmdForTest returns the host check command running check instead of
+// host.Check, and restores host.Check when the test ends.
+func HostCheckCmdForTest(t interface{ Cleanup(func()) }, check func(host.Config, *slog.Logger) (host.CheckResult, error)) *cobra.Command {
+	prev := hostCheck
+	hostCheck = check
+	t.Cleanup(func() { hostCheck = prev })
+	return newHostCheckCmd()
 }
