@@ -52,7 +52,7 @@ the host *command*, not about running ts-bridge on the host.
 | Tailscale | unattended mode + service start | IP only | IP only |
 | Power / sleep | disabled unless `--no-sleep` | not handled | not handled |
 | Idempotent re-run | not reported (no "already configured" state) | **no** (see L1) | n/a |
-| `host check` port | registry | config value, not the listener | hard-coded 3389 |
+| `host check` port | registry | config value, not the listener | 0: no service declared until #459 (was a hard-coded 3389) |
 
 ### Linux defects found in the audit (#454)
 

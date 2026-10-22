@@ -51,11 +51,24 @@ func actStep(name string, err error, okMsg, failMsg, fix string) SetupStep {
 }
 
 func checkWindows(cfg Config, r Runner, result *CheckResult) {
-	if port, err := readPortPS(r, psReadRDPPort); err == nil {
-		result.RDPPort = port
-		result.RDPEnabled = port > 0 // W2 (#455): fDenyTSConnections is never read
+	svc := Service{Kind: ServiceRDP}
+	port, err := readPortPS(r, psReadRDPPort)
+	if err == nil {
+		svc.Port, svc.Enabled = port, true // W2 (#455): fDenyTSConnections is never read
 	}
-	result.FirewallOK = windowsFirewallRuleExists(r, cfg.FirewallRule)
+	result.Steps = append(result.Steps, actRead("RDP configuration", err, fmt.Sprintf("RDP port %d", port),
+		"Could not read the RDP port from the registry", "enable Remote Desktop in Settings > System > Remote Desktop"))
+	svc.FirewallOK = windowsFirewallRuleExists(r, cfg.FirewallRule)
+	result.Steps = append(result.Steps, firewallReadStep("Firewall rule", svc.FirewallOK, svc.Port))
+	result.Services = []Service{svc}
+}
+
+// actRead maps a read's error to "ok" or "failed".
+func actRead(name string, err error, okMsg, failMsg, fix string) SetupStep {
+	if err != nil {
+		return newStep(name, OutcomeFailed, failMsg, fix)
+	}
+	return newStep(name, OutcomeOK, okMsg, "")
 }
 
 const (

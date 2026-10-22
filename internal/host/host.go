@@ -34,13 +34,29 @@ func Setup(cfg Config, logger *slog.Logger) (SetupResult, error) {
 	return result, nil
 }
 
-// CheckResult holds the result of a host check operation.
+// CheckResult holds the result of a host check operation. RDPPort, RDPEnabled
+// and FirewallOK are the pre-ADR-017 keys, derived from Services (§3).
 type CheckResult struct {
 	TailscaleIP string
 	RDPPort     int
 	RDPEnabled  bool
 	FirewallOK  bool
 	TailscaleUp bool
+	Services    []Service
+	Steps       []SetupStep
+}
+
+// ServiceRDP is the remote-desktop service kind (xrdp on Linux, RDP on Windows).
+const ServiceRDP = "rdp"
+
+// Service is the read state of one remote-access service the host declares.
+// Active is nil until a step reads the service state (#454, #455).
+type Service struct {
+	Kind       string
+	Port       int
+	Enabled    bool
+	Active     *bool
+	FirewallOK bool
 }
 
 // Check performs a read-only verification of host readiness. The resolved

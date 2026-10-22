@@ -1,6 +1,7 @@
 package host
 
 import (
+	"fmt"
 	"log/slog"
 	"os/exec"
 	"strings"
@@ -62,19 +63,48 @@ func setupFor(goos string, cfg Config, r Runner) SetupResult {
 	}
 }
 
-// checkFor runs the read-only host check of goos.
+// checkFor runs the read half of goos's setup steps and never calls Run.
+// darwin declares no service until #459.
 func checkFor(goos string, cfg Config, r Runner) CheckResult {
 	result := CheckResult{TailscaleIP: tailscaleIP(r)}
 	result.TailscaleUp = result.TailscaleIP != ""
+	result.Steps = []SetupStep{tailscaleStep(result.TailscaleIP)}
 	switch goos {
 	case "windows":
 		checkWindows(cfg, r, &result)
 	case "darwin":
-		result.RDPPort = defaultRDPPort
 	default:
 		checkLinux(cfg, r, &result)
 	}
+	deriveLegacy(&result)
 	return result
+}
+
+// deriveLegacy fills the pre-ADR-017 keys from the services (ADR-017 §3):
+// rdp_port/rdp_enabled from an enabled rdp service, firewall_ok only when
+// every declared service's firewall allows it.
+func deriveLegacy(result *CheckResult) {
+	result.FirewallOK = len(result.Services) > 0
+	for _, svc := range result.Services {
+		if svc.Kind == ServiceRDP && svc.Enabled {
+			result.RDPPort, result.RDPEnabled = svc.Port, true
+		}
+		result.FirewallOK = result.FirewallOK && svc.FirewallOK
+	}
+}
+
+// firewallReadStep is the read half of a firewall step: "changed" means
+// setup would change it.
+// port 0 means the service port could not be read, so the message omits it.
+func firewallReadStep(name string, allowed bool, port int) SetupStep {
+	target := fmt.Sprintf("port %d", port)
+	if port == 0 {
+		target = "the service port (unknown)"
+	}
+	if allowed {
+		return newStep(name, OutcomeOK, "Firewall allows "+target, "")
+	}
+	return newStep(name, OutcomeChanged, "No firewall rule found for "+target, "run ts-bridge host setup as an administrator")
 }
 
 func tailscaleIP(r Runner) string {
@@ -86,7 +116,11 @@ func tailscaleIP(r Runner) string {
 }
 
 func tailscaleIPStep(r Runner) SetupStep {
-	if ip := tailscaleIP(r); ip != "" {
+	return tailscaleStep(tailscaleIP(r))
+}
+
+func tailscaleStep(ip string) SetupStep {
+	if ip != "" {
 		return newStep("Tailscale IP", OutcomeOK, "Tailscale IP: "+ip, "")
 	}
 	return newStep("Tailscale IP", OutcomeFailed, "Tailscale not connected or CLI not available", "start Tailscale and log in")

@@ -26,11 +26,14 @@ created: "2026-10-21"
 - [x] [AC2] macOS stub into `darwin_steps.go`; tagged files keep only `isElevatedImpl`
 - [x] Shared per-step logging; `go test -race ./...`, `GOOS=windows/darwin go vet`, lint
 
-## Implementation — PR B (contract)
+## Implementation — PR B1 (additive contract)
 
-- [ ] [AC3] `checkFor` becomes the read half of the setup steps; test that check issues no mutating argv
-- [ ] [AC4] JSON: `steps[].outcome`, `steps[].fix`, `services[]`; derived legacy keys; `smoke.bats` unchanged
-- [ ] [AC5] `check` exit code from step outcomes
+- [x] [AC3] `checkFor` becomes the read half of the setup steps; test that check issues no mutating argv
+- [x] [AC4] JSON: `steps[].outcome`, `steps[].fix`, `services[]`; derived legacy keys; `smoke.bats` unchanged
+
+## Implementation — PR B2 (exit code)
+
+- [ ] [AC5] `check` exit code from step outcomes; update `smoke.bats` and `docs/qa-coverage.md`
 
 ## Closing
 

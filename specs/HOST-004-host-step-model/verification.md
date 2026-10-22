@@ -9,9 +9,9 @@ created: "2026-10-21"
 
 - [x] AC1 (PR A) -> `TestOutcomeSucceeded`; `TestSetupFor` asserts `Success == Outcome.Succeeded()` and a non-empty `Fix` on every non-success step
 - [x] AC2 (PR A) -> `TestSetupFor`, `TestSetupForWindowsRDPFailureFallsBackToDefaultPort`, `TestCheckFor`: exact argv per OS, copied from the pre-HOST-004 tagged code, all run on any runner
-- [ ] AC3 (PR B)
-- [ ] AC4 (PR B)
-- [ ] AC5 (PR B)
+- [x] AC3 (PR B1) -> `TestCheckFor`: exact read argv per OS, no `run` call in any case, every non-`ok` step carries a fix
+- [x] AC4 (PR B1) -> `TestCheckFor` (services and legacy keys derived), `TestCheckJSON_AddsServicesAndSteps`, `TestCheckJSON_EmptyListsAreArraysNotNull`, `TestSetupJSON_StepsCarryOutcomeAndFix`; `smoke.bats` untouched and every `host check` case passes
+- [ ] AC5 (PR B2)
 
 ## Test status
 
@@ -22,6 +22,10 @@ created: "2026-10-21"
 - No regressions: the existing `internal/host` and `cmd/cli` host tests pass unchanged.
 
 ## Decisions made during implementation
+
+- PR B split into B1 (additive) and B2 (exit code): AC4 requires `smoke.bats` unchanged and AC5 breaks its `assert_success` on `host check`. Owner decision, 2026-10-21.
+- B1: `services[].active` is `null`, not `false`, because no step reads service state yet. macOS `rdp_port` goes from a hard-coded 3389 to 0 (no service declared).
+- B1 test status: `go test -race -count=1 ./...` ok; `golangci-lint run` 0 issues; `GOOS=windows/linux go vet ./...` clean; `bats scripts/tests/smoke.bats` on macOS fails only 44/45, which also fail on the master binary (Linux-only `host setup` cases).
 
 - Step definitions moved to untagged `linux_steps.go`, `windows_steps.go` and `step.go`. The `_steps` suffix keeps Go from treating them as GOOS-constrained files. The tagged files keep only `isElevatedImpl`.
 - Logging moved to `host.Setup` and `host.Check` (one line per step, plus one `host check` line), so Linux now logs the same shape Windows did. This is the only observable change, as declared in the proposal.
