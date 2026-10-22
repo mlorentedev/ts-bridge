@@ -335,15 +335,14 @@ func TestPrintSetupJSON_Serialization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
 	}
-	if !json.Valid(out.Bytes()) {
-		t.Fatalf("output is not valid JSON:\n%s", out.String())
+	var parsed struct {
+		Steps []json.RawMessage `json:"steps"`
 	}
-
-	// Verify the JSON structure by parsing it.
-	// The function writes to stdout, which we can't easily capture from here.
-	// Instead, verify the internal structure is correct.
-	if len(result.Steps) != 3 {
-		t.Fatalf("expected 3 steps, got %d", len(result.Steps))
+	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, out.String())
+	}
+	if len(parsed.Steps) != 3 {
+		t.Fatalf("expected 3 steps in the output, got %d", len(parsed.Steps))
 	}
 }
 
