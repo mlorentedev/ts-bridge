@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -131,7 +132,8 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	// Profiles are the lowest configuration source above defaults. Load the
 	// selected profile before Merge validates required and control-plane fields.
 	profileName, _ := cmd.Flags().GetString("profile")
-	if err := applyConnectProfile(&yamlCfg, &flags, profileName); err != nil {
+	profileTarget, err := applyConnectProfile(&yamlCfg, &flags, profileName)
+	if err != nil {
 		return err
 	}
 
@@ -157,6 +159,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	if LoggerInit != nil {
 		LoggerInit(cfg)
 	}
+	warnConnectTargetOverride(profileName, profileTarget, cfg.Target, flags.Target)
 
 	// Run the bridge.
 	if Runner != nil {
@@ -165,10 +168,10 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("bridge runner not initialized (call main.go first)")
 }
 
-func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, profileName string) error {
+func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, profileName string) (string, error) {
 	selectedProfile, err := loadCommandProfile(profileName)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if yamlCfg.Target == "" {
 		yamlCfg.Target = selectedProfile.Target
@@ -178,10 +181,29 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 	}
 	applyProfileRuntime(yamlCfg, selectedProfile)
 	if flags.AuthKey != "" || flags.AuthKeyFile != "" || os.Getenv("TS_AUTHKEY") != "" {
-		return nil
+		return selectedProfile.Target, nil
 	}
 	flags.ProfileAuthKey, err = loadManagedProfileCredential(selectedProfile)
-	return err
+	return selectedProfile.Target, err
+}
+
+func warnConnectTargetOverride(profileName, profileTarget, target, flagTarget string) {
+	if profileName == "" || profileTarget == "" || target == "" || target == profileTarget {
+		return
+	}
+	source := "YAML"
+	if os.Getenv("TS_TARGET") != "" {
+		source = "TS_TARGET"
+	}
+	if flagTarget != "" {
+		source = "--target"
+	}
+	selectedLogger := logger
+	if selectedLogger == nil {
+		selectedLogger = slog.Default()
+	}
+	selectedLogger.Warn("connection target overrides selected profile",
+		"profile", profileName, "source", source, "target", target)
 }
 
 // collectFlags reads all CLI flag values into a FlagSet.
