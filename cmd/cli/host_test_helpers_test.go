@@ -6,6 +6,7 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
 	"io"
 	"log/slog"
 
@@ -62,4 +63,18 @@ func CheckJSONForTest(r host.CheckResult) ([]byte, error) {
 // SetupJSONForTest is a test-only wrapper for setupJSON.
 func SetupJSONForTest(result host.SetupResult) ([]byte, error) {
 	return setupJSON(result)
+}
+
+// CheckConvergenceForTest is a test-only wrapper for checkConvergence.
+func CheckConvergenceForTest(steps []host.SetupStep) error {
+	return checkConvergence(steps)
+}
+
+// HostCheckCmdForTest returns the host check command running check instead of
+// host.Check, and restores host.Check when the test ends.
+func HostCheckCmdForTest(t interface{ Cleanup(func()) }, check func(host.Config, *slog.Logger) (host.CheckResult, error)) *cobra.Command {
+	prev := hostCheck
+	hostCheck = check
+	t.Cleanup(func() { hostCheck = prev })
+	return newHostCheckCmd()
 }

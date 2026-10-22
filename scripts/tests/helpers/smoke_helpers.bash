@@ -55,6 +55,16 @@ assert_failure() {
   fi
 }
 
+# assert_status_in CODE... passes when the last `run` exited with one of CODEs.
+assert_status_in() {
+  local code
+  for code in "$@"; do
+    [ "${status}" -eq "${code}" ] && return 0
+  done
+  printf 'expected exit in {%s}, got %s\n--- output ---\n%s\n' "$*" "${status}" "${output}" >&2
+  return 1
+}
+
 # assert_contains fails the test if $output does not contain the given substring.
 assert_contains() {
   if [[ "${output}" != *"$1"* ]]; then

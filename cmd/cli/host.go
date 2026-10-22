@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -87,6 +88,11 @@ Outputs:
   - Firewall rule status
 
 Use --json for machine-readable output.
+
+Exit status:
+  0  every step is ok
+  1  the check could not run
+  2  the check ran and at least one step is not ok (its fix is printed)
 
 Examples:
   ts-bridge host check
@@ -210,18 +216,49 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 
-	result, err := host.Check(cfg, logger)
+	result, err := hostCheck(cfg, logger)
 	if err != nil {
 		logger.Error("host check failed", "error", err)
 		return fmt.Errorf("host check failed: %w", err)
 	}
 
-	if jsonOut {
-		return printCheckJSON(result)
-	}
+	return reportCheck(result, jsonOut)
+}
 
-	printCheckText(result)
-	return nil
+// reportCheck prints the check result and returns its exit status as an error.
+func reportCheck(result host.CheckResult, jsonOut bool) error {
+	if jsonOut {
+		if err := printCheckJSON(result); err != nil {
+			return err
+		}
+	} else {
+		printCheckText(result)
+	}
+	return checkConvergence(result.Steps)
+}
+
+// hostCheck is the check host check runs; tests replace it to drive the
+// command end to end without the machine's real state.
+var hostCheck = host.Check
+
+// exitNotConverged is check's exit status when it ran but a step is not ok,
+// as `terraform plan -detailed-exitcode` uses 2 for "changes present".
+const exitNotConverged = 2
+
+// checkConvergence returns an ExitError with exitNotConverged unless every
+// step is ok (ADR-017 §2). In check, changed means setup would change it.
+func checkConvergence(steps []host.SetupStep) error {
+	var pending []string
+	for _, s := range steps {
+		if s.Outcome != host.OutcomeOK {
+			pending = append(pending, fmt.Sprintf("%s (%s)", s.Name, s.Outcome))
+		}
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	return &ExitError{Code: exitNotConverged, Err: fmt.Errorf("host not converged: %d of %d steps not ok: %s",
+		len(pending), len(steps), strings.Join(pending, ", "))}
 }
 
 // ─── Logger initialization ──────────────────────────────────────

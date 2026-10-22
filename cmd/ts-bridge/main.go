@@ -36,6 +36,6 @@ func main() {
 	// Let Cobra handle all flag parsing and command dispatch.
 	if err := cli.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(cli.ExitCode(err))
 	}
 }

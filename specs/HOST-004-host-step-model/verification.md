@@ -11,7 +11,7 @@ created: "2026-10-21"
 - [x] AC2 (PR A) -> `TestSetupFor`, `TestSetupForWindowsRDPFailureFallsBackToDefaultPort`, `TestCheckFor`: exact argv per OS, copied from the pre-HOST-004 tagged code, all run on any runner
 - [x] AC3 (PR B1) -> `TestCheckFor`: exact read argv per OS, no `run` call in any case, every non-`ok` step carries a fix
 - [x] AC4 (PR B1) -> `TestCheckFor` (services and legacy keys derived), `TestCheckJSON_AddsServicesAndSteps`, `TestCheckJSON_EmptyListsAreArraysNotNull`, `TestSetupJSON_StepsCarryOutcomeAndFix`; `smoke.bats` untouched and every `host check` case passes
-- [ ] AC5 (PR B2)
+- [x] AC5 (PR B2) -> `TestExitCode` (0/1/2, wrapped errors), `TestCheckConvergence` (`changed`, `failed`, `unverified` all exit 2, the message names each step), `TestHostCheckCmd_ExitStatus` (the command end to end with an injected result, text and JSON); `smoke.bats` host check cases assert exit in {0, 2}, which fails if `main.go` still exits 1
 
 ## Test status
 
@@ -25,6 +25,8 @@ created: "2026-10-21"
 
 - PR B split into B1 (additive) and B2 (exit code): AC4 requires `smoke.bats` unchanged and AC5 breaks its `assert_success` on `host check`. Owner decision, 2026-10-21.
 - B1: `services[].active` is `null`, not `false`, because no step reads service state yet. macOS `rdp_port` goes from a hard-coded 3389 to 0 (no service declared).
+- AC4's "smoke.bats unchanged" held for B1 (#470), which left the file untouched. B2 edits it by design, so f4's verification checks the JSON and check tests only, not a diff against master.
+- B2: exit 2 for "not converged", not 1, so a script can tell a host that needs work from a check that could not run (`terraform plan -detailed-exitcode`). `main.go` maps errors through `cli.ExitCode`; every other command still exits 1 on error. `host setup` keeps exit 0 on a failed step: AC5 covers `check` only.
 - B1 test status: `go test -race -count=1 ./...` ok; `golangci-lint run` 0 issues; `GOOS=windows/linux go vet ./...` clean; `bats scripts/tests/smoke.bats` on macOS fails only 44/45, which also fail on the master binary (Linux-only `host setup` cases).
 
 - Step definitions moved to untagged `linux_steps.go`, `windows_steps.go` and `step.go`. The `_steps` suffix keeps Go from treating them as GOOS-constrained files. The tagged files keep only `isElevatedImpl`.
