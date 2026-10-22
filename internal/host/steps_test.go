@@ -248,6 +248,9 @@ func TestCheckFor(t *testing.T) {
 			var steps []string
 			for _, s := range got.Steps {
 				steps = append(steps, s.Name+"="+string(s.Outcome))
+				if s.Success != s.Outcome.Succeeded() {
+					t.Errorf("step %q: Success = %v but outcome %q", s.Name, s.Success, s.Outcome)
+				}
 				if strings.Contains(s.Message, "port 0") {
 					t.Errorf("step %q names port 0 for an unknown port: %q", s.Name, s.Message)
 				}
