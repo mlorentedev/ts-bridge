@@ -25,6 +25,7 @@ created: "2026-10-21"
 
 - PR B split into B1 (additive) and B2 (exit code): AC4 requires `smoke.bats` unchanged and AC5 breaks its `assert_success` on `host check`. Owner decision, 2026-10-21.
 - B1: `services[].active` is `null`, not `false`, because no step reads service state yet. macOS `rdp_port` goes from a hard-coded 3389 to 0 (no service declared).
+- AC4's "smoke.bats unchanged" held for B1 (#470), which left the file untouched. B2 edits it by design, so f4's verification checks the JSON and check tests only, not a diff against master.
 - B2: exit 2 for "not converged", not 1, so a script can tell a host that needs work from a check that could not run (`terraform plan -detailed-exitcode`). `main.go` maps errors through `cli.ExitCode`; every other command still exits 1 on error. `host setup` keeps exit 0 on a failed step: AC5 covers `check` only.
 - B1 test status: `go test -race -count=1 ./...` ok; `golangci-lint run` 0 issues; `GOOS=windows/linux go vet ./...` clean; `bats scripts/tests/smoke.bats` on macOS fails only 44/45, which also fail on the master binary (Linux-only `host setup` cases).
 

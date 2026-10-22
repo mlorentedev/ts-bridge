@@ -23,7 +23,7 @@
   {
     "id": "HOST-004-host-step-model-f4",
     "behavior": "AC4: JSON adds services[], steps[].outcome, steps[].fix; legacy keys derived; smoke.bats unchanged",
-    "verification": "go test ./cmd/cli -run 'CheckJSON|SetupJSON_Steps' -count=1 && git diff --quiet origin/master -- scripts/tests/smoke.bats",
+    "verification": "go test ./cmd/cli -run 'CheckJSON|SetupJSON_Steps' -count=1 && go test ./internal/host -run TestCheckFor -count=1",
     "state": "pending",
     "evidence": ""
   },
