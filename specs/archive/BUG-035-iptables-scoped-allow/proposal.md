@@ -1,7 +1,7 @@
 ---
 id: "BUG-035-iptables-scoped-allow"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-22"
 issue: "mlorentedev/ts-bridge#479"
 tags: [spec, proposal, host, linux, firewall]
