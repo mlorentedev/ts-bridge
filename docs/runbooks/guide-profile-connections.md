@@ -136,6 +136,13 @@ process variables and a CWD `.env` can still override profile settings. Use a
 terminal/directory without unrelated overrides when verifying profile-only use;
 do not clear another profile's environment globally.
 
+When the effective TCP target differs from the selected profile's target,
+`connect` emits a structured warning before starting the bridge, identifying
+the profile, effective target and winning source (`--target`, `TS_TARGET` or
+`YAML`). `TS_TARGET` includes values loaded from the CWD `.env`; the warning
+does not distinguish those from process environment variables. `--quiet` does
+not suppress it. Matching targets and SOCKS5 mode do not produce this warning.
+
 ## SSH Authentication Diagnostics
 
 Use the same shell and OpenSSH client selected by `connect`. On Windows,
