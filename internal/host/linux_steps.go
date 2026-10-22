@@ -172,7 +172,7 @@ func ufwAllows(added string, port int) bool {
 		if len(f) < 3 || f[0] != "ufw" || f[1] != "allow" || slices.Contains(f, "out") {
 			continue
 		}
-		if ufwRuleMatchesPort(f[2:], strconv.Itoa(port)) {
+		if ufwRuleMatchesPort(f[2:], port) {
 			return true
 		}
 	}
@@ -180,20 +180,42 @@ func ufwAllows(added string, port int) bool {
 }
 
 // ufwRuleMatchesPort matches the short form (`3389/tcp`, `3389`, `in 3389/tcp`)
-// and the full form (`... port 3389 [proto tcp]`).
-func ufwRuleMatchesPort(f []string, port string) bool {
-	if f[0] == "in" && len(f) == 2 {
+// and the full form (`... port 3389 [proto tcp]`). A trailing `comment '...'` is
+// ignored, and the port may sit in a list or range (`22,3389/tcp`, `3380:3390/tcp`).
+func ufwRuleMatchesPort(f []string, port int) bool {
+	if i := slices.Index(f, "comment"); i >= 0 {
+		f = f[:i]
+	}
+	if len(f) == 2 && f[0] == "in" {
 		f = f[1:]
 	}
 	if len(f) == 1 {
-		return f[0] == port || f[0] == port+"/tcp"
+		ports, proto, _ := strings.Cut(f[0], "/")
+		return (proto == "" || proto == "tcp") && portListHas(ports, port)
 	}
 	i := slices.Index(f, "port")
-	if i < 0 || i+1 >= len(f) || f[i+1] != port {
+	if i < 0 || i+1 >= len(f) || !portListHas(f[i+1], port) {
 		return false
 	}
 	j := slices.Index(f, "proto")
 	return j < 0 || (j+1 < len(f) && f[j+1] == "tcp")
+}
+
+// portListHas reports whether a ufw port list (`3389`, `22,3389`, `3380:3390`)
+// contains port.
+func portListHas(list string, port int) bool {
+	for _, p := range strings.Split(list, ",") {
+		lo, hi, isRange := strings.Cut(p, ":")
+		if !isRange {
+			hi = lo
+		}
+		a, errLo := strconv.Atoi(lo)
+		b, errHi := strconv.Atoi(hi)
+		if errLo == nil && errHi == nil && a <= port && port <= b {
+			return true
+		}
+	}
+	return false
 }
 
 func firewallSetupStep(r Runner, port int) SetupStep {

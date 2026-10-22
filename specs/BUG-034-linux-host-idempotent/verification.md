@@ -24,6 +24,15 @@ created: "2026-10-22"
   - `host check --json` as root reports the firewall `ok` (`firewall_ok: true`). As a non-root user it reports `Firewall configuration unverified | run ts-bridge host check as root`.
 - No regressions: the Windows `TestSetupFor` / `TestCheckFor` cases pass unchanged. The fake runner only gained `exit` and `elevated`.
 
+## Review round 1 (nan/deepseek-v4-flash, FAIL at 79492ef)
+
+- Major, REAL: `ufwAllows` read `ufw allow 3389/tcp comment 'xrdp'` and `ufw allow 3380:3390/tcp` as absent, so setup would add a duplicate. Applied: `ufwRuleMatchesPort` drops a trailing `comment` and matches the port inside a list or range (`portListHas`). `TestUFWAllows` gained the verbatim ufw 0.36.2 lines plus list, full-form range, a comment that names the port, and an app profile. Container proof (ubuntu:24.04, ufw 0.36.2): with `ufw allow 3389/tcp comment xrdp` already present, `host setup` reports "Firewall allows TCP 3389 (ufw)" and `ufw show added` still lists one rule.
+- Minor, REAL (AC1 wording): applied. AC1 and the tasks line now say "runs no mutating command", the property `TestSetupForLinux` pins; the iptables read is a read-only `run`.
+- Minor, REAL (`active` on an unreadable host): applied in `proposal.md`. Where `systemctl` cannot be read, `active` stays `null`, `enabled` false, and the step reports `unverified`; the sentence now says so.
+- Minor, REAL (stale `checkFor` comment): applied in `internal/host/step.go`.
+- Minor, REAL (`xrdp detection` fixture): applied in `cmd/cli/host_json_contract_test.go`.
+- Minor, THEORETICAL (`LookPath` depends on `PATH`; `static`/`indirect` units): ticketed as #478.
+
 ## Decisions made during implementation
 
 - Elevation is part of the `Runner` (`Elevated()`), so the gate is table-tested like any other input (lesson 040). It is checked before any firewall command, because legacy iptables may exit 1, the "absent" answer, on permission denied.

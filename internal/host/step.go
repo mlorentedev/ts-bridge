@@ -69,7 +69,8 @@ func setupFor(goos string, cfg Config, r Runner) SetupResult {
 	}
 }
 
-// checkFor runs the read half of goos's setup steps and never calls Run.
+// checkFor runs the read half of goos's setup steps and runs no mutating
+// command (the Linux iptables read is a read-only `iptables -C` through Run).
 // darwin declares no service until #459.
 func checkFor(goos string, cfg Config, r Runner) CheckResult {
 	result := CheckResult{TailscaleIP: tailscaleIP(r)}

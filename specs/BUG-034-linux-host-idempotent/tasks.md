@@ -23,7 +23,7 @@ created: "2026-10-22"
 - [x] [AC3] Implement the ufw status parser
 - [x] [AC2] [AC5] Failing tests for the iptables read: `-C` exit 0 present, exit 1 absent, other exit or no exit code unreadable
 - [x] [AC2] [AC5] Implement the exit-code read through the `Runner`
-- [x] [AC1] [AC2] Failing `TestSetupFor` cases: converged host makes no `run` call; missing rule runs `ufw allow <port>/tcp` or `iptables -A` once; unreadable state is `failed`
+- [x] [AC1] [AC2] Failing `TestSetupFor` cases: converged host runs no mutating command; missing rule runs `ufw allow <port>/tcp` or `iptables -A` once; unreadable state is `failed`
 - [x] [AC1] [AC2] Implement the state-first firewall step for setup, sharing the read with check
 - [x] [AC4] Failing tests for xrdp: not installed, enabled+active, disabled, inactive, unreadable, for setup and check
 - [x] [AC4] Implement the xrdp service step (`systemctl is-enabled` / `is-active`, `enable --now`) and fill `services[].enabled` / `active`

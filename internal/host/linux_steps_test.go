@@ -28,6 +28,14 @@ func TestUFWAllows(t *testing.T) {
 		{"deny", "ufw deny 3389/tcp", false},
 		{"limit", "ufw limit 3389/tcp", false},
 		{"no rules", "", false},
+		{"with comment", "ufw allow 3389/tcp comment 'xrdp'", true},
+		{"full form with comment", "ufw allow in on tailscale0 to any port 3389 proto tcp comment 'rdp port'", true},
+		{"comment naming the port", "ufw allow 22/tcp comment 'not 3389'", false},
+		{"range", "ufw allow 3380:3390/tcp", true},
+		{"range below", "ufw allow 3000:3010/tcp", false},
+		{"list", "ufw allow 22,3389/tcp", true},
+		{"full form range", "ufw allow to any port 3380:3390 proto tcp", true},
+		{"app profile", "ufw allow OpenSSH", false},
 		{"among others", "ufw allow 22/tcp\nufw allow 3389/tcp\nufw deny 4000/tcp", true},
 	}
 	for _, tt := range tests {
