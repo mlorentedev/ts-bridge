@@ -19,7 +19,7 @@ created: "2026-10-22"
 
 ## Implementation
 
-- [x] [AC3] Failing tests for the `ufw show added` parser: `allow <port>/tcp`, `allow <port>` and an interface-scoped allow match; `33890`, `out`, `route` and `deny` do not
+- [x] [AC3] Failing tests for the `ufw show added` parser: `allow <port>/tcp`, `allow <port>`, an interface-scoped allow, a trailing comment, a list and a range match; `33890`, `out`, `route`, `deny` and a source port do not
 - [x] [AC3] Implement the ufw status parser
 - [x] [AC2] [AC5] Failing tests for the iptables read: `-C` exit 0 present, exit 1 absent, other exit or no exit code unreadable
 - [x] [AC2] [AC5] Implement the exit-code read through the `Runner`

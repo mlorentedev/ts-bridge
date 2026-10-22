@@ -33,6 +33,27 @@ created: "2026-10-22"
 - Minor, REAL (`xrdp detection` fixture): applied in `cmd/cli/host_json_contract_test.go`.
 - Minor, THEORETICAL (`LookPath` depends on `PATH`; `static`/`indirect` units): ticketed as #478.
 
+## Review round 2 (nan/deepseek-v4-flash, FAIL at 854b799)
+
+- Major, REAL (xrdp enabled but not running untested at step level): applied. `TestSetupForLinux` and `TestCheckForLinux` gained `xrdp enabled, not running` (`is-active` answers `failed`): setup runs `systemctl enable --now xrdp` and reports `changed`; check reports `changed` with `Active=false`. Mutating `x.enabled && x.active` to `x.enabled` turns both red.
+- Minor, REAL (source-port ufw rule read as the destination): applied. `destPortIndex` takes the `port` after `to`; a `port` in the `from` clause never counts. Three `TestUFWAllows` cases, including the verbatim `ufw allow from any port 1234 to any port 3389 proto tcp`.
+- Minor, REAL (proposal and tasks lag the parser): applied. The ufw sentence and the parser task line now name comments, lists, ranges and the source-port exclusion.
+- Minor, REAL (iptables scoped allow reads as absent): out of scope here, recorded in the proposal and ticketed as #479.
+- Minor, SPECULATIVE (deletion record): applied below.
+- Minor, THEORETICAL (xrdp `LookPath`, `static` units): already #478.
+
+## Test deletions
+
+Five Linux cases left `internal/host/steps_test.go`; they guarded the pre-#454 behaviour this spec replaces.
+
+| Removed case | Successor | Retained? |
+|---|---|---|
+| `TestSetupFor/linux with ufw` | `TestSetupForLinux/ufw, converged` | stricter: also pins no mutating command |
+| `TestSetupFor/linux without ufw or xrdp, Tailscale down` | `TestSetupForLinux/xrdp missing, no systemctl, no backend, Tailscale down` | stricter: adds the no-backend branch |
+| `TestCheckFor/linux, port found in ufw` | `TestCheckForLinux/converged` | equivalent, through `ufw show added` |
+| `TestCheckFor/linux, firewall unreadable without root` | `TestCheckForLinux/not root, iptables host` | stricter: pins that no firewall command runs |
+| `TestCheckFor/linux, nothing` | none on Linux | The all-zero legacy keys with Tailscale down are an OS-independent derivation (ADR-017 §3), asserted by `TestCheckFor/windows, registry unreadable and no rule`; the Linux reads it depended on are covered by `xrdp not installed` |
+
 ## Decisions made during implementation
 
 - Elevation is part of the `Runner` (`Elevated()`), so the gate is table-tested like any other input (lesson 040). It is checked before any firewall command, because legacy iptables may exit 1, the "absent" answer, on permission denied.

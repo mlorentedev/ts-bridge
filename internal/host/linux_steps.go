@@ -194,12 +194,27 @@ func ufwRuleMatchesPort(f []string, port int) bool {
 		ports, proto, _ := strings.Cut(f[0], "/")
 		return (proto == "" || proto == protoTCP) && portListHas(ports, port)
 	}
-	i := slices.Index(f, "port")
+	i := destPortIndex(f)
 	if i < 0 || i+1 >= len(f) || !portListHas(f[i+1], port) {
 		return false
 	}
 	j := slices.Index(f, "proto")
 	return j < 0 || (j+1 < len(f) && f[j+1] == protoTCP)
+}
+
+// destPortIndex returns the index of the destination `port` keyword: the one
+// after `to`. A `port` in the `from` clause is a source port and never counts.
+func destPortIndex(f []string) int {
+	if t := slices.Index(f, "to"); t >= 0 {
+		if i := slices.Index(f[t:], "port"); i >= 0 {
+			return t + i
+		}
+		return -1
+	}
+	if slices.Contains(f, "from") {
+		return -1
+	}
+	return slices.Index(f, "port")
 }
 
 // portListHas reports whether a ufw port list (`3389`, `22,3389`, `3380:3390`)

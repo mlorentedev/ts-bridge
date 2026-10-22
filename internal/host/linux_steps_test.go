@@ -35,6 +35,9 @@ func TestUFWAllows(t *testing.T) {
 		{"range below", "ufw allow 3000:3010/tcp", false},
 		{"list", "ufw allow 22,3389/tcp", true},
 		{"full form range", "ufw allow to any port 3380:3390 proto tcp", true},
+		{"source port only", "ufw allow from any port 3389 proto tcp", false},
+		{"source port, other destination", "ufw allow from any port 3389 to any port 22 proto tcp", false},
+		{"source and destination port", "ufw allow from any port 1234 to any port 3389 proto tcp", true},
 		{"app profile", "ufw allow OpenSSH", false},
 		{"among others", "ufw allow 22/tcp\nufw allow 3389/tcp\nufw deny 4000/tcp", true},
 	}
@@ -147,6 +150,12 @@ func TestSetupForLinux(t *testing.T) {
 			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeOK},
 		},
 		{
+			name:     "xrdp enabled, not running",
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isActive: 3}},
+			calls:    append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwAdded, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeChanged, OutcomeOK, OutcomeOK},
+		},
+		{
 			name:     "iptables, converged",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(nil)},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "run "+iptCheck, "output tailscale ip -4"),
@@ -237,6 +246,14 @@ func TestCheckForLinux(t *testing.T) {
 			steps:    []string{"Tailscale IP=ok", "xrdp service=changed", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Active: &no}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
+		},
+		{
+			name:     "xrdp enabled, not running",
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isActive: 3}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=changed", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &no, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
 		},
 		{
 			name:     "not root, iptables host",

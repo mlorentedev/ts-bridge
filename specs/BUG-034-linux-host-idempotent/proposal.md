@@ -22,7 +22,7 @@ template_version: "1.0"
 
 - **Elevation first.** Every Linux firewall read needs root: `ufw show added`, `ufw status` and `iptables -C` all refuse without it (measured below). The `Runner` reports elevation. Without root, the firewall step runs no command and reports `unverified` in check and `failed` in setup, each with a fix that names root.
 - **Firewall, one backend.** Use ufw when it is on `PATH`, otherwise iptables. Setup and check share one read, so check is exactly the read half of setup.
-  - **ufw:** read `ufw show added`, which lists the configured user rules whether or not ufw is active. A rule counts when it is an `allow` on exactly `<port>/tcp`, `<port>`, or `port <port>` (with `proto tcp` or no proto), interface-scoped (`in on tailscale0`) included. It does not count when it is `out`, `route`, `deny`/`reject`/`limit`, or a different port. If no rule counts, setup runs `ufw allow <port>/tcp`.
+  - **ufw:** read `ufw show added`, which lists the configured user rules whether or not ufw is active. A rule counts when it is an `allow` on `<port>/tcp`, `<port>`, or destination `port <port>` (with `proto tcp` or no proto), interface-scoped (`in on tailscale0`) included. The port may sit in a comma list or a range (`22,3389/tcp`, `3380:3390/tcp`), and a trailing `comment '...'` is ignored. It does not count when it is `out`, `route`, `deny`/`reject`/`limit`, a source port (`from ... port <port>`), or a different port. If no rule counts, setup runs `ufw allow <port>/tcp`.
   - **iptables:** run `iptables -C INPUT -p tcp --dport <port> -j ACCEPT` as root. Exit 0 means present. Exit 1 means absent, and only then does setup run `-A`. Any other result means the state is unknown.
 - **xrdp, service state.** `systemctl is-enabled xrdp` and `systemctl is-active xrdp` decide the step. Neither needs root.
   - Not installed: `failed`.
@@ -43,6 +43,7 @@ Measured on Ubuntu 24.04 (ufw 0.36.2, iptables 1.8.10 nf_tables), 2026-10-22:
 - firewalld and nftables-only hosts, which have neither ufw nor iptables. They keep failing with the existing fix text.
 - An SSH service on Linux, and the explicit `--config` host file (#458).
 - The `port 0` text rendering from #475; this PR closes only #475's partial-read half.
+- An iptables allow narrower than the exact form (interface or source scoped) reads as absent, so setup appends the unrestricted rule. The ufw path counts the equivalent scoped rule as present. Tracked by #479.
 - Persistence of the iptables rule across reboot. `iptables -A` lasts until the next boot; after a reboot, setup re-adds the rule and reports `changed`. Saving rules (`netfilter-persistent`, `iptables-save`) is the operator's. ufw rules persist on their own.
 - Enabling ufw itself. A configured rule on an inactive ufw counts as present.
 
