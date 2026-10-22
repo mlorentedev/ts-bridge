@@ -36,9 +36,9 @@ created: "2026-10-22"
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-042-2026-10-22.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-017 (per-OS table, Linux row) already decides ufw `allow`, iptables `-C` then `-A`, and `systemctl enable --now`
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: single-project mechanism (one CLI's Linux host steps)
 
 ## Archive checklist
 
