@@ -22,6 +22,15 @@ created: "2026-10-22"
   - Only the jump: the first run reports "Firewall rule added", the second "Firewall allows", and `-S INPUT` shows one `--dport 3389` rule.
 - Measurements that shaped the parser (same image): `-S` prints `-p tcp -m tcp --dport`, puts `! ` before a negated flag, escapes quotes inside `--comment "..."`; ufw folds `from X to any` into `from X`.
 
+## Review round 1 (nan/deepseek-v4-flash, FAIL at ef191e4)
+
+- Major, REAL (the comment strip had no test that fails without it): applied. `TestIptablesCovers/comment holding -j ACCEPT` (a covering rule whose comment contains `-j ACCEPT`, want present) fails when the strip is replaced by `strings.Fields(line)` and passes with it. The old case is renamed `comment port never counts`, which is what it pins.
+- Major, THEORETICAL (a blanket iptables ACCEPT without a port reads absent while ufw's reads present): ticketed as #483. The "no destination port" exclusion protects against `-m conntrack` rules, and narrowing it needs a contract decision.
+- Minor, REAL (no check-side iptables cases for AC1/AC5): applied. `TestCheckForLinux/iptables, scoped allow` (all `ok`, `firewall_ok`) and `/iptables -S fails` (`unverified`, no `run`).
+- Minor, REAL (stale `-C` comments): applied. The `TestIptablesRule` and `TestCheckForLinux` doc comments now describe the `-S` read.
+- Minor, THEORETICAL (`-d` destination-qualified ACCEPT counts): declined. A rule the operator scoped by destination address is still their scope, which the proposal says check does not judge. Message accuracy for scoped rules goes with #481.
+- Question, SPECULATIVE (repeated `--dport` in one rule; `ufw proto any`): declined. Neither form was produced by the tools measured, and both read absent, which leads to one extra narrow rule rather than a widening.
+
 ## Decisions made during implementation
 
 - Dropped two clauses from the first draft after review: "a jump in `INPUT` means unknown" (tailscaled adds `-j ts-input` on every host it manages, so setup would never act) and "a DROP before the ACCEPT means failed" (a scoped deny before a scoped allow is a legitimate hardened ruleset, and ufw never judged order). Shadowing is #481 for both backends.
