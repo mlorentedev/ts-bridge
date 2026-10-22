@@ -30,22 +30,26 @@ historical acceptance is not a live check on another computer.
 Start with an existing profile and managed credential. Do not enter a new
 Headscale key or an application token just to configure runtime settings.
 
-Before importing, check which binary and SSH client this terminal selects.
+Before importing, inspect the command type and path for the binary and SSH
+client this terminal selects.
 Confirm that the selected `ts-bridge` build contains the change described above.
-If it does not, use the verified executable's absolute path in the commands
-below instead of invoking an older binary on PATH.
+If either name resolves to an alias or function, or the selected application
+is not the intended executable, use the verified executable's absolute path
+for every direct invocation below, including import, daily use and SSH
+diagnostics. ts-bridge selects the external SSH client from PATH, not a shell
+alias or function; verify that client when choosing the diagnostic executable.
 
 In POSIX shells, including Git Bash:
 
 ```bash
-command -v ts-bridge
-command -v ssh
+command -V ts-bridge
+command -V ssh
 ```
 
 In PowerShell:
 
 ```powershell
-Get-Command ts-bridge, ssh
+Get-Command ts-bridge, ssh -All | Select-Object CommandType, Name, Source
 ```
 
 Put supported, non-secret settings in `runtime.yaml`, replacing the state
@@ -95,9 +99,10 @@ In the terminal that will own the foreground connection, on any supported OS:
 ts-bridge connect --profile work
 ```
 
-No launcher or daily `--config` argument is needed. If the executable is not on
-PATH, invoke the verified absolute path from one-time configuration instead;
-the feature does not modify PATH or install a binary.
+No launcher or daily `--config` argument is needed. If the command is shadowed,
+selects an unintended executable, or is not on PATH, invoke the verified
+absolute path from one-time configuration instead; the feature does not modify
+PATH or install a binary.
 
 The process stays in the foreground. Complete any SSH host-key or passphrase
 prompt in that terminal; verify unfamiliar host fingerprints through a trusted
