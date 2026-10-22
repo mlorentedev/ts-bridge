@@ -111,14 +111,15 @@ Examples:
 func runHostSetup(cmd *cobra.Command, args []string) error {
 	// macOS: not applicable.
 	if runtime.GOOS == "darwin" {
-		fmt.Println("Host setup is not applicable on macOS.")
-		fmt.Println("Use the client mode (ts-bridge connect) to connect to a remote host.")
+		out := cmd.OutOrStdout()
+		fmt.Fprintln(out, "Host setup is not applicable on macOS.")
+		fmt.Fprintln(out, "Use the client mode (ts-bridge connect) to connect to a remote host.")
 		return nil
 	}
 
 	// Admin check.
 	if !host.IsElevated() {
-		printElevationError()
+		printElevationError(cmd.ErrOrStderr())
 		return fmt.Errorf("host setup requires elevated privileges")
 	}
 
@@ -170,7 +171,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	// explicitly requested a different --port, say so rather than leaving the
 	// flag silently ineffective.
 	if runtime.GOOS == windowsOS && cmd.Flags().Changed("port") && cfg.Port != result.RDPPort {
-		printWarn(fmt.Sprintf(
+		printWarn(cmd.ErrOrStderr(), fmt.Sprintf(
 			"--port %d not applied: Windows RDP listens on port %d (set in the registry). "+
 				"Change the RDP port in Windows, then re-run host setup.",
 			cfg.Port, result.RDPPort))
@@ -178,22 +179,22 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 	if jsonOut {
-		return printSetupJSON(result)
+		return printSetupJSON(cmd.OutOrStdout(), result)
 	}
 
 	// Print step-by-step results.
 	for i, step := range result.Steps {
-		printStep(i+1, len(result.Steps), step.Name)
+		printStep(cmd.OutOrStdout(), i+1, len(result.Steps), step.Name)
 		if step.Success {
-			printOk(step.Message)
+			printOk(cmd.OutOrStdout(), step.Message)
 		} else {
-			printWarn(step.Message)
+			printWarn(cmd.ErrOrStderr(), step.Message)
 		}
 	}
 
 	// Report the port that was actually configured (result.RDPPort), which on
 	// Windows comes from the registry and may differ from the requested --port.
-	printSetupSummary(result.RDPPort)
+	printSetupSummary(cmd.OutOrStdout(), result.RDPPort)
 	return nil
 }
 
@@ -222,17 +223,18 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("host check failed: %w", err)
 	}
 
-	return reportCheck(result, jsonOut)
+	return reportCheck(cmd.OutOrStdout(), result, jsonOut)
 }
 
-// reportCheck prints the check result and returns its exit status as an error.
-func reportCheck(result host.CheckResult, jsonOut bool) error {
+// reportCheck prints the check result to w and returns its exit status as an
+// error.
+func reportCheck(w io.Writer, result host.CheckResult, jsonOut bool) error {
 	if jsonOut {
-		if err := printCheckJSON(result); err != nil {
+		if err := printCheckJSON(w, result); err != nil {
 			return err
 		}
 	} else {
-		printCheckText(result)
+		printCheckText(w, result)
 	}
 	return checkConvergence(result.Steps)
 }
@@ -299,16 +301,16 @@ func newHostLogger(cfg host.Config, w io.Writer) *slog.Logger {
 
 // ─── Print helpers ───────────────────────────────────────────────
 
-func printStep(num, total int, msg string) {
-	fmt.Printf("  [%d/%d] %s\n", num, total, msg)
+func printStep(w io.Writer, num, total int, msg string) {
+	fmt.Fprintf(w, "  [%d/%d] %s\n", num, total, msg)
 }
 
-func printOk(msg string) {
-	fmt.Printf("       %s\n", msg)
+func printOk(w io.Writer, msg string) {
+	fmt.Fprintf(w, "       %s\n", msg)
 }
 
-func printWarn(msg string) {
-	fmt.Fprintf(os.Stderr, "       WARNING: %s\n", msg)
+func printWarn(w io.Writer, msg string) {
+	fmt.Fprintf(w, "       WARNING: %s\n", msg)
 }
 
 // mustBool, mustString, mustInt are helper getters that ignore errors
@@ -330,47 +332,47 @@ func mustInt(cmd *cobra.Command, name string) int {
 
 // ─── Output helpers ──────────────────────────────────────────────
 
-func printElevationError() {
+func printElevationError(w io.Writer) {
 	switch runtime.GOOS {
 	case windowsOS:
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "ERROR: This operation requires Administrator privileges.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "To run as Administrator:")
-		fmt.Fprintln(os.Stderr, "  1. Open PowerShell as Administrator (right-click → Run as Administrator)")
-		fmt.Fprintln(os.Stderr, "  2. Re-run: ts-bridge host setup")
-		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(w, "")
+		fmt.Fprintln(w, "ERROR: This operation requires Administrator privileges.")
+		fmt.Fprintln(w, "")
+		fmt.Fprintln(w, "To run as Administrator:")
+		fmt.Fprintln(w, "  1. Open PowerShell as Administrator (right-click → Run as Administrator)")
+		fmt.Fprintln(w, "  2. Re-run: ts-bridge host setup")
+		fmt.Fprintln(w, "")
 	case "linux":
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "ERROR: This operation requires root privileges.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "To run as root:")
-		fmt.Fprintln(os.Stderr, "  sudo ts-bridge host setup")
-		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(w, "")
+		fmt.Fprintln(w, "ERROR: This operation requires root privileges.")
+		fmt.Fprintln(w, "")
+		fmt.Fprintln(w, "To run as root:")
+		fmt.Fprintln(w, "  sudo ts-bridge host setup")
+		fmt.Fprintln(w, "")
 	}
 }
 
-func printSetupSummary(rdpPort int) {
-	fmt.Println()
-	fmt.Println("  ---------------------------------------")
-	fmt.Println("  HOST READY")
-	fmt.Println("  ---------------------------------------")
+func printSetupSummary(w io.Writer, rdpPort int) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  ---------------------------------------")
+	fmt.Fprintln(w, "  HOST READY")
+	fmt.Fprintln(w, "  ---------------------------------------")
 
 	tsIP := host.TailscaleIP()
 	if tsIP != "" {
-		fmt.Printf("  Tailscale IP: %s\n", tsIP)
+		fmt.Fprintf(w, "  Tailscale IP: %s\n", tsIP)
 	}
-	fmt.Printf("  RDP Port:     %d\n", rdpPort)
-	fmt.Println()
-	fmt.Println("  Client .env config:")
-	fmt.Printf("  TS_TARGET=%s:%d\n", tsIP, rdpPort)
+	fmt.Fprintf(w, "  RDP Port:     %d\n", rdpPort)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  Client .env config:")
+	fmt.Fprintf(w, "  TS_TARGET=%s:%d\n", tsIP, rdpPort)
 	if desc := buildDescriptorLine(tsIP, rdpPort, ""); desc != "" {
-		fmt.Println()
-		fmt.Println("  Shareable descriptor:")
-		fmt.Printf("  %s\n", desc)
-		fmt.Printf("  (import with: ts-bridge import <name> %q)\n", desc)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "  Shareable descriptor:")
+		fmt.Fprintf(w, "  %s\n", desc)
+		fmt.Fprintf(w, "  (import with: ts-bridge import <name> %q)\n", desc)
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 }
 
 // buildDescriptorLine returns a tsb:// descriptor string for the given host IP,
@@ -433,34 +435,34 @@ func setupJSON(result host.SetupResult) ([]byte, error) {
 	return json.MarshalIndent(output, "", "  ")
 }
 
-func printSetupJSON(result host.SetupResult) error {
+func printSetupJSON(w io.Writer, result host.SetupResult) error {
 	data, err := setupJSON(result)
 	if err != nil {
 		return fmt.Errorf("marshal setup result: %w", err)
 	}
-	fmt.Println(string(data))
+	fmt.Fprintln(w, string(data))
 	return nil
 }
 
-func printCheckText(r host.CheckResult) {
-	fmt.Println()
-	fmt.Println("  HOST CHECK")
-	fmt.Println("  ---------------------------------------")
-	fmt.Printf("  Platform:      %s\n", runtime.GOOS)
-	fmt.Printf("  Tailscale:     %s\n", statusStr(r.TailscaleUp))
-	fmt.Printf("  Tailscale IP:  %s\n", r.TailscaleIP)
-	fmt.Printf("  RDP:           %s (port %d)\n", statusStr(r.RDPEnabled), r.RDPPort)
-	fmt.Printf("  Firewall:      %s\n", statusStr(r.FirewallOK))
+func printCheckText(w io.Writer, r host.CheckResult) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  HOST CHECK")
+	fmt.Fprintln(w, "  ---------------------------------------")
+	fmt.Fprintf(w, "  Platform:      %s\n", runtime.GOOS)
+	fmt.Fprintf(w, "  Tailscale:     %s\n", statusStr(r.TailscaleUp))
+	fmt.Fprintf(w, "  Tailscale IP:  %s\n", r.TailscaleIP)
+	fmt.Fprintf(w, "  RDP:           %s (port %d)\n", statusStr(r.RDPEnabled), r.RDPPort)
+	fmt.Fprintf(w, "  Firewall:      %s\n", statusStr(r.FirewallOK))
 	for _, step := range r.Steps {
 		if step.Outcome != host.OutcomeOK {
-			fmt.Printf("  ! %s (%s): %s\n", step.Name, step.Outcome, step.Fix)
+			fmt.Fprintf(w, "  ! %s (%s): %s\n", step.Name, step.Outcome, step.Fix)
 		}
 	}
 	if desc := buildDescriptorLine(r.TailscaleIP, r.RDPPort, ""); desc != "" {
-		fmt.Printf("  Descriptor:    %s\n", desc)
+		fmt.Fprintf(w, "  Descriptor:    %s\n", desc)
 	}
-	fmt.Println("  ---------------------------------------")
-	fmt.Println()
+	fmt.Fprintln(w, "  ---------------------------------------")
+	fmt.Fprintln(w)
 }
 
 func checkJSON(r host.CheckResult) ([]byte, error) {
@@ -493,12 +495,12 @@ func checkJSON(r host.CheckResult) ([]byte, error) {
 	return json.MarshalIndent(out, "", "  ")
 }
 
-func printCheckJSON(r host.CheckResult) error {
+func printCheckJSON(w io.Writer, r host.CheckResult) error {
 	data, err := checkJSON(r)
 	if err != nil {
 		return fmt.Errorf("marshal check result: %w", err)
 	}
-	fmt.Println(string(data))
+	fmt.Fprintln(w, string(data))
 	return nil
 }
 

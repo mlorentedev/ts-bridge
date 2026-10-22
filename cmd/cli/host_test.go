@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -330,16 +331,19 @@ func TestPrintSetupJSON_Serialization(t *testing.T) {
 			{Name: "Step 3", Success: true, Message: "Also OK"},
 		},
 	}
-	err := cmdpkg.PrintSetupJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintSetupJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
 	}
-
-	// Verify the JSON structure by parsing it.
-	// The function writes to stdout, which we can't easily capture from here.
-	// Instead, verify the internal structure is correct.
-	if len(result.Steps) != 3 {
-		t.Fatalf("expected 3 steps, got %d", len(result.Steps))
+	var parsed struct {
+		Steps []json.RawMessage `json:"steps"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", err, out.String())
+	}
+	if len(parsed.Steps) != 3 {
+		t.Fatalf("expected 3 steps in the output, got %d", len(parsed.Steps))
 	}
 }
 
@@ -349,9 +353,13 @@ func TestPrintSetupJSON_EmptySteps(t *testing.T) {
 		RDPPort: 3389,
 		Steps:   []host.SetupStep{},
 	}
-	err := cmdpkg.PrintSetupJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintSetupJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
+	}
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("output is not valid JSON:\n%s", out.String())
 	}
 }
 
@@ -364,19 +372,32 @@ func TestPrintSetupJSON_AllWarnings(t *testing.T) {
 			{Name: "Step 2", Success: false, Message: "Warning 2"},
 		},
 	}
-	err := cmdpkg.PrintSetupJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintSetupJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printSetupJSON error: %v", err)
 	}
-
-	// Verify the structure.
-	if len(result.Steps) != 2 {
-		t.Fatalf("expected 2 steps, got %d", len(result.Steps))
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("output is not valid JSON:\n%s", out.String())
 	}
-	for i, step := range result.Steps {
+
+	var parsed struct {
+		Steps    []struct{ Success bool } `json:"steps"`
+		Warnings []string                 `json:"warnings"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if len(parsed.Steps) != 2 {
+		t.Fatalf("expected 2 steps in the output, got %d", len(parsed.Steps))
+	}
+	for i, step := range parsed.Steps {
 		if step.Success {
-			t.Errorf("step %d: expected Success=false, got true", i)
+			t.Errorf("step %d: expected success=false, got true", i)
 		}
+	}
+	if want := []string{"Warning 1", "Warning 2"}; !slices.Equal(parsed.Warnings, want) {
+		t.Errorf("warnings = %v, want %v", parsed.Warnings, want)
 	}
 }
 
@@ -390,20 +411,18 @@ func TestPrintCheckJSON_Serialization(t *testing.T) {
 		TailscaleUp: true,
 	}
 
-	err := cmdpkg.PrintCheckJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintCheckJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printCheckJSON error: %v", err)
 	}
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("output is not valid JSON:\n%s", out.String())
+	}
 
-	// Verify the structure.
-	if result.TailscaleIP != "100.64.0.1" {
-		t.Errorf("expected TailscaleIP 100.64.0.1, got %s", result.TailscaleIP)
-	}
-	if !result.RDPEnabled {
-		t.Error("expected RDPEnabled true")
-	}
-	if !result.FirewallOK {
-		t.Error("expected FirewallOK true")
+	got := decodeCheckJSON(t, out.Bytes())
+	if got.TailscaleIP != "100.64.0.1" || got.RDPPort != 3389 || !got.RDPEnabled || !got.FirewallOK || !got.TailscaleUp {
+		t.Errorf("decoded output = %+v, want the result's values", got)
 	}
 }
 
@@ -417,14 +436,37 @@ func TestPrintCheckJSON_Disconnected(t *testing.T) {
 		TailscaleUp: false,
 	}
 
-	err := cmdpkg.PrintCheckJSONForTest(result)
+	var out bytes.Buffer
+	err := cmdpkg.PrintCheckJSONForTest(&out, result)
 	if err != nil {
 		t.Fatalf("printCheckJSON error: %v", err)
 	}
-
-	if result.TailscaleIP != "" {
-		t.Error("expected empty TailscaleIP")
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("output is not valid JSON:\n%s", out.String())
 	}
+
+	got := decodeCheckJSON(t, out.Bytes())
+	if got.TailscaleIP != "" || got.RDPEnabled || got.FirewallOK || got.TailscaleUp {
+		t.Errorf("decoded output = %+v, want every field empty or false", got)
+	}
+}
+
+// checkJSONFields is the part of host check --json these tests assert on.
+type checkJSONFields struct {
+	TailscaleIP string `json:"tailscale_ip"`
+	RDPPort     int    `json:"rdp_port"`
+	RDPEnabled  bool   `json:"rdp_enabled"`
+	FirewallOK  bool   `json:"firewall_ok"`
+	TailscaleUp bool   `json:"tailscale_up"`
+}
+
+func decodeCheckJSON(t *testing.T, data []byte) checkJSONFields {
+	t.Helper()
+	var got checkJSONFields
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("decode output: %v\n%s", err, data)
+	}
+	return got
 }
 
 // ─── JSON output correctness tests ───────────────────────────────

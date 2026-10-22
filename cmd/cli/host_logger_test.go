@@ -100,7 +100,7 @@ func TestPrintCheckJSON_StdoutIsPureJSON(t *testing.T) {
 		logger := cmdpkg.HostInitLoggerForTest(host.Config{LogFormat: "text"})
 		logger.Info("host check", "tailscale_up", true, "rdp_port", 3389)
 
-		if err := cmdpkg.PrintCheckJSONForTest(result); err != nil {
+		if err := cmdpkg.PrintCheckJSONForTest(os.Stdout, result); err != nil {
 			t.Errorf("printCheckJSON: %v", err)
 		}
 	})
@@ -138,7 +138,7 @@ func TestPrintSetupJSON_StdoutIsPureJSON(t *testing.T) {
 		logger := cmdpkg.HostInitLoggerForTest(host.Config{LogFormat: "text"})
 		logger.Info("starting host setup", "rdp_port", 3389)
 
-		if err := cmdpkg.PrintSetupJSONForTest(result); err != nil {
+		if err := cmdpkg.PrintSetupJSONForTest(os.Stdout, result); err != nil {
 			t.Errorf("printSetupJSON: %v", err)
 		}
 	})
