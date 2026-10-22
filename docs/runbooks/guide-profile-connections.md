@@ -2,7 +2,7 @@
 id: "ts-bridge-profile-connections"
 type: runbook
 status: draft
-tags: [runbook, profiles, windows, git-bash, ssh]
+tags: [runbook, profiles, cross-platform, ssh]
 created: "2026-10-15"
 owner: manu
 ---
@@ -10,24 +10,35 @@ owner: manu
 # Daily Foreground Profile Connections
 
 Requires a build containing [ADR-016](../adr/adr-016-self-contained-profile-connections.md)
-and #441. Older installed binaries do not support this runtime import. The
-[feature verification record](../../specs/CFG-005-self-contained-connections/verification.md)
-records successful Windows/Git Bash candidate acceptance on 2026-10-20.
-This runbook remains draft while #442 awaits final review and delivery.
+and #441, merged in #442. Older binaries do not support this runtime import;
+updating a source checkout does not update the installed executable. Use a
+release containing the change, or an explicitly authorized CI candidate tied
+to its source commit. A CI candidate is not a published release.
+
+The profile and foreground-command contract is the same on Windows, macOS and
+Linux; no OS-specific launcher is required. OpenSSH must be available in the
+invoking terminal. State paths and SSH identities remain machine-local settings,
+not paths copied verbatim between computers.
+
+The [archived feature verification record](../../specs/archive/CFG-005-self-contained-connections/verification.md)
+records Windows/Git Bash candidate acceptance on 2026-10-20 and its evidence
+qualifications. This runbook remains draft pending release delivery; that
+historical acceptance is not a live check on another computer.
 
 ## One-Time Configuration
 
 Start with an existing profile and managed credential. Do not enter a new
 Headscale key or an application token just to configure runtime settings.
 
-Put supported, non-secret settings in a local YAML file:
+Put supported, non-secret settings in `runtime.yaml`, replacing the state
+directory placeholder with an absolute path valid on this computer:
 
 ```yaml
 version: 1
 bootstrap_ssh: work-bastion
 bootstrap_socks_addr: 127.0.0.1:1056
 hostname: work-bridge
-state_dir: C:\Users\user\AppData\Local\ts-bridge\state\work
+state_dir: "<absolute machine-local state directory for this profile>"
 local_addr: 127.0.0.1:34443
 health_addr: 127.0.0.1:9081
 ```
@@ -39,9 +50,8 @@ The existing custom control URL is required for Headscale SSH bootstrap.
 
 Import once, with the intended binary:
 
-```powershell
-& 'C:\Tools\ts-bridge\ts-bridge.exe' init `
-  --profile work --config "$HOME\.ts-bridge\work.yml" --force
+```sh
+ts-bridge init --profile work --config runtime.yaml --force
 ```
 
 `target` and `control_url` may also be supplied in the input. Omitted settings,
@@ -59,7 +69,7 @@ export them.
 
 ## Daily Use
 
-In the intended Windows/Git Bash terminal:
+In the terminal that will own the foreground connection, on any supported OS:
 
 ```bash
 ts-bridge connect --profile work
@@ -67,11 +77,18 @@ ts-bridge connect --profile work
 
 No launcher or daily `--config` argument is needed. If the executable is not on
 PATH, invoke its existing absolute path instead; the feature does not modify
-PATH or install a binary. Check which binary and SSH client the shell selects:
+PATH or install a binary. Check which binary and SSH client the shell selects.
+In POSIX shells, including Git Bash:
 
 ```bash
 command -v ts-bridge
 command -v ssh
+```
+
+In PowerShell:
+
+```powershell
+Get-Command ts-bridge, ssh
 ```
 
 The process stays in the foreground. Complete any SSH host-key or passphrase
@@ -85,8 +102,9 @@ do not clear another profile's environment globally.
 
 ## SSH Authentication Diagnostics
 
-Use the same shell and OpenSSH client selected by `connect`. Git for Windows
-OpenSSH and Windows OpenSSH can use different configuration and agents.
+Use the same shell and OpenSSH client selected by `connect`. On Windows,
+Git for Windows OpenSSH and Windows OpenSSH can use different configuration
+and agents. On every OS, the chosen client's identity and agent access matter.
 
 ```bash
 ssh -G work-bastion
@@ -135,11 +153,12 @@ connection, or configure distinct addresses.
 application is reachable. For a Gitea HTTPS target, probe its unauthenticated
 health endpoint through the actual local address printed by the bridge:
 
-```powershell
-curl.exe --noproxy "*" --fail --show-error --connect-timeout 5 --max-time 15 `
-  --connect-to "forge.example.internal:443:127.0.0.1:34443" `
-  "https://forge.example.internal/api/healthz"
+```sh
+curl --noproxy "*" --fail --show-error --connect-timeout 5 --max-time 15 --connect-to "forge.example.internal:443:127.0.0.1:34443" "https://forge.example.internal/api/healthz"
 ```
+
+Use the curl executable, not a shell alias; in Windows PowerShell, invoke
+`curl.exe` explicitly.
 
 Require an HTTP success and Gitea JSON with `"status":"pass"`. Keep the canonical
 service hostname in the URL: `--connect-to` changes only the TCP destination,
