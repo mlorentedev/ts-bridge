@@ -1,0 +1,37 @@
+[
+  {
+    "id": "BUG-035-iptables-scoped-allow-f1",
+    "behavior": "AC1: a scoped, negated-interface, multiport, range or comment-qualified iptables ACCEPT for the port reads as present",
+    "verification": "go test -race -count=1 ./internal/host -run 'TestIptablesCovers|TestSetupForLinux|TestCheckForLinux'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-035-iptables-scoped-allow-f2",
+    "behavior": "AC2: with no covering rule setup appends once, a second run is ok, and a ts-input jump changes nothing",
+    "verification": "go test -race -count=1 ./internal/host -run 'TestSetupForLinux|TestIptablesRule'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-035-iptables-scoped-allow-f3",
+    "behavior": "AC3: another port, udp, --sport, negated ports, non-ACCEPT targets, jumps, comments and rules without a destination port never count",
+    "verification": "go test -race -count=1 ./internal/host -run 'TestIptablesCovers'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-035-iptables-scoped-allow-f4",
+    "behavior": "AC4: a ufw allow with no destination port covers the port; proto udp, app profiles and source-port-only rules do not",
+    "verification": "go test -race -count=1 ./internal/host -run 'TestUFWAllows'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-035-iptables-scoped-allow-f5",
+    "behavior": "AC5: the iptables read is iptables -S INPUT through Output; -A is the only mutation; a non-zero -S is unverified or failed",
+    "verification": "go test -race -count=1 ./internal/host -run 'TestIptablesRule|TestCheckForLinux|TestSetupForLinux'",
+    "state": "pending",
+    "evidence": ""
+  }
+]

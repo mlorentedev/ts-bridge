@@ -53,3 +53,4 @@ tags: [ts-bridge, lessons, index]
 | 040 | 2026-10-20 | Cross-compiling a platform proves it compiles, not that it behaves, and make the OS an input so one runner covers every branch | [lesson-040-2026-10-20.md](lesson-040-2026-10-20.md) | `ci`, `testing`, `macos`, `cross-platform` |
 | 041 | 2026-10-22 | A state that could not be read is not a state that is absent: report `unverified`, not `changed` | [lesson-041-2026-10-22.md](lesson-041-2026-10-22.md) | `host`, `outcome-model`, `exit-status` |
 | 042 | 2026-10-22 | Read the firewall from its configuration (`ufw show added`), only as root, and decide systemctl answers by the printed word | [lesson-042-2026-10-22.md](lesson-042-2026-10-22.md) | `host`, `linux`, `firewall` |
+| 043 | 2026-10-22 | Decide firewall coverage from the rule set (`iptables -S`), not an exact-match probe; a `ts-input` jump is normal | [lesson-043-2026-10-22.md](lesson-043-2026-10-22.md) | `host`, `linux`, `firewall` |
