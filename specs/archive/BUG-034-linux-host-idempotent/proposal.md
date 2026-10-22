@@ -1,7 +1,7 @@
 ---
 id: "BUG-034-linux-host-idempotent"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-22"
 issue: "mlorentedev/ts-bridge#454"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
