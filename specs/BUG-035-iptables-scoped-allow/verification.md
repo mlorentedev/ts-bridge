@@ -31,6 +31,13 @@ created: "2026-10-22"
 - Minor, THEORETICAL (`-d` destination-qualified ACCEPT counts): declined. A rule the operator scoped by destination address is still their scope, which the proposal says check does not judge. Message accuracy for scoped rules goes with #481.
 - Question, SPECULATIVE (repeated `--dport` in one rule; `ufw proto any`): declined. Neither form was produced by the tools measured, and both read absent, which leads to one extra narrow rule rather than a widening.
 
+## Review round 2 (nan/deepseek-v4-flash, PASS-WITH-GAPS at 8733c9b)
+
+- Major, THEORETICAL (blanket ACCEPT without a port reads absent): carried; already #483.
+- Minor, REAL (`checkFor` doc comment in `internal/host/step.go` still named `-C`): applied. Round 1's comment finding had fixed only the two test comments; this was the third.
+- Minor, THEORETICAL (`-d` destination-qualified allow reads present): declined, as in round 1; same on both backends, and setup adds nothing. Revisit under #481.
+- Question, SPECULATIVE (repeated `--dport`; `-m limit` ACCEPT reads present): declined; neither leads to a widening, and neither form was produced by the tools measured.
+
 ## Decisions made during implementation
 
 - Dropped two clauses from the first draft after review: "a jump in `INPUT` means unknown" (tailscaled adds `-j ts-input` on every host it manages, so setup would never act) and "a DROP before the ACCEPT means failed" (a scoped deny before a scoped allow is a legitimate hardened ruleset, and ufw never judged order). Shadowing is #481 for both backends.

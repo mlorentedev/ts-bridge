@@ -1,115 +1,122 @@
 ---
 spec: "BUG-035-iptables-scoped-allow"
-verdict: "FAIL"
-reviewed_sha: "ef191e42837abf697835cc22283d5f86987815c0"
+verdict: "PASS-WITH-GAPS"
+reviewed_sha: "8733c9b679c3161e613045beba40aef0621ceb4e"
 reviewer: "nan/deepseek-v4-flash"
 date: "2026-10-22"
 ---
 
 ## Adversarial review
 
-**Scope**: BUG-035-iptables-scoped-allow — `iptables -C` → `iptables -S INPUT` coverage read, plus the
-ufw no-destination-port allow.
+**Scope**: BUG-035-iptables-scoped-allow — round 2, the whole change (`8fd5fe8...HEAD`, two commits: `ef191e4` the
+`iptables -C` → `iptables -S INPUT` coverage read plus the ufw no-destination-port allow, `8733c9b` the round-1
+test findings).
 **Sources**: `specs/BUG-035-iptables-scoped-allow/{proposal,tasks,verification}.md` + `features.json`;
-`git diff 8fd5fe855c4411094534945316c64edf1b6c199d...HEAD` (one commit, `ef191e4`) touching
-`internal/host/linux_steps.go`, `internal/host/linux_steps_test.go`,
-`docs/design/host-client-parity.md`, `docs/lessons/lesson-043-2026-10-22.md`, `docs/lessons/_index.md`.
+`git diff 8fd5fe855c4411094534945316c64edf1b6c199d...HEAD` and `git log` over the same range; round-1 review
+(`specs/BUG-035-iptables-scoped-allow/review-round1.md`).
 
-Contract freshness: `dotf spec digest BUG-035-iptables-scoped-allow` returns exactly the
-`contract_digests` in `review-request.json` (all three match), so this verdict describes the current
-contract. No `[AGENT-DRAFT]`/`[AGENT-SUGGESTION]` tags remain in any spec file.
+Contract freshness: `dotf spec digest BUG-035-iptables-scoped-allow` returns exactly the three
+`contract_digests` in `review-request.json` (features.json, proposal.md, tasks.md all match), so this verdict
+describes the current contract. No `[AGENT-DRAFT]`/`[AGENT-SUGGESTION]` tags remain in any spec file.
 
 ### Spec and task alignment
 
-- Every AC in `proposal.md` maps to a diff change: AC1/AC3 → `iptablesCovers` + `TestIptablesCovers`;
-  AC2/AC5 → `readLinuxFirewall` (`-S INPUT` via `Output`) + `TestIptablesRule` / `TestSetupForLinux`;
-  AC4 → the `destPortIndex < 0` branch + `TestUFWAllows`. No AC is unimplemented.
-- `tasks.md` all `[x]` except "PR opened", which is the review window itself — not a finding.
-  PR #482 exists and is still a **draft**; that is the launcher's context, not a defect, but it should be
-  marked ready (`gh pr ready 482`) after the finding-1 fix so the human review reads the finished change.
-- Board check (`gh issue list`): #479 (this bug), #480 (duplicate rules), #481 (deny before allow) are
-  open and distinct from finding 2 — the no-destination-port ACCEPT gap has no ticket yet.
-- `features.json` is honest: five entries, all `state: pending` with empty `evidence` (the harness owns
-  the terminal state), each `verification` a focused `go test -run` over the named tests.
-- Two `tasks.md`/`verification.md` claims go **beyond** what the tests prove — the comment-stripping
-  mechanism (finding 1) and the check-side halves of AC1/AC5 (finding 3).
-- The test *deletions* were replacements, not weakenings, and I verified the replacements bite: with
-  `-C`'s `exitCode` gone (`grep` finds no remaining caller), removing the `!` check turns
-  `TestIptablesCovers/negated_port` + `/negated_multiport` red, and dropping the `-p tcp` requirement
-  turns `/udp` red. `TestIptablesRule` still pins present/absent/unknown.
+- AC1 → `iptablesCovers` + `TestIptablesCovers`, plus the two new round-2 check-side assertions
+  (`TestCheckForLinux/iptables, scoped allow`, `TestSetupForLinux/iptables, converged`). Met.
+- AC2 → `TestSetupForLinux/iptables, rule missing` (exactly one `run iptables -A ...`, `changed`),
+  `TestIptablesRule/absent behind a ts-input jump`. The "second run reports `ok`" clause is not a named unit
+  test: it is proven by composition (`TestIptablesCovers/exact` covers the appended form, so the next read is
+  `rulePresent`) and by the container run in `verification.md`, which I could not reproduce here → UNVERIFIED,
+  not contradicted.
+- AC3 → the 22-case `TestIptablesCovers` table; every negative I re-mutated turned red. Met.
+- AC4 → the `destPortIndex(f) < 0` branch + `TestUFWAllows` (source-only, interface-only, source-only+tcp
+  present; udp, app profile, source-port-only absent). Met.
+- AC5 → `readLinuxFirewall` uses `Output(iptables, "-S", "INPUT")`; `iptablesAppend` is the only mutating argv;
+  `TestIptablesRule/permission`, `/no exit status`, `TestSetupForLinux/iptables -S fails` (`failed`, no `-A`),
+  `TestCheckForLinux/iptables -S fails` (`unverified`). The exact call lists in both setup and check cases
+  assert that no other `run` happens. Met.
+- `tasks.md`: every box is `[x]` except "PR opened", which is this review window (PR #482 is open as a
+  **draft**), not a defect.
+- `features.json` is honest: five entries, all `state: pending`, all `evidence` empty (the harness owns the
+  terminal state), each `verification` targeting the named tests I ran.
+- Round-1 dispositions are real, not verbal: `#483` exists and is open with the blanket-ACCEPT body, and #480/
+  #481 cover the duplicate-rule and deny-shadowing items. The round-1 comment fix is **incomplete** — see
+  finding 2.
 
-Verification I ran fresh, in this session, on `ef191e4`:
+Verification I ran fresh, in this session, on `8733c9b`:
 
-| Command | Result |
+| Command / mutation | Result |
 |---|---|
 | `go build ./...` | exit 0 |
 | `go test -race -count=1 ./...` | 13 packages ok, 0 failures |
 | `GOOS=linux\|windows\|darwin go vet ./...` | clean, all three |
 | `mise exec -- golangci-lint run` | `0 issues.`, exit 0 |
-| mutation: `!` negation check removed | 2 red — `TestIptablesCovers/negated_port`, `/negated_multiport` |
+| `dotf spec digest` vs `review-request.json` | all three contract digests match |
+| mutation: comment strip removed (`strings.Fields(iptComment.ReplaceAllString(line, ""))` → `strings.Fields(line)`) | red — `TestIptablesCovers/comment_holding_-j_ACCEPT` (round-1 finding 1 now has teeth) |
+| mutation: `!`-precedes-flag check removed | red — `TestIptablesCovers/negated_port`, `/negated_multiport` |
 | mutation: `-p tcp` requirement removed | red — `TestIptablesCovers/udp` |
-| mutation: ufw no-dest-port branch reverted | 3 red — `TestUFWAllows/source_only`, `/interface_only`, `/source_only,_tcp` |
-| mutation: comment-stripping removed | **green — no test notices** (finding 1) |
+| mutation: `--ports` dropped from the flag list | red — `TestIptablesCovers/source_or_destination_ports` |
+| mutation: `-j ACCEPT` requirement removed | red — `TestIptablesCovers/drop` |
+| mutation: ufw no-destination-port branch reverted to `return false` | red — `TestUFWAllows/source_only`, `/interface_only`, `/source_only,_tcp` |
+| mutation: `-S` error collapsed into `ruleAbsent` | red — `TestIptablesRule/permission`, `/no_exit_status`, `TestSetupForLinux/iptables_-S_fails`, `TestCheckForLinux/iptables_-S_fails` |
 
-Working tree left clean apart from this file and the launcher's `review-request.json`.
+Probes (throwaway test file, deleted afterwards; tree left clean apart from this review):
+
+| Input | `iptablesCovers`/`ufwAllows` (port 3389) |
+|---|---|
+| `-A INPUT -i tailscale0 -j ACCEPT` / `-A INPUT -s 100.64.0.0/10 -j ACCEPT` / `-A INPUT -p tcp -j ACCEPT` | `false` (finding 1, tracked #483) |
+| `-A INPUT -d 192.168.1.5 -p tcp -m tcp --dport 3389 -j ACCEPT` | `true` (finding 3) |
+| `ufw allow in on tailscale0 to 192.168.1.5` | `true` (finding 3) |
+| `-A INPUT -p tcp -m tcp --dport 22 -m tcp --dport 3389 -j ACCEPT` | `false` (finding 4) |
+| `-A INPUT -p tcp -m tcp --dport 3389 -g ts-input` | `false` (correct: goto is not ACCEPT) |
+| `-A INPUT -p tcp -m limit --limit 1/hour -m tcp --dport 3389 -j ACCEPT` | `true` (finding 4) |
+| `ufw route allow in on tailscale0`, `ufw allow in on tailscale0 app OpenSSH`, `ufw allow from 100.64.0.0/10 proto any` | `false` (correct) |
 
 ### Findings
 
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
 |----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Major | REAL | iptables parser / test strength | The comment-stripping line (`strings.Fields(iptComment.ReplaceAllString(line, ""))`) is guarded by no test that fails without it, contrary to `proposal.md` "Risks" ("The parser removes the comment value before splitting fields, so a quoted word cannot pose as a flag") and the `tasks.md` step it ticks. `TestIptablesCovers/comment spelling a covering rule` passes for an unrelated reason, so a refactor dropping the strip would ship silently and reintroduce firewall widening. | Replacing the strip with `strings.Fields(line)` leaves `go test -run TestIptablesCovers` **ok**. It passes because the comment's `-j` becomes the first `-j`, yielding `ACCEPT"`, so the line is skipped — not because the comment was removed. Red-green demonstrated both ways on a probe test: as shipped, `-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "x -j ACCEPT" -j ACCEPT` reads present; with the strip removed it reads **absent** (setup would then append the unrestricted rule — the exact #479 harm). | `TestIptablesCovers/comment spelling a covering rule` (vacuous for this mechanism) — **UNTESTED** | tests (add a case whose comment holds a bare `-j ACCEPT` after the real `--dport`, asserted red without the strip; reword the existing case to say what it actually pins) |
-| Major | THEORETICAL | iptables coverage vs ufw parity (not #480, not #481) | A blanket ACCEPT with no destination port — `-A INPUT -i tailscale0 -j ACCEPT`, `-A INPUT -s 100.64.0.0/10 -j ACCEPT`, `-A INPUT -p tcp -j ACCEPT` — reads **absent**, so `host setup` appends the unrestricted `-A INPUT -p tcp --dport 3389 -j ACCEPT`; the ufw equivalents (`ufw allow in on tailscale0`, `ufw allow from 100.64.0.0/10`) read **present**. The proposal's headline ("Both backends answer one question the same way") holds for every case tested but not for the most common hardened Tailscale shape, which is the residual of the very widening #479 records. Declared in "Not covering" (rules without a destination port), so not an AC violation — an unclosed gap. | Probe (this session): `iptablesCovers("-A INPUT -i tailscale0 -j ACCEPT\n", 3389)` → `false`; `ufwAllows("ufw allow in on tailscale0\n", 3389)` → `true`. Harm chain is deterministic: `firewallSetupStep` takes the append branch whenever the read is absent, pinned by `TestSetupForLinux/iptables, rule missing`. | UNTESTED (no case for a no-dport ACCEPT on either backend) | code + tests, as a **follow-up ticket** beside #480/#481 — distinguishing blanket ACCEPTs from `-m conntrack --ctstate` rules is a contract decision, so do **not** edit `proposal.md` under this review |
-| Minor | REAL | test traceability (AC1, AC5 second halves) | AC1's "check reports `ok`" on an iptables host and AC5's "a non-zero `-S` exit is `unverified` in check" have no named test. `iptScoped` is used only by `TestIptablesRule/present` and `TestSetupForLinux/iptables, converged`; `TestCheckForLinux` has no iptables covering-rule case and no `-S`-fails case, and `verification.md` claims neither. The behaviour is shared (`checkLinux` → `readLinuxFirewall`) and works, so this is coverage, not a defect. | `grep -rn iptScoped` → 3 hits, none in `TestCheckForLinux`; `TestCheckForLinux/xrdp not installed` is the only iptables check case and uses `iptEmpty` (→ `changed`). | `TestCheckForLinux/not root, iptables host` and `.../no systemctl, ufw unreadable` cover `ruleUnknown → unverified` generically; the iptables-specific paths are **UNTESTED** | tests (two `TestCheckForLinux` cases: scoped rule → `ok`, `-S` exit 2 → `unverified`); `verification.md` update is free |
-| Minor | REAL | maintainability (stale comments) | Two comments still describe the `-C` read: the block comment "only exit 0 and exit 1 of `-C` are answers" now sits directly above `TestIptablesCovers` (function renamed, comment not moved), and `TestCheckForLinux`'s doc says "no run call except the read-only iptables `-C`" while the read is now an `Output` of `-S`. Both mislead the next parser change. | `internal/host/linux_steps_test.go:79-80` and `:273`; `git diff` shows `TestIptablesCovers` inserted under the old `-C` comment. | UNTESTED (comments) | code (comment-only) |
-| Minor | THEORETICAL | iptables parser | A destination-qualified rule (`-A INPUT -d 192.168.1.5 -p tcp -m tcp --dport 3389 -j ACCEPT`) reads present, so `check` reports "Firewall allows TCP 3389 (iptables)" while tailnet traffic may not match it. `-d` is not operator *scope* in the way `-i`/`-s` are; it selects a different address on the host. Declared by "Its other qualifiers … do not matter", so this is a message-overstates-state note, not a widening. | Probe: `iptablesCovers("-A INPUT -d 192.168.1.5 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 3389)` → `true`. | UNTESTED | surface only — track with #481 if it recurs |
-| Question | SPECULATIVE | iptables parser | `iptFlag` takes the **first** occurrence of a flag, so a legal but unusual rule with two `-m tcp --dport` clauses (`--dport 22 -m tcp --dport 3389`) reads absent; `ufw allow … proto any …` reads absent because `ufwProtoTCP` accepts only `tcp` or no `proto` (pre-existing for the destination-port branch). | Probe: both → `false`. iptables-save normalises `-p 6` to `-p tcp`, so the protocol-number variant is not a risk. | UNTESTED | — (surface only; do not gate) |
+| Major | THEORETICAL | iptables coverage vs ufw parity | A blanket ACCEPT with no destination port (`-i tailscale0 -j ACCEPT`, `-s 100.64.0.0/10 -j ACCEPT`, `-p tcp -j ACCEPT`) reads **absent**, so `host setup` still appends the unrestricted rule on the most common hardened Tailscale shape, while the ufw equivalents read **present**. Declared in proposal "Not covering", so not an AC violation — an unclosed gap in the headline ("both backends answer one question the same way"). Carried, not new: it is already ticketed. | Probe this session: both → `false`/`true` respectively; harm chain pinned by `TestSetupForLinux/iptables, rule missing`; ticket `#483` is open with the same evidence and root cause (`-m conntrack` exclusion over-generalised). | UNTESTED (no case on either backend) — exactly what `#483` asks for ("build the test table from verbatim `iptables -S INPUT` output") | code + tests, in the `#483` follow-up (needs a contract decision; do **not** edit `proposal.md` under this review) |
+| Minor | REAL | maintainability (stale comment) | `internal/host/step.go:73` still documents the old read: "the Linux iptables read is a read-only `iptables -C` through Run". The read is now `-S INPUT` through `Output`, so the sentence is wrong in the one place that describes the read half's contract, and `verification.md` records round-1's comment finding as "applied" when only the two `linux_steps_test.go` comments were fixed. | `grep -rn "iptables -C" --include=*.go .` → only `internal/host/step.go:73` (tests and lesson-042 are fixed/historical). | UNTESTED (comment-only) | code (`checkFor` doc comment); free, outside the contract set |
+| Minor | THEORETICAL | iptables/ufw parser, message accuracy | A destination-qualified allow (`-d 192.168.1.5 … --dport 3389`; `ufw allow in on tailscale0 to 192.168.1.5`) reads present, so `check` reports "Firewall allows TCP 3389" for a rule that selects a different address on the host and may not admit tailnet traffic. Not a widening (setup appends nothing), and `-i`/`-s` are declared the operator's scope — `-d` is the one qualifier that is *not* the same kind of scope. Same class on both backends, so parity holds. | Probes above: both → `true` for a destination-scoped rule. | UNTESTED | surface only — fold into `#481` if it recurs |
+| Question | SPECULATIVE | iptables/ufw parser | `iptFlag` takes the **first** occurrence of a flag, so a legal-but-unusual rule repeating `--dport` (`--dport 22 -m tcp --dport 3389`) reads absent; a rate-limited ACCEPT (`-m limit --limit 1/hour … --dport 3389 … -j ACCEPT`) reads present even though it throttles the connection. `iptables-save` normalises `-p 6` to `-p tcp`, so the protocol-number variant is not a risk. Each mis-read leads to one extra narrow rule (absent) or no new rule (present), never to a widening beyond #479. | Probes above. No `iptables -S` output I could produce by hand selects both forms, and I cannot run the container here. | UNTESTED | — (surface only; do not gate) |
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | B | All five ACs implemented and the negative table is genuinely broad (21 cases, three mutations red), but one guard (comment stripping) is unguarded and two AC clauses have no named test. |
-| Verification       | B | Re-runnable commands with real outputs for build/race/vet/lint, but one claimed mechanism is proven neither by test nor by a reproducible measurement here; the privileged-container run I could not reproduce (no privileged run in budget) — UNVERIFIED, not contradicted. |
-| Scope              | A | Diff is exactly the proposal plus the lesson/parity rows `tasks.md` names; no creep, no dependency, no unrelated file. |
-| Reliability        | A | Unknown reads stay `unverified` (check) / `failed` (setup) with no mutation; append happens only on `ruleAbsent`, so a second run converges — pinned by `TestSetupForLinux/iptables, rule missing` and `/iptables -S fails`. |
-| Maintainability    | B | Functions are short (CC well under 10), names say what they do, and both helpers carry why-comments — but two comments describe the deleted `-C` read, one of them attached to the wrong test. |
-| Handoff-readiness  | A | Lesson 043 records the widening lesson and the measured `-S` syntax, parity doc updated, `verification.md` filled, promotion questions answered with reasons. |
+| Correctness        | A | All five ACs verified by named tests I ran; the 22-case negative table is broad and every guard I mutated (comment strip, negation, protocol, `--ports`, target, ufw no-dest branch) turned red; no observed defect. Residual destination-scoped false positive is theoretical and declared. |
+| Verification       | B | Re-runnable commands with real outputs for build/race/vet/lint/digest, and red-green proofs for every claimed mechanism; the privileged `ubuntu:24.04` run behind AC2's second-run clause and the ufw 0.36.2 measurements are not reproducible in this run — UNVERIFIED, not contradicted. |
+| Scope              | A | Diff is the proposal plus the lesson/parity rows `tasks.md` names; no creep, no dependency, no unrelated file. |
+| Reliability        | A | Unknown reads stay `unverified` (check) / `failed` (setup) with no mutation — mutation 7 proves both are pinned; append only on `ruleAbsent`, so a re-run converges. |
+| Maintainability    | B | Functions are short (CC well under 10), names say what they do, both helpers carry why-comments; but one comment still describes the deleted `-C` read. |
+| Handoff-readiness  | A | Lesson 043 records the widening and the measured `-S` syntax and is indexed; parity doc row updated; `verification.md` carries round-1 dispositions and answers every promotion line. |
 
-Rubric alone would be PASS (no C, no D); the severity axis governs: one **REAL Major** (finding 1)
-forces **FAIL** under the `severity × reality` rule.
+Rubric alone is PASS (no C, no D). The open **Major THEORETICAL** (finding 1) is tracked as #483, which under
+`severity × reality` is a tracked gap, not a blocker → **PASS WITH GAPS**.
 
 ### Verdict
 
-FAIL
+PASS WITH GAPS
 
 ### Recommended next steps
 
-Contract set (`proposal.md`, `tasks.md`, `features.json`) — **leave untouched**; none of the findings
-requires a contract change, and editing one would invalidate this review. Every item below is outside
-the staleness check.
+The contract set (`proposal.md`, `tasks.md`, `features.json`) is **closed** at this verdict — nothing below
+requires a contract edit, and editing one would invalidate this review. Route the items through
+`verification.md` (outside the staleness check) or the existing tickets.
 
-- **tests (this is the flip item)** — add one `TestIptablesCovers` case to `internal/host/linux_steps_test.go`:
-  a covering rule whose comment mentions `-j ACCEPT`
-  (`-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "x -j ACCEPT" -j ACCEPT`, want `true`).
-  Confirm red-green: it must fail with `strings.Fields(iptComment.ReplaceAllString(line, ""))` replaced by
-  `strings.Fields(line)`, and pass with the shipped line. Reword `comments spelling a covering rule` so it
-  states what it actually pins (a comment's *port* token cannot count), not the stripping mechanism.
-- **tests** — two `TestCheckForLinux` cases for the AC1/AC5 check-side clauses: `iptScoped` → all `ok`,
-  and `iptRead` exit 2 → `Firewall configuration=unverified`, no mutating command.
-- **verification.md** — record the new cases against AC1/AC5 and the mutation evidence (comment strip,
-  negation, protocol, ufw branch), so the next round reads it as a proven suite.
-- **code (comment-only)** — move the `-C`/exit-0-1 comment to `TestIptablesRule` (or rewrite it) and fix
-  `TestCheckForLinux`'s "read-only iptables `-C`" sentence; both are now wrong.
-- **follow-up ticket** — file the no-destination-port ACCEPT gap (finding 2) beside #480/#481 (neither
-  covers it): "an
-  interface- or source-scoped blanket ACCEPT reads absent on the iptables backend while the ufw
-  equivalent reads present, so setup still appends an unrestricted rule on a hardened Tailscale host."
-  Root cause: the "no destination port" exclusion was written for `-m conntrack --ctstate` rules and
-  over-generalises to blanket ACCEPTs; fix needs a contract decision.
-- **UNVERIFIED, not a finding** — the privileged `ubuntu:24.04` end-to-end run in `verification.md` and the
-  ufw 0.36.2 measurements were not reproducible in this run's budget; the unit-level claims they back all
-  held under my own runs.
+- **code (comment-only, free)** — `internal/host/step.go:73`: replace "a read-only `iptables -C` through Run"
+  with the current read (`iptables -S INPUT` through `Output`). Then record in `verification.md` that round-1's
+  comment finding is fully applied, since it currently claims it is.
+- **`#483` (already open, not a new ticket)** — the blanket-ACCEPT gap (finding 1). No action under this spec
+  beyond keeping the disposition; the fix needs a contract decision on how to tell a blanket ACCEPT from a
+  `-m conntrack` rule.
+- **surface only** — destination-qualified allows (finding 3) and the repeated-`--dport` / `-m limit` shapes
+  (finding 4): no gate, no ticket unless `#481` work reaches them.
+- **PR** — #482 is still a draft; mark it ready (`gh pr ready 482`) once the comment fix lands so the human
+  review reads the finished change, and run `dotf pr triage-queue` before calling the PR work complete.
+- **UNVERIFIED, not a finding** — the privileged container end-to-end run and the ufw 0.36.2 measurements in
+  `verification.md` were outside this run's budget; every unit-level claim they back held under my own runs.
 
-`dotf spec archive` is **not** advisable in the current state: the review verdict is FAIL until the
-comment-stripping test exists and a re-review passes. Minimum flip set: that one named red-green test
-(finding 1) — the remaining items are tracked gaps that a PASS-WITH-GAPS would carry, not blockers.
+`dotf spec archive` is advisable: the REAL Major that blocked round 1 is fixed and its regression test
+demonstrably fails without the fix. The two open items are one comment and one tracked ticket.
