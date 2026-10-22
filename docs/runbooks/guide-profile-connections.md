@@ -30,6 +30,24 @@ historical acceptance is not a live check on another computer.
 Start with an existing profile and managed credential. Do not enter a new
 Headscale key or an application token just to configure runtime settings.
 
+Before importing, check which binary and SSH client this terminal selects.
+Confirm that the selected `ts-bridge` build contains the change described above.
+If it does not, use the verified executable's absolute path in the commands
+below instead of invoking an older binary on PATH.
+
+In POSIX shells, including Git Bash:
+
+```bash
+command -v ts-bridge
+command -v ssh
+```
+
+In PowerShell:
+
+```powershell
+Get-Command ts-bridge, ssh
+```
+
 Put supported, non-secret settings in `runtime.yaml`, replacing the state
 directory placeholder with an absolute path valid on this computer:
 
@@ -38,12 +56,14 @@ version: 1
 bootstrap_ssh: work-bastion
 bootstrap_socks_addr: 127.0.0.1:1056
 hostname: work-bridge
-state_dir: "<absolute machine-local state directory for this profile>"
+state_dir: '<absolute machine-local state directory for this profile>'
 local_addr: 127.0.0.1:34443
 health_addr: 127.0.0.1:9081
 ```
 
 Use the actual SSH alias, paths and free loopback addresses for this profile.
+Single-quoted YAML preserves backslashes literally; double any single quote
+inside the path.
 Keep different profiles' hostnames, state directories and listening addresses
 distinct. The bootstrap listener must not overlap the bridge or health listener.
 The existing custom control URL is required for Headscale SSH bootstrap.
@@ -76,20 +96,8 @@ ts-bridge connect --profile work
 ```
 
 No launcher or daily `--config` argument is needed. If the executable is not on
-PATH, invoke its existing absolute path instead; the feature does not modify
-PATH or install a binary. Check which binary and SSH client the shell selects.
-In POSIX shells, including Git Bash:
-
-```bash
-command -v ts-bridge
-command -v ssh
-```
-
-In PowerShell:
-
-```powershell
-Get-Command ts-bridge, ssh
-```
+PATH, invoke the verified absolute path from one-time configuration instead;
+the feature does not modify PATH or install a binary.
 
 The process stays in the foreground. Complete any SSH host-key or passphrase
 prompt in that terminal; verify unfamiliar host fingerprints through a trusted
@@ -151,14 +159,15 @@ connection, or configure distinct addresses.
 
 `READY`, the bridge's health endpoint and `status` output do not prove that the
 application is reachable. For a Gitea HTTPS target, probe its unauthenticated
-health endpoint through the actual local address printed by the bridge:
+health endpoint through the actual local address printed by the bridge.
+In a POSIX shell, `command curl` bypasses shell aliases and functions:
 
 ```sh
-curl --noproxy "*" --fail --show-error --connect-timeout 5 --max-time 15 --connect-to "forge.example.internal:443:127.0.0.1:34443" "https://forge.example.internal/api/healthz"
+command curl --noproxy "*" --fail --show-error --connect-timeout 5 --max-time 15 --connect-to "forge.example.internal:443:127.0.0.1:34443" "https://forge.example.internal/api/healthz"
 ```
 
-Use the curl executable, not a shell alias; in Windows PowerShell, invoke
-`curl.exe` explicitly.
+In PowerShell, use the same arguments with `curl.exe` instead of `command curl`
+to select the executable rather than a shell alias.
 
 Require an HTTP success and Gitea JSON with `"status":"pass"`. Keep the canonical
 service hostname in the URL: `--connect-to` changes only the TCP destination,
