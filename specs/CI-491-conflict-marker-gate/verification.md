@@ -13,7 +13,7 @@ created: "2026-10-22"
 - [x] Criterion 2 -> cases `setext-short` (`===`) and `setext-seven` (exactly seven `=`), both
       exit 0; `indented-example` shows an indented quoted conflict stays green.
 - [x] Criterion 3 -> case `not-a-repo` (exit 2, `not a Git work tree`); the real tree reports
-      `check-conflict-markers: OK (513 tracked files) at `89b8e61``.
+      `check-conflict-markers: OK (513 tracked files)` at `89b8e61`.
 - [x] Criterion 4 -> the suite ran every case under bash and zsh (16/16 ok), and
       `TCM_SHELLS="bash nosuchsh"` exits 1.
 - [ ] CI wiring -> pending the owner's two steps in `.github/workflows/repo-hygiene.yml`
@@ -27,7 +27,7 @@ created: "2026-10-22"
 - Mutants, each run with `TCM_SHELLS=bash`, all redden the suite (exit 1): separator `=======`
   added back to the regex; `git grep` exit 1 no longer treated as OK; the end-of-line form of the
   marker dropped; findings exiting 0.
-- Real tree: `bash scripts/check-conflict-markers.sh` -> `OK (513 tracked files) at `89b8e61``;
+- Real tree: `bash scripts/check-conflict-markers.sh` -> `OK (513 tracked files)` at `89b8e61`;
   `bash scripts/check-lessons.sh` -> `OK (46 lessons)`.
 - `shellcheck scripts/check-conflict-markers.sh scripts/tests/test-conflict-markers.sh` -> exit 0.
   The hygiene job's shellcheck covers only workflow-embedded shell, so this ran locally.
