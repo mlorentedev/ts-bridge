@@ -16,6 +16,7 @@ const (
 	backendUFW   = "ufw"
 	backendIPT   = "iptables"
 	protoTCP     = "tcp"
+	iptAccept    = "ACCEPT"
 )
 
 func linuxPort(cfg Config) int {
@@ -165,11 +166,12 @@ var (
 
 // iptablesCovers reports whether `iptables -S` output holds an ACCEPT that
 // admits TCP port. Interface and source qualifiers are the operator's scope
-// and do not matter; a negated port, a source port and a jump never count.
+// and do not matter; a loopback rule, a negated port, a source port and a jump
+// never count.
 func iptablesCovers(rules string, port int) bool {
 	for _, line := range strings.Split(rules, "\n") {
 		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
-		if len(f) == 0 || f[0] != "-A" || iptFlag(f, "-j") != "ACCEPT" {
+		if len(f) < 2 || f[0] != "-A" || iptFlag(f, "-j") != iptAccept || iptLoopback(f) {
 			continue
 		}
 		portless := !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptPortFlags, w) })
@@ -194,32 +196,70 @@ func iptPortCovers(f []string, port int) bool {
 	return false
 }
 
-// iptPortlessCovers reports whether an ACCEPT with no port flag admits every
-// TCP port: its protocol is tcp or absent, it matches only on `tcp` or
-// `comment` (conntrack, state, limit and the rest narrow it in ways not
-// modeled here), and it is not a loopback rule, which every ruleset carries.
+// iptPortlessCovers reports whether a non-loopback ACCEPT with no port flag
+// admits a new TCP connection on every port. Every token after the chain must
+// be one this parser models; anything else (conntrack, state, limit, `-f`, a
+// `--tcp-flags` set other than `--syn`, a negation that is not of loopback)
+// narrows the rule in a way not modeled here, so the rule reads as absent.
 func iptPortlessCovers(f []string) bool {
-	if slices.Contains(f, "-p") && iptFlag(f, "-p") != protoTCP {
-		return false
-	}
-	for i, w := range f {
-		if w == "-m" && (i+1 >= len(f) || (f[i+1] != protoTCP && f[i+1] != "comment")) {
+	for i := 2; i < len(f); {
+		n := iptPortlessToken(f[i:])
+		if n == 0 {
 			return false
 		}
+		i += n
 	}
-	return !iptLoopback(f)
+	return true
 }
 
-// iptLoopback reports whether a rule is scoped to loopback: `-i lo`, or a
-// source or destination prefix on a loopback address.
-func iptLoopback(f []string) bool {
-	if iptFlag(f, "-i") == "lo" {
-		return true
+// iptPortlessToken returns how many fields the qualifier at the start of f
+// spans when it keeps a rule open to every TCP port, or 0 when it narrows it.
+func iptPortlessToken(f []string) int {
+	if len(f) < 2 {
+		return 0
 	}
-	for _, flag := range []string{"-s", "-d"} {
-		if p, err := netip.ParsePrefix(iptFlag(f, flag)); err == nil && p.Addr().IsLoopback() {
+	switch v := f[1]; f[0] {
+	case "-j":
+		return iptIf(v == iptAccept, 2)
+	case "-p", "-m":
+		return iptIf(v == protoTCP || (f[0] == "-m" && v == "comment"), 2)
+	case "--comment", "-i", "-s", "-d":
+		return 2 // loopback scopes were rejected before this point
+	case "--tcp-flags": // `--syn` prints as this exact pair
+		return iptIf(len(f) > 2 && v == "FIN,SYN,RST,ACK" && f[2] == "SYN", 3)
+	case "!": // only a negated loopback scope leaves every other source open
+		return iptIf(len(f) > 2 && iptLoopbackScope(v, f[2]), 3)
+	}
+	return 0
+}
+
+func iptIf(ok bool, n int) int {
+	if ok {
+		return n
+	}
+	return 0
+}
+
+// iptLoopback reports whether a rule is scoped to loopback by a non-negated
+// `-i lo` or a loopback source or destination prefix.
+func iptLoopback(f []string) bool {
+	for i := 0; i+1 < len(f); i++ {
+		if (i == 0 || f[i-1] != "!") && iptLoopbackScope(f[i], f[i+1]) {
 			return true
 		}
+	}
+	return false
+}
+
+// iptLoopbackScope reports whether flag value names loopback: `-i lo`, or
+// `-s`/`-d` with a loopback prefix.
+func iptLoopbackScope(flag, value string) bool {
+	switch flag {
+	case "-i":
+		return value == "lo"
+	case "-s", "-d":
+		p, err := netip.ParsePrefix(value)
+		return err == nil && p.Addr().IsLoopback()
 	}
 	return false
 }
@@ -234,7 +274,7 @@ func iptFlag(f []string, flag string) string {
 }
 
 func iptablesAppend(port int) []string {
-	return []string{"-A", "INPUT", "-p", protoTCP, "--dport", strconv.Itoa(port), "-j", "ACCEPT"}
+	return []string{"-A", "INPUT", "-p", protoTCP, "--dport", strconv.Itoa(port), "-j", iptAccept}
 }
 
 // ufwAllows reports whether `ufw show added` holds an inbound allow for TCP

@@ -74,6 +74,7 @@ const (
 	iptScoped       = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
 	iptEmpty        = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
 	iptTailnet      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -i tailscale0 -j ACCEPT\n"
+	iptAckOnly      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK -j ACCEPT\n"
 	iptLoopbackOnly = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n"
 )
 
@@ -131,6 +132,15 @@ func TestIptablesCovers(t *testing.T) {
 		{"port-less limit", "-A INPUT -p tcp -m limit --limit 5/min -j ACCEPT", false},
 		{"port-less recent", "-A INPUT -m recent --rcheck --name x --mask 255.255.255.255 --rsource -j ACCEPT", false},
 		{"port-less drop", "-A INPUT -i tailscale0 -j DROP", false},
+		// Narrowing the parser does not model reads as absent, the visible failure.
+		{"port-less ack-only tcp flags", "-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK -j ACCEPT", false},
+		{"port-less syn+ack tcp flags", "-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN,ACK -j ACCEPT", false},
+		{"port-less other tcp flags mask", "-A INPUT -p tcp -m tcp --tcp-flags SYN,RST SYN -j ACCEPT", false},
+		{"port-less fragment", "-A INPUT -f -j ACCEPT", false},
+		{"port-less negated tailnet source", "-A INPUT ! -s 100.64.0.0/10 -j ACCEPT", false},
+		{"port-less negated tailnet interface", "-A INPUT ! -i tailscale0 -j ACCEPT", false},
+		{"loopback interface with the port", "-A INPUT -i lo -p tcp -m tcp --dport 3389 -j ACCEPT", false},
+		{"loopback source with the port", "-A INPUT -s 127.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT", false},
 		{"among others", "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 22 -j ACCEPT\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT", true},
 	}
 	for _, tt := range tests {
@@ -257,6 +267,12 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "iptables, only loopback and established allowed",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptLoopbackOnly})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
+			name:     "iptables, only an established-traffic tcp-flags allow",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptAckOnly})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},

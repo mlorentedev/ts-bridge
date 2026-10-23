@@ -21,6 +21,7 @@ created: "2026-10-22"
 - [x] [AC2] `TestSetupForLinux` case: an `-i lo -j ACCEPT` host still gets one `-A`
 - [x] Container run: `host setup` twice on a host with `-i tailscale0 -j ACCEPT`, then on one with only `-i lo -j ACCEPT`
 - [x] Lesson and parity doc updated
+- [x] Review round 1 (FAIL): port-less branch rebuilt as a token allow-list (`--syn` only, `-f`, non-loopback negations absent), loopback guard hoisted above the port split, regression cases added
 
 ## Closing
 

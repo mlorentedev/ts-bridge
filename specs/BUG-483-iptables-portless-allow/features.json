@@ -9,7 +9,7 @@
   {
     "id": "BUG-483-iptables-portless-allow-f2",
     "behavior": "AC2: a port-less ACCEPT that is loopback, non-TCP, or carries another match reads as absent and setup appends the rule",
-    "verification": "go test -race -count=1 ./internal/host -run 'TestIptablesCovers|TestSetupForLinux/iptables,_only_loopback|TestCheckForLinux/iptables,_only_loopback'",
+    "verification": "go test -race -count=1 ./internal/host -run 'TestIptablesCovers|TestSetupForLinux/iptables,_only|TestCheckForLinux/iptables,_only_loopback'",
     "state": "pending",
     "evidence": ""
   },
