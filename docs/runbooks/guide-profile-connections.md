@@ -2,7 +2,7 @@
 id: "ts-bridge-profile-connections"
 type: runbook
 status: draft
-tags: [runbook, profiles, windows, git-bash, ssh]
+tags: [runbook, profiles, cross-platform, ssh]
 created: "2026-10-15"
 owner: manu
 ---
@@ -10,38 +10,95 @@ owner: manu
 # Daily Foreground Profile Connections
 
 Requires a build containing [ADR-016](../adr/adr-016-self-contained-profile-connections.md)
-and #441. Older installed binaries do not support this runtime import. The
-[feature verification record](../../specs/CFG-005-self-contained-connections/verification.md)
-records successful Windows/Git Bash candidate acceptance on 2026-10-20.
-This runbook remains draft while #442 awaits final review and delivery.
+and #441, merged in #442. Older binaries do not support this runtime import;
+updating a source checkout does not update the installed executable. Use a
+release containing the change, or an explicitly authorized CI candidate tied
+to its source commit. A CI candidate is not a published release.
+
+The profile and foreground-command contract is the same on Windows, macOS and
+Linux; no OS-specific launcher is required. OpenSSH must be available in the
+invoking terminal. State paths and SSH identities remain machine-local settings,
+not paths copied verbatim between computers.
+
+The [archived feature verification record](../../specs/archive/CFG-005-self-contained-connections/verification.md)
+records Windows/Git Bash candidate acceptance on 2026-10-20 and its evidence
+qualifications. This runbook remains draft pending release delivery; that
+historical acceptance is not a live check on another computer.
 
 ## One-Time Configuration
 
 Start with an existing profile and managed credential. Do not enter a new
 Headscale key or an application token just to configure runtime settings.
 
-Put supported, non-secret settings in a local YAML file:
+Before importing, inspect the command type and path for the binary and SSH
+client this terminal selects.
+If either name resolves to an alias or function, or the selected application
+is not the intended executable, use the verified executable's absolute path
+for every direct invocation below, including import, daily use and SSH
+diagnostics. ts-bridge selects the external SSH client from PATH, not a shell
+alias or function; verify that client when choosing the diagnostic executable.
+
+In POSIX shells, including Git Bash:
+
+```bash
+command -V ts-bridge
+command -V ssh
+```
+
+In PowerShell:
+
+```powershell
+Get-Command ts-bridge, ssh -All | Select-Object CommandType, Name, Source
+```
+
+Then ask the selected executable for its build identity, using its absolute path
+if needed:
+
+```sh
+ts-bridge version
+```
+
+A published release reports `ts-bridge vX.Y.Z (commit <revision>)`. Match those
+values to the tag and source revision on the repository's
+[Releases page](https://github.com/mlorentedev/ts-bridge/releases).
+To check whether that source contains the required change, open GitHub's
+Compare view with base `ed3ccb104abb61619968c1960f163aebb90e6119` (the #442 merge)
+and compare set to the release tag. Require an identical or ahead revision;
+a behind, diverged or unavailable comparison does not establish support.
+Do not assume that the latest published release already contains the change.
+
+An authorized CI candidate can report `ts-bridge dev (commit unknown)`;
+that output cannot identify its source. Instead, use the artifact downloaded
+from the exact successful build run, record its run URL, artifact name/digest
+and full source SHA, and perform the same ancestry comparison against that SHA.
+Do not substitute an unrelated executable found on PATH. If the release identity
+or CI artifact provenance cannot be established, stop before importing.
+Command discovery alone proves neither the version nor feature support.
+
+Put supported, non-secret settings in `runtime.yaml`, replacing the state
+directory placeholder with an absolute path valid on this computer:
 
 ```yaml
 version: 1
 bootstrap_ssh: work-bastion
 bootstrap_socks_addr: 127.0.0.1:1056
 hostname: work-bridge
-state_dir: C:\Users\user\AppData\Local\ts-bridge\state\work
+state_dir: '<absolute machine-local state directory for this profile>'
 local_addr: 127.0.0.1:34443
 health_addr: 127.0.0.1:9081
 ```
 
 Use the actual SSH alias, paths and free loopback addresses for this profile.
+Single-quoted YAML preserves backslashes literally; double any single quote
+inside the path.
 Keep different profiles' hostnames, state directories and listening addresses
 distinct. The bootstrap listener must not overlap the bridge or health listener.
 The existing custom control URL is required for Headscale SSH bootstrap.
 
 Import once, with the intended binary:
 
-```powershell
-& 'C:\Tools\ts-bridge\ts-bridge.exe' init `
-  --profile work --config "$HOME\.ts-bridge\work.yml" --force
+```sh
+ts-bridge init --profile work --config runtime.yaml --force
 ```
 
 `target` and `control_url` may also be supplied in the input. Omitted settings,
@@ -59,20 +116,16 @@ export them.
 
 ## Daily Use
 
-In the intended Windows/Git Bash terminal:
+In the terminal that will own the foreground connection, on any supported OS:
 
 ```bash
 ts-bridge connect --profile work
 ```
 
-No launcher or daily `--config` argument is needed. If the executable is not on
-PATH, invoke its existing absolute path instead; the feature does not modify
-PATH or install a binary. Check which binary and SSH client the shell selects:
-
-```bash
-command -v ts-bridge
-command -v ssh
-```
+No launcher or daily `--config` argument is needed. If the command is shadowed,
+selects an unintended executable, or is not on PATH, invoke the verified
+absolute path from one-time configuration instead; the feature does not modify
+PATH or install a binary.
 
 The process stays in the foreground. Complete any SSH host-key or passphrase
 prompt in that terminal; verify unfamiliar host fingerprints through a trusted
@@ -83,10 +136,18 @@ process variables and a CWD `.env` can still override profile settings. Use a
 terminal/directory without unrelated overrides when verifying profile-only use;
 do not clear another profile's environment globally.
 
+When the effective TCP target differs from the selected profile's target,
+`connect` emits a structured warning before starting the bridge, identifying
+the profile, effective target and winning source (`--target`, `TS_TARGET` or
+`YAML`). `TS_TARGET` includes values loaded from the CWD `.env`; the warning
+does not distinguish those from process environment variables. `--quiet` does
+not suppress it. Matching targets and SOCKS5 mode do not produce this warning.
+
 ## SSH Authentication Diagnostics
 
-Use the same shell and OpenSSH client selected by `connect`. Git for Windows
-OpenSSH and Windows OpenSSH can use different configuration and agents.
+Use the same shell and OpenSSH client selected by `connect`. On Windows,
+Git for Windows OpenSSH and Windows OpenSSH can use different configuration
+and agents. On every OS, the chosen client's identity and agent access matter.
 
 ```bash
 ssh -G work-bastion
@@ -133,13 +194,15 @@ connection, or configure distinct addresses.
 
 `READY`, the bridge's health endpoint and `status` output do not prove that the
 application is reachable. For a Gitea HTTPS target, probe its unauthenticated
-health endpoint through the actual local address printed by the bridge:
+health endpoint through the actual local address printed by the bridge.
+In a POSIX shell, `command curl` bypasses shell aliases and functions:
 
-```powershell
-curl.exe --noproxy "*" --fail --show-error --connect-timeout 5 --max-time 15 `
-  --connect-to "forge.example.internal:443:127.0.0.1:34443" `
-  "https://forge.example.internal/api/healthz"
+```sh
+command curl --noproxy "*" --fail --show-error --connect-timeout 5 --max-time 15 --connect-to "forge.example.internal:443:127.0.0.1:34443" "https://forge.example.internal/api/healthz"
 ```
+
+In PowerShell, use the same arguments with `curl.exe` instead of `command curl`
+to select the executable rather than a shell alias.
 
 Require an HTTP success and Gitea JSON with `"status":"pass"`. Keep the canonical
 service hostname in the URL: `--connect-to` changes only the TCP destination,

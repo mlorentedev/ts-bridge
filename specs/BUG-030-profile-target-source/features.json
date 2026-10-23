@@ -1,0 +1,23 @@
+[
+  {
+    "id": "BUG-030-profile-target-source-f1",
+    "behavior": "AC1: Preserve target precedence and identify the winning source in one override warning.",
+    "verification": "go test ./cmd/cli -run TestConnectProfileTargetOverrideWarning -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-030-profile-target-source-f2",
+    "behavior": "AC2: Omit override warnings when no selected profile target is actually replaced.",
+    "verification": "go test ./cmd/cli -run TestConnectProfileTargetOverrideWarning -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-030-profile-target-source-f3",
+    "behavior": "AC3: Emit structured text/JSON warnings before startup, without secrets or profile mutations.",
+    "verification": "go test ./cmd/cli -run TestConnectProfileTargetOverrideWarning -count=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
