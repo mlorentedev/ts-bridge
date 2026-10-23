@@ -34,7 +34,7 @@ created: "2026-10-22"
 | ADR rationale says macOS Screen Sharing is `manual` today | Applied: reworded to "once macOS has steps (#459)" and states that macOS setup exits 0 with "not applicable" until then |
 | `unverified` not stated for setup (THEORETICAL) | Applied in the ADR: setup has no `unverified` outcome, and one would exit 0 like `manual`. No test, because setup emits none |
 | `hostGOOS` shadows `runtime.GOOS` only in the command layer (THEORETICAL) | Applied: the comment states that a test changing `hostGOOS` must also replace `hostSetup` or `hostCheck` |
-| Review base excluded the implementation commit (process) | Ticketed in the dotfiles repo (review launcher) |
+| Review base excluded the implementation commit (process) | Ticketed: evidence added to mlorentedev/dotfiles#1551 (the review base is inferred from history) |
 | `not elevated` stdout assertion is vacuous | Applied: an empty expectation now asserts empty stdout. That surfaced that the bare subcommand printed usage on error; the helper now sets `SilenceUsage` as the root command does (#210) |
 | macOS exits 0 for "not applicable" (Question) | Kept as 0 and documented in the ADR and parity doc; asked of the owner on #490, since it predates this spec and changes with #459 |
 
