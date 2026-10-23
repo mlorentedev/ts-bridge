@@ -78,3 +78,8 @@ func HostCheckCmdForTest(t interface{ Cleanup(func()) }, check func(host.Config,
 	t.Cleanup(func() { hostCheck = prev })
 	return newHostCheckCmd()
 }
+
+// PrintCheckTextForTest is a test-only wrapper for printCheckText.
+func PrintCheckTextForTest(w io.Writer, r host.CheckResult) {
+	printCheckText(w, r)
+}

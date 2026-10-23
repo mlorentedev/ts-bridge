@@ -451,7 +451,11 @@ func printCheckText(w io.Writer, r host.CheckResult) {
 	fmt.Fprintf(w, "  Platform:      %s\n", runtime.GOOS)
 	fmt.Fprintf(w, "  Tailscale:     %s\n", statusStr(r.TailscaleUp))
 	fmt.Fprintf(w, "  Tailscale IP:  %s\n", r.TailscaleIP)
-	fmt.Fprintf(w, "  RDP:           %s (port %d)\n", statusStr(r.RDPEnabled), r.RDPPort)
+	if r.RDPPort > 0 {
+		fmt.Fprintf(w, "  RDP:           %s (port %d)\n", statusStr(r.RDPEnabled), r.RDPPort)
+	} else {
+		fmt.Fprintln(w, "  RDP:           no service declared")
+	}
 	fmt.Fprintf(w, "  Firewall:      %s\n", statusStr(r.FirewallOK))
 	for _, step := range r.Steps {
 		if step.Outcome != host.OutcomeOK {
