@@ -54,4 +54,5 @@ tags: [ts-bridge, lessons, index]
 | 041 | 2026-10-22 | A state that could not be read is not a state that is absent: report `unverified`, not `changed` | [lesson-041-2026-10-22.md](lesson-041-2026-10-22.md) | `host`, `outcome-model`, `exit-status` |
 | 042 | 2026-10-22 | Read the firewall from its configuration (`ufw show added`), only as root, and decide systemctl answers by the printed word | [lesson-042-2026-10-22.md](lesson-042-2026-10-22.md) | `host`, `linux`, `firewall` |
 | 043 | 2026-10-22 | Decide firewall coverage from the rule set (`iptables -S`), not an exact-match probe; a `ts-input` jump is normal | [lesson-043-2026-10-22.md](lesson-043-2026-10-22.md) | `host`, `linux`, `firewall` |
+| 044 | 2026-10-22 | Ask systemd whether a service exists, not PATH; `static` counts as enabled, `masked` needs unmask, other answers are `unverified` | [lesson-044-2026-10-22.md](lesson-044-2026-10-22.md) | `host`, `linux`, `systemd` |
 | 045 | 2026-10-22 | Preserve the original profile target at the resolution boundary | [lesson-045-profile-target-source.md](lesson-045-profile-target-source.md) | `profiles`, `configuration`, `logging` |
