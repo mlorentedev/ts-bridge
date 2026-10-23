@@ -274,12 +274,12 @@ func iptLoopback(f []string) bool {
 	return false
 }
 
-// iptLoopbackScope reports whether flag value names loopback: `-i lo`, or
-// `-s`/`-d` with a loopback prefix.
+// iptLoopbackScope reports whether flag value names loopback: `-i lo` or its
+// wildcard `-i lo+`, or `-s`/`-d` with a loopback prefix.
 func iptLoopbackScope(flag, value string) bool {
 	switch flag {
 	case "-i":
-		return value == "lo"
+		return value == "lo" || value == "lo+"
 	case "-s", "-d":
 		p, err := netip.ParsePrefix(value)
 		return err == nil && p.Addr().IsLoopback()

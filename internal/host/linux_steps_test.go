@@ -124,6 +124,7 @@ func TestIptablesCovers(t *testing.T) {
 		{"port-less tcp flags", "-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT", true},
 		{"port-less comment", "-A INPUT -i tailscale0 -m comment --comment tailnet -j ACCEPT", true},
 		{"port-less loopback interface", "-A INPUT -i lo -j ACCEPT", false},
+		{"port-less loopback interface wildcard", "-A INPUT -i lo+ -j ACCEPT", false},
 		{"port-less loopback source", "-A INPUT -s 127.0.0.0/8 -j ACCEPT", false},
 		{"port-less loopback destination", "-A INPUT -d 127.0.0.1/32 -j ACCEPT", false},
 		{"port-less ipv6 loopback source", "-A INPUT -s ::1/128 -j ACCEPT", false},

@@ -9,7 +9,7 @@ created: "2026-10-22"
 
 - [x] AC1 -> `TestIptablesCovers` (`port-less blanket`, `interface`, `source`, `tcp`, `negated loopback interface`, `negated loopback source`, `tcp flags` (the `--syn` form), `comment`); `TestSetupForLinux/iptables, port-less tailnet allow` (`ok`, no `run`); `TestCheckForLinux/iptables, port-less tailnet allow` (`ok`, `firewall_ok`)
 - [x] AC2 -> `TestIptablesCovers`:
-  - loopback: `port-less loopback interface`, `loopback source`, `loopback destination`, `ipv6 loopback source`;
+  - loopback: `port-less loopback interface`, `port-less loopback interface wildcard` (`-i lo+`, printed as written by iptables 1.8.10, added after the PR review), `loopback source`, `loopback destination`, `ipv6 loopback source`;
   - protocol: `udp`, `icmp`, `negated tcp`;
   - other matches: `state`, `limit`, `recent`, `drop`, and the existing conntrack case `no destination port`;
   - `fragment`;
