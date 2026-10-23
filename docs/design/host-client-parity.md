@@ -52,6 +52,7 @@ the host *command*, not about running ts-bridge on the host.
 | Tailscale | unattended mode + service start | IP only | IP only |
 | Power / sleep | disabled unless `--no-sleep` | not handled | not handled |
 | Idempotent re-run | not reported (no "already configured" state) | yes: a converged host reports every step `ok` (#454; iptables rules last until reboot) | n/a |
+| `host setup` / `host check` exit status | setup: 0 ok/changed/manual, 2 a step failed, 1 could not run (#476); check: 0 all ok, 2 not converged, 1 could not run (#471) | same | same (setup prints "not applicable" and exits 0 until #459) |
 | `host check` port | registry | config value, not the listener | 0: no service declared until #459 (was a hard-coded 3389) |
 
 ### Linux defects found in the audit (#454, fixed)

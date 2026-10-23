@@ -1,0 +1,30 @@
+[
+  {
+    "id": "CLI-476-setup-exit-status-f1",
+    "behavior": "AC1: host setup exits 2 when a step is failed, text and JSON, with the full result printed",
+    "verification": "go test -race -count=1 ./cmd/cli -run 'TestHostSetupCmd_ExitStatus'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CLI-476-setup-exit-status-f2",
+    "behavior": "AC2: host setup exits 0 when every step is ok, changed or manual",
+    "verification": "go test -race -count=1 ./cmd/cli -run 'TestHostSetupCmd_ExitStatus'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CLI-476-setup-exit-status-f3",
+    "behavior": "AC3: host setup exits 1 when not elevated",
+    "verification": "go test -race -count=1 ./cmd/cli -run 'TestHostSetupCmd_ExitStatus'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CLI-476-setup-exit-status-f4",
+    "behavior": "AC4: ADR-017 section 2 states setup's exit status",
+    "verification": "grep -n 'setup.*exit' docs/adr/adr-017-host-desired-state.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
