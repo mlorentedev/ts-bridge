@@ -58,6 +58,12 @@ On Linux:
 On macOS:
   - Not applicable — use ts-bridge connect to connect to a remote host.
 
+Exit status:
+  0  every step is ok, changed or manual (a manual step prints what is left to you)
+  2  setup ran and at least one step failed
+  1  setup could not run (for example, without admin privileges)
+Run ts-bridge host check afterwards to confirm the host converged.
+
 Examples:
   ts-bridge host setup
   ts-bridge host setup --no-sleep
@@ -261,7 +267,9 @@ func reportCheck(w io.Writer, result host.CheckResult, jsonOut bool) error {
 
 // hostCheck, hostSetup, hostIsElevated and hostGOOS are what the host commands
 // run on; tests replace them to drive the commands end to end without the
-// machine's real state.
+// machine's real state. hostGOOS steers only the command layer: host.Setup and
+// host.Check read runtime.GOOS themselves, so a test that changes hostGOOS
+// must also replace hostSetup or hostCheck.
 var (
 	hostGOOS       = runtime.GOOS
 	hostCheck      = host.Check

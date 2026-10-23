@@ -23,6 +23,21 @@ created: "2026-10-22"
 - `host setup` returned early on macOS ("not applicable") using `runtime.GOOS`, so the first test run on a Mac never reached the exit path. The OS is now the package variable `hostGOOS` (lesson 040: make the OS an input), set to `linux` by the test helper.
 - The JSON path returns the print error first and the exit status second, so a marshal failure still exits 1, not 2.
 
+## Review disposition (nan/deepseek-v4-flash, PASS-WITH-GAPS at `85df608`)
+
+| Finding | Disposition |
+|---|---|
+| `host setup --help` has no exit status | Applied: the `Long` help lists 0/2/1 and points to `host check` |
+| features.json f4 passes on the unfixed base (matches an older "exits" line) | Declined in this round: `features.json` is in the reviewed contract set, and editing it would make the review stale. The amendment is verifiable by `grep -n 'setup. reports its own failures' docs/adr/adr-017-host-desired-state.md`, which fails on the base |
+| tasks.md ticks the parity doc, which was not changed | Applied: the parity doc now has an exit-status row |
+| tasks.md leaves "PR opened" unticked | Applied |
+| ADR rationale says macOS Screen Sharing is `manual` today | Applied: reworded to "once macOS has steps (#459)" and states that macOS setup exits 0 with "not applicable" until then |
+| `unverified` not stated for setup (THEORETICAL) | Applied in the ADR: setup has no `unverified` outcome, and one would exit 0 like `manual`. No test, because setup emits none |
+| `hostGOOS` shadows `runtime.GOOS` only in the command layer (THEORETICAL) | Applied: the comment states that a test changing `hostGOOS` must also replace `hostSetup` or `hostCheck` |
+| Review base excluded the implementation commit (process) | Ticketed in the dotfiles repo (review launcher) |
+| `not elevated` stdout assertion is vacuous | Applied: an empty expectation now asserts empty stdout. That surfaced that the bare subcommand printed usage on error; the helper now sets `SilenceUsage` as the root command does (#210) |
+| macOS exits 0 for "not applicable" (Question) | Kept as 0 and documented in the ADR and parity doc; asked of the owner on #490, since it predates this spec and changes with #459 |
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? no: the one non-obvious point (OS as an input) is lesson 040 already

@@ -87,5 +87,7 @@ func HostSetupCmdForTest(t interface{ Cleanup(func()) }, elevated bool, setup fu
 	hostIsElevated = func() bool { return elevated }
 	hostGOOS = "linux"
 	t.Cleanup(func() { hostSetup, hostIsElevated, hostGOOS = prevSetup, prevElevated, prevGOOS })
-	return newHostSetupCmd()
+	c := newHostSetupCmd()
+	c.SilenceUsage = true // as the root command sets it (#210)
+	return c
 }

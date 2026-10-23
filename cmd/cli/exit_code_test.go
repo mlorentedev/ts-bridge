@@ -141,6 +141,9 @@ func TestHostSetupCmd_ExitStatus(t *testing.T) {
 			if got := cmdpkg.ExitCode(c.Execute()); got != tt.want {
 				t.Errorf("exit %d, want %d", got, tt.want)
 			}
+			if tt.stdout == "" && out.Len() > 0 {
+				t.Errorf("stdout = %q, want nothing", out.String())
+			}
 			if !strings.Contains(out.String(), tt.stdout) {
 				t.Errorf("stdout = %q, want it to contain %q", out.String(), tt.stdout)
 			}

@@ -131,7 +131,10 @@ not run, 2 it ran and at least one step is not `ok`. Before HOST-004 PR B2, `che
 0 every step `ok`, `changed` or `manual`; 2 it ran and at least one step is `failed`; 1 it
 could not run (not elevated, bad config). `manual` exits 0 because setup has printed the
 action the OS leaves to the user (C8); a non-zero status there would make `host setup &&`
-never chain on macOS, where Screen Sharing is always `manual`. Whether the host converged
+never chain on macOS once it has steps (#459), since Screen Sharing is always `manual`.
+Until then macOS `setup` prints "not applicable" and exits 0. Only `failed` exits 2: setup
+has no `unverified` outcome (table above), and a step that ever reported one would exit 0,
+as `manual` does. Whether the host converged
 is `check`'s answer, so "configure, then verify" is `sudo ts-bridge host setup && ts-bridge
 host check`. Before this amendment `setup` exited 0 even when a step failed.
 
