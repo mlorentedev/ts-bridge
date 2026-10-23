@@ -805,3 +805,37 @@ func newTestHostInitCommand() *cobra.Command {
 	c.Flags().String("config", "", "Output .env file path")
 	return c
 }
+
+func TestPrintCheckText_Service(t *testing.T) {
+	tests := []struct {
+		name    string
+		result  host.CheckResult
+		want    string
+		notWant string
+	}{
+		{
+			name:   "service declared",
+			result: host.CheckResult{RDPPort: 3389, RDPEnabled: true},
+			want:   "(port 3389)",
+		},
+		{
+			name:    "no service declared",
+			result:  host.CheckResult{},
+			want:    "no service declared",
+			notWant: "port 0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			cmdpkg.PrintCheckTextForTest(&buf, tt.result)
+			got := buf.String()
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("output lacks %q:\n%s", tt.want, got)
+			}
+			if tt.notWant != "" && strings.Contains(got, tt.notWant) {
+				t.Errorf("output contains %q:\n%s", tt.notWant, got)
+			}
+		})
+	}
+}
