@@ -48,7 +48,7 @@ the host *command*, not about running ts-bridge on the host.
 | Capability | Windows | Linux | macOS |
 |---|---|---|---|
 <<<<<<< HEAD
-| Remote-access service | RDP: port read from registry; enabled state not read (W2) | xrdp: `systemctl is-enabled` / `is-active` (the unit, not PATH; `static`/`indirect` count as enabled, `masked` reports the unmask fix), enabled with `enable --now` (#454, #478) | **none** (stub) |
+| Remote-access service | RDP: port read from registry; enabled state not read (W2) | xrdp: `systemctl is-enabled` / `is-active` (the unit, not PATH; `static` counts as enabled, `masked` reports the unmask fix, other answers are `unverified`), enabled with `enable --now` (#454, #478) | **none** (stub) |
 | Firewall | Named rule via PowerShell (W3) | `ufw allow` / `iptables -C` then `-A`, read first (#454) | not inspected |
 =======
 | Remote-access service | RDP: port read from registry; enabled state not read (W2) | xrdp: `systemctl is-enabled` / `is-active`, enabled with `enable --now` (#454) | **none** (stub) |

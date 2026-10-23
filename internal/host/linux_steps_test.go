@@ -2,6 +2,8 @@ package host
 
 import (
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -165,9 +167,12 @@ func TestXRDP(t *testing.T) {
 		{"static unit", &recordingRunner{onPath: map[string]bool{"systemctl": true},
 			output: map[string]string{isEnabled: "static\n", isActive: "active\n"}},
 			xrdpState{installed: true, readable: true, enabled: true, active: true}},
-		{"indirect unit", &recordingRunner{onPath: map[string]bool{"systemctl": true},
+		{"indirect unit: an answer ts-bridge does not decide on", &recordingRunner{onPath: map[string]bool{"systemctl": true},
 			output: map[string]string{isEnabled: "indirect\n", isActive: "active\n"}},
-			xrdpState{installed: true, readable: true, enabled: true, active: true}},
+			xrdpState{installed: true, undecided: "indirect"}},
+		{"generated unit: an answer ts-bridge does not decide on", &recordingRunner{onPath: map[string]bool{"systemctl": true},
+			output: map[string]string{isEnabled: "generated\n", isActive: "active\n"}},
+			xrdpState{installed: true, undecided: "generated"}},
 		{"enabled for this boot only", &recordingRunner{onPath: map[string]bool{"systemctl": true},
 			output: map[string]string{isEnabled: "enabled-runtime\n", isActive: "active\n"}},
 			xrdpState{installed: true, readable: true, active: true}},
@@ -297,6 +302,39 @@ func TestSetupForLinux(t *testing.T) {
 // TestCheckForLinux pins check as the read half of setup (AC1, AC5): the same
 // reads, no run call (the iptables read is `-S` through Output), and an unreadable state
 // reported as unverified.
+// TestXRDPStepOutcomes pins the outcomes for xrdp states setup cannot act on:
+// a masked unit needs a person to unmask it, and an is-enabled answer ts-bridge
+// does not interpret is reported as such, never guessed.
+func TestXRDPStepOutcomes(t *testing.T) {
+	masked := map[string]string{isEnabled: "masked\n", isActive: "inactive\n"}
+	indirect := map[string]string{isEnabled: "indirect\n", isActive: "active\n"}
+	tests := []struct {
+		name         string
+		output       map[string]string
+		setup, check Outcome
+		fixHas       string
+	}{
+		{"masked", masked, OutcomeFailed, OutcomeManual, "unmask"},
+		{"indirect", indirect, OutcomeUnverified, OutcomeUnverified, "systemctl status xrdp"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{elevated: true, onPath: map[string]bool{"systemctl": true}, output: tt.output}
+			s := xrdpSetupStep(r)
+			if s.Outcome != tt.setup || !strings.Contains(s.Fix, tt.fixHas) {
+				t.Errorf("setup = %s (fix %q), want %s with %q", s.Outcome, s.Fix, tt.setup, tt.fixHas)
+			}
+			if slices.Contains(r.calls, "run "+enableXRDP) {
+				t.Errorf("setup ran enable on a unit it cannot act on: %v", r.calls)
+			}
+			c := xrdpCheckStep(readXRDP(r))
+			if c.Outcome != tt.check || !strings.Contains(c.Fix, tt.fixHas) {
+				t.Errorf("check = %s (fix %q), want %s with %q", c.Outcome, c.Fix, tt.check, tt.fixHas)
+			}
+		})
+	}
+}
+
 func TestCheckForLinux(t *testing.T) {
 	yes, no := true, false
 	ufw := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true}
