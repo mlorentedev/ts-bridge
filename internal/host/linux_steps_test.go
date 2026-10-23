@@ -226,6 +226,7 @@ func TestSetupForLinux(t *testing.T) {
 		runner   *recordingRunner
 		calls    []string
 		outcomes []Outcome
+		blocked  string // the rule a manual firewall step must name
 	}{
 		{
 			name:     "ufw, converged",
@@ -283,12 +284,14 @@ func TestSetupForLinux(t *testing.T) {
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw deny 3389\nufw allow 3389/tcp\n"})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			blocked:  "ufw deny 3389",
 		},
 		{
 			name:     "iptables, a drop and no allow: nothing appended after it",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptDropFirst})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
 		},
 		{
 			name:     "iptables -S fails",
@@ -330,6 +333,7 @@ func TestSetupForLinux(t *testing.T) {
 				if s.Outcome != OutcomeOK && s.Outcome != OutcomeChanged && s.Fix == "" {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}
+				assertNamesBlockedRule(t, s, tt.blocked)
 			}
 			if !reflect.DeepEqual(outcomes, tt.outcomes) {
 				t.Errorf("outcomes = %v, want %v", outcomes, tt.outcomes)
@@ -351,6 +355,7 @@ func TestCheckForLinux(t *testing.T) {
 		steps    []string
 		services []Service
 		legacy   CheckResult
+		blocked  string // the rule a manual firewall step must name
 	}{
 		{
 			name:     "converged",
@@ -425,6 +430,7 @@ func TestCheckForLinux(t *testing.T) {
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
 		},
 		{
 			name:     "iptables -S fails",
@@ -463,6 +469,7 @@ func TestCheckForLinux(t *testing.T) {
 				if s.Outcome != OutcomeOK && s.Fix == "" {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}
+				assertNamesBlockedRule(t, s, tt.blocked)
 			}
 			if !reflect.DeepEqual(steps, tt.steps) {
 				t.Errorf("steps = %q, want %q", steps, tt.steps)
@@ -546,6 +553,18 @@ func TestFirewallDecideOrder(t *testing.T) {
 	}
 }
 
+// assertNamesBlockedRule checks that a manual firewall step names the deny
+// that decided the port, so the operator knows which rule to remove (#481).
+func assertNamesBlockedRule(t *testing.T, s SetupStep, rule string) {
+	t.Helper()
+	if s.Name != linuxFwName || s.Outcome != OutcomeManual {
+		return
+	}
+	if rule == "" || !strings.Contains(s.Message, rule) {
+		t.Errorf("step %q message %q does not name the blocking rule %q", s.Name, s.Message, rule)
+	}
+}
+
 // TestIptablesDecideOnly pins the iptables shapes ufw cannot express.
 func TestIptablesDecideOnly(t *testing.T) {
 	tests := []struct {
@@ -556,6 +575,9 @@ func TestIptablesDecideOnly(t *testing.T) {
 		{"blanket drop before the allow", "-A INPUT -j DROP\n-A INPUT -i tailscale0 -j ACCEPT", ruleBlocked},
 		{"tcp reset before the allow", "-A INPUT -p tcp -j REJECT --reject-with tcp-reset\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
 		{"conntrack drop does not decide", "-A INPUT -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
+		// An unmodeled match on a port-bearing rule is ignored for a deny as for an
+		// allow (iptPortCovers), so this deny decides: parity, not precision.
+		{"port-bearing conntrack drop decides", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
 		{"negated-scope drop does not decide", "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
 		{"loopback drop does not decide", "-A INPUT -i lo -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
 		{"jump does not decide", "-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
