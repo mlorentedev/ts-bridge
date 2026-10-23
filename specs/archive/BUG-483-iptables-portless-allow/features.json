@@ -1,0 +1,23 @@
+[
+  {
+    "id": "BUG-483-iptables-portless-allow-f1",
+    "behavior": "AC1: a port-less ACCEPT that is blanket, interface-, source-, negated-loopback-, tcp-, tcp-flags- or comment-qualified reads as present; setup appends nothing and check is ok",
+    "verification": "go test -race -count=1 ./internal/host -run 'TestIptablesCovers/port-less|TestSetupForLinux/iptables,_port-less|TestCheckForLinux/iptables,_port-less'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-483-iptables-portless-allow-f2",
+    "behavior": "AC2: a port-less ACCEPT that is loopback, non-TCP, or carries another match reads as absent and setup appends the rule",
+    "verification": "go test -race -count=1 ./internal/host -run 'TestIptablesCovers|TestSetupForLinux/iptables,_only|TestCheckForLinux/iptables,_only_loopback'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-483-iptables-portless-allow-f3",
+    "behavior": "AC3: every pre-existing TestIptablesCovers case keeps its answer",
+    "verification": "go test -race -count=1 ./internal/host -run TestIptablesCovers",
+    "state": "pending",
+    "evidence": ""
+  }
+]

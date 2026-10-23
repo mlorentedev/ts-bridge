@@ -48,7 +48,7 @@ the host *command*, not about running ts-bridge on the host.
 | Capability | Windows | Linux | macOS |
 |---|---|---|---|
 | Remote-access service | RDP: port read from registry; enabled state not read (W2) | xrdp: `systemctl is-enabled` / `is-active`, enabled with `enable --now` (#454) | **none** (stub) |
-| Firewall | Named rule via PowerShell (W3) | `ufw allow` / `iptables -A`, after reading whether an existing allow covers the port, scoped ones included (#454, #479) | not inspected |
+| Firewall | Named rule via PowerShell (W3) | `ufw allow` / `iptables -A`, after reading whether an existing allow covers the port, scoped and port-less ones included, loopback excluded (#454, #479, #483) | not inspected |
 | Tailscale | unattended mode + service start | IP only | IP only |
 | Power / sleep | disabled unless `--no-sleep` | not handled | not handled |
 | Idempotent re-run | not reported (no "already configured" state) | yes: a converged host reports every step `ok` (#454; iptables rules last until reboot) | n/a |
