@@ -1,7 +1,7 @@
 ---
 id: "BUG-483-iptables-portless-allow"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-10-22"
 issue: "mlorentedev/ts-bridge#483"
 tags: [spec, proposal, host, linux, firewall]
