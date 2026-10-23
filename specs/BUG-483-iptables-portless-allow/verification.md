@@ -49,6 +49,6 @@ created: "2026-10-22"
 
 ## Promotion candidates
 
-- [x] Lesson for the repo's `docs/lessons/`? Yes: lesson 046, added in this PR.
-- [x] ADR-worthy decision for the repo's `docs/adr/`? No: the ADR-017 Linux row already says setup appends only when no allow covers the port. This change widens what "covers" reads, not the contract.
-- [x] New pattern candidate for `00_meta/patterns/`? No. The cross-project idea (prefer an allow-list over a deny-list when a false positive is silent) is already the fail-closed principle.
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-046-2026-10-22.md
+- [x] ADR-worthy decision for the repo's `docs/adr/`? no: the ADR-017 Linux row already says setup appends only when no allow covers the port. This change widens what "covers" reads, not the contract.
+- [x] New pattern candidate for `00_meta/patterns/`? no: The cross-project idea (prefer an allow-list over a deny-list when a false positive is silent) is already the fail-closed principle.
