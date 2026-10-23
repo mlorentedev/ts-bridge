@@ -39,3 +39,16 @@ created: "2026-10-22"
 - Minor, THEORETICAL: the loopback guard covered only port-less rules. Applied. `iptablesCovers` now rejects loopback rules before the port split, and two cases pin it. AC3 records the change.
 - Minor, SPECULATIVE: `iptFlag` conflates absent and negated. Applied for this branch: the port-less branch no longer calls `iptFlag` and reads negation explicitly. `iptFlag` keeps its contract for the port-bearing branch, where "negated" correctly means "not this port".
 - Minor, THEORETICAL: the container run is prose with no committed script. Declined. The repository has no container harness for `internal/host`, and adding one is its own change. Every `-S` line the unit tests use was printed by iptables in the container, so the parser's inputs are reproducible from the tables. The end-to-end steps are recorded above.
+
+## Review round 2 (nan/deepseek-v4-flash, PASS)
+
+- Minor, THEORETICAL (a bare loopback literal such as `-s 127.0.0.1` is not recognized): declined. iptables 1.8.10 always prints a prefix length (`127.0.0.1/32`, `::1/128`), as measured in round 1 and again by the reviewer, so `-S` never produces that input. A code change now would also make the PASS stale for a shape that cannot be reached.
+- Minor, SPECULATIVE (a non-loopback `-d` or `! -s` counts): no change. This is the declared "operator's scope" judgment, listed in AC1 and §Risks.
+- Minor, REAL (the end-to-end run has no committed script): declined, for the reason given in round 1.
+- Minor, REAL (no promotion-candidates section): applied below. `features.json` states stay `pending` because only the harness may write `passing`.
+
+## Promotion candidates
+
+- [x] Lesson for the repo's `docs/lessons/`? Yes: lesson 046, added in this PR.
+- [x] ADR-worthy decision for the repo's `docs/adr/`? No: the ADR-017 Linux row already says setup appends only when no allow covers the port. This change widens what "covers" reads, not the contract.
+- [x] New pattern candidate for `00_meta/patterns/`? No. The cross-project idea (prefer an allow-list over a deny-list when a false positive is silent) is already the fail-closed principle.
