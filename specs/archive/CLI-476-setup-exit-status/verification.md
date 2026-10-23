@@ -46,7 +46,7 @@ created: "2026-10-22"
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/CLI-476-setup-exit-status/` -> `specs/archive/CLI-476-setup-exit-status/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/CLI-476-setup-exit-status/` -> `specs/archive/CLI-476-setup-exit-status/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
