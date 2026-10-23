@@ -35,13 +35,13 @@ type SetupJSONOutputForTest = setupJSONOutput
 type SetupStepJSONForTest = setupStepJSON
 
 // PrintSetupJSONForTest is a test-only wrapper for printSetupJSON.
-func PrintSetupJSONForTest(result host.SetupResult) error {
-	return printSetupJSON(result)
+func PrintSetupJSONForTest(w io.Writer, result host.SetupResult) error {
+	return printSetupJSON(w, result)
 }
 
 // PrintCheckJSONForTest is a test-only wrapper for printCheckJSON.
-func PrintCheckJSONForTest(r host.CheckResult) error {
-	return printCheckJSON(r)
+func PrintCheckJSONForTest(w io.Writer, r host.CheckResult) error {
+	return printCheckJSON(w, r)
 }
 
 // HostInitLoggerForTest is a test-only wrapper for hostInitLogger. It exercises
