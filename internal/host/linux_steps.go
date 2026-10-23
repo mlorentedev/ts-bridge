@@ -84,7 +84,7 @@ func readXRDP(r Runner) xrdpState {
 	default:
 		// indirect, generated, alias, transient, linked...: whether xrdp starts
 		// at boot depends on another unit, so ts-bridge does not guess.
-		return xrdpState{installed: true, undecided: e}
+		return xrdpState{installed: true, active: x.active, undecided: e}
 	}
 	return x
 }
