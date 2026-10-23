@@ -35,4 +35,6 @@ Independent review `nan/deepseek-v4-flash` at `a466a8b`: PASS-WITH-GAPS, three M
 
 ## Promotion candidates
 
-- no: the lesson (docs/lessons/lesson-047-2026-10-22.md) is ts-bridge firewall detail; the cross-project point (read rules in evaluation order) is already the general shape of lesson 046's allow-list guidance.
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-047-2026-10-22.md
+- [x] ADR-worthy decision for the repo's `docs/adr/`? no: ADR-017 already says setup converges without deleting operator state; reporting an unscoped deny as `manual` applies that rule, it does not change it.
+- [x] New pattern candidate for `00_meta/patterns/`? no: the cross-project point (read rules in evaluation order) is already the general shape of lesson 046's allow-list guidance; the rest is ts-bridge firewall detail.
