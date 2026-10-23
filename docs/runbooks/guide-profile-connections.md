@@ -32,7 +32,6 @@ Headscale key or an application token just to configure runtime settings.
 
 Before importing, inspect the command type and path for the binary and SSH
 client this terminal selects.
-Confirm that the selected `ts-bridge` build contains the change described above.
 If either name resolves to an alias or function, or the selected application
 is not the intended executable, use the verified executable's absolute path
 for every direct invocation below, including import, daily use and SSH
@@ -51,6 +50,30 @@ In PowerShell:
 ```powershell
 Get-Command ts-bridge, ssh -All | Select-Object CommandType, Name, Source
 ```
+
+Then ask the selected executable for its build identity, using its absolute path
+if needed:
+
+```sh
+ts-bridge version
+```
+
+A published release reports `ts-bridge vX.Y.Z (commit <revision>)`. Match those
+values to the tag and source revision on the repository's
+[Releases page](https://github.com/mlorentedev/ts-bridge/releases).
+To check whether that source contains the required change, open GitHub's
+Compare view with base `ed3ccb104abb61619968c1960f163aebb90e6119` (the #442 merge)
+and compare set to the release tag. Require an identical or ahead revision;
+a behind, diverged or unavailable comparison does not establish support.
+Do not assume that the latest published release already contains the change.
+
+An authorized CI candidate can report `ts-bridge dev (commit unknown)`;
+that output cannot identify its source. Instead, use the artifact downloaded
+from the exact successful build run, record its run URL, artifact name/digest
+and full source SHA, and perform the same ancestry comparison against that SHA.
+Do not substitute an unrelated executable found on PATH. If the release identity
+or CI artifact provenance cannot be established, stop before importing.
+Command discovery alone proves neither the version nor feature support.
 
 Put supported, non-secret settings in `runtime.yaml`, replacing the state
 directory placeholder with an absolute path valid on this computer:
