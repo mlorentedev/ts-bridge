@@ -106,3 +106,44 @@ func TestHostCheckCmd_ExitStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestHostSetupCmd_ExitStatus(t *testing.T) {
+	t.Chdir(t.TempDir()) // no .env from the working tree
+	step := func(name string, o host.Outcome, fix string) host.SetupStep {
+		return host.SetupStep{Name: name, Outcome: o, Success: o.Succeeded(), Message: name + " " + string(o), Fix: fix}
+	}
+	converged := host.SetupResult{RDPPort: 3389, Steps: []host.SetupStep{
+		step("Tailscale IP", host.OutcomeOK, ""), step("Firewall rule", host.OutcomeChanged, ""),
+		step("Screen Sharing", host.OutcomeManual, "turn it on in System Settings")}}
+	failed := host.SetupResult{RDPPort: 3389, Steps: []host.SetupStep{
+		step("Tailscale IP", host.OutcomeOK, ""), step("xrdp service", host.OutcomeFailed, "sudo apt install xrdp")}}
+	tests := []struct {
+		name     string
+		elevated bool
+		result   host.SetupResult
+		args     []string
+		want     int
+		stdout   string
+	}{
+		{"ok, changed and manual, text", true, converged, nil, 0, "Firewall rule"},
+		{"ok, changed and manual, json", true, converged, []string{"--json"}, 0, `"outcome": "manual"`},
+		{"a failed step, text", true, failed, nil, 2, "xrdp service"},
+		{"a failed step, json", true, failed, []string{"--json"}, 2, `"outcome": "failed"`},
+		{"not elevated", false, converged, nil, 1, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := cmdpkg.HostSetupCmdForTest(t, tt.elevated, func(host.Config, *slog.Logger) (host.SetupResult, error) { return tt.result, nil })
+			c.SetArgs(tt.args)
+			var out bytes.Buffer
+			c.SetOut(&out)
+			c.SetErr(io.Discard)
+			if got := cmdpkg.ExitCode(c.Execute()); got != tt.want {
+				t.Errorf("exit %d, want %d", got, tt.want)
+			}
+			if !strings.Contains(out.String(), tt.stdout) {
+				t.Errorf("stdout = %q, want it to contain %q", out.String(), tt.stdout)
+			}
+		})
+	}
+}

@@ -78,3 +78,14 @@ func HostCheckCmdForTest(t interface{ Cleanup(func()) }, check func(host.Config,
 	t.Cleanup(func() { hostCheck = prev })
 	return newHostCheckCmd()
 }
+
+// HostSetupCmdForTest returns a host setup command that runs setup instead of
+// host.Setup, as on Linux, and treats the process as elevated or not.
+func HostSetupCmdForTest(t interface{ Cleanup(func()) }, elevated bool, setup func(host.Config, *slog.Logger) (host.SetupResult, error)) *cobra.Command {
+	prevSetup, prevElevated, prevGOOS := hostSetup, hostIsElevated, hostGOOS
+	hostSetup = setup
+	hostIsElevated = func() bool { return elevated }
+	hostGOOS = "linux"
+	t.Cleanup(func() { hostSetup, hostIsElevated, hostGOOS = prevSetup, prevElevated, prevGOOS })
+	return newHostSetupCmd()
+}

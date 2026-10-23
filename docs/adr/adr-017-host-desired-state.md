@@ -127,6 +127,14 @@ Exit status, as `terraform plan -detailed-exitcode`: 0 every step `ok`, 1 the ch
 not run, 2 it ran and at least one step is not `ok`. Before HOST-004 PR B2, `check` exited
 0 whatever it found; `host check && ...` changes meaning from that release.
 
+`setup` reports its own failures, not the host's convergence (amended 2026-10-22, #476):
+0 every step `ok`, `changed` or `manual`; 2 it ran and at least one step is `failed`; 1 it
+could not run (not elevated, bad config). `manual` exits 0 because setup has printed the
+action the OS leaves to the user (C8); a non-zero status there would make `host setup &&`
+never chain on macOS, where Screen Sharing is always `manual`. Whether the host converged
+is `check`'s answer, so "configure, then verify" is `sudo ts-bridge host setup && ts-bridge
+host check`. Before this amendment `setup` exited 0 even when a step failed.
+
 ### 3. Services, not RDP fields
 
 `host check --json` gains a `services` array
