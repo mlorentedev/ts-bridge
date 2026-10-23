@@ -2,6 +2,7 @@ package host
 
 import (
 	"fmt"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strconv"
@@ -155,20 +156,69 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 // quotes included, so its words cannot pose as flags once the line is split.
 var iptQuoted = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
 
-// iptablesCovers reports whether `iptables -S` output holds an ACCEPT for TCP
-// whose destination port list contains port. Interface, source and match
-// qualifiers are the operator's scope and do not matter; a negated port, a
-// source port, a jump or a rule without a destination port never counts.
+// iptDestPortFlags name a destination port list; iptPortFlags are every flag
+// that makes a rule port-bearing, negated or not.
+var (
+	iptDestPortFlags = []string{"--dport", "--dports", "--ports"}
+	iptPortFlags     = append(slices.Clone(iptDestPortFlags), "--sport", "--sports")
+)
+
+// iptablesCovers reports whether `iptables -S` output holds an ACCEPT that
+// admits TCP port. Interface and source qualifiers are the operator's scope
+// and do not matter; a negated port, a source port and a jump never count.
 func iptablesCovers(rules string, port int) bool {
 	for _, line := range strings.Split(rules, "\n") {
 		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
-		if len(f) == 0 || f[0] != "-A" || iptFlag(f, "-j") != "ACCEPT" || iptFlag(f, "-p") != protoTCP {
+		if len(f) == 0 || f[0] != "-A" || iptFlag(f, "-j") != "ACCEPT" {
 			continue
 		}
-		for _, flag := range []string{"--dport", "--dports", "--ports"} {
-			if portListHas(iptFlag(f, flag), port) {
-				return true
-			}
+		portless := !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptPortFlags, w) })
+		if (portless && iptPortlessCovers(f)) || (!portless && iptPortCovers(f, port)) {
+			return true
+		}
+	}
+	return false
+}
+
+// iptPortCovers reports whether a port-bearing TCP ACCEPT names port in a
+// non-negated destination port list.
+func iptPortCovers(f []string, port int) bool {
+	if iptFlag(f, "-p") != protoTCP {
+		return false
+	}
+	for _, flag := range iptDestPortFlags {
+		if portListHas(iptFlag(f, flag), port) {
+			return true
+		}
+	}
+	return false
+}
+
+// iptPortlessCovers reports whether an ACCEPT with no port flag admits every
+// TCP port: its protocol is tcp or absent, it matches only on `tcp` or
+// `comment` (conntrack, state, limit and the rest narrow it in ways not
+// modeled here), and it is not a loopback rule, which every ruleset carries.
+func iptPortlessCovers(f []string) bool {
+	if slices.Contains(f, "-p") && iptFlag(f, "-p") != protoTCP {
+		return false
+	}
+	for i, w := range f {
+		if w == "-m" && (i+1 >= len(f) || (f[i+1] != protoTCP && f[i+1] != "comment")) {
+			return false
+		}
+	}
+	return !iptLoopback(f)
+}
+
+// iptLoopback reports whether a rule is scoped to loopback: `-i lo`, or a
+// source or destination prefix on a loopback address.
+func iptLoopback(f []string) bool {
+	if iptFlag(f, "-i") == "lo" {
+		return true
+	}
+	for _, flag := range []string{"-s", "-d"} {
+		if p, err := netip.ParsePrefix(iptFlag(f, flag)); err == nil && p.Addr().IsLoopback() {
+			return true
 		}
 	}
 	return false

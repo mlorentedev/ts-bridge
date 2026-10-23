@@ -67,11 +67,14 @@ const (
 	enableXRDP = "systemctl enable --now xrdp"
 )
 
-// Verbatim `iptables -S INPUT` output: a Tailscale-scoped allow, and a chain
-// holding only tailscaled's jump.
+// Verbatim `iptables -S INPUT` output: a Tailscale-scoped allow, a chain
+// holding only tailscaled's jump, a port-less tailnet allow, and a hardened
+// chain whose only allows are loopback and established traffic.
 const (
-	iptScoped = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
-	iptEmpty  = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	iptScoped       = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	iptEmpty        = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	iptTailnet      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -i tailscale0 -j ACCEPT\n"
+	iptLoopbackOnly = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n"
 )
 
 var xrdpReads = []string{"lookpath xrdp", "lookpath systemctl", "output " + isEnabled, "output " + isActive}
@@ -107,6 +110,27 @@ func TestIptablesCovers(t *testing.T) {
 		{"quoted string holding -j DROP", `-A INPUT -p tcp -m tcp --dport 3389 -m string --string "marker -j DROP here" --algo bm --to 65535 -j ACCEPT`, true},
 		{"quoted string holding -j ACCEPT on a drop", `-A INPUT -p tcp -m tcp --dport 3389 -m string --string "x -j ACCEPT" --algo bm --to 65535 -j DROP`, false},
 		{"policy only", "-P INPUT ACCEPT", false},
+		// A rule with no port flag covers every TCP port, unless it is loopback,
+		// non-TCP, or narrowed by a match the parser does not model.
+		{"port-less blanket", "-A INPUT -j ACCEPT", true},
+		{"port-less interface", "-A INPUT -i tailscale0 -j ACCEPT", true},
+		{"port-less source", "-A INPUT -s 100.64.0.0/10 -j ACCEPT", true},
+		{"port-less tcp", "-A INPUT -p tcp -j ACCEPT", true},
+		{"port-less negated loopback interface", "-A INPUT ! -i lo -j ACCEPT", true},
+		{"port-less negated loopback source", "-A INPUT ! -s 127.0.0.0/8 -j ACCEPT", true},
+		{"port-less tcp flags", "-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -j ACCEPT", true},
+		{"port-less comment", "-A INPUT -i tailscale0 -m comment --comment tailnet -j ACCEPT", true},
+		{"port-less loopback interface", "-A INPUT -i lo -j ACCEPT", false},
+		{"port-less loopback source", "-A INPUT -s 127.0.0.0/8 -j ACCEPT", false},
+		{"port-less loopback destination", "-A INPUT -d 127.0.0.1/32 -j ACCEPT", false},
+		{"port-less ipv6 loopback source", "-A INPUT -s ::1/128 -j ACCEPT", false},
+		{"port-less udp", "-A INPUT -p udp -j ACCEPT", false},
+		{"port-less icmp", "-A INPUT -p icmp -j ACCEPT", false},
+		{"port-less negated tcp", "-A INPUT ! -p tcp -j ACCEPT", false},
+		{"port-less state", "-A INPUT -m state --state NEW -j ACCEPT", false},
+		{"port-less limit", "-A INPUT -p tcp -m limit --limit 5/min -j ACCEPT", false},
+		{"port-less recent", "-A INPUT -m recent --rcheck --name x --mask 255.255.255.255 --rsource -j ACCEPT", false},
+		{"port-less drop", "-A INPUT -i tailscale0 -j DROP", false},
 		{"among others", "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 22 -j ACCEPT\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT", true},
 	}
 	for _, tt := range tests {
@@ -225,6 +249,18 @@ func TestSetupForLinux(t *testing.T) {
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
+			name:     "iptables, port-less tailnet allow",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptTailnet})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
+		},
+		{
+			name:     "iptables, only loopback and established allowed",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptLoopbackOnly})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
 			name:     "iptables -S fails",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(nil), exit: map[string]int{iptRead: 2}},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
@@ -335,6 +371,22 @@ func TestCheckForLinux(t *testing.T) {
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "iptables, port-less tailnet allow",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTailnet})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "iptables, only loopback and established allowed",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptLoopbackOnly})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 		},
 		{
 			name:     "iptables -S fails",

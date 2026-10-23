@@ -1,0 +1,9 @@
+[
+  {
+    "id": "BUG-483-iptables-portless-allow-f1",
+    "behavior": "Outcome 1",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
