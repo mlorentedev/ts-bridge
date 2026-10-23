@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.20.0](https://github.com/mlorentedev/ts-bridge/compare/v1.19.1...v1.20.0) (2026-10-23)
+
+
+### Features
+
+* **host:** exit 2 from host check when a step is not ok ([#471](https://github.com/mlorentedev/ts-bridge/issues/471)) ([1fe8783](https://github.com/mlorentedev/ts-bridge/commit/1fe87838e50b69a41044458748f4f9bb87d184c5))
+* **host:** exit 2 from host setup when a step failed ([#490](https://github.com/mlorentedev/ts-bridge/issues/490)) ([3fdbede](https://github.com/mlorentedev/ts-bridge/commit/3fdbedecacb65736298db0c5e27dec842fda1081))
+* **host:** report check as read steps and services, with outcome and fix in the JSON ([#470](https://github.com/mlorentedev/ts-bridge/issues/470)) ([ae81b56](https://github.com/mlorentedev/ts-bridge/commit/ae81b568f98f099ae2f4cab5e310da852678d06b))
+* make named profile connections self-contained ([#442](https://github.com/mlorentedev/ts-bridge/issues/442)) ([ed3ccb1](https://github.com/mlorentedev/ts-bridge/commit/ed3ccb104abb61619968c1960f163aebb90e6119))
+
+
+### Bug Fixes
+
+* **browser:** discover Microsoft Edge on macOS and Linux ([#465](https://github.com/mlorentedev/ts-bridge/issues/465)) ([d010591](https://github.com/mlorentedev/ts-bridge/commit/d01059156d6dbbc6709694fd27addf2474a1ee7a))
+* **ci:** run the test suite on macOS and make the log-dir OS an input ([#448](https://github.com/mlorentedev/ts-bridge/issues/448)) ([bfd45ea](https://github.com/mlorentedev/ts-bridge/commit/bfd45ea54e6db7f0e49c2b4d4e9d0cc7678560e7))
+* explain named profile target overrides ([#489](https://github.com/mlorentedev/ts-bridge/issues/489)) ([ca636e4](https://github.com/mlorentedev/ts-bridge/commit/ca636e43f0f1510754ac1273c3d972c6bb01f2f6))
+* **host:** count a scoped iptables allow as present instead of appending an open rule ([#482](https://github.com/mlorentedev/ts-bridge/issues/482)) ([0b2e63c](https://github.com/mlorentedev/ts-bridge/commit/0b2e63c71e38365fb7d8a5ef08b7e657d65d5b74))
+* **host:** make Linux host setup state-first and read the exact firewall rule ([#477](https://github.com/mlorentedev/ts-bridge/issues/477)) ([8fd5fe8](https://github.com/mlorentedev/ts-bridge/commit/8fd5fe855c4411094534945316c64edf1b6c199d))
+* **host:** print 'no service declared' instead of 'port 0' in host check text ([#486](https://github.com/mlorentedev/ts-bridge/issues/486)) ([c249243](https://github.com/mlorentedev/ts-bridge/commit/c249243076abdad068bebe072701779e204c2ffe))
+* **host:** read xrdp from systemd, not PATH, and count static units as enabled ([#485](https://github.com/mlorentedev/ts-bridge/issues/485)) ([a576980](https://github.com/mlorentedev/ts-bridge/commit/a576980b0585872d12feffe415e09f9885aaf4c4))
+* **host:** report an unreadable Linux firewall as unverified, not changed ([#473](https://github.com/mlorentedev/ts-bridge/issues/473)) ([d881023](https://github.com/mlorentedev/ts-bridge/commit/d881023670240b0cc35716e899854e31fec669b4))
+* **init:** refuse to replace a .env that cannot be read ([#467](https://github.com/mlorentedev/ts-bridge/issues/467)) ([7c5ead3](https://github.com/mlorentedev/ts-bridge/commit/7c5ead3cdf9bf7e5a9cebf63d86aa7d9187fc7fc))
+* route bootstrap control traffic through an HTTP-to-SOCKS proxy for DERP ([#444](https://github.com/mlorentedev/ts-bridge/issues/444)) ([874ca96](https://github.com/mlorentedev/ts-bridge/commit/874ca965febcfbb2fcb7bd04b43769524a07cc82))
+
 ## [1.19.1](https://github.com/mlorentedev/ts-bridge/compare/v1.19.0...v1.19.1) (2026-10-09)
 
 
