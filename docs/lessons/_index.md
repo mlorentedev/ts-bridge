@@ -56,3 +56,4 @@ tags: [ts-bridge, lessons, index]
 | 043 | 2026-10-22 | Decide firewall coverage from the rule set (`iptables -S`), not an exact-match probe; a `ts-input` jump is normal | [lesson-043-2026-10-22.md](lesson-043-2026-10-22.md) | `host`, `linux`, `firewall` |
 | 045 | 2026-10-22 | Preserve the original profile target at the resolution boundary | [lesson-045-profile-target-source.md](lesson-045-profile-target-source.md) | `profiles`, `configuration`, `logging` |
 | 046 | 2026-10-22 | Decide coverage from an allow-list of qualifiers, not a feature the good rule also lacks; guard the direction a widened test fails silently | [lesson-046-2026-10-22.md](lesson-046-2026-10-22.md) | `host`, `linux`, `firewall` |
+| 047 | 2026-10-22 | Read firewall rules in evaluation order; only an unscoped deny decides against the operator, and a fix setup may not make is `manual` | [lesson-047-2026-10-22.md](lesson-047-2026-10-22.md) | `host`, `linux`, `firewall` |
