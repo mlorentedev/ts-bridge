@@ -96,7 +96,7 @@ func xrdpUnmet(x xrdpState, unreadable Outcome) (SetupStep, bool) {
 		return newStep(xrdpName, OutcomeFailed, "xrdp is not installed", "sudo apt install xrdp"), true
 	}
 	if x.undecided != "" {
-		return newStep(xrdpName, OutcomeUnverified, fmt.Sprintf("systemctl is-enabled answered %q, which ts-bridge does not interpret", x.undecided),
+		return newStep(xrdpName, unreadable, fmt.Sprintf("systemctl is-enabled answered %q, which ts-bridge does not interpret", x.undecided),
 			"check systemctl status xrdp, and enable it by hand if it does not start at boot"), true
 	}
 	if !x.readable {

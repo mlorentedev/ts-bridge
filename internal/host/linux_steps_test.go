@@ -315,7 +315,7 @@ func TestXRDPStepOutcomes(t *testing.T) {
 		fixHas       string
 	}{
 		{"masked", masked, OutcomeFailed, OutcomeManual, "unmask"},
-		{"indirect", indirect, OutcomeUnverified, OutcomeUnverified, "systemctl status xrdp"},
+		{"indirect", indirect, OutcomeFailed, OutcomeUnverified, "systemctl status xrdp"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
