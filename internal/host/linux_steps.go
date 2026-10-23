@@ -112,6 +112,7 @@ const (
 	ruleUnknown ruleState = iota
 	ruleAbsent
 	rulePresent
+	ruleBlocked // an unscoped deny decides the port before any allow
 )
 
 // firewallRead is one read of the firewall rule for a port. backend names the
@@ -121,6 +122,7 @@ type firewallRead struct {
 	backend   string
 	noBackend bool
 	reason    string
+	blockedBy string // the deny rule, when state is ruleBlocked
 }
 
 // readLinuxFirewall reads with ufw when it is installed, otherwise iptables.
@@ -135,10 +137,8 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 		if err != nil {
 			return firewallRead{backend: backendUFW, reason: fmt.Sprintf("ufw show added: %v", err)}
 		}
-		if ufwAllows(string(out), port) {
-			return firewallRead{state: rulePresent, backend: backendUFW}
-		}
-		return firewallRead{state: ruleAbsent, backend: backendUFW}
+		state, rule := ufwDecide(string(out), port)
+		return firewallRead{state: state, backend: backendUFW, blockedBy: rule}
 	}
 	if _, err := r.LookPath(backendIPT); err != nil {
 		return firewallRead{noBackend: true, reason: "neither ufw nor iptables is installed"}
@@ -147,10 +147,8 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 	if err != nil {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
 	}
-	if iptablesCovers(string(out), port) {
-		return firewallRead{state: rulePresent, backend: backendIPT}
-	}
-	return firewallRead{state: ruleAbsent, backend: backendIPT}
+	state, rule := iptablesDecide(string(out), port)
+	return firewallRead{state: state, backend: backendIPT, blockedBy: rule}
 }
 
 // iptQuoted matches a quoted value (a `--comment` or `--string`), escaped
@@ -165,21 +163,46 @@ var (
 )
 
 // iptablesCovers reports whether `iptables -S` output holds an ACCEPT that
-// admits TCP port. Interface and source qualifiers are the operator's scope
-// and do not matter; a loopback rule, a negated port, a source port and a jump
-// never count.
+// admits TCP port before any unscoped deny decides it.
 func iptablesCovers(rules string, port int) bool {
+	state, _ := iptablesDecide(rules, port)
+	return state == rulePresent
+}
+
+// iptablesDecide walks `iptables -S` output in chain order and returns the
+// answer of the first rule that decides TCP port: an ACCEPT that admits it
+// (interface and source qualifiers are the operator's scope), or an unscoped
+// DROP/REJECT that would admit it as an ACCEPT, together with that rule. A
+// loopback rule, a negated port, a source port and a jump never decide.
+func iptablesDecide(rules string, port int) (ruleState, string) {
 	for _, line := range strings.Split(rules, "\n") {
 		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
-		if len(f) < 2 || f[0] != "-A" || iptFlag(f, "-j") != iptAccept || iptLoopback(f) {
+		if len(f) < 2 || f[0] != "-A" || iptLoopback(f) || !iptMatchesPort(f, port) {
 			continue
 		}
-		portless := !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptPortFlags, w) })
-		if (portless && iptPortlessCovers(f)) || (!portless && iptPortCovers(f, port)) {
-			return true
+		switch iptFlag(f, "-j") {
+		case iptAccept:
+			return rulePresent, ""
+		case "DROP", "REJECT":
+			if !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptScopeFlags, w) }) {
+				return ruleBlocked, strings.TrimSpace(line)
+			}
 		}
 	}
-	return false
+	return ruleAbsent, ""
+}
+
+// iptScopeFlags narrow a rule to part of the traffic; a deny carrying one is
+// the operator's scope and never decides the port.
+var iptScopeFlags = []string{"-i", "-s", "-d", "!"}
+
+// iptMatchesPort reports whether a rule's match, whatever its target, applies
+// to new TCP connections on port.
+func iptMatchesPort(f []string, port int) bool {
+	if slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptPortFlags, w) }) {
+		return iptPortCovers(f, port)
+	}
+	return iptPortlessCovers(f)
 }
 
 // iptPortCovers reports whether a port-bearing TCP ACCEPT names port in a
@@ -196,8 +219,8 @@ func iptPortCovers(f []string, port int) bool {
 	return false
 }
 
-// iptPortlessCovers reports whether a non-loopback ACCEPT with no port flag
-// admits a new TCP connection on every port. Every token after the chain must
+// iptPortlessCovers reports whether a non-loopback rule with no port flag
+// matches a new TCP connection on every port. Every token after the chain must
 // be one this parser models; anything else (conntrack, state, limit, `-f`, a
 // `--tcp-flags` set other than `--syn`, a negation that is not of loopback)
 // narrows the rule in a way not modeled here, so the rule reads as absent.
@@ -219,8 +242,8 @@ func iptPortlessToken(f []string) int {
 		return 0
 	}
 	switch v := f[1]; f[0] {
-	case "-j":
-		return iptIf(v == iptAccept, 2)
+	case "-j", "--reject-with": // the caller decides by target
+		return 2
 	case "-p", "-m":
 		return iptIf(v == protoTCP || (f[0] == "-m" && v == "comment"), 2)
 	case "--comment", "-i", "-s", "-d":
@@ -278,19 +301,36 @@ func iptablesAppend(port int) []string {
 }
 
 // ufwAllows reports whether `ufw show added` holds an inbound allow for TCP
-// port. route, out, deny and limit rules do not count, and the port must match
-// exactly: 33890 is not 3389.
+// port before any unscoped deny decides it.
 func ufwAllows(added string, port int) bool {
+	state, _ := ufwDecide(added, port)
+	return state == rulePresent
+}
+
+// ufwDecide walks `ufw show added`, which lists user rules in the order ufw
+// evaluates them, and returns the answer of the first rule that decides TCP
+// port: an inbound allow, or an unscoped deny/reject (no `from`, no `on`),
+// together with that rule. route, out and limit rules never decide, and the
+// port must match exactly: 33890 is not 3389.
+func ufwDecide(added string, port int) (ruleState, string) {
 	for _, line := range strings.Split(added, "\n") {
 		f := strings.Fields(line)
-		if len(f) < 3 || f[0] != "ufw" || f[1] != "allow" || slices.Contains(f, "out") {
+		if i := slices.Index(f, "comment"); i >= 0 {
+			f = f[:i]
+		}
+		if len(f) < 3 || f[0] != "ufw" || slices.Contains(f, "out") || !ufwRuleMatchesPort(f[2:], port) {
 			continue
 		}
-		if ufwRuleMatchesPort(f[2:], port) {
-			return true
+		switch f[1] {
+		case "allow":
+			return rulePresent, ""
+		case "deny", "reject":
+			if !slices.Contains(f, "from") && !slices.Contains(f, "on") {
+				return ruleBlocked, strings.TrimSpace(line)
+			}
 		}
 	}
-	return false
+	return ruleAbsent, ""
 }
 
 // ufwRuleMatchesPort matches the short form (`3389/tcp`, `3389`, `in 3389/tcp`)
@@ -360,6 +400,8 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 	switch read.state {
 	case rulePresent:
 		return newStep(linuxFwName, OutcomeOK, fmt.Sprintf("Firewall allows TCP %d (%s)", port, read.backend), "")
+	case ruleBlocked:
+		return firewallBlockedStep(read, port)
 	case ruleUnknown:
 		return newStep(linuxFwName, OutcomeFailed, "Cannot read the firewall: "+read.reason, firewallFix(read, port, "setup"))
 	}
@@ -380,7 +422,18 @@ func firewallCheckStep(read firewallRead, port int) SetupStep {
 	if read.state == ruleUnknown {
 		return newStep(linuxFwName, OutcomeUnverified, "Cannot read the firewall: "+read.reason, firewallFix(read, port, "check"))
 	}
+	if read.state == ruleBlocked {
+		return firewallBlockedStep(read, port)
+	}
 	return firewallReadStep(linuxFwName, read.state == rulePresent, port)
+}
+
+// firewallBlockedStep reports a deny that decides the port before any allow.
+// Setup never deletes or reorders firewall rules, so this is the operator's.
+func firewallBlockedStep(read firewallRead, port int) SetupStep {
+	return newStep(linuxFwName, OutcomeManual,
+		fmt.Sprintf("Firewall blocks TCP %d before any allow (%s): %s", port, read.backend, read.blockedBy),
+		fmt.Sprintf("remove that rule, or put an allow for TCP %d before it; setup does not delete or reorder firewall rules", port))
 }
 
 func firewallFix(read firewallRead, port int, command string) string {

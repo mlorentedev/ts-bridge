@@ -1,0 +1,30 @@
+[
+  {
+    "id": "BUG-481-firewall-deny-order-f1",
+    "behavior": "An unscoped deny before any covering allow reads as blocked and setup/check report manual without running a firewall command",
+    "verification": "go test ./internal/host/ -run 'TestFirewallDecideOrder|TestIptablesDecideOnly|TestSetupForLinux|TestCheckForLinux' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-481-firewall-deny-order-f2",
+    "behavior": "The hardened ruleset (scoped deny, then scoped allow) reads as present on both backends",
+    "verification": "go test ./internal/host/ -run 'TestFirewallDecideOrder/hardened' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-481-firewall-deny-order-f3",
+    "behavior": "An allow before a deny reads as present; denies on another port, on UDP, or narrowed by an unmodeled match do not decide",
+    "verification": "go test ./internal/host/ -run 'TestFirewallDecideOrder|TestIptablesDecideOnly' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-481-firewall-deny-order-f4",
+    "behavior": "One table test feeds the same rulesets to both backends and expects the same answer",
+    "verification": "go test ./internal/host/ -run 'TestFirewallDecideOrder' -count=1 -v",
+    "state": "pending",
+    "evidence": ""
+  }
+]

@@ -2,6 +2,7 @@ package host
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +75,7 @@ const (
 	iptScoped       = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
 	iptEmpty        = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
 	iptTailnet      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -i tailscale0 -j ACCEPT\n"
+	iptDropFirst    = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n"
 	iptAckOnly      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK -j ACCEPT\n"
 	iptLoopbackOnly = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n"
 )
@@ -225,6 +227,7 @@ func TestSetupForLinux(t *testing.T) {
 		runner   *recordingRunner
 		calls    []string
 		outcomes []Outcome
+		blocked  string // the rule a manual firewall step must name
 	}{
 		{
 			name:     "ufw, converged",
@@ -278,6 +281,20 @@ func TestSetupForLinux(t *testing.T) {
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
+			name:     "ufw, a deny decides the port first",
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw deny 3389\nufw allow 3389/tcp\n"})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			blocked:  "ufw deny 3389",
+		},
+		{
+			name:     "iptables, a drop and no allow: nothing appended after it",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptDropFirst})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
+		},
+		{
 			name:     "iptables -S fails",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(nil), exit: map[string]int{iptRead: 2}},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
@@ -317,6 +334,7 @@ func TestSetupForLinux(t *testing.T) {
 				if s.Outcome != OutcomeOK && s.Outcome != OutcomeChanged && s.Fix == "" {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}
+				assertNamesBlockedRule(t, s, tt.blocked)
 			}
 			if !reflect.DeepEqual(outcomes, tt.outcomes) {
 				t.Errorf("outcomes = %v, want %v", outcomes, tt.outcomes)
@@ -338,6 +356,7 @@ func TestCheckForLinux(t *testing.T) {
 		steps    []string
 		services []Service
 		legacy   CheckResult
+		blocked  string // the rule a manual firewall step must name
 	}{
 		{
 			name:     "converged",
@@ -406,6 +425,15 @@ func TestCheckForLinux(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 		},
 		{
+			name:     "iptables, a drop decides the port first",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptDropFirst + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
+		},
+		{
 			name:     "iptables -S fails",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(nil), exit: map[string]int{iptRead: 2}},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
@@ -442,6 +470,7 @@ func TestCheckForLinux(t *testing.T) {
 				if s.Outcome != OutcomeOK && s.Fix == "" {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}
+				assertNamesBlockedRule(t, s, tt.blocked)
 			}
 			if !reflect.DeepEqual(steps, tt.steps) {
 				t.Errorf("steps = %q, want %q", steps, tt.steps)
@@ -452,6 +481,116 @@ func TestCheckForLinux(t *testing.T) {
 			got.Steps, got.Services = nil, nil
 			if !reflect.DeepEqual(got, tt.legacy) {
 				t.Errorf("legacy keys = %+v, want %+v", got, tt.legacy)
+			}
+		})
+	}
+}
+
+// TestFirewallDecideOrder feeds each ruleset to both backends in their verbatim
+// syntax (ufw 0.36.2 `show added`, iptables 1.8.10 `-S INPUT`) and expects the
+// same answer: the first rule that decides the port wins, and only an unscoped
+// deny decides against it (#481).
+func TestFirewallDecideOrder(t *testing.T) {
+	tests := []struct {
+		name string
+		ufw  []string
+		ipt  []string
+		want ruleState
+	}{
+		{"deny before allow",
+			[]string{"ufw deny 3389", "ufw allow 3389/tcp"},
+			[]string{"-A INPUT -p tcp -m tcp --dport 3389 -j DROP", "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"},
+			ruleBlocked},
+		{"reject before allow",
+			[]string{"ufw reject 3380:3390/tcp", "ufw allow 3389/tcp"},
+			[]string{"-A INPUT -p tcp -m tcp --dport 3380:3390 -j REJECT --reject-with icmp-port-unreachable", "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"},
+			ruleBlocked},
+		{"deny and no allow",
+			[]string{"ufw deny 3389/tcp"},
+			[]string{"-A INPUT -p tcp -m tcp --dport 3389 -j DROP"},
+			ruleBlocked},
+		{"hardened: scoped deny, then scoped allow",
+			[]string{"ufw deny from 192.168.0.0/16 to any port 3389 proto tcp", "ufw allow in on tailscale0 to any port 3389 proto tcp"},
+			[]string{"-A INPUT -s 192.168.0.0/16 -p tcp -m tcp --dport 3389 -j DROP", "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
+			rulePresent},
+		{"interface-scoped deny, then allow",
+			[]string{"ufw deny in on eth0 to any port 3389 proto tcp", "ufw allow 3389/tcp"},
+			[]string{"-A INPUT -i eth0 -p tcp -m tcp --dport 3389 -j DROP", "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"},
+			rulePresent},
+		{"allow before deny",
+			[]string{"ufw allow 3389/tcp", "ufw deny 3389"},
+			[]string{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", "-A INPUT -p tcp -m tcp --dport 3389 -j DROP"},
+			rulePresent},
+		{"deny on another port",
+			[]string{"ufw deny 33890/tcp", "ufw allow 3389/tcp"},
+			[]string{"-A INPUT -p tcp -m tcp --dport 33890 -j DROP", "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"},
+			rulePresent},
+		{"udp deny",
+			[]string{"ufw deny 3389/udp", "ufw allow 3389/tcp"},
+			[]string{"-A INPUT -p udp -m udp --dport 3389 -j DROP", "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"},
+			rulePresent},
+		{"outbound deny",
+			[]string{"ufw deny out 3389/tcp", "ufw allow 3389/tcp"},
+			[]string{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"},
+			rulePresent},
+		{"deny with a comment naming an interface",
+			[]string{"ufw deny 3389/tcp comment 'blocked on purpose'", "ufw allow in on tailscale0"},
+			[]string{`-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "blocked on purpose" -j DROP`, "-A INPUT -i tailscale0 -j ACCEPT"},
+			ruleBlocked},
+		{"nothing",
+			[]string{"ufw allow 22/tcp"},
+			[]string{"-A INPUT -p tcp -m tcp --dport 22 -j ACCEPT"},
+			ruleAbsent},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, _ := ufwDecide(ufwAddedHeader+strings.Join(tt.ufw, "\n")+"\n", 3389); got != tt.want {
+				t.Errorf("ufw: got %v, want %v", got, tt.want)
+			}
+			if got, _ := iptablesDecide("-P INPUT DROP\n-A INPUT -j ts-input\n"+strings.Join(tt.ipt, "\n")+"\n", 3389); got != tt.want {
+				t.Errorf("iptables: got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// assertNamesBlockedRule checks that a manual firewall step names the deny
+// that decided the port, so the operator knows which rule to remove (#481).
+func assertNamesBlockedRule(t *testing.T, s SetupStep, rule string) {
+	t.Helper()
+	if s.Name != linuxFwName || s.Outcome != OutcomeManual {
+		return
+	}
+	if rule == "" || !strings.Contains(s.Message, rule) {
+		t.Errorf("step %q message %q does not name the blocking rule %q", s.Name, s.Message, rule)
+	}
+}
+
+// TestIptablesDecideOnly pins the iptables shapes ufw cannot express.
+func TestIptablesDecideOnly(t *testing.T) {
+	tests := []struct {
+		name string
+		rule string
+		want ruleState
+	}{
+		{"blanket drop before the allow", "-A INPUT -j DROP\n-A INPUT -i tailscale0 -j ACCEPT", ruleBlocked},
+		{"tcp reset before the allow", "-A INPUT -p tcp -j REJECT --reject-with tcp-reset\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
+		{"conntrack drop does not decide", "-A INPUT -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
+		// An unmodeled match on a port-bearing rule is ignored for a deny as for an
+		// allow (iptPortCovers), so this deny decides: parity, not precision.
+		{"port-bearing conntrack drop decides", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
+		{"negated-scope drop does not decide", "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
+		{"loopback drop does not decide", "-A INPUT -i lo -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
+		{"jump does not decide", "-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, rule := iptablesDecide(tt.rule+"\n", 3389)
+			if got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+			if (got == ruleBlocked) != (rule != "") {
+				t.Errorf("blocking rule = %q for state %v", rule, got)
 			}
 		})
 	}
