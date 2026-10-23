@@ -91,3 +91,8 @@ func HostSetupCmdForTest(t interface{ Cleanup(func()) }, elevated bool, setup fu
 	c.SilenceUsage = true // as the root command sets it (#210)
 	return c
 }
+
+// PrintCheckTextForTest is a test-only wrapper for printCheckText.
+func PrintCheckTextForTest(w io.Writer, r host.CheckResult) {
+	printCheckText(w, r)
+}
