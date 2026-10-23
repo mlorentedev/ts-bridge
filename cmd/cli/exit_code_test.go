@@ -119,21 +119,25 @@ func TestHostSetupCmd_ExitStatus(t *testing.T) {
 		step("Tailscale IP", host.OutcomeOK, ""), step("xrdp service", host.OutcomeFailed, "sudo apt install xrdp")}}
 	tests := []struct {
 		name     string
+		goos     string
 		elevated bool
 		result   host.SetupResult
 		args     []string
 		want     int
 		stdout   string
 	}{
-		{"ok, changed and manual, text", true, converged, nil, 0, "Firewall rule"},
-		{"ok, changed and manual, json", true, converged, []string{"--json"}, 0, `"outcome": "manual"`},
-		{"a failed step, text", true, failed, nil, 2, "xrdp service"},
-		{"a failed step, json", true, failed, []string{"--json"}, 2, `"outcome": "failed"`},
-		{"not elevated", false, converged, nil, 1, ""},
+		{"ok, changed and manual, text", "linux", true, converged, nil, 0, "Firewall rule"},
+		{"ok, changed and manual, json", "linux", true, converged, []string{"--json"}, 0, `"outcome": "manual"`},
+		{"a failed step, text", "linux", true, failed, nil, 2, "xrdp service"},
+		{"a failed step, json", "linux", true, failed, []string{"--json"}, 2, `"outcome": "failed"`},
+		{"not elevated", "linux", false, converged, nil, 1, ""},
+		// macOS answers "not applicable" before the elevation check and never runs setup (#459).
+		{"macOS, not elevated", "darwin", false, failed, nil, 0, "not applicable on macOS"},
+		{"macOS, elevated", "darwin", true, failed, nil, 0, "not applicable on macOS"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := cmdpkg.HostSetupCmdForTest(t, tt.elevated, func(host.Config, *slog.Logger) (host.SetupResult, error) { return tt.result, nil })
+			c := cmdpkg.HostSetupCmdForTest(t, tt.goos, tt.elevated, func(host.Config, *slog.Logger) (host.SetupResult, error) { return tt.result, nil })
 			c.SetArgs(tt.args)
 			var out bytes.Buffer
 			c.SetOut(&out)
