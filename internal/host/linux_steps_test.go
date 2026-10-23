@@ -299,9 +299,6 @@ func TestSetupForLinux(t *testing.T) {
 	}
 }
 
-// TestCheckForLinux pins check as the read half of setup (AC1, AC5): the same
-// reads, no run call (the iptables read is `-S` through Output), and an unreadable state
-// reported as unverified.
 // TestXRDPStepOutcomes pins the outcomes for xrdp states setup cannot act on:
 // a masked unit needs a person to unmask it, and an is-enabled answer ts-bridge
 // does not interpret is reported as such, never guessed.
@@ -335,6 +332,9 @@ func TestXRDPStepOutcomes(t *testing.T) {
 	}
 }
 
+// TestCheckForLinux pins check as the read half of setup (AC1, AC5): the same
+// reads, no run call (the iptables read is `-S` through Output), and an unreadable state
+// reported as unverified.
 func TestCheckForLinux(t *testing.T) {
 	yes, no := true, false
 	ufw := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true}
