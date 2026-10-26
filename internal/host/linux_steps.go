@@ -10,13 +10,14 @@ import (
 )
 
 const (
-	xrdpName     = "xrdp service"
-	linuxFwName  = "Firewall configuration"
-	xrdpFixSetup = "run ts-bridge host setup as root"
-	backendUFW   = "ufw"
-	backendIPT   = "iptables"
-	protoTCP     = "tcp"
-	iptAccept    = "ACCEPT"
+	xrdpName      = "xrdp service"
+	linuxFwName   = "Firewall configuration"
+	xrdpFixUnmask = "sudo systemctl unmask xrdp, then run ts-bridge host setup"
+	xrdpFixSetup  = "run ts-bridge host setup as root"
+	backendUFW    = "ufw"
+	backendIPT    = "iptables"
+	protoTCP      = "tcp"
+	iptAccept     = "ACCEPT"
 )
 
 func linuxPort(cfg Config) int {
@@ -49,24 +50,45 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 
 // xrdpState is the xrdp service as systemd reports it. readable is false when
 // systemctl is missing or answered nothing, so "off" and "cannot tell" differ.
-type xrdpState struct{ installed, readable, enabled, active bool }
+// undecided holds an is-enabled answer ts-bridge does not interpret.
+type xrdpState struct {
+	installed, readable, enabled, active, masked bool
+	undecided                                    string
+}
 
+// readXRDP asks systemd for the unit, not PATH for the binary: xrdp lives in
+// /usr/sbin, which a non-root PATH often lacks. Without systemctl the binary on
+// PATH is the only evidence left.
 func readXRDP(r Runner) xrdpState {
-	if _, err := r.LookPath("xrdp"); err != nil {
-		return xrdpState{}
-	}
 	if _, err := r.LookPath("systemctl"); err != nil {
-		return xrdpState{installed: true}
+		_, err := r.LookPath("xrdp")
+		return xrdpState{installed: err == nil}
 	}
 	// is-enabled and is-active exit non-zero when the answer is "no", and
 	// still print it, so the printed word decides, not the exit status.
 	enabled, _ := r.Output("systemctl", "is-enabled", "xrdp")
+	e := strings.TrimSpace(string(enabled))
+	if e == "not-found" {
+		return xrdpState{}
+	}
 	active, _ := r.Output("systemctl", "is-active", "xrdp")
-	e, a := strings.TrimSpace(string(enabled)), strings.TrimSpace(string(active))
+	a := strings.TrimSpace(string(active))
 	if e == "" || a == "" {
 		return xrdpState{installed: true}
 	}
-	return xrdpState{installed: true, readable: true, enabled: e == "enabled", active: a == "active"}
+	x := xrdpState{installed: true, readable: true, active: a == "active"}
+	switch e {
+	case "enabled", "static": // static: no [Install] section, enable cannot change it
+		x.enabled = true
+	case "masked":
+		x.masked = true
+	case "disabled", "enabled-runtime": // enabled-runtime lasts until the next boot
+	default:
+		// indirect, generated, alias, transient, linked...: whether xrdp starts
+		// at boot depends on another unit, so ts-bridge does not guess.
+		return xrdpState{installed: true, active: x.active, undecided: e}
+	}
+	return x
 }
 
 // xrdpUnmet returns the step for an xrdp that is missing or unreadable;
@@ -74,6 +96,10 @@ func readXRDP(r Runner) xrdpState {
 func xrdpUnmet(x xrdpState, unreadable Outcome) (SetupStep, bool) {
 	if !x.installed {
 		return newStep(xrdpName, OutcomeFailed, "xrdp is not installed", "sudo apt install xrdp"), true
+	}
+	if x.undecided != "" {
+		return newStep(xrdpName, unreadable, fmt.Sprintf("systemctl is-enabled answered %q, which ts-bridge does not interpret", x.undecided),
+			"check systemctl status xrdp, and enable it by hand if it does not start at boot"), true
 	}
 	if !x.readable {
 		return newStep(xrdpName, unreadable, "Cannot read the xrdp service state: ts-bridge reads it with systemctl",
@@ -90,6 +116,9 @@ func xrdpSetupStep(r Runner) SetupStep {
 	if x.enabled && x.active {
 		return newStep(xrdpName, OutcomeOK, "xrdp is enabled and running", "")
 	}
+	if x.masked {
+		return newStep(xrdpName, OutcomeFailed, "xrdp is masked, so it cannot be enabled", xrdpFixUnmask)
+	}
 	if err := r.Run("systemctl", "enable", "--now", "xrdp"); err != nil {
 		return newStep(xrdpName, OutcomeFailed, fmt.Sprintf("Could not enable xrdp: %v", err), "sudo systemctl enable --now xrdp")
 	}
@@ -102,6 +131,9 @@ func xrdpCheckStep(x xrdpState) SetupStep {
 	}
 	if x.enabled && x.active {
 		return newStep(xrdpName, OutcomeOK, "xrdp is enabled and running", "")
+	}
+	if x.masked {
+		return newStep(xrdpName, OutcomeManual, "xrdp is masked, and setup does not unmask units", xrdpFixUnmask)
 	}
 	return newStep(xrdpName, OutcomeChanged, fmt.Sprintf("xrdp is not enabled and running (enabled=%t, active=%t)", x.enabled, x.active), xrdpFixSetup)
 }

@@ -58,6 +58,12 @@ On Linux:
 On macOS:
   - Not applicable — use ts-bridge connect to connect to a remote host.
 
+Exit status:
+  0  every step is ok, changed or manual (a manual step prints what is left to you)
+  2  setup ran and at least one step failed
+  1  setup could not run (for example, without admin privileges)
+Run ts-bridge host check afterwards to confirm the host converged.
+
 Examples:
   ts-bridge host setup
   ts-bridge host setup --no-sleep
@@ -110,7 +116,7 @@ Examples:
 
 func runHostSetup(cmd *cobra.Command, args []string) error {
 	// macOS: not applicable.
-	if runtime.GOOS == "darwin" {
+	if hostGOOS == "darwin" {
 		out := cmd.OutOrStdout()
 		fmt.Fprintln(out, "Host setup is not applicable on macOS.")
 		fmt.Fprintln(out, "Use the client mode (ts-bridge connect) to connect to a remote host.")
@@ -118,7 +124,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	// Admin check.
-	if !host.IsElevated() {
+	if !hostIsElevated() {
 		printElevationError(cmd.ErrOrStderr())
 		return fmt.Errorf("host setup requires elevated privileges")
 	}
@@ -160,7 +166,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		"no_sleep", cfg.NoSleep,
 	)
 
-	result, err := host.Setup(cfg, logger)
+	result, err := hostSetup(cfg, logger)
 	if err != nil {
 		logger.Error("host setup failed", "error", err)
 		return fmt.Errorf("host setup failed: %w", err)
@@ -170,7 +176,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	// ts-bridge; the firewall opens the actual (registry) port. If the user
 	// explicitly requested a different --port, say so rather than leaving the
 	// flag silently ineffective.
-	if runtime.GOOS == windowsOS && cmd.Flags().Changed("port") && cfg.Port != result.RDPPort {
+	if hostGOOS == windowsOS && cmd.Flags().Changed("port") && cfg.Port != result.RDPPort {
 		printWarn(cmd.ErrOrStderr(), fmt.Sprintf(
 			"--port %d not applied: Windows RDP listens on port %d (set in the registry). "+
 				"Change the RDP port in Windows, then re-run host setup.",
@@ -179,7 +185,10 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 	if jsonOut {
-		return printSetupJSON(cmd.OutOrStdout(), result)
+		if err := printSetupJSON(cmd.OutOrStdout(), result); err != nil {
+			return err
+		}
+		return setupConvergence(result.Steps)
 	}
 
 	// Print step-by-step results.
@@ -195,7 +204,24 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	// Report the port that was actually configured (result.RDPPort), which on
 	// Windows comes from the registry and may differ from the requested --port.
 	printSetupSummary(cmd.OutOrStdout(), result.RDPPort)
-	return nil
+	return setupConvergence(result.Steps)
+}
+
+// setupConvergence returns an ExitError with exitNotConverged when any step
+// failed (ADR-017 §2). Unlike check, changed and manual exit 0: setup did its
+// part, and printed the action a manual step leaves to the user.
+func setupConvergence(steps []host.SetupStep) error {
+	var failed []string
+	for _, s := range steps {
+		if s.Outcome == host.OutcomeFailed {
+			failed = append(failed, s.Name)
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return &ExitError{Code: exitNotConverged, Err: fmt.Errorf("host setup did not converge: %d of %d steps failed: %s",
+		len(failed), len(steps), strings.Join(failed, ", "))}
 }
 
 // ─── Check ───────────────────────────────────────────────────────
@@ -239,12 +265,21 @@ func reportCheck(w io.Writer, result host.CheckResult, jsonOut bool) error {
 	return checkConvergence(result.Steps)
 }
 
-// hostCheck is the check host check runs; tests replace it to drive the
-// command end to end without the machine's real state.
-var hostCheck = host.Check
+// hostCheck, hostSetup, hostIsElevated and hostGOOS are what the host commands
+// run on; tests replace them to drive the commands end to end without the
+// machine's real state. hostGOOS steers only the command layer: host.Setup and
+// host.Check read runtime.GOOS themselves, so a test that changes hostGOOS
+// must also replace hostSetup or hostCheck.
+var (
+	hostGOOS       = runtime.GOOS
+	hostCheck      = host.Check
+	hostSetup      = host.Setup
+	hostIsElevated = host.IsElevated
+)
 
-// exitNotConverged is check's exit status when it ran but a step is not ok,
-// as `terraform plan -detailed-exitcode` uses 2 for "changes present".
+// exitNotConverged is the exit status of a host command that ran but did not
+// find (check) or reach (setup) the declared state, as `terraform plan
+// -detailed-exitcode` uses 2 for "changes present".
 const exitNotConverged = 2
 
 // checkConvergence returns an ExitError with exitNotConverged unless every

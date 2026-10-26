@@ -222,7 +222,14 @@ ts-bridge host setup --no-sleep
 
 # Output JSON for automation
 ts-bridge host setup --json
+
+# Configure, then verify
+sudo ts-bridge host setup && ts-bridge host check
 ```
+
+Exit status: `0` when every step is `ok`, `changed` or `manual` (a manual step prints
+the action left to you), `2` when setup ran and at least one step `failed`, `1` when setup
+could not run (for example, without root). Use `host check` to confirm the host converged.
 
 ### `ts-bridge host check`
 
