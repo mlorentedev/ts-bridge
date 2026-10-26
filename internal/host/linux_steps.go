@@ -341,7 +341,8 @@ func ufwAllows(added string, port int) bool {
 
 // ufwDecide walks `ufw show added`, which lists user rules in the order ufw
 // evaluates them, and returns the answer of the first rule that decides TCP
-// port: an inbound allow, or an unscoped deny/reject (no `from`, no `on`),
+// port: an inbound allow, or an unscoped deny/reject (no `from`, no `on`, no
+// `to <address>`),
 // together with that rule. route, out and limit rules never decide, and the
 // port must match exactly: 33890 is not 3389.
 func ufwDecide(added string, port int) (ruleState, string) {
@@ -357,12 +358,23 @@ func ufwDecide(added string, port int) (ruleState, string) {
 		case "allow":
 			return rulePresent, ""
 		case "deny", "reject":
-			if !slices.Contains(f, "from") && !slices.Contains(f, "on") {
+			if !ufwScoped(f) {
 				return ruleBlocked, strings.TrimSpace(line)
 			}
 		}
 	}
 	return ruleAbsent, ""
+}
+
+// ufwScoped reports whether a ufw rule narrows its traffic by source,
+// interface or destination address, as iptables' -s/-i/-d do. `to any` does
+// not narrow it.
+func ufwScoped(f []string) bool {
+	if slices.Contains(f, "from") || slices.Contains(f, "on") {
+		return true
+	}
+	t := slices.Index(f, "to")
+	return t >= 0 && t+1 < len(f) && f[t+1] != "any"
 }
 
 // ufwRuleMatchesPort matches the short form (`3389/tcp`, `3389`, `in 3389/tcp`)
