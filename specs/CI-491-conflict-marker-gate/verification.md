@@ -16,8 +16,9 @@ created: "2026-10-22"
       `check-conflict-markers: OK (513 tracked files)` at `89b8e61`.
 - [x] Criterion 4 -> the suite ran every case under bash and zsh (16/16 ok), and
       `TCM_SHELLS="bash nosuchsh"` exits 1.
-- [ ] CI wiring -> pending the owner's two steps in `.github/workflows/repo-hygiene.yml`
-      (`features.json` f4). Until then nothing in CI runs the guard.
+- [x] CI wiring -> `.github/workflows/repo-hygiene.yml` runs `No committed merge-conflict markers`
+      and `Conflict-marker guard rejects markers, tolerates setext headings` (`features.json` f4);
+      both passed in Repo hygiene run `40567222073` at `37d9133`.
 
 ## Test status
 
