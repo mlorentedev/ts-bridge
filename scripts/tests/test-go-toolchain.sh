@@ -11,7 +11,9 @@ check_file() {
     }
     /^jobs:[[:space:]]*(#.*)?$/ { in_jobs = 1; next }
     in_jobs && /^[^[:space:]]/ { finish_job(); in_jobs = 0; in_job = 0 }
-    in_jobs && /^  [[:alnum:]_-]+:[[:space:]]*(#.*)?$/ {
+    # Any line at job depth opens a new job, whatever the key spelling
+    # (quoted, commented), so one job never inherits the setup-go of another.
+    in_jobs && /^  [^[:space:]#]/ {
       finish_job(); in_job = 1; next
     }
     /^[[:space:]]*#/ { next }
@@ -215,6 +217,21 @@ jobs:   # job list
 YAML
 if ! check_file "$tmp"; then
   echo "test-go-toolchain: rejected a configured job under commented keys" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  lint:
+    steps:
+      - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+        with:
+          go-version-file: go.mod
+  "test":
+    steps:
+      - run: go test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: let a quoted job key inherit the previous job's setup-go" >&2
   exit 1
 fi
 
