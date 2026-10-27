@@ -48,10 +48,11 @@ the host *command*, not about running ts-bridge on the host.
 | Capability | Windows | Linux | macOS |
 |---|---|---|---|
 | Remote-access service | RDP: port read from registry; enabled state not read (W2) | xrdp: `systemctl is-enabled` / `is-active` (the unit, not PATH; `static` counts as enabled, `not-found` is not installed, `disabled` gets `enable --now`, `masked` is `manual` in check and `failed` in setup with the unmask fix, unrecognized answers such as `indirect` are `unverified` in check and `failed` in setup), enabled with `enable --now` (#454, #478) | **none** (stub) |
-| Firewall | Named rule via PowerShell (W3) | `ufw allow` / `iptables -A`, after reading whether an existing allow covers the port, scoped ones included (#454, #479) | not inspected |
+| Firewall | Named rule via PowerShell (W3) | `ufw allow` / `iptables -A`, after reading whether an existing allow covers the port, scoped and port-less ones included, loopback excluded, in rule order: an unscoped deny before any allow is `manual` (#454, #479, #483, #481) | not inspected |
 | Tailscale | unattended mode + service start | IP only | IP only |
 | Power / sleep | disabled unless `--no-sleep` | not handled | not handled |
 | Idempotent re-run | not reported (no "already configured" state) | yes: a converged host reports every step `ok` (#454; iptables rules last until reboot) | n/a |
+| `host setup` / `host check` exit status | setup: 0 ok/changed/manual, 2 a step failed, 1 could not run (#476); check: 0 all ok, 2 not converged, 1 could not run (#471) | same | same (setup prints "not applicable" and exits 0 until #459) |
 | `host check` port | registry | config value, not the listener | 0: no service declared until #459 (was a hard-coded 3389) |
 
 ### Linux defects found in the audit (#454, fixed)
