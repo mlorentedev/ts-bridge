@@ -34,7 +34,7 @@ created: "2026-10-09"
 - [x] Lint passes.
 - [x] No unrelated changes in the diff.
 - [x] `verification.md` filled in.
-- [ ] PR opened referencing this spec folder
+- [x] PR opened referencing this spec folder
 
 ## Machine-readable features
 

@@ -9,8 +9,8 @@ created: "2026-10-09"
 
 - [x] Criterion 1 -> `go version` returned `go1.27.1 windows/amd64`; `go mod tidy` followed by `go mod verify` succeeded, and `git diff --exit-code FETCH_HEAD -- go.mod go.sum` confirmed the graph matches Dependabot #431. Module files had line-ending normalization only.
 - [x] Criterion 2 -> `bash scripts/tests/test-go-toolchain.sh` first failed on the original 1.26 CI pins, then passed on all four workflows; conflicting-version, missing-setup and linter-mismatch fixtures are rejected. `actionlint` succeeded on all four edited workflows.
-- [ ] Criterion 3 -> Windows `go build ./...`, `go vet ./...`, `go test -count=1 ./...` and pinned `golangci-lint v2.14.0 run` succeeded; all six cross-builds succeeded. On PR #436 head `b8ff388`, Linux race, Windows, smoke, lint and all cross-build CI checks passed; recheck the head after the review fixes.
-- [x] Criterion 4 -> `AGENTS.md` declares Go 1.27.1+ and installs golangci-lint v2.14.0; `go.mod` and `.github/workflows/ci.yml` match.
+- [x] Criterion 3 -> Windows `go build ./...`, `go vet ./...`, `go test -count=1 ./...` and pinned `golangci-lint v2.14.0 run` succeeded; all six cross-builds succeeded. The cited PR #436 head `b8ff388` was orphaned by the squash merge (`eab4bee`); the current evidence is CI at `aa3e8c6`: run `40544475350` (CI: Linux race, Windows, macOS, smoke, lint, security, six cross-builds), `40544475357` (Repo hygiene) and `40544475503` (Release), all success.
+- [x] Criterion 4 -> `AGENTS.md` declares Go 1.27.1+ and installs the linter with `mise install`; since #464 the version lives only in `mise.toml`, which the guard holds equal to `.github/workflows/ci.yml`.
 
 ## Test status
 
@@ -26,6 +26,25 @@ created: "2026-10-09"
 
 - `tailscale.com@v1.104.0` itself declares `go 1.27.1`; lowering our `go` directive is not valid. `actions/setup-go` now reads the module file rather than maintaining eight separate numeric pins. Lint stays pinned to v2.14.0, whose release binary is Go-1.27-built.
 - The workstation's direct-first module proxy returned a zip checksum different from `go.sum` and the public sumdb for `wireguard/windows@v1.0.1`. A fresh fetch from the official Go proxy matched the sumdb; further commands used that proxy without disabling checksum checks. Lesson 037 records the operational rule.
+
+## Independent review round 1 - 2026-10-27
+
+Reviewer `nan/deepseek-v4-flash` returned **FAIL** at `aa3e8c6`. The signed report is
+`review.md` with its matching `review-request.json`. It found no functional defect:
+build, vet, tests and CI lint are green. The two REAL Majors and the minors are
+dispositioned below. The contract-set edits (F1, F3, F4) change the digests, so a
+fresh review is required.
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| F1 Major: f4 verification unsatisfiable after #464 | Applied (contract). | f4 now checks `Go 1.27.1+` and a `mise install` line in `AGENTS.md`, the policy the guard enforces. |
+| F2 Major: guard fails open on a commented `jobs:` key | Applied (code + tests). | Keys accept a trailing comment, and every Go command counts even when no recognised job holds it. Four new fixtures: commented `jobs:`, commented job key, unrecognised `"jobs":` (all rejected without `setup-go`), and a configured job under commented keys (accepted). Before the fix the suite failed on `accepted a Go job without setup-go under a commented jobs key`. Mutants: restoring the exact `^jobs:` match, restoring the exact job-key match, and restricting Go detection to recognised jobs (`in_job &&`) each make the suite fail. The real tree reports `OK (4 Go workflows)`. |
+| F3 Minor: AC1 names Tailscale v1.104.0 | Applied (contract). | AC1, `What` and f1 now say v1.104.x; `go.mod` requires v1.104.1 since #438. AC3 is ticked on the `aa3e8c6` CI evidence. |
+| F4 Minor: f3 hardcodes `go run …@v2.14.0` | Applied (contract). | f3 runs `mise install && golangci-lint run`, reading the pin. Local lint is still not run on this workstation (owner prohibition); CI `lint` is the evidence. |
+| F5 Minor: orphaned `b8ff388` evidence, stale PR box | Applied. | Criterion 3 cites the `aa3e8c6` runs; the `tasks.md` PR box is ticked (#436). |
+| F6 Minor: CRLF `go.mod`/`go.sum` on Windows | Ticketed: #498. | Separate `.gitattributes` change. |
+| F7 Minor: guard blind to `go get`, wrappers, `GOTOOLCHAIN` | Ticketed: #499. | Scope decision needed; not in this fix. |
+| F8 Minor: guard not run under zsh | Ticketed: #500. | zsh is absent on this workstation; CI owns two-shell runs. |
 
 ## Promotion candidates
 
