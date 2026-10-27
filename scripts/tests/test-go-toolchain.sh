@@ -9,13 +9,18 @@ check_file() {
       if (job_go && !job_setup) bad = 1
       job_go = 0; job_setup = 0
     }
-    /^jobs:[[:space:]]*$/ { in_jobs = 1; next }
+    /^jobs:[[:space:]]*(#.*)?$/ { in_jobs = 1; next }
     in_jobs && /^[^[:space:]]/ { finish_job(); in_jobs = 0; in_job = 0 }
-    in_jobs && /^  [[:alnum:]_-]+:[[:space:]]*$/ {
+    # Any line at job depth opens a new job, whatever the key spelling
+    # (quoted, commented), so one job never inherits the setup-go of another.
+    in_jobs && /^  [^[:space:]#]/ {
       finish_job(); in_job = 1; next
     }
     /^[[:space:]]*#/ { next }
-    in_job && /(^|[[:space:]])go[[:space:]]+(build|clean|env|fmt|generate|install|list|mod|run|test|tool|version|vet|work)([[:space:]]|$)/ {
+    # Every Go command counts, not only those inside a recognised job: one the
+    # parser cannot place fails closed, so an unrecognised key spelling can
+    # never switch the checks off.
+    /(^|[[:space:]])go[[:space:]]+(build|clean|env|fmt|generate|install|list|mod|run|test|tool|version|vet|work)([[:space:]]|$)/ {
       if (!job_setup) bad = 1
       job_go = 1
     }
@@ -169,6 +174,79 @@ jobs:
 YAML
 if check_file "$tmp"; then
   echo "test-go-toolchain: accepted a conflicting pinned Go version" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:   # job list
+  build:
+    steps:
+      - run: go test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted a Go job without setup-go under a commented jobs key" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:   # unit tests
+    steps:
+      - run: go test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted a Go job without setup-go under a commented job key" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+"jobs":
+  build:
+    steps:
+      - run: go test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted a Go command outside any recognised job" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:   # job list
+  build:   # unit tests
+    steps:
+      - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+YAML
+if ! check_file "$tmp"; then
+  echo "test-go-toolchain: rejected a configured job under commented keys" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  lint:
+    steps:
+      - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+        with:
+          go-version-file: go.mod
+  "test":
+    steps:
+      - run: go test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: let a quoted job key inherit the previous job's setup-go" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+"jobs":
+  lint:
+    steps:
+      - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+        with:
+          go-version-file: go.mod
+  test:
+    steps:
+      - run: go test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: counted a setup-go outside any recognised job" >&2
   exit 1
 fi
 

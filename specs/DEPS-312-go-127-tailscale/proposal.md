@@ -18,7 +18,7 @@ Tailscale v1.104.0 requires Go 1.27.1, but every Go workflow in this repository 
 
 ## What
 
-The project builds and tests against Tailscale v1.104.0 with Go 1.27.1 or newer; all CI, release, mutation and hygiene jobs use the Go version required by the module, and lint runs under a compatible pinned version. CI rejects a future toolchain mismatch rather than silently downloading another compiler.
+The project builds and tests against Tailscale v1.104.x with Go 1.27.1 or newer; all CI, release, mutation and hygiene jobs use the Go version required by the module, and lint runs under a compatible pinned version. CI rejects a future toolchain mismatch rather than silently downloading another compiler.
 
 ## Out of scope
 
@@ -32,9 +32,9 @@ The project builds and tests against Tailscale v1.104.0 with Go 1.27.1 or newer;
 
 ## Acceptance criteria
 
-- [x] `go.mod` requires Go 1.27.1 and Tailscale v1.104.0, and `go mod tidy` produces no diff.
+- [x] `go.mod` requires Go 1.27.1 and Tailscale v1.104.x, and `go mod tidy` produces no diff.
 - [x] Every GitHub workflow that installs Go derives its version from `go.mod`; a fixture test rejects a pinned 1.26 workflow and accepts the configured workflows.
-- [ ] CI lint uses a pinned version compatible with Go 1.27.1; build, vet, tests and lint pass on the upgraded dependency, with Windows and release jobs covered by CI.
+- [x] CI lint uses a pinned version compatible with Go 1.27.1; build, vet, tests and lint pass on the upgraded dependency, with Windows and release jobs covered by CI.
 - [x] Operator documentation gives the correct Go minimum and local lint version.
 
 ## References
