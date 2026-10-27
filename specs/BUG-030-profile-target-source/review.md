@@ -1,155 +1,146 @@
 ---
 spec: "BUG-030-profile-target-source"
 verdict: "FAIL"
-reviewed_sha: "1fe82ad1832f86f4ef6611edb1c8485a5328a03d"
+reviewed_sha: "d1bc86809d65acce51ac0ca6ad9d2d1dc854fe00"
 reviewer: "nan/deepseek-v4-flash"
 date: "2026-10-23"
 ---
 
 ## Adversarial review
 
-**Scope**: `BUG-030-profile-target-source` (issue mlorentedev/ts-bridge#417, PR #489).
-Diff `3d1bb45` (base, declared by the launcher in `review-request.json`) .. `1fe82ad`,
-now squashed on `origin/master` as `ca636e4`.
+**Scope**: `BUG-030-profile-target-source` (issue mlorentedev/ts-bridge#417). Round 2, at
+`d1bc868` (PR [#496](https://github.com/mlorentedev/ts-bridge/pull/496) head), after the
+round-1 FAIL. The production change under review is `ca636e4` (#489, merged); `d1bc868`
+carries the follow-up tests and verification evidence, and has **zero production diff**.
+The launcher's declared range `3d1bb45..d1bc868` also contains unrelated host/doc PRs
+(#485, #486, #488, #490); they are outside this spec and were not reviewed here.
 
 **Sources**: `specs/BUG-030-profile-target-source/{proposal,tasks,verification}.md`,
-`features.json`, `git diff 3d1bb45..1fe82ad`, `gh pr view 489`, `harness/reviewer-pool.json`,
-`cmd/cli/connect.go`, `cmd/cli/connect_target_source_test.go`,
-`internal/config/{config,merge}.go`, `internal/logging/logging.go`, `cmd/cli/run.go`.
+`features.json`, `review-request.json`, the preserved `review-round1.md`,
+`git diff 3d1bb45..d1bc868` restricted to the spec's files, `cmd/cli/connect.go`,
+`cmd/cli/connect_target_source_test.go`, `internal/config/{config,merge}.go`,
+`internal/logging/logging.go`, `cmd/cli/run.go`, `cmd/ts-bridge/main.go`,
+`harness/reviewer-pool.json`, `gh pr view 489,496`.
 
 **Independence**: reviewed on `nan/deepseek-v4-flash` (pool primary). No Anthropic model
-signed, no second signature needed (`proposal.md` declares no `risk: high`). Local
+signed; `proposal.md` declares no `risk: high`, so no second signature is required. Local
 `golangci-lint` was **not** run (owner prohibition, `AGENTS.override.md`); the CI `lint`
-result at `1fe82ad` is used instead.
+result at the reviewed head is used instead.
 
-**Evidence produced in this session** (commands run fresh, not quoted from `verification.md`):
+**Contract state**: `dotf spec digest BUG-030-profile-target-source` returns the same three
+digests the launcher recorded in `review-request.json`
+(`features.json 8f6e577…`, `proposal.md 3b08b17…`, `tasks.md 78d893d…`), so the contract has
+not moved since round 1 and this verdict is about the current contract state.
+
+**Evidence produced in this session** (fresh, not quoted from `verification.md`):
 
 ```
-go test ./cmd/cli -run 'TestConnectProfileTargetOverrideWarning|TestConnectTargetOverrideDefaultLogger' -count=1   -> ok 8.09s
-go test ./cmd/cli ./internal/config/... -count=1                                                                  -> ok (3 packages)
-go vet ./...                                                                                                     -> exit 0
-gofmt -l cmd/cli/connect.go cmd/cli/connect_target_source_test.go                                                -> empty
-git diff --check 3d1bb45..1fe82ad                                                                                -> exit 0
+go test ./cmd/cli -run 'TestConnectProfileTargetOverrideWarning|TestConnectTargetOverrideDefaultLogger|TestConnectTargetOverrideProductionLogger' -count=1 -v
+  -> PASS, 26 table subtests + default-logger + 2 production-logger cases
+go test ./cmd/cli ./internal/config/... ./internal/logging -count=1   -> ok (4 packages)
+go vet ./...                                                          -> exit 0
+git diff --check d1bc868^ d1bc868                                     -> exit 0
+gh pr view 496 --json statusCheckRollup  -> test, test-windows, test-macos, lint, security,
+  hygiene, smoke, 6 build-matrix legs, GitGuardian: SUCCESS; pr-agent/review: CANCELLED
 ```
 
-Two independent re-derivations of the RED claim, in a throwaway copy of the tree (no
-tracked file in this worktree was modified):
+**Mutation battery** (throwaway copy at `/tmp/b030`, no tracked file in this worktree was
+modified; all mutations restored):
 
-1. **Revert** `cmd/cli/connect.go` to the base revision → `undefined: warnConnectTargetOverride`
-   (build failure). The recorded RED ("failed on the ten expected warning cases") is **not**
-   reproducible by reverting alone; it required a no-op stub. The claim itself survives, its
-   stated shape does not.
-2. **Mutation** of the attribution: suppressing `source=--target` whenever `TS_TARGET` is set
-   → `text/flag_overrides_environment_and_YAML` and `json/flag_overrides_environment_and_YAML`
-   both fail, matching `verification.md`. The test genuinely discriminates the source label.
-
-**Production-path probe** (real `cli.InitLogger`, `LOCALAPPDATA`/`HOME` redirected to a temp
-dir, synthetic profile + key, `--profile office`, `TS_TARGET=env-host:443`):
-
-| run | console stdout | log file |
+| Mutation | Expected discriminator | Observed |
 |---|---|---|
-| `--log-format text --quiet` | `level=WARN msg="connection target overrides selected profile" profile=office source=TS_TARGET target=env-host:443` | JSON record |
-| `--log-format json --quiet` | **text**, same WARN record | JSON record |
-| `--log-format text` | same WARN record | JSON record |
+| `defer` the warning so it runs after the runner | ordering | table `want exactly one warning before runner` fails in both formats; logger tests fail inside the runner |
+| drop the `profileTarget == ""` guard | AC2 profile-without-target | `text/profile_without_target` and `json/…` fail on an unexpected warning |
+| make `logging.New` console-only (no file) | AC3 JSON record | `TestConnectTargetOverrideProductionLogger/{text,json}` fail on `production logger did not initialize a log file` |
+| let `TS_TARGET` outrank the flag in the label | AC1 source attribution | `…/flag_overrides_environment_and_YAML` fails in both formats (`source = "TS_TARGET", want "--target"`) |
 
-So AC3's `--quiet` visibility and the JSON record hold **for the writer that ships** — and the
-console stays text under `--log-format json` (pre-existing `logging.New`: console text / file
-JSON). That last fact is what makes finding F4 below a fidelity gap rather than a defect.
+The tests are not vacuous: each guard and each label the spec promises is independently
+killable. The round-1 finding that a plain revert of the production file cannot reproduce
+the recorded RED is now honestly restated in `verification.md`.
 
 ### Spec and task alignment
 
 | Criterion | Verdict | Evidence |
 |---|---|---|
-| AC1 precedence unchanged + exactly one warning naming the winning source | **Met** | `applyConnectProfile` keeps its original ordering (`yamlCfg` fill → `applyProfileRuntime` → credential); warning fired once, after `Merge`, `cfg.Quiet`, `lockCommandProfile` and `LoggerInit`, before `Runner`. Mutation test proves the `--target` / `TS_TARGET` / `YAML` label is discriminating. |
-| AC2 no warning for profile-only, equal targets, no profile, SOCKS5, invalid config | **Met** | Guards `profileName == "" || profileTarget == "" || target == "" || target == profileTarget`; invalid config returns from `Merge` before the call; SOCKS5 clears `cfg.Target` (`internal/config/merge.go` `applyEnvProxyMode`/`applyFlagProxyMode`). Table covers each case in both formats. |
-| AC3 text/JSON before the runner, visible with `--quiet`, no auth material, profile bytes untouched | **Met in behaviour**; evidence fidelity is F4 | Probe above; `assertTargetOverrideWarning` asserts no `tskey-auth-`; `before`/`after` profile bytes compared per case. |
+| AC1 — precedence unchanged; changed profile target yields exactly one warning naming the winning source | **Met** | `applyConnectProfile` returns the target from the existing read; warning fires once after `Merge` and `lockCommandProfile`, naming `profile`/`source`/`target`. Flag, env, YAML and `.env` labels mutation-proven. |
+| AC2 — no warning for profile-only, equal targets, no profile, SOCKS5, invalid config, profile-without-target | **Met for raw values, with one real edge (F3)** | Guard-first return; invalid config exits in `Merge`; `applyEnvProxyMode`/`applyFlagProxyMode` clear the target in SOCKS5 mode. Cases exist in both formats. |
+| AC3 — text and JSON before the runner, visible with `--quiet`, no auth material, profile bytes unchanged | **Met** | `TestConnectTargetOverrideProductionLogger` drives the real `InitLogger` with temporary `HOME`/`LOCALAPPDATA`, asserts one text console line before a runner marker and one credential-free JSON file record under `--quiet`; the table compares profile-store bytes before/after. |
 
-Board: issue #417 is `CLOSED` and PR #489 is `MERGED`; the spec folder is still active and
-unarchived, which is the correct state until this review exists. Board and spec therefore agree.
-
-Task boxes: 4 of 6 Closing/Implementation boxes remain open and are **accurately** open
-(`Open an atomic PR … and inspect all reviewer output`, `Obtain an independent review`,
-`Verify lint and Linux race tests through CI`) — except that CI has since run and passed, so
-that last box's state is now stale (F3). Contract files (`proposal.md`, `tasks.md`,
-`features.json`) are byte-identical to `origin/master`, so nothing here is drift.
+Board: #417 is `CLOSED`, #489 is `MERGED`, #496 is `OPEN` with this review as its
+independent pass. Contract boxes that remain open are accurately open. `PR #496` has zero
+reviews and a `CANCELLED` `pr-agent/review`; that is disclosed here rather than counted as
+review coverage.
 
 ### Findings
 
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location |
 |---|---|---|---|---|---|---|
-| Major | REAL | governance / git record | The merged commit carries `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` on `origin/master`. The standing order is explicit and non-negotiable: no AI attribution and no `Co-Authored-By` trailer referencing an AI agent, precisely because agent CLIs append it by default. It can no longer be fixed by amending the PR — it is in main history. | `git log -1 --format=%B ca636e4` contains the trailer; the trailer is also in local commit `1fe82ad`. | UNTESTED (no gate detects it) | code (owner decision: rewrite `master`, or accept + record in `verification.md`) **and** a bitácora ticket to gate it, since a Copilot-authored session will repeat it |
-| Major | REAL | Definition of Done §4 (Review) | PR #489 **merged with no review at all**, and the only automated review run ended `CANCELLED`. `reviews` is `[]`; the `pr-agent / review` check is `CANCELLED` at `2026-10-22T20:29:17Z`; the author's own `## Review triage` comment six minutes earlier said "The PR remains open; no merge, archive or release was performed" and left PR-Agent "pending". Repo has **no** `.github/merge-grant.yml`, so the standing merge grant does not apply. Proceeding unreviewed is permitted only if disclosed — it was not. | `gh pr view 489 --json state,mergedAt,reviews,statusCheckRollup`; `ls .github/` | UNTESTED (process) | spec (`verification.md`, outside the contract set) + a PR comment; owner confirms who authorized the merge |
-| Minor | REAL | verification accuracy | `verification.md` still says "Linux race tests and all-platform CI remain pending PR checks". They ran and passed at `1fe82ad`: `test` (Linux, `go test -v -race -coverprofile=… ./...`), `test-windows`, `test-macos`, `lint` (golangci-lint), `security`, `hygiene`, `smoke`, six `build-matrix` legs, GitGuardian — all `SUCCESS`. Only `pr-agent / review` is `CANCELLED`. | `gh pr view 489 --json statusCheckRollup`; `.github/workflows/ci.yml:50,115,186` | named commands exist; the *statement* is untested as written | spec (`verification.md`) |
-| Minor | REAL | test fidelity (AC3 JSON) | The `json` table branch installs its own `slog.NewJSONHandler` on the console buffer, so it proves the *record encoding*, not the shipped writer: production `connect` never writes JSON to the console — JSON goes to the rotating log file. The same stub is what makes the `--quiet` case pass, so neither `--quiet` nor "JSON to the log file" is covered by a test of the real `InitLogger` path. Behaviour is nonetheless correct (probe, and the record is `level=WARN` against a `LevelWarn` console threshold). | `cmd/cli/connect_target_source_test.go:70-76`; `internal/logging/logging.go` `New`; probe output above | `TestConnectProfileTargetOverrideWarning` (proves the record, not the writer) | tests (one case through `InitLogger` + a log-file assertion) |
-| Minor | THEORETICAL | correctness edge | Target equality is a raw string compare and the target is never normalised (`parseTarget` returns the env string verbatim; `Merge` trims only `ControlURL`). `TS_TARGET=MESH-Host:443` against a profile `mesh-host:443` is the same destination but yields an override warning — a false positive against AC2's "equal effective targets". | `internal/config/config.go` `parseTarget`; `warnConnectTargetOverride` | UNTESTED | code |
-| Minor | THEORETICAL | maintainability / drift | The winning source is *re-derived* at the call site from `os.Getenv("TS_TARGET")` + `flags.Target` instead of being returned from `Merge`, duplicating the precedence that lives in `applyEnvProxyMode`/`applyFlagProxyMode`. Every reachable branch agrees today (env-vs-YAML, SOCKS clearing, flag short-circuit all checked), but a future precedence change silently mis-labels the warning and no test would notice. | `cmd/cli/connect.go:191-200` vs `internal/config/merge.go:365-390,470-485` | UNTESTED | code (later; not a blocker) |
-| Minor | THEORETICAL | ordering coverage | "One warning **before** the runner" is proven only on the command path with a stubbed `LoggerInit`. With `LoggerInit == nil` the fallback is exercised by calling `warnConnectTargetOverride` directly, so its position relative to `Runner` is not asserted; the `profileTarget == ""` guard (selected profile without a target) has no case at all. | `TestConnectTargetOverrideDefaultLogger`; table fixture always sets a profile target | `TestConnectTargetOverrideDefaultLogger` (partial), `profileTarget == ""` UNTESTED | tests |
+| Major | REAL | governance / git record | The follow-up commit **`d1bc868`** — the head of PR #496, already pushed to `origin/test/profile-target-review-evidence` — carries `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`. This is the same non-negotiable standing-order violation round 1 recorded on the merged `ca636e4`, recurring in a **new, unmerged** commit. Unlike `ca636e4`, it is still cheap to remove: amend the message (or squash-merge #496 with a clean title/body) before it reaches `master`, where the owner's no-rewrite rule makes it permanent. Round 1 also asked for a bitácora ticket because no gate catches this; `gh issue list --search "Co-authored-by OR attribution OR Copilot" --state all` finds none, so the same default will append it again. | `git log -1 --format=%B d1bc868`; `git branch -a --contains d1bc868`; `gh pr view 496 --json headRefOid` | UNTESTED (no gate exists) | git record (amend/squash) — **not** the contract set; plus a ticket for a prevention gate |
+| Minor | REAL | verification accuracy | `verification.md` ("Cross-platform/race/lint results for this follow-up must come from its own CI") and the #496 body ("This follow-up's CI results are pending") are stale: CI at `d1bc868` has completed — Linux `test` (`go test -v -race ./...`, `ci.yml:49`), `test-windows`, `test-macos`, `lint`, `security`, `hygiene`, `smoke`, six `build-matrix` legs and GitGuardian all `SUCCESS`. The honest statement now is "green at `d1bc868`; PR-Agent cancelled". This regressed only because CI finished after the commit. | `gh pr view 496 --json statusCheckRollup`; `.github/workflows/ci.yml:40-58` | the CI commands themselves are the evidence, and they pass | spec (`verification.md`, outside the contract set) |
+| Minor | REAL | correctness edge (AC2) | Target equality is a raw string compare. Reproduced end to end in the throwaway copy: profile target `acemagic-office:45000` with `TS_TARGET=ACEMAGIC-OFFICE:45000` — the same DNS destination — emits `WARN connection target overrides selected profile source=TS_TARGET`. Round 1 graded this THEORETICAL; it is demonstrably REAL, still Minor (a diagnostic false positive, no behaviour change). Declined in round 1 on scope grounds (`proposal.md` specifies raw value difference); it needs a ticket or an explicit "raw comparison" note, not a silent carry-forward. | probe test output: `{"level":"WARN","msg":"connection target overrides selected profile","profile":"office","source":"TS_TARGET","target":"ACEMAGIC-OFFICE:45000"}`; `warnConnectTargetOverride` string compare | UNTESTED (no case covers case-differing equality) | code (case-insensitive host compare) or spec clarification — ticket, not a gate |
+| Minor | THEORETICAL | maintainability / drift | The winning source is re-derived at the call site from `os.Getenv("TS_TARGET")` plus `flags.Target` rather than returned by `Merge`, duplicating the precedence that lives in `applyEnvProxyMode`/`applyFlagProxyMode`/`applyStringFields`. Every reachable combination I constructed agrees today (flag+env, env+YAML, SOCKS5 clearing, flag restores profile value, `.env`→env), so this is drift risk, not a defect. | `cmd/cli/connect.go:184-200` vs `internal/config/merge.go:330-380,474-484` | the four mutation cases above pin today's labels; no test fails if `Merge` changes precedence without this function | code (later; not a blocker) |
 
-Not findings (checked, then dismissed): warning content carries no credential material
-(profile name, source, `host:port` only); profile store is read-only on this path; the
-untracked `review-transcript.jsonl` is git-ignored on purpose (`.gitignore:73`); the
-`.env`-beats-process-env comment contradiction is pre-existing, disclosed, and ticketed
-under #399; the `features.json` `state: pending` / empty `evidence` convention matches every
-archived spec in this repo.
-
-### Questions / assumptions (no action taken)
-
-1. **Who authorized the merge?** The merge commit author and the triage comment are the same
-   owner account; the comment says no merge was performed, then it merged. Either the owner
-   merged deliberately (then the comment needs correcting) or it was not a deliberate merge.
-   Only the owner can answer; F2 turns into "disclosed" once answered.
-2. **Console stream choice.** The warning goes to `stdout` through the combined logger, not
-   `stderr` (the older `--auth-key` warning uses `stderr`). That matches the existing
-   `WARN` console lines and the `READY`/`ERROR` lifecycle lines, so it is consistent — surfaced
-   only because a machine reading `READY` now has one more possible preceding line.
-3. Pre-existing, not this diff: `runConnect` never closes the logging instance, so the log file
-   handle stays open for the process lifetime (observed: the temp log file could not be removed
-   while the probe process was alive). Out of scope; worth a ticket, not a gate.
+**Not findings (checked, then dismissed):** contract digests match the launcher's request, so
+no contract drift; the round-1 `review.md` and `review-request.json` are preserved
+byte-identically in `review-round1.md` / `review-request-round1.json` (verified by diff
+against `d1bc868`); `gofmt -l` listing every file here is a CRLF checkout artifact
+(`core.autocrlf=true`), not a formatting defect — the committed content is LF and CI
+`hygiene` is green; no credential material is logged (profile name, source, `host:port`
+only); the profile store is untouched on this path; `features.json` `state: pending` matches
+the convention of every archived spec; `LoggerInit` is wired in `cmd/ts-bridge/main.go:34`,
+so the `slog.Default()` fallback is the documented degraded path, not the shipped one; the
+pre-existing `.env`-vs-process-env precedence/comment contradiction is disclosed and ticketed
+under #399; `runConnect` never closing the logging instance is pre-existing (round-1 Q3).
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness | B | Every AC reproduced independently and the source label is mutation-proven; two untested edges (case/whitespace equality, empty-profile-target guard). |
-| Verification | B | Commands reproduce here, but the JSON/`--quiet` proof runs against a stub rather than the shipped writer, the recorded RED is a build failure when reverted, and the CI statement is stale. |
-| Scope | A | Five code/doc files plus the spec, exactly the proposal; no creep, no dependency change, host code untouched. |
-| Reliability | A | Guard-first early return, no new error path, no warning on invalid/SOCKS5/equal/no-profile, profile bytes untouched, no secret in output. |
-| Maintainability | B | Function well under 40 lines and no nesting; the cost is precedence re-derived at the call site instead of returned from `Merge`. |
-| Handoff-readiness | B | Lesson 045, runbook paragraph and PR `## Knowledge` all present; `verification.md` is stale about CI and silent about the unreviewed merge. |
+| Correctness | B | Every AC reproduced; source labels mutation-proven; one real raw-comparison edge (F3) and the drift-prone re-derivation (F4). |
+| Verification | B | Fresh commands, mutation battery and green CI all reproduce the claims; `verification.md` is stale about the follow-up's CI. |
+| Scope | A | Production `+27/-5` in one file, tests `+258`, one runbook paragraph, one lesson, the spec; no dependency or contract change; #496 has zero production diff. |
+| Reliability | A | Guard-first early return, no new error path, no warning on equal/SOCKS5/no-profile/invalid, profile bytes untouched, no secret in output. |
+| Maintainability | B | Function well under 40 lines with low nesting; cost is the precedence duplicated at the call site. |
+| Handoff-readiness | B | Lesson 045, runbook paragraph and PR `## Knowledge` present; the CI paragraph is stale and the attribution trailer is unresolved. |
 
-Rubric alone (no C, no D) would read PASS. The findings axis escalates: two **REAL Majors**
-force FAIL.
+Rubric alone (no C, no D) would read PASS. The findings axis escalates: one **REAL Major**.
 
 ### Verdict
 **FAIL**
 
-No functional defect was found: the warning is correct, narrow, credential-free and
-mutation-proven, and it ships the documented `--quiet`/JSON behaviour. The FAIL comes from the
-durable record — an AI-attribution trailer on `master`, and a merge that landed with zero
-review while its own triage comment still listed the reviewer as pending. Neither is a code
-change, and neither needs a contract edit.
+No functional defect was found in the warning itself: it is correct, narrow, credential-free,
+`--quiet`-visible, ordered before the runner, and each promised property is independently
+killable by mutation. The round-1 gaps it could close are closed: the real-logger/`--quiet`/
+JSON-file path now has a test through `InitLogger`, the default-logger fallback is exercised
+through the full command with its ordering asserted, and the profile-without-target guard has
+a case. The FAIL is the durable record, not the behaviour: an AI-attribution trailer appended
+to the **new** head commit, repeating the exact violation round 1 flagged, at the last point
+where it is still amendable.
+
+`dotf spec archive` is **not advisable** in this state: the contract digests are unchanged and
+the folder is otherwise archive-ready, but a FAIL verdict is not a passing gate.
 
 ### Recommended next steps
 
-Contract set (`proposal.md`, `tasks.md`, `features.json`) — **nothing to change**. That is
-deliberate: the re-review after these dispositions will not be invalidated by digest drift.
+Contract set (`proposal.md`, `tasks.md`, `features.json`) — **nothing to change**. A re-review
+must not be invalidated by digest drift.
 
-Non-contract (fixable now, no re-review cost beyond the verdict itself):
+Non-contract, in order:
 
-1. `verification.md`: replace the pending-CI paragraph with the actual `1fe82ad` conclusions
-   (`test` on Linux with `-race`, `test-windows`, `test-macos`, `lint`, `security`, `hygiene`,
-   `smoke`, six `build-matrix` legs, GitGuardian — all pass; `pr-agent / review` cancelled;
-   local lint not run by policy).
-2. `verification.md` Findings-disposition table, once the owner answers Q1: the Copilot trailer
-   (rewrite or accept-and-record) and the merge-without-review disclosure. Repo rule: unreviewed
-   is allowed, silent is not.
-3. One test through the real `InitLogger` (temp `LOCALAPPDATA`) asserting the JSON record lands
-   in the log file and the console line survives `--quiet`; plus table cases for a profile with
-   no target. Tests only.
-4. Bitácora ticket for the attribution trailer: a Copilot session will append it again — the
-   gate that should have caught it does not exist in this repo.
-5. Owner decision on `master`: rewrite `ca636e4` (force-push, coordinated) or record the
-   deviation and let the ticket carry prevention. Reviewer does not choose.
+1. **Remove the trailer from `d1bc868`** (owner action, git record): `git commit --amend`
+   without the `Co-authored-by` line, then force-push the review branch — or squash-merge
+   #496 with a clean message. No code, test or contract change. This is the only blocker.
+2. `verification.md`: replace the "CI must come from its own CI" sentence with the actual
+   `d1bc868` result set (`test` on Linux with `-race`, `test-windows`, `test-macos`, `lint`,
+   `security`, `hygiene`, `smoke`, six `build-matrix` legs, GitGuardian pass; `pr-agent/review`
+   cancelled; local lint not run by policy). `verification.md` is outside the staleness set.
+   Ticking `tasks.md`'s CI box is digest-neutral (SDD-042 ignores checkbox ticks) if the owner
+   wants it consistent.
+3. File the bitácora ticket round 1 asked for — the recurrence in `d1bc868` is the evidence
+   that a Copilot-authored session will append the trailer again and nothing in this repo
+   catches it.
+4. Ticket (or explicitly decline in `verification.md`) the two inherited minors: F3 raw
+   string equality and F4 source re-derivation. Neither blocks; both are now evidenced.
 
-Re-review after 1–3 (and the Q1 answer) should return **PASS WITH GAPS** or **PASS** at the same
-`1fe82ad` contract state.
+Re-review at the amended sha (or at a clean squash commit) should return **PASS WITH GAPS**
+with F3/F4 tracked — the rubric has no C or D, and the remaining findings are minors.
