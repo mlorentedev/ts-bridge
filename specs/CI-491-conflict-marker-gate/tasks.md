@@ -30,7 +30,7 @@ created: "2026-10-22"
 - [x] [AC1] [AC2] [AC3] Mutate the guard (separator back in the regex, no-match not OK,
       end-of-line form dropped, findings exit 0): each mutant reds the suite.
 - [x] Lesson 048 and its index row; `check-lessons.sh` and the new guard green on the real tree.
-- [ ] Owner adds the two `repo-hygiene.yml` steps (guard on the real tree; fixture suite after
+- [x] Owner adds the two `repo-hygiene.yml` steps (guard on the real tree; fixture suite after
       the zsh install).
 
 ## Closing
