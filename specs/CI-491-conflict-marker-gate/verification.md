@@ -40,6 +40,11 @@ created: "2026-10-22"
   The real tree reports `OK (539 tracked files)`, also when run from `docs/`, and `shellcheck` on
   both scripts exits 0. zsh is not installed on this Windows workstation, so CI's Repo hygiene
   run covers the zsh half.
+- PR-Agent on `b54fa99`: a bare repository or a path inside `.git` answers
+  `--is-inside-work-tree` with `false` and exit 0, so the guard reached `--show-toplevel` and exited
+  128. New cases `bare-repo` and `dotgit/.git` failed with `exit 128, wanted 2` (bare repos allowed
+  via `GIT_CONFIG_*` `safe.bareRepository=all`, since this workstation sets `explicit`). The guard
+  now tests the printed answer. 13/13 pass under bash with and without that override.
 
 ## Decisions made during implementation
 

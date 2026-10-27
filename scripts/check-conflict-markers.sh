@@ -5,7 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCAN_ROOT="${1:-$ROOT}"
 
-if ! git -C "$SCAN_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+# A bare repository, or a path inside `.git`, answers `false` with exit 0, so test the answer.
+if [ "$(git -C "$SCAN_ROOT" rev-parse --is-inside-work-tree 2>/dev/null)" != true ]; then
   echo "check-conflict-markers: $SCAN_ROOT is not a Git work tree" >&2
   exit 2
 fi

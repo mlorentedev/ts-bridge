@@ -63,6 +63,8 @@ build() {
       git -C "$dir" add lesson.md
       ;;
     not-a-repo) mkdir -p "$dir" ;;
+    bare-repo) git init -q --bare "$dir" ;;
+    dotgit/.git) new_repo "$WORK/dotgit" ;;
     long-markers)
       new_repo "$dir"
       printf '*.md conflict-marker-size=32\n' >"$dir/.gitattributes"
@@ -92,6 +94,8 @@ setext-short:0:OK
 setext-seven:0:OK
 indented-example:0:OK
 not-a-repo:2:not a Git work tree
+bare-repo:2:not a Git work tree
+dotgit/.git:2:not a Git work tree
 long-markers:1:notes.md:2:
 diff3-base:1:notes.txt:2:
 nested/sub:1:docs/index.md:2:'
