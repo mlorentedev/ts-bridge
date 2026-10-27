@@ -14,7 +14,8 @@ created: "2026-10-22"
       exit 0; `indented-example` shows an indented quoted conflict stays green.
 - [x] Criterion 3 -> case `not-a-repo` (exit 2, `not a Git work tree`); the real tree reports
       `check-conflict-markers: OK (513 tracked files)` at `89b8e61`.
-- [x] Criterion 4 -> the suite ran every case under bash and zsh (16/16 ok), and
+- [x] Criterion 4 -> the suite ran every case under bash and zsh (26/26 ok: 13 cases x 2 shells,
+      Repo hygiene run `40573251031` at `96c9760`), and
       `TCM_SHELLS="bash nosuchsh"` exits 1.
 - [x] CI wiring -> `.github/workflows/repo-hygiene.yml` runs `No committed merge-conflict markers`
       and `Conflict-marker guard rejects markers, tolerates setext headings` (`features.json` f4);
@@ -24,7 +25,9 @@ created: "2026-10-22"
 
 - RED: `bash scripts/tests/test-conflict-markers.sh` before the guard existed -> exit 2,
   `guard not found`.
-- GREEN: `bash scripts/tests/test-conflict-markers.sh` -> exit 0, 16/16 cases (bash + zsh).
+- GREEN: `bash scripts/tests/test-conflict-markers.sh` -> exit 0, 16/16 checks (8 cases, bash + zsh)
+  at `068bf95`. The current suite has 13 cases: 26/26 in Repo hygiene run `40573251031` at
+  `96c9760`. The local counts below are bash-only runs from the review follow-ups.
 - Mutants, each run with `TCM_SHELLS=bash`, all redden the suite (exit 1): separator `=======`
   added back to the regex; `git grep` exit 1 no longer treated as OK; the end-of-line form of the
   marker dropped; findings exiting 0.
