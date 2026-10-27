@@ -234,6 +234,21 @@ if check_file "$tmp"; then
   echo "test-go-toolchain: let a quoted job key inherit the previous job's setup-go" >&2
   exit 1
 fi
+cat > "$tmp" <<'YAML'
+"jobs":
+  lint:
+    steps:
+      - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+        with:
+          go-version-file: go.mod
+  test:
+    steps:
+      - run: go test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: counted a setup-go outside any recognised job" >&2
+  exit 1
+fi
 
 printf 'go 1.27.1\n' > "$tmp_mod"
 printf '          version: v2.14.0\n' > "$tmp_ci"
