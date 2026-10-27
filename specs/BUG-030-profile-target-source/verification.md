@@ -33,8 +33,9 @@ created: "2026-10-22"
 
 ## Independent review and owner disposition - 2026-10-23
 
-The original NaN report is preserved unchanged in `review.md`, with its matching
-`review-request.json`. Reviewer `nan/deepseek-v4-flash` returned **FAIL** at
+The original round-1 NaN report is preserved unchanged in `review-round1.md`, with
+its matching `review-request-round1.json` (moved byte-identically when round 2 took
+`review.md`; see below). Reviewer `nan/deepseek-v4-flash` returned **FAIL** at
 `1fe82ad`, despite finding no functional defect. That verdict is not replaced by
 the implementer's dispositions below. Archival remains blocked until a fresh,
 passing independent verdict exists.
@@ -68,7 +69,28 @@ its instance. No production change or leak ticket is justified by that probe.
 - Disabling the file side of the combined production logger made `go test ./cmd/cli -run '^TestConnectTargetOverrideProductionLogger$' -count=1` fail in both formats on the missing JSON file record.
 - All three mutations were restored. No production change is included, and `proposal.md`, `tasks.md` and `features.json` remain unchanged.
 - After restoring the mutations, `go test ./cmd/cli ./internal/config/... ./internal/logging -count=1`, `go vet ./...` and `git diff --check` passed. The normalized contract digests still match the independent review request.
-- No local golangci-lint, wrapper, go-run equivalent or endpoint-protection change was used. Cross-platform/race/lint results for this follow-up must come from its own CI, not the earlier implementation head.
+- No local golangci-lint, wrapper, go-run equivalent or endpoint-protection change was used.
+- Follow-up CI at `d1bc868` (#496) completed: Linux `test` (`go test -v -race ./...`), `test-windows`, `test-macos`, `lint`, `security`, `hygiene`, `smoke`, all six `build-matrix` legs and GitGuardian passed. The PR-Agent `review` job was cancelled and is not review coverage. #496 merged as `fd6e4e1`.
+
+## Independent review round 2 and owner disposition - 2026-10-23
+
+Reviewer `nan/deepseek-v4-flash` re-reviewed `d1bc868` with unchanged contract
+digests and returned **FAIL**. The signed report is `review.md` with its matching
+`review-request.json`. It reproduced AC1-AC3, the related suites, `go vet` and four
+killed mutation classes, and found no functional defect. Its only Major is the
+commit coauthorship trailer. The round-2 verdict is not replaced by the
+dispositions below, which the owner approved on #496
+([triage](https://github.com/mlorentedev/ts-bridge/pull/496#issuecomment-6374809185)).
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| Major: coauthorship trailer on `d1bc868` | Owner-accepted; retained. | The owner chose to keep the attribution. No amend, force-push, history rewrite or suppression gate was performed. |
+| Minor: stale pending-CI statement | Applied. | The test-status section above now records the completed `d1bc868` CI snapshot. |
+| Minor: differently cased target values | Declined, as in round 1. | AC2 specifies configured-value equality; a distinct raw value is intentionally diagnosed. No normalization or contract change. |
+| Minor: future source-attribution drift | Declined, as in round 1. | No current mismatch; the precedence table and killed mutations pin today's labels. |
+
+Archival remains blocked: both signed verdicts are FAIL, and owner acceptance is
+not a passing independent verdict or an archive waiver.
 
 ## Promotion candidates
 
