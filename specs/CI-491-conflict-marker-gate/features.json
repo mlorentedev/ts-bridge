@@ -1,0 +1,30 @@
+[
+  {
+    "id": "CI-491-conflict-marker-gate-f1",
+    "behavior": "A tracked file with a conflict open or close marker line fails the guard with file:line; the same marker untracked does not.",
+    "verification": "TCM_SHELLS='bash zsh' bash scripts/tests/test-conflict-markers.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-491-conflict-marker-gate-f2",
+    "behavior": "A Markdown setext underline of three or exactly seven '=' does not fail the guard.",
+    "verification": "TCM_SHELLS='bash zsh' bash scripts/tests/test-conflict-markers.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-491-conflict-marker-gate-f3",
+    "behavior": "The guard fails closed outside a Git work tree and reports the current tree clean.",
+    "verification": "TCM_SHELLS='bash zsh' bash scripts/tests/test-conflict-markers.sh && bash scripts/check-conflict-markers.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-491-conflict-marker-gate-f4",
+    "behavior": "Repository hygiene runs the conflict-marker guard and its fixture suite.",
+    "verification": "grep -q 'scripts/check-conflict-markers.sh' .github/workflows/repo-hygiene.yml && grep -q 'scripts/tests/test-conflict-markers.sh' .github/workflows/repo-hygiene.yml",
+    "state": "pending",
+    "evidence": ""
+  }
+]
