@@ -9,11 +9,13 @@ if ! git -C "$SCAN_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "check-conflict-markers: $SCAN_ROOT is not a Git work tree" >&2
   exit 2
 fi
+# A path inside the work tree still means the whole tree: a marker elsewhere ships all the same.
+SCAN_ROOT="$(git -C "$SCAN_ROOT" rev-parse --show-toplevel)"
 
-# Only the open and close markers are matched. Git writes both around every separator (and
-# around a diff3 base), so they cover each real conflict, while a bare run of seven `=` is also
-# a valid Markdown setext underline.
-output="$(git -C "$SCAN_ROOT" grep -nIE '^(<<<<<<<|>>>>>>>)( |$)' -- . 2>&1)" && rc=0 || rc=$?
+# The open, close and diff3 base markers are matched, at any length (`conflict-marker-size`
+# lengthens them). The separator is not: a bare run of `=` is also a valid Markdown setext
+# underline, and Git never writes a separator without an open and a close marker around it.
+output="$(git -C "$SCAN_ROOT" grep -nIE '^(<{7,}|>{7,}|\|{7,})( |$)' -- . 2>&1)" && rc=0 || rc=$?
 
 case "$rc" in
   1)

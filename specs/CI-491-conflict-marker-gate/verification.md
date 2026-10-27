@@ -33,6 +33,13 @@ created: "2026-10-22"
 - `shellcheck scripts/check-conflict-markers.sh scripts/tests/test-conflict-markers.sh` -> exit 0.
   The hygiene job's shellcheck covers only workflow-embedded shell, so this ran locally.
 - No regressions: no Go code changed.
+- PR review follow-up (CodeRabbit on #495): three new cases, `long-markers` (32-character runs
+  under `conflict-marker-size=32`), `diff3-base` (a `|||||||` base line) and `nested/sub` (a
+  `[repo]` inside the work tree, marker elsewhere), each failed against the previous guard with
+  `exit 0, wanted 1` under `TCM_SHELLS=bash`. After the fix the suite passes 11/11 under bash.
+  The real tree reports `OK (539 tracked files)`, also when run from `docs/`, and `shellcheck` on
+  both scripts exits 0. zsh is not installed on this Windows workstation, so CI's Repo hygiene
+  run covers the zsh half.
 
 ## Decisions made during implementation
 
@@ -40,7 +47,10 @@ created: "2026-10-22"
   seven-`=` setext underline, the acceptance's own negative case.
 - Fixtures are built at runtime, never committed: the guard scans every tracked file, so a
   committed marker fixture would fail the real tree.
-- The owner keeps `.github/**`; the workflow steps are proposed in the PR body, not committed.
+- The workflow steps were first proposed in the PR body; the owner then authorized adding them
+  in this PR (`37d9133`).
+- The issue's `:!*.md.orig` exclusion is not carried: no `.orig` file is tracked, and a tracked
+  backup holding markers would itself be a shipped defect.
 
 ## Promotion candidates
 

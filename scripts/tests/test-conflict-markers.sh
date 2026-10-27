@@ -11,6 +11,10 @@ GUARD="$ROOT/scripts/check-conflict-markers.sh"
 OPEN="$(printf '%7s' '' | tr ' ' '<')"
 SEP="$(printf '%7s' '' | tr ' ' '=')"
 CLOSE="$(printf '%7s' '' | tr ' ' '>')"
+BASE="$(printf '%7s' '' | tr ' ' '|')"
+# conflict-marker-size=32 in .gitattributes makes Git write runs of 32.
+LONG_OPEN="$(printf '%32s' '' | tr ' ' '<')"
+LONG_CLOSE="$(printf '%32s' '' | tr ' ' '>')"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -59,6 +63,24 @@ build() {
       git -C "$dir" add lesson.md
       ;;
     not-a-repo) mkdir -p "$dir" ;;
+    long-markers)
+      new_repo "$dir"
+      printf '*.md conflict-marker-size=32\n' >"$dir/.gitattributes"
+      printf 'a\n%s HEAD\nours\n%s origin/master\nb\n' "$LONG_OPEN" "$LONG_CLOSE" >"$dir/notes.md"
+      git -C "$dir" add .gitattributes notes.md
+      ;;
+    diff3-base)
+      new_repo "$dir"
+      printf 'a\n%s merged common ancestors\nbase\nb\n' "$BASE" >"$dir/notes.txt"
+      git -C "$dir" add notes.txt
+      ;;
+    nested/sub)
+      new_repo "$WORK/nested"
+      mkdir -p "$dir" "$WORK/nested/docs"
+      printf 'plain\n' >"$dir/ok.txt"
+      conflict >"$WORK/nested/docs/index.md"
+      git -C "$WORK/nested" add sub/ok.txt docs/index.md
+      ;;
   esac
 }
 
@@ -69,7 +91,10 @@ untracked-conflict:0:OK
 setext-short:0:OK
 setext-seven:0:OK
 indented-example:0:OK
-not-a-repo:2:not a Git work tree'
+not-a-repo:2:not a Git work tree
+long-markers:1:notes.md:2:
+diff3-base:1:notes.txt:2:
+nested/sub:1:docs/index.md:2:'
 
 failed=0
 for sh_name in ${TCM_SHELLS:-bash zsh}; do

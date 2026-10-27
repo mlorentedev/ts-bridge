@@ -23,17 +23,16 @@ gate rejects a marker line, so the next one can land the same way.
 ## What
 
 A zero-toolchain guard, `scripts/check-conflict-markers.sh [repo]`, fails with `file:line` for
-every tracked text file holding a line that starts with a conflict open marker (seven `<` and a
-space or end of line) or close marker (seven `>`, likewise). It exits 0 on a clean tree and fails
+every tracked text file holding a line that starts with a conflict open marker (seven or more `<`
+and a space or end of line), close marker (seven or more `>`, likewise) or diff3 base marker
+(seven or more `|`, likewise). Longer runs come from `conflict-marker-size`. A `[repo]` inside a
+work tree scans that whole tree. It exits 0 on a clean tree and fails
 closed (exit 2) when the target is not a Git work tree. A fixture suite,
 `scripts/tests/test-conflict-markers.sh`, builds throwaway Git repositories at runtime and runs
 every case under bash and zsh. `repo-hygiene.yml` runs both.
 
 ## Out of scope
 
-- Editing `.github/workflows/repo-hygiene.yml`. That path belongs to the owner, who adds the two
-  steps (guard on the real tree, fixture suite after the zsh install). Until then the gate is
-  inert in CI; this PR proves it locally.
 - A local pre-commit hook. The repo installs none, and CI is the gate that cannot be skipped.
 - Untracked or ignored files: they are not what a commit ships.
 
@@ -41,8 +40,8 @@ every case under bash and zsh. `repo-hygiene.yml` runs both.
 
 - **The separator line is not matched, by decision.** The issue's regex includes `=======$`,
   which also matches a Markdown setext underline of exactly seven `=`, the case the acceptance
-  says must stay green. Git always writes the open and close markers around a separator (and
-  around the diff3 `|||||||` base), so matching those two keeps full coverage of real conflicts
+  says must stay green. Git always writes the open and close markers around a separator, and the
+  diff3 `|||||||` base is matched too, so matching those keeps full coverage of real conflicts
   and drops the only false-positive class. A reviewer should not reopen this without a conflict
   shape that has a separator but no open or close marker.
 - **Committed fixtures would red the real tree.** The guard scans every tracked file, so a
@@ -57,11 +56,11 @@ every case under bash and zsh. `repo-hygiene.yml` runs both.
 
 ## Acceptance criteria
 
-- [ ] A tracked file containing a conflict open or close marker line fails the guard, which
+- [x] A tracked file containing a conflict open or close marker line fails the guard, which
       names the file and line; the same marker in an untracked file does not.
-- [ ] A Markdown setext underline (three `=`, or exactly seven) does not fail the guard.
-- [ ] The guard fails closed (exit 2) outside a Git work tree, and reports the current tree clean.
-- [ ] Every case above passes under both bash and zsh, and the suite fails when either shell is
+- [x] A Markdown setext underline (three `=`, or exactly seven) does not fail the guard.
+- [x] The guard fails closed (exit 2) outside a Git work tree, and reports the current tree clean.
+- [x] Every case above passes under both bash and zsh, and the suite fails when either shell is
       missing.
 
 ## References

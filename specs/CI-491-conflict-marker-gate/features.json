@@ -16,7 +16,7 @@
   {
     "id": "CI-491-conflict-marker-gate-f3",
     "behavior": "The guard fails closed outside a Git work tree and reports the current tree clean.",
-    "verification": "bash scripts/check-conflict-markers.sh",
+    "verification": "TCM_SHELLS='bash zsh' bash scripts/tests/test-conflict-markers.sh && bash scripts/check-conflict-markers.sh",
     "state": "pending",
     "evidence": ""
   },
