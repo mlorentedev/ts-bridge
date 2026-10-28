@@ -9,13 +9,13 @@ created: "2026-10-09"
 
 - [x] Criterion 1 -> `go version` returned `go1.27.1 windows/amd64`; `go mod tidy` followed by `go mod verify` succeeded, and `git diff --exit-code FETCH_HEAD -- go.mod go.sum` confirmed the graph matches Dependabot #431. Module files had line-ending normalization only.
 - [x] Criterion 2 -> `bash scripts/tests/test-go-toolchain.sh` first failed on the original 1.26 CI pins, then passed on all four workflows; conflicting-version, missing-setup and linter-mismatch fixtures are rejected. `actionlint` succeeded on all four edited workflows.
-- [x] Criterion 3 -> Windows `go build ./...`, `go vet ./...`, `go test -count=1 ./...` and pinned `golangci-lint v2.14.0 run` succeeded; all six cross-builds succeeded. The cited PR #436 head `b8ff388` was orphaned by the squash merge (`eab4bee`); the current evidence is CI at `aa3e8c6`: run `40544475350` (CI: Linux race, Windows, macOS, smoke, lint, security, six cross-builds), `40544475357` (Repo hygiene) and `40544475503` (Release), all success.
+- [x] Criterion 3 -> Windows `go build ./...`, `go vet ./...` and `go test -count=1 ./...` succeeded; all six cross-builds succeeded. Lint evidence is CI only (local lint is prohibited on this workstation): `lint` job of CI run `40580255110` at `813d898`, success, alongside Linux race, Windows, macOS, smoke, security and six cross-builds. The cited PR #436 head `b8ff388` was orphaned by the squash merge (`eab4bee`); the current evidence is CI at `aa3e8c6`: run `40544475350` (CI: Linux race, Windows, macOS, smoke, lint, security, six cross-builds), `40544475357` (Repo hygiene) and `40544475503` (Release), all success.
 - [x] Criterion 4 -> `AGENTS.md` declares Go 1.27.1+ and installs the linter with `mise install`; since #464 the version lives only in `mise.toml`, which the guard holds equal to `.github/workflows/ci.yml`.
 
 ## Test status
 
 - `go test -count=1 ./...` -> PASS, all Go packages on Windows after the upgrade. The original `go test ./...` baseline had one load-dependent SSH readiness timeout; its isolated test passed 3/3 before any changes.
-- `go vet ./...`, `go build ./...`, `golangci-lint v2.14.0 run` -> PASS (`0 issues`). The pinned binary's published SHA256 matched its release checksums; it was built with Go 1.27.0.
+- `go vet ./...`, `go build ./...` -> PASS. `golangci-lint` is not run locally (owner prohibition); CI `lint` at `813d898` (run `40580255110`) is the evidence. The pinned v2.14.0 release was built with Go 1.27.0.
 - `actionlint -shellcheck=shellcheck` on four workflows, `shellcheck scripts/tests/test-go-toolchain.sh`, `bash scripts/tests/test-go-toolchain.sh`, `bash scripts/check-lessons.sh` -> PASS.
 - The toolchain guard now checks each Go-running job for `setup-go` and rejects module Go versions newer than the approved linter's Go compiler or pins that drift from `AGENTS.md`.
 - Cross-compile `./cmd/ts-bridge/` for linux/windows/darwin on amd64/arm64 -> PASS (6/6).
@@ -45,6 +45,19 @@ fresh review is required.
 | F6 Minor: CRLF `go.mod`/`go.sum` on Windows | Ticketed: #498. | Separate `.gitattributes` change. Until it lands, f1 (`go mod tidy && git diff --exit-code`) is red on a Windows `core.autocrlf=true` checkout from line endings alone; run f1 on Linux or a fresh LF checkout, and do not read a Windows red as a module regression. |
 | F7 Minor: guard blind to `go get`, wrappers, `GOTOOLCHAIN` | Ticketed: #499. | Scope decision needed; not in this fix. |
 | F8 Minor: guard not run under zsh | Ticketed: #500. | zsh is absent on this workstation; CI owns two-shell runs. |
+
+## Independent review round 2 - 2026-10-28
+
+Reviewer `nan/deepseek-v4-flash` returned **FAIL** at `813d898` (`review.md`; round 1 kept as
+`review-round1.md`). Round 1's two Majors are confirmed closed. No contract-set edit is needed:
+the fixes below are code, tests and this file, so the next round reviews the same digests.
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| F1 Major: guard accepts a Go command that is quoted, `\`-continued or inside `sh -c` | Applied (code + tests). | The Go token now matches after any non-word character (quote, `sh -c "`, subshell), and a line ending in `\` is matched joined to the next. Fixtures: `"go test"`, `'go vet'`, `sh -c "go build"`, `(go test)` and a `go \` + `test` continuation, all rejected without `setup-go`; quoted and continued commands accepted inside a configured job; `cargo test && mongo run` accepted (no false match inside another name). The reviewer's fake-root probe now gives: quoted run without `setup-go` -> exit 1, continued -> exit 1, `sh -c` -> exit 1, control without the probe -> exit 0. Mutants: restoring the whitespace-only prefix, dropping the continuation join, and dropping the prefix guard each fail the suite. `shellcheck` clean. #499 keeps `go get`, wrappers and `GOTOOLCHAIN`. |
+| F2 Minor: fail-closed rejects workflows not indented at exactly 2 | Ticketed: #505. | Deliberate fail-closed trade; no workflow here uses another indent. |
+| F3 Minor: local-lint statements contradict each other | Applied. | Criterion 3 and Test status no longer claim a local lint run; CI `lint` at `813d898` is cited. |
+| F4 Minor: `features.json` states still `pending` | Declined. | Not an archive gate (`dotf spec archive` reads `review.md`). f1 is red on a Windows CRLF checkout (#498) and f3's lint half is CI-only by owner prohibition; CI plus `bash scripts/tests/test-go-toolchain.sh` is the durable enforcement. |
 
 ## Promotion candidates
 
