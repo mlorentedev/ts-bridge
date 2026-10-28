@@ -75,8 +75,8 @@ its instance. No production change or leak ticket is justified by that probe.
 ## Independent review round 2 and owner disposition - 2026-10-23
 
 Reviewer `nan/deepseek-v4-flash` re-reviewed `d1bc868` with unchanged contract
-digests and returned **FAIL**. The signed report is `review.md` with its matching
-`review-request.json`. It reproduced AC1-AC3, the related suites, `go vet` and four
+digests and returned **FAIL**. The signed report is `review-round2.md` with its matching
+`review-request-round2.json` (moved when round 3 took `review.md`). It reproduced AC1-AC3, the related suites, `go vet` and four
 killed mutation classes, and found no functional defect. Its only Major is the
 commit coauthorship trailer. The round-2 verdict is not replaced by the
 dispositions below, which the owner approved on #496
@@ -107,6 +107,21 @@ keeps `master` history as it is. What the reviews asked for that *is* still poss
 
 The contract set (`proposal.md`, `tasks.md`, `features.json`) is unchanged, so a round-3 review
 reads the same digests. Archival waits for that verdict.
+
+## Independent review round 3 - 2026-10-28
+
+Reviewer `nan/deepseek-v4-flash` returned **PASS** at `ff6f676` against unchanged contract
+digests (`review.md` with `review-request.json`). No Blocker or REAL Major; every open item is a
+minor with a disposition below.
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| F1 Minor: the `invalid target` row is vacuous (the error path never calls `LoggerInit`) | Applied (tests). | The table test now routes `logger` and `slog.Default()` into the captured buffer before `Execute`, so a warning emitted before validation fails the silence check. Mutant M5 (an extra `warnConnectTargetOverride` before `config.Merge`) passed `.../(text\|json)/invalid_target` before the change and fails both after, with `unexpected override warning`. `go test ./cmd/cli ./internal/config/... ./internal/logging -count=1` and `go vet ./cmd/cli` pass. Test-only; no production change. |
+| F2 Minor: two `tasks.md` boxes and `features.json` states understate completion | Recorded, not edited. | Both tasks are done: CI lint and Linux race passed on #489 and #496, and #489 carried `Closes #417`. The boxes and `pending` states stay as they are because editing the contract set would invalidate this verdict's digests; the harness, not the implementer, sets `passing`. |
+| F3 Minor: round 2's signed report would leave the repo | Applied. | Committed as `review-round2.md` / `review-request-round2.json`; the round-2 section above now points at them. |
+| F4 Minor: case-differing target values warn | Ticketed: #508. | Outside AC2's raw-value contract. |
+| F5 Minor (SPECULATIVE): source label re-derived at the call site | Declined, as in rounds 1-2. | No current mismatch. |
+| F6 Minor: governance residual | Recorded. | `master` keeps `ca636e4`, `fd6e4e1` and `aa3e8c6` with the trailer by owner decision. The #510 gate covers pull-request commits only: it skips push runs and does not read PR or issue bodies. |
 
 ## Promotion candidates
 

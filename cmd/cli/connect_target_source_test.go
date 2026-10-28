@@ -73,15 +73,19 @@ func TestConnectProfileTargetOverrideWarning(t *testing.T) {
 				}
 
 				var logs bytes.Buffer
-				oldLogger := logger
-				t.Cleanup(func() { logger = oldLogger })
-				LoggerInit = func(cfg config.Config) {
-					if cfg.LogFormat == "json" {
-						logger = slog.New(slog.NewJSONHandler(&logs, nil))
-					} else {
-						logger = slog.New(slog.NewTextHandler(&logs, nil))
+				newLogger := func(format string) *slog.Logger {
+					if format == "json" {
+						return slog.New(slog.NewJSONHandler(&logs, nil))
 					}
+					return slog.New(slog.NewTextHandler(&logs, nil))
 				}
+				oldLogger, oldDefault := logger, slog.Default()
+				t.Cleanup(func() { logger = oldLogger; slog.SetDefault(oldDefault) })
+				// The error path never reaches LoggerInit, so a warning emitted before
+				// validation must land in the same buffer to fail the silence check.
+				logger = newLogger(format)
+				slog.SetDefault(logger)
+				LoggerInit = func(cfg config.Config) { logger = newLogger(cfg.LogFormat) }
 				var gotTarget, logsAtRun string
 				var ran bool
 				Runner = func(cfg config.Config) error {
