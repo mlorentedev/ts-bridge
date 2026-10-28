@@ -1,7 +1,7 @@
 ---
 id: "DEPS-312-go-127-tailscale"
 type: spec
-status: implementing
+status: archived
 created: "2026-10-09"
 issue: "mlorentedev/ts-bridge#435"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]

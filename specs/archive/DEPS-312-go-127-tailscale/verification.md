@@ -59,6 +59,19 @@ the fixes below are code, tests and this file, so the next round reviews the sam
 | F3 Minor: local-lint statements contradict each other | Applied. | Criterion 3 and Test status no longer claim a local lint run; CI `lint` at `813d898` is cited. |
 | F4 Minor: `features.json` states still `pending` | Declined. | Not an archive gate (`dotf spec archive` reads `review.md`). f1 is red on a Windows CRLF checkout (#498) and f3's lint half is CI-only by owner prohibition; CI plus `bash scripts/tests/test-go-toolchain.sh` is the durable enforcement. |
 
+## Independent review round 3 - 2026-10-28
+
+Reviewer `nan/deepseek-v4-flash` returned **PASS** at `933f904` (#509 merged) against unchanged
+contract digests (`review.md`; rounds 1 and 2 kept as `review-round1.md` and `review-round2.md`).
+No Blocker or Major; rounds 1-2's findings are confirmed closed.
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| F1 Minor: guard misses `go -C dir test`, `go fix`/`go get`, `go.exe`, `go${IFS}test` | Ticketed: #499 (problem statement extended). | Non-idiomatic spellings no workflow here uses; #499 already owns the class. |
+| F2 Minor: a folded `name: >-` scalar is read as a command (fail-closed) | Ticketed: #505 (folded in). | Same root cause as #505: literal columns instead of indentation. Rejects, never accepts. |
+| F3 Minor: f2 and f4 could carry evidence | Declined. | The harness, not the implementer, sets `passing` and `evidence`; not an archive gate. |
+| F4 Minor (SPECULATIVE): suffix boundary not pinned by a fixture | Declined for now. | Removing it only over-matches (fail-closed); to be pinned when the regex is next edited (#499). |
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
@@ -69,7 +82,7 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/DEPS-312-go-127-tailscale/` -> `specs/archive/DEPS-312-go-127-tailscale/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/DEPS-312-go-127-tailscale/` -> `specs/archive/DEPS-312-go-127-tailscale/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #435 closes with this PR
+- [x] Promotions above executed (if any)
