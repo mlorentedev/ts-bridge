@@ -17,6 +17,8 @@ check_file() {
       finish_job(); in_job = 1; cont = ""; next
     }
     /^[[:space:]]*#/ { next }
+    # A job or step name is a label, never a command.
+    { is_name = ($0 ~ /^[[:space:]]*(-[[:space:]]+)?name:/) }
     # A `\` continuation is matched joined to the next line, so `go \` +
     # `test ./...` is still one Go command.
     {
@@ -26,8 +28,9 @@ check_file() {
     # Every Go command counts, not only those inside a recognised job: one the
     # parser cannot place fails closed, so an unrecognised key spelling can
     # never switch the checks off. Any non-word character may precede the
-    # token (a quote, `sh -c "`, a subshell), not only whitespace.
-    cmd ~ /(^|[^[:alnum:]_.-])go[[:space:]]+(build|clean|env|fmt|generate|install|list|mod|run|test|tool|version|vet|work)([[:space:]]|["'\'')]|$)/ {
+    # token (a quote, `sh -c "`, a subshell) or follow the subcommand (`;`,
+    # `&&`, `|`), not only whitespace.
+    !is_name && cmd ~ /(^|[^[:alnum:]_.-])go[[:space:]]+(build|clean|env|fmt|generate|install|list|mod|run|test|tool|version|vet|work)([^[:alnum:]_.-]|$)/ {
       if (!job_setup) bad = 1
       job_go = 1
     }
@@ -129,6 +132,22 @@ jobs:
 YAML
 if check_file "$tmp"; then
   echo "test-go-toolchain: accepted a version in an unrelated step" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
+      - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+        with:
+          cache: true
+      - name: other
+        uses: example/action@0123456789abcdef0123456789abcdef01234567
+        with:
+          go-version-file: go.mod
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted a version in an unrelated named step" >&2
   exit 1
 fi
 cat > "$tmp" <<'YAML'
@@ -258,7 +277,8 @@ if check_file "$tmp"; then
 fi
 # The command token counts whatever precedes it: a quote, `sh -c`, or a `\`
 # continuation that puts the subcommand on the next line.
-for spelling in '"go test ./..."' "'go vet ./...'" "sh -c \"go build ./...\"" '(go test ./...)'; do
+for spelling in '"go test ./..."' "'go vet ./...'" "sh -c \"go build ./...\"" '(go test ./...)' \
+  'sh -c "go test; echo done"' 'go vet&&echo done' 'go test|tee log'; do
   printf 'jobs:\n  build:\n    steps:\n      - run: %s\n' "$spelling" > "$tmp"
   if check_file "$tmp"; then
     echo "test-go-toolchain: accepted a Go job without setup-go ($spelling)" >&2
@@ -291,6 +311,22 @@ jobs:
 YAML
 if ! check_file "$tmp"; then
   echo "test-go-toolchain: rejected quoted and continued Go commands in a configured job" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    name: "go test"
+    steps:
+      - name: go vet
+        run: echo lint
+      - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+YAML
+if ! check_file "$tmp"; then
+  echo "test-go-toolchain: read a job or step name as a Go command" >&2
   exit 1
 fi
 cat > "$tmp" <<'YAML'
