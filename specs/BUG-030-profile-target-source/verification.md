@@ -92,6 +92,22 @@ dispositions below, which the owner approved on #496
 Archival remains blocked: both signed verdicts are FAIL, and owner acceptance is
 not a passing independent verdict or an archive waiver.
 
+## Owner disposition update - 2026-10-28
+
+The owner revisited the round-2 Major and chose prevention over acceptance. The remedy the
+review proposed (amend `d1bc868` before it reached `master`) is no longer available: #496 merged
+as `fd6e4e1` and #497 as `aa3e8c6`, both carrying the trailer, and the owner's no-rewrite rule
+keeps `master` history as it is. What the reviews asked for that *is* still possible is now done:
+
+| Finding | Updated disposition | Evidence / boundary |
+|---|---|---|
+| Major (rounds 1-2): AI coauthorship trailer, no gate catches it | Prevention gate shipped; merged history retained. | Ticket #506 (`CI-358-ai-trailer-gate`), merged in #510 as `1553b0d`: `Repo hygiene` runs `scripts/check-ai-trailers.sh` over every pull request's `base..head` and fails on a `Co-authored-by` trailer naming an AI agent. Its own run on #510 reported `check-ai-trailers: OK (2 commits)` and `test-ai-trailers: OK (bash zsh)`. Against history, `bash scripts/check-ai-trailers.sh 813d898~5 813d898` lists the trailered commits including `fd6e4e1`, so the gate would have refused #496. The owner has instructed the agent to stop appending the trailer. `fd6e4e1`, `aa3e8c6` and `ca636e4` stay as they are. |
+| Minor: differently cased target values (round-2 F3) | Ticketed: #508. | Round 2 graded it REAL; it is now tracked instead of declined. Still a diagnostic false positive with no behaviour change, outside AC2's raw-value contract. |
+| Minor: future source-attribution drift (round-2 F4) | Declined, as in rounds 1-2. | No current mismatch; the precedence table and killed mutations pin today's labels. A ticket would track a hypothetical. |
+
+The contract set (`proposal.md`, `tasks.md`, `features.json`) is unchanged, so a round-3 review
+reads the same digests. Archival waits for that verdict.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
