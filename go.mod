@@ -1,6 +1,6 @@
 module ts-bridge
 
-go 1.27.1
+go 1.27.3
 
 require (
 	github.com/spf13/cobra v1.10.2
@@ -8,7 +8,7 @@ require (
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
-	tailscale.com v1.104.1
+	tailscale.com v1.104.2
 	tailscale.com/client/tailscale/v2 v2.12.0
 )
 
