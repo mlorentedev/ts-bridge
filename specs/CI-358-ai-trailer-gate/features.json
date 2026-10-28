@@ -1,0 +1,30 @@
+[
+  {
+    "id": "CI-358-ai-trailer-gate-f1",
+    "behavior": "A commit in the range whose Co-authored-by trailer names an AI agent fails the guard with the commit and trailer, in any key case and among human co-authors.",
+    "verification": "bash scripts/tests/test-ai-trailers.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-358-ai-trailer-gate-f2",
+    "behavior": "A human co-author, a mention in body prose, and a trailer only before base do not fail the guard.",
+    "verification": "bash scripts/tests/test-ai-trailers.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-358-ai-trailer-gate-f3",
+    "behavior": "The guard fails closed (exit 2) on a range it cannot resolve.",
+    "verification": "bash scripts/tests/test-ai-trailers.sh && { bash scripts/check-ai-trailers.sh HEAD no-such-ref-ci358; test $? -eq 2; }",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-358-ai-trailer-gate-f4",
+    "behavior": "Repo hygiene runs the guard on pull requests over base.sha..head.sha and the suite under bash and zsh (CI-only: zsh is not required locally).",
+    "verification": "awk '/name: Pull request commits carry no AI-attribution trailer/{s=1} s&&/if: github.event_name == .pull_request./{i=1} s&&/run: bash scripts\\/check-ai-trailers.sh \"\\$BASE_SHA\" \"\\$HEAD_SHA\"/{r=1} /run: ATG_SHELLS=.bash zsh. bash scripts\\/tests\\/test-ai-trailers.sh/{t=1} END{exit !(i&&r&&t)}' .github/workflows/repo-hygiene.yml",
+    "state": "pending",
+    "evidence": ""
+  }
+]
