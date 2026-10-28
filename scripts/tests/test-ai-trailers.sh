@@ -27,6 +27,8 @@ build() {
     claude-key-case) commit "$dir" "$(printf 'fix: x\n\nCo-Authored-By: Claude <noreply@anthropic.com>')" ;;
     among-humans) commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: Ana <ana@example.com>\nCo-authored-by: Cursor Agent <cursoragent@cursor.com>')" ;;
     human) commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: Ana <ana@example.com>')" ;;
+    human-name-contains-agent) commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: Claudette Geminiani <claudette@example.com>')" ;;
+    folded-value) commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: Pair\n  Copilot <c@example.com>')" ;;
     prose-mention) commit "$dir" "$(printf 'docs: x\n\nCo-authored-by: Copilot is what the harness appends.\n\nThe gate rejects it.')" ;;
     earlier-in-range)
       commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: Copilot <c@example.com>')"
@@ -40,7 +42,7 @@ build() {
   esac
 }
 
-CASES='no-trailer:0 human:0 prose-mention:0 before-base:0 copilot:1 claude-key-case:1 among-humans:1 earlier-in-range:1'
+CASES='no-trailer:0 human:0 human-name-contains-agent:0 prose-mention:0 before-base:0 copilot:1 claude-key-case:1 among-humans:1 earlier-in-range:1 folded-value:1'
 for name_rc in $CASES; do
   build "${name_rc%%:*}"
 done

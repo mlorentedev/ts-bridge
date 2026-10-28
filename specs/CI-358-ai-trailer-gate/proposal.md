@@ -23,7 +23,7 @@ prevention gate.
 ## What
 
 A zero-toolchain guard, `scripts/check-ai-trailers.sh <base> <head> [repo]`, lists every commit
-in `base..head` whose `Co-authored-by` trailer value names an AI agent (Copilot, Claude/Anthropic,
+in `base..head` whose `Co-authored-by` trailer value (unfolded) names an AI agent as a whole word (Copilot, Claude/Anthropic,
 ChatGPT/OpenAI, Gemini, Codex, Cursor, Devin, Aider, Windsurf, Codeium, Tabnine, CodeWhisperer;
 case-insensitive) and exits 1. Git's own trailer parser decides what is a trailer, so a mention
 in body prose is not one and the key matches in any case. It exits 0 on a clean range and fails

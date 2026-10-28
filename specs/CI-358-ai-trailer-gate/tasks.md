@@ -13,7 +13,7 @@ created: "2026-10-28"
 
 ## Implementation
 
-- [x] [AC1] [AC2] [AC3] Fixture suite `scripts/tests/test-ai-trailers.sh` (eight ranges plus an unresolvable ref)
+- [x] [AC1] [AC2] [AC3] Fixture suite `scripts/tests/test-ai-trailers.sh` (ten ranges plus an unresolvable ref)
 - [x] [AC1] [AC2] [AC3] Guard `scripts/check-ai-trailers.sh` makes it pass
 - [x] [AC4] `repo-hygiene.yml`: full-history checkout, guard on pull requests, suite under bash and zsh
 
@@ -24,4 +24,4 @@ created: "2026-10-28"
 - [x] Lint passes (`shellcheck` on both scripts)
 - [x] No unrelated changes in the diff (no scope creep)
 - [x] `verification.md` filled in
-- [ ] PR opened referencing this spec folder
+- [x] PR opened referencing this spec folder (#510)
