@@ -16,7 +16,9 @@ SCAN_ROOT="$(git -C "$SCAN_ROOT" rev-parse --show-toplevel)"
 # The open, close and diff3 base markers are matched, at any length (`conflict-marker-size`
 # lengthens them). The separator is not: a bare run of `=` is also a valid Markdown setext
 # underline, and Git never writes a separator without an open and a close marker around it.
-output="$(git -C "$SCAN_ROOT" grep -nIE '^(<{7,}|>{7,}|\|{7,})( |$)' -- . 2>&1)" && rc=0 || rc=$?
+# `-a` reads files Git treats as binary (a `binary` attribute, a NUL byte) as text: skipping
+# them would pass a marker silently. `[|]` is a literal pipe with no escape to interpret.
+output="$(git -C "$SCAN_ROOT" grep -naE '^(<{7,}|>{7,}|[|]{7,})( |$)' -- . 2>&1)" && rc=0 || rc=$?
 
 case "$rc" in
   1)

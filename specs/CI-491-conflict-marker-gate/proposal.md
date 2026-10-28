@@ -1,7 +1,7 @@
 ---
 id: "CI-491-conflict-marker-gate"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-10-22"
 issue: "mlorentedev/ts-bridge#491"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -23,7 +23,7 @@ gate rejects a marker line, so the next one can land the same way.
 ## What
 
 A zero-toolchain guard, `scripts/check-conflict-markers.sh [repo]`, fails with `file:line` for
-every tracked text file holding a line that starts with a conflict open marker (seven or more `<`
+every tracked file (including one Git treats as binary) holding a line that starts with a conflict open marker (seven or more `<`
 and a space or end of line), close marker (seven or more `>`, likewise) or diff3 base marker
 (seven or more `|`, likewise). Longer runs come from `conflict-marker-size`. A `[repo]` inside a
 work tree scans that whole tree. It exits 0 on a clean tree and fails
@@ -57,11 +57,14 @@ every case under bash and zsh. `repo-hygiene.yml` runs both.
 ## Acceptance criteria
 
 - [x] A tracked file containing a conflict open or close marker line fails the guard, which
-      names the file and line; the same marker in an untracked file does not.
+      names the file and line, also when Git treats the file as binary; the same marker in an
+      untracked file does not.
 - [x] A Markdown setext underline (three `=`, or exactly seven) does not fail the guard.
-- [x] The guard fails closed (exit 2) outside a Git work tree, and reports the current tree clean.
+- [x] The guard fails closed (exit 2) outside a Git work tree, under either
+      `safe.bareRepository` setting, and reports the current tree clean.
 - [x] Every case above passes under both bash and zsh, and the suite fails when either shell is
-      missing.
+      missing. The zsh half is certified in CI (`Repo hygiene` installs zsh); a workstation
+      without zsh runs the suite with `TCM_SHELLS=bash`.
 
 ## References
 
