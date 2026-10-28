@@ -52,6 +52,9 @@ every case under bash and zsh. `repo-hygiene.yml` runs both.
   code fence, fails the guard. That is accepted: indent the example. Today's tree has none.
 - **`git grep` exit codes.** 1 means no match (OK), 0 means a match (fail), anything else is an
   error that must fail the check rather than read as clean.
+- **Re-encoded working trees are not scanned in their stored encoding.** A file checked out
+  through `working-tree-encoding` (e.g. UTF-16LE) holds its markers in bytes the pattern does not
+  match. No tracked file declares that attribute; tracking one would need an index-side scan.
 - No blocking open questions remain.
 
 ## Acceptance criteria

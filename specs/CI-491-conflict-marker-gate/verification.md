@@ -63,9 +63,18 @@ was judged sound. The contract-set edits below change the digests, so a fresh re
 | Minor: `bare-repo` exercises only the ambient `safe.bareRepository` branch | Applied (tests). | The case runs under `GIT_CONFIG_*` `safe.bareRepository=explicit` and `=all` explicitly. Mutating the guard to trust `rev-parse`'s exit code fails `bare-repo[all]` (and `dotgit/.git`) with `exit 128, wanted 2`. |
 | Minor: `lesson-048` names only the open and close markers | Ticketed: #507. | Docs-only; together with the `security-audit.md` required-check reconciliation. |
 | Minor: spec drift (PR box, `status: implementing`) | Applied. | `tasks.md` PR box ticked (#495, #501); `proposal.md` is `verifying`. |
-| Minor (THEORETICAL): `\|{7,}` in an ERE | Applied. | Written `[|]{7,}`; `diff3-base` still fails as required. |
+| Minor (THEORETICAL): `\|{7,}` in an ERE | Applied. | Written as a bracketed pipe class, `[\|]{7,}`; `diff3-base` still fails as required. |
 
 `shellcheck` on both scripts exits 0; the suite passes 16/16 checks under `TCM_SHELLS=bash` (15 cases, `bare-repo` run under both settings).
+
+CodeRabbit on #511 then tightened the contract and named one limit:
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| f4 records a step unconditional before reading an `if:` placed after `run:` | Applied (contract). | f4 decides per step, at the step's end. Exits 0 here; 1 with `if: github.event_name == 'push'` after the guard's `run:`. |
+| f5 passes when the suite step sets `TCM_SHELLS: bash` in `env:` | Applied (contract). | f5 fails on any non-comment `TCM_SHELLS` in the workflow (step, job or workflow `env:`). Exits 0 here; 1 with that `env:` added. |
+| `git grep -a` misses markers in a `working-tree-encoding=UTF-16LE` file | Skipped; recorded as a limit (proposal Risks). | No tracked file declares `working-tree-encoding`, and CI scans a fresh checkout with no unstaged content. An encoding-aware scan is a second behaviour, to be added if such a file is ever tracked. |
+| Pipe splits table cells in `review-round1.md` and here | Applied here; skipped in `review-round1.md`. | The signed reviewer report stays verbatim. |
 
 ## Decisions made during implementation
 
