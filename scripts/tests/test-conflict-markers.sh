@@ -76,6 +76,18 @@ build() {
       printf 'a\n%s merged common ancestors\nbase\nb\n' "$BASE" >"$dir/notes.txt"
       git -C "$dir" add notes.txt
       ;;
+    # Git treats both files as binary; a marker in either must still fail the guard.
+    binary-attribute)
+      new_repo "$dir"
+      printf '*.md binary\n' >"$dir/.gitattributes"
+      conflict >"$dir/notes.md"
+      git -C "$dir" add .gitattributes notes.md
+      ;;
+    nul-byte)
+      new_repo "$dir"
+      { printf 'head\000tail\n'; conflict; } >"$dir/notes.txt"
+      git -C "$dir" add notes.txt
+      ;;
     nested/sub)
       new_repo "$WORK/nested"
       mkdir -p "$dir" "$WORK/nested/docs"
@@ -98,6 +110,8 @@ bare-repo:2:not a Git work tree
 dotgit/.git:2:not a Git work tree
 long-markers:1:notes.md:2:
 diff3-base:1:notes.txt:2:
+binary-attribute:1:notes.md:2:
+nul-byte:1:notes.txt:3:
 nested/sub:1:docs/index.md:2:'
 
 failed=0
@@ -115,22 +129,37 @@ for sh_name in ${TCM_SHELLS:-bash zsh}; do
     want="${rest%%:*}"
     want_sub="${rest#*:}"
     [ -d "$WORK/$name" ] || build "$name"
-    got="$("$sh_name" "$GUARD" "$WORK/$name" 2>&1)" && rc=0 || rc=$?
+    # A bare repository is refused by `rev-parse` under safe.bareRepository=explicit and
+    # answers `false` under `all`; force each branch instead of inheriting the ambient config.
+    case "$name" in
+      bare-repo) bare_modes='explicit all' ;;
+      *) bare_modes='-' ;;
+    esac
+    for bare_mode in $bare_modes; do
+      label="$name"
+      if [ "$bare_mode" = - ]; then
+        got="$("$sh_name" "$GUARD" "$WORK/$name" 2>&1)" && rc=0 || rc=$?
+      else
+        label="${name}[$bare_mode]"
+        got="$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository GIT_CONFIG_VALUE_0="$bare_mode" \
+          "$sh_name" "$GUARD" "$WORK/$name" 2>&1)" && rc=0 || rc=$?
+      fi
 
-    if [ "$rc" -ne "$want" ]; then
-      echo "  FAIL [$sh_name] $name: exit $rc, wanted $want"
-      echo "$got"
-      failed=1
-      continue
-    fi
-    case "$got" in
-      *"$want_sub"*) echo "  ok   [$sh_name] $name -> exit $rc, mentions \"$want_sub\"" ;;
-      *)
-        echo "  FAIL [$sh_name] $name: output does not mention '$want_sub'"
+      if [ "$rc" -ne "$want" ]; then
+        echo "  FAIL [$sh_name] $label: exit $rc, wanted $want"
         echo "$got"
         failed=1
-        ;;
-    esac
+        continue
+      fi
+      case "$got" in
+        *"$want_sub"*) echo "  ok   [$sh_name] $label -> exit $rc, mentions \"$want_sub\"" ;;
+        *)
+          echo "  FAIL [$sh_name] $label: output does not mention '$want_sub'"
+          echo "$got"
+          failed=1
+          ;;
+      esac
+    done
   done <<EOF
 $SPECS
 EOF

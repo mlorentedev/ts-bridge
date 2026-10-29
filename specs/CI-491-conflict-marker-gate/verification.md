@@ -49,6 +49,33 @@ created: "2026-10-22"
   via `GIT_CONFIG_*` `safe.bareRepository=all`, since this workstation sets `explicit`). The guard
   now tests the printed answer. 13/13 pass under bash with and without that override.
 
+## Independent review round 1 - 2026-10-27
+
+Reviewer `nan/deepseek-v4-flash` returned **FAIL** at `813d898`; the signed report is kept as
+`review-round1.md` with its matching `review-request-round1.json`. No Blocker; the guard itself
+was judged sound. The contract-set edits below change the digests, so a fresh review follows.
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| Major: `features.json` f1-f3 pin `TCM_SHELLS='bash zsh'` and cannot pass on a workstation without zsh | Applied (contract). | f1-f3 run with `TCM_SHELLS=bash` and exit 0 here. AC4 moved to its own feature, f5: the missing-shell failure runs locally (`TCM_SHELLS='bash ci491-missing-shell'` must fail), and the zsh half is stated as CI-only, asserted by the zsh install preceding the suite's default (bash + zsh) run in `repo-hygiene.yml`. AC4's text records the same split. |
+| Minor: f4 only proves the paths are mentioned | Applied (contract). | f4 asserts both exact `run:` lines inside steps carrying no `if:`, and no job-level `if:`. It exits 0 on this tree and 1 with `if: false` added to the guard step; f5 exits 1 with the zsh install removed. |
+| Minor: `git grep -I` skips binary files silently | Applied (code + tests). | The guard uses `-a`. New cases `binary-attribute` (`*.md binary`) and `nul-byte` (NUL on line 1, marker on line 3) failed with `exit 0, wanted 1` before the change and pass after; restoring `-I` fails both. The real tree stays `OK (541 tracked files)`. |
+| Minor: `bare-repo` exercises only the ambient `safe.bareRepository` branch | Applied (tests). | The case runs under `GIT_CONFIG_*` `safe.bareRepository=explicit` and `=all` explicitly. Mutating the guard to trust `rev-parse`'s exit code fails `bare-repo[all]` (and `dotgit/.git`) with `exit 128, wanted 2`. |
+| Minor: `lesson-048` names only the open and close markers | Ticketed: #507. | Docs-only; together with the `security-audit.md` required-check reconciliation. |
+| Minor: spec drift (PR box, `status: implementing`) | Applied. | `tasks.md` PR box ticked (#495, #501); `proposal.md` is `verifying`. |
+| Minor (THEORETICAL): `\|{7,}` in an ERE | Applied. | Written as a bracketed pipe class, `[\|]{7,}`; `diff3-base` still fails as required. |
+
+`shellcheck` on both scripts exits 0; the suite passes 16/16 checks under `TCM_SHELLS=bash` (15 cases, `bare-repo` run under both settings).
+
+CodeRabbit on #511 then tightened the contract and named one limit:
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| f4 records a step unconditional before reading an `if:` placed after `run:` | Applied (contract). | f4 decides per step, at the step's end. Exits 0 here; 1 with `if: github.event_name == 'push'` after the guard's `run:`. |
+| f5 passes when the suite step sets `TCM_SHELLS: bash` in `env:` | Applied (contract). | f5 fails on any non-comment `TCM_SHELLS` in the workflow (step, job or workflow `env:`). Exits 0 here; 1 with that `env:` added. |
+| `git grep -a` misses markers in a `working-tree-encoding=UTF-16LE` file | Skipped; recorded as a limit (proposal Risks). | No tracked file declares `working-tree-encoding`, and CI scans a fresh checkout with no unstaged content. An encoding-aware scan is a second behaviour, to be added if such a file is ever tracked. |
+| Pipe splits table cells in `review-round1.md` and here | Applied here; skipped in `review-round1.md`. | The signed reviewer report stays verbatim. |
+
 ## Decisions made during implementation
 
 - The separator is not matched (see proposal Risks): the issue's `=======$` would red a

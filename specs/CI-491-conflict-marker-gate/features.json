@@ -1,29 +1,36 @@
 [
   {
     "id": "CI-491-conflict-marker-gate-f1",
-    "behavior": "A tracked file with a conflict open or close marker line fails the guard with file:line; the same marker untracked does not.",
-    "verification": "TCM_SHELLS='bash zsh' bash scripts/tests/test-conflict-markers.sh",
+    "behavior": "A tracked file with a conflict open or close marker line fails the guard with file:line, including a file Git treats as binary; the same marker untracked does not.",
+    "verification": "TCM_SHELLS=bash bash scripts/tests/test-conflict-markers.sh",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CI-491-conflict-marker-gate-f2",
     "behavior": "A Markdown setext underline of three or exactly seven '=' does not fail the guard.",
-    "verification": "TCM_SHELLS='bash zsh' bash scripts/tests/test-conflict-markers.sh",
+    "verification": "TCM_SHELLS=bash bash scripts/tests/test-conflict-markers.sh",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CI-491-conflict-marker-gate-f3",
-    "behavior": "The guard fails closed outside a Git work tree and reports the current tree clean.",
-    "verification": "TCM_SHELLS='bash zsh' bash scripts/tests/test-conflict-markers.sh && bash scripts/check-conflict-markers.sh",
+    "behavior": "The guard fails closed outside a Git work tree (under either safe.bareRepository branch) and reports the current tree clean.",
+    "verification": "TCM_SHELLS=bash bash scripts/tests/test-conflict-markers.sh && bash scripts/check-conflict-markers.sh",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "CI-491-conflict-marker-gate-f4",
-    "behavior": "Repository hygiene runs the conflict-marker guard and its fixture suite.",
-    "verification": "grep -q 'scripts/check-conflict-markers.sh' .github/workflows/repo-hygiene.yml && grep -q 'scripts/tests/test-conflict-markers.sh' .github/workflows/repo-hygiene.yml",
+    "behavior": "Repository hygiene runs the guard and its fixture suite as unconditional run steps.",
+    "verification": "awk 'function end_step() { if (g0 && !s) g = 1; if (t0 && !s) t = 1; g0 = 0; t0 = 0; s = 0 } {sub(/\\r$/, \"\")} /^    if:/{j=1} /^      - /{end_step()} /^        if:/{s=1} /^        run: bash scripts\\/check-conflict-markers.sh$/{g0=1} /^        run: bash scripts\\/tests\\/test-conflict-markers.sh$/{t0=1} END{end_step(); exit !(g && t && !j)}' .github/workflows/repo-hygiene.yml",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-491-conflict-marker-gate-f5",
+    "behavior": "The suite fails when a required shell is missing, and CI installs zsh before running it under its default bash and zsh, with no TCM_SHELLS override anywhere in the workflow (the zsh half is CI-only: zsh is not required on a workstation).",
+    "verification": "! TCM_SHELLS='bash ci491-missing-shell' bash scripts/tests/test-conflict-markers.sh >/dev/null 2>&1 && awk '{sub(/\\r$/, \"\")} /^[[:space:]]*#/{next} /TCM_SHELLS/{e=1} /apt-get install -y -qq zsh/{z=NR} /^        run: bash scripts\\/tests\\/test-conflict-markers.sh$/{r=NR} END{exit !(z && r && z < r && !e)}' .github/workflows/repo-hygiene.yml",
     "state": "pending",
     "evidence": ""
   }
