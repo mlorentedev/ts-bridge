@@ -113,7 +113,7 @@ reports `OK (553 tracked files)`; `shellcheck` on both scripts exits 0.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/CI-491-conflict-marker-gate/` -> `specs/archive/CI-491-conflict-marker-gate/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/CI-491-conflict-marker-gate/` -> `specs/archive/CI-491-conflict-marker-gate/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #491 closed by #495
+- [x] Promotions above executed (if any)

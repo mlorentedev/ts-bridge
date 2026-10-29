@@ -1,7 +1,7 @@
 ---
 id: "CI-491-conflict-marker-gate"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-22"
 issue: "mlorentedev/ts-bridge#491"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
