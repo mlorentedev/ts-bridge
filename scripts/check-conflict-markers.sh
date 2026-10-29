@@ -18,7 +18,9 @@ SCAN_ROOT="$(git -C "$SCAN_ROOT" rev-parse --show-toplevel)"
 # underline, and Git never writes a separator without an open and a close marker around it.
 # `-a` reads files Git treats as binary (a `binary` attribute, a NUL byte) as text: skipping
 # them would pass a marker silently. `[|]` is a literal pipe with no escape to interpret.
-output="$(git -C "$SCAN_ROOT" grep -naE '^(<{7,}|>{7,}|[|]{7,})( |$)' -- . 2>&1)" && rc=0 || rc=$?
+# The marker ends at any whitespace or the line end: a label follows a space (or a tab), and a
+# CRLF checkout leaves `\r` after a marker that has no label.
+output="$(git -C "$SCAN_ROOT" grep -naE '^(<{7,}|>{7,}|[|]{7,})([[:space:]]|$)' -- . 2>&1)" && rc=0 || rc=$?
 
 case "$rc" in
   1)
