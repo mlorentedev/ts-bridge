@@ -28,6 +28,8 @@ conflict() {
   printf 'before\n%s HEAD\nours\n%s\ntheirs\n%s origin/master\nafter\n' "$OPEN" "$SEP" "$CLOSE"
 }
 
+# One flat fixture table: each arm is a few straight-line setup commands with no shared
+# branching, so it stays in one place rather than following the 40-line / CC-10 rule.
 build() {
   dir="$WORK/$1"
   case "$1" in
@@ -88,6 +90,23 @@ build() {
       { printf 'head\000tail\n'; conflict; } >"$dir/notes.txt"
       git -C "$dir" add notes.txt
       ;;
+    # A checkout with CRLF endings leaves `\r` after a marker that has no label.
+    crlf-bare-marker)
+      new_repo "$dir"
+      printf '*.txt text eol=crlf\n' >"$dir/.gitattributes"
+      printf 'a\r\n%s\r\nb\r\n' "$OPEN" >"$dir/notes.txt"
+      git -C "$dir" add .gitattributes notes.txt
+      ;;
+    tab-label)
+      new_repo "$dir"
+      printf 'a\n%s\tHEAD\nb\n' "$OPEN" >"$dir/notes.txt"
+      git -C "$dir" add notes.txt
+      ;;
+    # `git grep` itself fails on a corrupt index; the guard must not read that as clean.
+    corrupt-index)
+      new_repo "$dir"
+      printf 'not an index\n' >"$dir/.git/index"
+      ;;
     nested/sub)
       new_repo "$WORK/nested"
       mkdir -p "$dir" "$WORK/nested/docs"
@@ -112,6 +131,9 @@ long-markers:1:notes.md:2:
 diff3-base:1:notes.txt:2:
 binary-attribute:1:notes.md:2:
 nul-byte:1:notes.txt:3:
+crlf-bare-marker:1:notes.txt:2:
+tab-label:1:notes.txt:2:
+corrupt-index:2:git grep failed
 nested/sub:1:docs/index.md:2:'
 
 failed=0

@@ -76,6 +76,24 @@ CodeRabbit on #511 then tightened the contract and named one limit:
 | `git grep -a` misses markers in a `working-tree-encoding=UTF-16LE` file | Skipped; recorded as a limit (proposal Risks). | No tracked file declares `working-tree-encoding`, and CI scans a fresh checkout with no unstaged content. An encoding-aware scan is a second behaviour, to be added if such a file is ever tracked. |
 | Pipe splits table cells in `review-round1.md` and here | Applied here; skipped in `review-round1.md`. | The signed reviewer report stays verbatim. |
 
+## Independent review round 2 - 2026-10-29
+
+Reviewer `nan/deepseek-v4-flash` returned **PASS WITH GAPS** at `7bc98be` (#511 merged) against
+the current contract digests (`review.md` with `review-request.json`). No Blocker, no REAL Major.
+The contract set is closed by this verdict, so every disposition below lands outside it.
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| Major (THEORETICAL): the fail-closed `git grep` error branch has no test | Applied (tests). | New case `corrupt-index` (garbage in `.git/index`) expects exit 2 and `git grep failed`. Mutating the guard's `*)` arm so an error falls through to exit 0 fails it. |
+| Minor: an unlabelled marker is missed under CRLF (`<<<<<<<\r`) | Applied (code + tests). | The marker now ends at `[[:space:]]` or the line end. New case `crlf-bare-marker` (`*.txt text eol=crlf`, CRLF bytes) failed with `exit 0, wanted 1` before and passes after; restoring `( \|$)` fails it again. |
+| Minor (SPECULATIVE): tab-separated label missed | Applied with the CRLF fix. | New case `tab-label` failed before, passes after. A marker with no separator at all (`<<<<<<<HEAD`) stays unmatched: Git never writes it. |
+| Minor: f4 accepts `continue-on-error` on a guarded step | Ticketed: #514. | Fixing it means editing `features.json`, which would stale this verdict. |
+| Minor: `build()` exceeds the 40-line / CC-10 rule | Exemption recorded. | A comment above `build()` states why a flat fixture table stays in one function. |
+| Minor: `dotf spec audit` reports the spec as a zombie (#491 closed) | Cleared by archiving in this PR. | — |
+
+The suite passes 19/19 checks under `TCM_SHELLS=bash`, three consecutive runs; the real tree
+reports `OK (553 tracked files)`; `shellcheck` on both scripts exits 0.
+
 ## Decisions made during implementation
 
 - The separator is not matched (see proposal Risks): the issue's `=======$` would red a
