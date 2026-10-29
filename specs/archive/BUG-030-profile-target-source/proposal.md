@@ -1,7 +1,7 @@
 ---
 id: "BUG-030-profile-target-source"
 type: spec
-status: verifying
+status: archived
 created: "2026-10-22"
 issue: "mlorentedev/ts-bridge#417"
 tags: [spec, proposal]
