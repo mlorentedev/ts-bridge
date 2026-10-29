@@ -20,6 +20,23 @@ created: "2026-10-28"
 - Sibling hygiene suites on this branch: `test-site-pr-workflow`, `test-go-toolchain`, `check-actions-pinned`, `check-workflow-permissions` pass. `test-workflow-permissions` fails only on `[zsh] not installed`, identically on `master` (this workstation has no zsh); every bash case passes.
 - The zsh half runs in CI only; zsh is absent on this workstation.
 
+## Independent review round 1 - 2026-10-29
+
+Reviewer `nan/deepseek-v4-flash` returned **PASS WITH GAPS** at `0b86357` (`review.md` with
+`review-request.json`). No Blocker, no REAL Major. The contract set is closed by this verdict, so
+every disposition below lands outside it.
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| Major (THEORETICAL): the denylist omits harnesses in use (OpenCode, Antigravity, Hermes, ...) | Applied (code + tests). | `AI_AGENTS` gains `opencode`, `antigravity`, `hermes`, `cline`, `goose`, `qwen`, `amp`. New case `fleet-agents` (OpenCode and Hermes Agent trailers) failed with `exit 0, want 1` before and passes after; removing the additions fails it again. The list stays a denylist, as `proposal.md` Risks declares. |
+| Minor: AC1's "names the commit and trailer" is untested | Applied (tests). | The suite asserts the `copilot` report contains `<sha>: Co-authored-by: Copilot <...>`. Replacing the report line with a fixed string fails it. |
+| Minor: the usage path (wrong arity → exit 2) is untested | Applied (tests). | One-argument call expects exit 2; turning the usage `exit 2` into `exit 0` fails it. |
+| Minor (THEORETICAL): `2>&1` folds git warnings into the parsed stream | Applied (code). | Stderr goes to a temp file and is printed only when `git log` fails. |
+| Minor (SPECULATIVE): a PR runs its own copy of the workflow and guard | Ticketed: #516. | A posture shared by every hygiene guard, filed once for all of them. |
+| Minor (THEORETICAL): lines Git does not parse as trailers pass | Recorded; declined. | Text after the trailer block, or a trailer with no blank line before it, is not a trailer to Git, and the reviewer refuted the attribution impact: GitHub only credits co-authors from the trailer block. The guard follows Git's parser by design. |
+
+`bash scripts/tests/test-ai-trailers.sh` → `OK (bash)`; `shellcheck` on both scripts → clean.
+
 ## Decisions made during implementation
 
 - The suite defaults to `bash` and takes extra shells from `ATG_SHELLS`, so every `features.json` command runs on a workstation without zsh; CI's step names both shells and fails if either is missing (the CI-491 round-1 Major).

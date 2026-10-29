@@ -29,6 +29,7 @@ build() {
     human) commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: Ana <ana@example.com>')" ;;
     human-name-contains-agent) commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: Claudette Geminiani <claudette@example.com>')" ;;
     folded-value) commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: Pair\n  Copilot <c@example.com>')" ;;
+    fleet-agents) commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: OpenCode <bot@example.com>\nCo-authored-by: Hermes Agent <hermes@example.com>')" ;;
     prose-mention) commit "$dir" "$(printf 'docs: x\n\nCo-authored-by: Copilot is what the harness appends.\n\nThe gate rejects it.')" ;;
     earlier-in-range)
       commit "$dir" "$(printf 'fix: x\n\nCo-authored-by: Copilot <c@example.com>')"
@@ -42,7 +43,7 @@ build() {
   esac
 }
 
-CASES='no-trailer:0 human:0 human-name-contains-agent:0 prose-mention:0 before-base:0 copilot:1 claude-key-case:1 among-humans:1 earlier-in-range:1 folded-value:1'
+CASES='no-trailer:0 human:0 human-name-contains-agent:0 prose-mention:0 before-base:0 copilot:1 claude-key-case:1 among-humans:1 earlier-in-range:1 folded-value:1 fleet-agents:1'
 for name_rc in $CASES; do
   build "${name_rc%%:*}"
 done
@@ -68,6 +69,14 @@ for sh in $SHELLS; do
   rc=0
   "$sh" "$GUARD" base no-such-ref "$WORK/no-trailer" >/dev/null 2>&1 || rc=$?
   [ "$rc" = 2 ] || { echo "FAIL [$sh] unresolvable ref: exit $rc, want 2" >&2; failed=1; }
+  rc=0
+  "$sh" "$GUARD" base >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ] || { echo "FAIL [$sh] one argument: exit $rc, want 2" >&2; failed=1; }
+  # The report names the offending commit and the trailer value, not only the exit code.
+  "$sh" "$GUARD" base HEAD "$WORK/copilot" >"$WORK/out" 2>&1 || true
+  sha="$(git -C "$WORK/copilot" rev-parse --short HEAD)"
+  grep -Fq "$sha: Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>" "$WORK/out" ||
+    { echo "FAIL [$sh] copilot: report does not name $sha and its trailer" >&2; sed 's/^/  /' "$WORK/out" >&2; failed=1; }
 done
 [ "$failed" = 0 ] || exit 1
 echo "test-ai-trailers: OK ($SHELLS)"
