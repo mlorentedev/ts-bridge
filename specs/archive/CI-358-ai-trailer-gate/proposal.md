@@ -1,7 +1,7 @@
 ---
 id: "CI-358-ai-trailer-gate"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-28"
 issue: "mlorentedev/ts-bridge#506"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]

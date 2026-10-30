@@ -12,25 +12,35 @@ REPO="${3:-.}"
 
 # Matched case-insensitively against the trailer value (name and address), as whole words, so
 # `Claudette` is a human while `Copilot@users`, `cursoragent@cursor.com` and `Claude <...>` match.
-AI_AGENTS='copilot|claude|anthropic|chatgpt|openai|gemini|codex|cursor|devin|aider|windsurf|codeium|tabnine|codewhisperer'
+# A denylist: an agent not named here passes, so the harnesses in use are listed explicitly.
+AI_AGENTS='copilot|claude|anthropic|chatgpt|openai|gemini|codex|cursor|devin|aider|windsurf|codeium|tabnine|codewhisperer|opencode|antigravity'
+# Agent names that are also human names count only beside agent, bot, ai, code or coder:
+# `Cline Bot`, `Hermes-Agent` and `Qwen-Coder` match, `Sam Cline` and `Qwen Zhang` are people.
+AI_QUALIFIED='cline|goose|amp|hermes|qwen'
 
 # Git parses the trailer block itself, so a mention in the body prose is not a trailer, and
 # the key matches in any case (`Co-Authored-By`). `unfold` joins a value continued on an
 # indented line, which would otherwise escape as a line of its own. A ref that does not
-# resolve fails closed.
+# resolve fails closed. Stderr is kept apart, so a git warning is never parsed as a commit.
+err="$(mktemp)"
+trap 'rm -f "$err"' EXIT
 if ! log="$(git -C "$REPO" log --format='%h%x09%(trailers:key=Co-authored-by,valueonly,unfold,separator=%x1f)' \
-  "$BASE..$HEAD" -- 2>&1)"; then
-  printf '%s\n' "$log" >&2
+  "$BASE..$HEAD" -- 2>"$err")"; then
+  cat "$err" >&2
   echo "check-ai-trailers: cannot read $BASE..$HEAD" >&2
   exit 2
 fi
 
-found="$(printf '%s\n' "$log" | awk -F '\t' -v agents="$AI_AGENTS" '
+found="$(printf '%s\n' "$log" | awk -F '\t' -v agents="$AI_AGENTS" -v qualified="$AI_QUALIFIED" '
   NF < 2 || $2 == "" { next }
   {
     n = split($2, values, "\037")
-    for (i = 1; i <= n; i++)
-      if (tolower(values[i]) ~ "(^|[^a-z])(" agents ")([^a-z]|$)") print $1 ": Co-authored-by: " values[i]
+    for (i = 1; i <= n; i++) {
+      v = tolower(values[i])
+      if (v ~ "(^|[^a-z])(" agents ")([^a-z]|$)" ||
+          v ~ "(^|[^a-z])(" qualified ")[ _-]+(agent|bot|ai|code|coder)([^a-z]|$)")
+        print $1 ": Co-authored-by: " values[i]
+    }
   }
 ')"
 commits="$(printf '%s\n' "$log" | awk 'NF { n++ } END { print n + 0 }')"

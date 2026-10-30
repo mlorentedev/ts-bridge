@@ -20,6 +20,23 @@ created: "2026-10-28"
 - Sibling hygiene suites on this branch: `test-site-pr-workflow`, `test-go-toolchain`, `check-actions-pinned`, `check-workflow-permissions` pass. `test-workflow-permissions` fails only on `[zsh] not installed`, identically on `master` (this workstation has no zsh); every bash case passes.
 - The zsh half runs in CI only; zsh is absent on this workstation.
 
+## Independent review round 1 - 2026-10-29
+
+Reviewer `nan/deepseek-v4-flash` returned **PASS WITH GAPS** at `0b86357` (`review.md` with
+`review-request.json`). No Blocker, no REAL Major. The contract set is closed by this verdict, so
+every disposition below lands outside it.
+
+| Finding | Disposition | Evidence / boundary |
+|---|---|---|
+| Major (THEORETICAL): the denylist omits harnesses in use (OpenCode, Antigravity, Hermes, ...) | Applied (code + tests). | `AI_AGENTS` gains `opencode` and `antigravity`. `cline`, `goose`, `amp`, `hermes` and `qwen` are also human names (PR-Agent on #517: `Sam Cline`, then `Qwen Zhang`, would be rejected), so by owner decision they match only beside `agent`, `bot`, `ai`, `code` or `coder` (`AI_QUALIFIED`): `Cline Bot`, `Hermes-Agent` and `Qwen-Coder` fail, `Sam Cline`, `Lucy Goose`, `Amp Patel`, `Hermes Conrad` and `Qwen Zhang` pass. The suite builds one repository per agent value and per human value, so dropping any single name, or the qualifier, fails a case. The human cases failed before the qualifier existed. The list stays a denylist, as `proposal.md` Risks declares. |
+| Minor: AC1's "names the commit and trailer" is untested | Applied (tests). | The suite asserts the `copilot` report contains `<sha>: Co-authored-by: Copilot <...>`. Replacing the report line with a fixed string fails it. |
+| Minor: the usage path (wrong arity → exit 2) is untested | Applied (tests). | One-argument call expects exit 2; turning the usage `exit 2` into `exit 0` fails it. |
+| Minor (THEORETICAL): `2>&1` folds git warnings into the parsed stream | Applied (code). | Stderr goes to a temp file and is printed only when `git log` fails. |
+| Minor (SPECULATIVE): a PR runs its own copy of the workflow and guard | Ticketed: #516. | A posture shared by every hygiene guard, filed once for all of them. |
+| Minor (THEORETICAL): lines Git does not parse as trailers pass | Recorded; declined. | Text after the trailer block, or a trailer with no blank line before it, is not a trailer to Git, and the reviewer refuted the attribution impact: GitHub only credits co-authors from the trailer block. The guard follows Git's parser by design. |
+
+`bash scripts/tests/test-ai-trailers.sh` → `OK (bash)`; `shellcheck` on both scripts → clean.
+
 ## Decisions made during implementation
 
 - The suite defaults to `bash` and takes extra shells from `ATG_SHELLS`, so every `features.json` command runs on a workstation without zsh; CI's step names both shells and fails if either is missing (the CI-491 round-1 Major).
@@ -36,7 +53,7 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/CI-358-ai-trailer-gate/` -> `specs/archive/CI-358-ai-trailer-gate/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/CI-358-ai-trailer-gate/` -> `specs/archive/CI-358-ai-trailer-gate/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #506 closed by #510
+- [x] Promotions above executed (if any)
