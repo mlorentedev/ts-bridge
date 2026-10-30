@@ -65,18 +65,18 @@ type FilePower struct {
 }
 
 // osCapability is what one OS's steps can converge in this version. Each
-// per-OS ticket widens its row (ADR-017 §5); ticket names that work in errors.
+// per-OS ticket widens its row (ADR-017 §5).
 type osCapability struct {
 	kinds        []string
 	power        bool
-	firewallRule bool // a named firewall rule; only the Windows step uses one
-	ticket       string
+	firewallRule bool              // a named firewall rule; only the Windows step uses one
+	planned      map[string]string // kind -> the ticket adding its step, where one exists
 }
 
 var osCapabilities = map[string]osCapability{
-	goosWindows: {kinds: []string{ServiceRDP}, power: true, firewallRule: true, ticket: "#455"},
-	goosLinux:   {kinds: []string{ServiceRDP}, ticket: "#454"},
-	goosDarwin:  {ticket: "#459"},
+	goosWindows: {kinds: []string{ServiceRDP}, power: true, firewallRule: true, planned: map[string]string{ServiceSSH: "#521"}},
+	goosLinux:   {kinds: []string{ServiceRDP}, planned: map[string]string{ServiceSSH: "#521"}},
+	goosDarwin:  {planned: map[string]string{ServiceSSH: "#459", ServiceVNC: "#459"}},
 }
 
 // capabilityFor returns goos's row. Any other OS runs the Linux steps (setupFor).
@@ -193,7 +193,11 @@ func validateService(field string, s FileService, goos string, capab osCapabilit
 		return fmt.Errorf("%s.kind %q: must be one of rdp, ssh, vnc", field, s.Kind)
 	}
 	if !slices.Contains(capab.kinds, s.Kind) {
-		return fmt.Errorf("%s.kind %q: %s has no %s step in this version (%s)", field, s.Kind, goos, s.Kind, capab.ticket)
+		ref, ok := capab.planned[s.Kind]
+		if !ok {
+			ref = "ADR-017 §5"
+		}
+		return fmt.Errorf("%s.kind %q: %s has no %s step in this version (%s)", field, s.Kind, goos, s.Kind, ref)
 	}
 	if s.Port != nil && (*s.Port < 1 || *s.Port > 65535) {
 		return fmt.Errorf("%s.port %d: must be between 1 and 65535", field, *s.Port)
@@ -212,14 +216,14 @@ func validateControlURL(raw *string) error {
 	}
 	u, err := url.Parse(*raw)
 	if err != nil {
-		// The value is not echoed: it may carry a secret.
 		return errors.New("host.control_url: not a valid URL")
 	}
 	if u.User != nil {
 		return errors.New("host.control_url: must not carry credentials; the host needs none")
 	}
 	if (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
-		return fmt.Errorf("host.control_url %q: must be an http or https URL with a host", *raw)
+		// Not echoed: an opaque or scheme-less value can hide user info from u.User.
+		return errors.New("host.control_url: must be an http or https URL with a host")
 	}
 	return nil
 }

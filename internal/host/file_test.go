@@ -156,6 +156,8 @@ func TestLoadFile_InvalidEntries(t *testing.T) {
 		{"control_url with only a port", "host:\n  control_url: http://:8080\n", []string{"host.control_url", "with a host"}},
 		{"control_url with credentials", "host:\n  control_url: https://user:secret@hs.example\n", []string{"host.control_url", "credentials"}},
 		{"control_url with credentials and a bad scheme", "host:\n  control_url: ftp://user:secret@hs.example\n", []string{"host.control_url", "credentials"}},
+		{"opaque control_url with credentials", "host:\n  control_url: https:user:secret@hs.example\n", []string{"host.control_url", "with a host"}},
+		{"schemeless control_url with credentials", "host:\n  control_url: user:secret@hs.example\n", []string{"host.control_url", "with a host"}},
 		{"null host", "host:\n", []string{"host", "no value"}},
 		{"null services", "host:\n  services:\n", []string{"host.services", "no value"}},
 		{"null control_url", "host:\n  control_url:\n", []string{"host.control_url", "no value"}},
@@ -207,21 +209,23 @@ func TestLoadFile_OSCapability(t *testing.T) {
 		goos    string
 		content string
 		wantErr []string // empty: accepted
+		notErr  string   // a ticket the error must not cite: it adds no such step
 	}{
-		{"windows", svc("rdp"), nil},
-		{"linux", svc("rdp"), nil},
-		{"windows", power, nil},
-		{"windows", firewall, nil},
-		{"linux", svc("ssh"), []string{"host.services[0].kind", `"ssh"`, "linux", "#454"}},
-		{"linux", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "linux", "#454"}},
-		{"windows", svc("ssh"), []string{"host.services[0].kind", `"ssh"`, "windows", "#455"}},
-		{"windows", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "windows", "#455"}},
-		{"darwin", svc("ssh"), []string{"host.services[0].kind", "darwin", "#459"}},
-		{"darwin", svc("rdp"), []string{"darwin", "#459"}},
-		{"linux", power, []string{"host.power", "linux"}},
-		{"darwin", power, []string{"host.power", "darwin"}},
-		{"linux", firewall, []string{"host.firewall", "linux"}},
-		{"darwin", firewall, []string{"host.firewall", "darwin"}},
+		{"windows", svc("rdp"), nil, ""},
+		{"linux", svc("rdp"), nil, ""},
+		{"windows", power, nil, ""},
+		{"windows", firewall, nil, ""},
+		{"linux", svc("ssh"), []string{"host.services[0].kind", `"ssh"`, "linux", "#521"}, "#454"},
+		{"linux", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "linux", "ADR-017 §5"}, "#454"},
+		{"windows", svc("ssh"), []string{"host.services[0].kind", `"ssh"`, "windows", "#521"}, "#455"},
+		{"windows", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "windows", "ADR-017 §5"}, "#455"},
+		{"darwin", svc("ssh"), []string{"host.services[0].kind", "darwin", "#459"}, ""},
+		{"darwin", svc("vnc"), []string{"host.services[0].kind", "darwin", "#459"}, ""},
+		{"darwin", svc("rdp"), []string{"darwin", "ADR-017 §5"}, "#459"},
+		{"linux", power, []string{"host.power", "linux"}, ""},
+		{"darwin", power, []string{"host.power", "darwin"}, ""},
+		{"linux", firewall, []string{"host.firewall", "linux"}, ""},
+		{"darwin", firewall, []string{"host.firewall", "darwin"}, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.goos+"/"+strings.ReplaceAll(strings.TrimSpace(tc.content), "\n", " "), func(t *testing.T) {
@@ -239,6 +243,9 @@ func TestLoadFile_OSCapability(t *testing.T) {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error %q does not contain %q", err, want)
 				}
+			}
+			if tc.notErr != "" && strings.Contains(err.Error(), tc.notErr) {
+				t.Errorf("error %q cites %s, which adds no such step", err, tc.notErr)
 			}
 		})
 	}
