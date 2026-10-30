@@ -48,7 +48,7 @@ The file and its rules (A1), and how the commands use it (A2):
   - `version` absent is version 1; any other value than 1 is an error naming the supported version.
   - Unknown keys at any level are ignored with one warning each on stderr, as the client YAML does. Keys reached through an alias or a merge key are checked as the decoder resolves them. A second YAML document is an error, not silently dropped. A known key with no value (`control_url:`, `services:`) is an error too, so a placeholder line cannot pass for an absent key (review of #519).
   - `kind` outside `rdp|ssh|vnc`, a port outside 1-65535, a duplicate `kind`, an empty `services` list, an invalid `firewall.rule`, or an empty, non-`http(s)`, host-less or credential-carrying `control_url` is an error naming the entry. A `control_url` with user info is rejected because the host needs no credential and PR B writes the file `0644` (review of #519).
-  - **Against the target OS** (owner decision 2026-10-30): an entry the OS has no step for *in this version* is an error naming the entry and the OS, never skipped (ADR-017 §1). The capability table is what the steps implement today, and each per-OS ticket widens it: Windows `{rdp}` + `power` + named `firewall.rule`; Linux `{rdp}`; macOS `{}`. So `ssh` on Linux errors until #454, any service on macOS errors until #459, and `power` and `firewall` error outside Windows (only the Windows firewall step uses a rule name; review of #519).
+  - **Against the target OS** (owner decision 2026-10-30): an entry the OS has no step for *in this version* is an error naming the entry and the OS, never skipped (ADR-017 §1). The capability table is what the steps implement today, and each per-OS ticket widens it: Windows `{rdp}` + `power` + named `firewall.rule`; Linux `{rdp}`; macOS `{}`. The error cites the ticket that adds the missing step where one exists (`ssh` on Linux and Windows: #521; `ssh`/`vnc` on macOS: #459), and ADR-017 §5 otherwise (`vnc` on Linux/Windows, `rdp` on macOS). `power` and `firewall` error outside Windows (only the Windows firewall step uses a rule name). Review of #519: #454 and #455 add no `ssh` step, so they are not cited.
   - Validation applies to the file only. Flags and env keep today's behaviour on every OS (for example, `--no-sleep` on Linux stays accepted and has no effect).
 - A declared `control_url` is honoured now (owner decision 2026-10-30): it becomes the `cp=` of the `tsb://` descriptor printed by `setup` and `check` (text and `--json`). Absent means today's behaviour; detection is #453.
 - Host commands never read the per-user profile or credential store (ADR-017 C9).
@@ -64,7 +64,7 @@ The file and its rules (A1), and how the commands use it (A2):
 
 ## Out of scope
 
-- Steps for new kinds or read-first behaviour: Linux `ssh` and convergence (#454), Windows `ssh` and state-first firewall (#455), macOS Remote Login / Screen Sharing (#459). They widen the capability table here.
+- Steps for new kinds or read-first behaviour: Linux and Windows `ssh` (#521), Windows state-first firewall (#455), macOS Remote Login / Screen Sharing (#459). They widen the capability table here.
 - Control-plane detection, per-service descriptors and `svc=` (#453). PR A2 only passes a declared `control_url` through.
 - A default or machine-wide config path, `TS_HOST_CONFIG`, or `--profile` on host commands (ADR-017 rejected alternatives).
 - Removing `.env` support from `setup`/`check`, or migrating an existing `.env` into the YAML file.
@@ -96,4 +96,4 @@ The file and its rules (A1), and how the commands use it (A2):
 - Gap inventory: `docs/design/host-client-parity.md` (G3, G5)
 - Prior spec: `specs/archive/HOST-004-host-step-model/` (step/outcome model this builds on)
 - Lesson: `docs/lessons/lesson-040-2026-10-20.md` (OS as an input)
-- Related issues: #408 (unreadable file must not be rewritten), #399 (`.env` retirement), #453, #454, #455, #459
+- Related issues: #408 (unreadable file must not be rewritten), #399 (`.env` retirement), #453, #454, #455, #459, #521
