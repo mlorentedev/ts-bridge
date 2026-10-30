@@ -46,13 +46,13 @@ The file and its rules (A1), and how the commands use it (A2):
 - Per-OS default when no file declares `services`: Windows `rdp`, Linux `rdp`, macOS `ssh` (port defaults per kind).
 - Validation, before any step runs:
   - `version` absent is version 1; any other value than 1 is an error naming the supported version.
-  - Unknown keys at any level are ignored with one warning each on stderr, as the client YAML does. Keys reached through an alias or a merge key are checked as the decoder resolves them. A second YAML document is an error, not silently dropped (review of #519).
+  - Unknown keys at any level are ignored with one warning each on stderr, as the client YAML does. Keys reached through an alias or a merge key are checked as the decoder resolves them. A second YAML document is an error, not silently dropped. A known key with no value (`control_url:`, `services:`) is an error too, so a placeholder line cannot pass for an absent key (review of #519).
   - `kind` outside `rdp|ssh|vnc`, a port outside 1-65535, a duplicate `kind`, an empty `services` list, an invalid `firewall.rule`, or an empty, non-`http(s)`, host-less or credential-carrying `control_url` is an error naming the entry. A `control_url` with user info is rejected because the host needs no credential and PR B writes the file `0644` (review of #519).
   - **Against the target OS** (owner decision 2026-10-30): an entry the OS has no step for *in this version* is an error naming the entry and the OS, never skipped (ADR-017 §1). The capability table is what the steps implement today, and each per-OS ticket widens it: Windows `{rdp}` + `power` + named `firewall.rule`; Linux `{rdp}`; macOS `{}`. So `ssh` on Linux errors until #454, any service on macOS errors until #459, and `power` and `firewall` error outside Windows (only the Windows firewall step uses a rule name; review of #519).
   - Validation applies to the file only. Flags and env keep today's behaviour on every OS (for example, `--no-sleep` on Linux stays accepted and has no effect).
 - A declared `control_url` is honoured now (owner decision 2026-10-30): it becomes the `cp=` of the `tsb://` descriptor printed by `setup` and `check` (text and `--json`). Absent means today's behaviour; detection is #453.
 - Host commands never read the per-user profile or credential store (ADR-017 C9).
-- Coupled fix: `host setup --firewall-rule` defaults to `"Tailscale-RDP-Ingress"` instead of empty, so the flag always overrides `TS_HOST_FIREWALL_RULE` today, and would override `firewall.rule`. The flag only applies when passed.
+- Coupled fix. The defect: `host setup --firewall-rule` is declared with the non-empty default `"Tailscale-RDP-Ingress"`, so the flag always wins over `TS_HOST_FIREWALL_RULE` today and would win over `firewall.rule`. The fix: the flag gets an empty default (its help text still names the default rule), so it applies only when passed.
 
 **PR B: `host init` writes the file.**
 

@@ -49,7 +49,7 @@ created: "2026-10-30"
 
 ### The descriptor (`internal/host/step.go`, `cmd/cli/host.go`)
 
-- [ ] [AC6] Failing tests: `checkFor` and `setupFor` copy `cfg.ControlURL` into `CheckResult.ControlURL` / `SetupResult.ControlURL`; `checkJSON`, `printCheckText` and `printSetupSummary` emit a `tsb://` descriptor whose control plane is that URL (`cp=` per `internal/profile`). Expected: FAIL.
+- [ ] [AC6] Failing tests `TestCheckFor_ControlURL`, `TestSetupFor_ControlURL` and `TestHostCmds_DescriptorControlURL`: `checkFor` and `setupFor` copy `cfg.ControlURL` into `CheckResult.ControlURL` / `SetupResult.ControlURL`; `checkJSON`, `printCheckText` and `printSetupSummary` emit a `tsb://` descriptor whose control plane is that URL (`cp=` per `internal/profile`). Expected: FAIL.
 - [ ] [AC6] Add `ControlURL` to both results and pass it to `buildDescriptorLine`. Expected: PASS.
 
 ### PR A2 close
@@ -71,7 +71,7 @@ created: "2026-10-30"
 ## Closing
 
 - [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command
+- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command (each names its test and greps its `--- PASS:` line, so a missing test fails instead of exiting 0 on "no tests to run")
 - [ ] Lint passes
 - [ ] No unrelated changes in the diff (no scope creep)
 - [ ] `verification.md` filled in
