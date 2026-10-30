@@ -1,0 +1,58 @@
+[
+  {
+    "id": "HOST-005-host-config-f1",
+    "behavior": "AC1: --config loads the ADR-017 §1 schema; version checked, unknown keys warned and ignored, invalid entries fail before any step naming the entry",
+    "verification": "go test ./internal/host -run '^TestLoadFile_Schema$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_Schema ' && go test ./internal/host -run '^TestLoadFile_InvalidEntries$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_InvalidEntries ' && go test ./cmd/cli -run '^TestHostSetupCmd_Config$' -count=1 -v | grep -q -- '--- PASS: TestHostSetupCmd_Config ' && go test ./cmd/cli -run '^TestHostCheckCmd_Config$' -count=1 -v | grep -q -- '--- PASS: TestHostCheckCmd_Config '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-005-host-config-f2",
+    "behavior": "AC2: flags > env (TS_HOST_*) > file > per-OS defaults, .env still in the env layer, --firewall-rule only applies when passed",
+    "verification": "go test ./internal/host -run '^TestResolve_Precedence$' -count=1 -v | grep -q -- '--- PASS: TestResolve_Precedence ' && go test ./cmd/cli -run '^TestHostSetupCmd_FirewallRuleFlagUnset$' -count=1 -v | grep -q -- '--- PASS: TestHostSetupCmd_FirewallRuleFlagUnset ' && go test ./cmd/cli -run '^TestHostSetupCmd_Config$' -count=1 -v | grep -q -- '--- PASS: TestHostSetupCmd_Config '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-005-host-config-f3",
+    "behavior": "AC3: host commands never read the per-user profile or credential store, under simulated elevation",
+    "verification": "go test ./internal/host -run '^TestHostPackage_DoesNotImportUserStores$' -count=1 -v | grep -q -- '--- PASS: TestHostPackage_DoesNotImportUserStores ' && go test ./cmd/cli -run '^TestHostCmds_NeverReadUserStore$' -count=1 -v | grep -q -- '--- PASS: TestHostCmds_NeverReadUserStore '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-005-host-config-f4",
+    "behavior": "AC4: a file entry the target OS has no step for in this version is a configuration error naming the entry and the OS",
+    "verification": "go test ./internal/host -run '^TestLoadFile_OSCapability$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_OSCapability ' && go test ./cmd/cli -run '^TestHostSetupCmd_ConfigOSCapability$' -count=1 -v | grep -q -- '--- PASS: TestHostSetupCmd_ConfigOSCapability '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-005-host-config-f5",
+    "behavior": "AC5: without a file the declared state is Windows rdp, Linux rdp, macOS ssh on the kind's default port",
+    "verification": "go test ./internal/host -run '^TestResolve_PerOSDefaults$' -count=1 -v | grep -q -- '--- PASS: TestResolve_PerOSDefaults '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-005-host-config-f6",
+    "behavior": "AC6: a declared control_url is the descriptor's control plane in setup and check output; an empty one is an error",
+    "verification": "go test ./internal/host -run '^TestLoadFile_InvalidEntries$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_InvalidEntries ' && go test ./internal/host -run '^TestCheckFor_ControlURL$' -count=1 -v | grep -q -- '--- PASS: TestCheckFor_ControlURL ' && go test ./internal/host -run '^TestSetupFor_ControlURL$' -count=1 -v | grep -q -- '--- PASS: TestSetupFor_ControlURL ' && go test ./cmd/cli -run '^TestHostCmds_DescriptorControlURL$' -count=1 -v | grep -q -- '--- PASS: TestHostCmds_DescriptorControlURL '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-005-host-config-f7",
+    "behavior": "AC7: host init requires --config, writes the YAML (never .env) with only the keys the OS accepts, and the file loads back unchanged; on macOS until #459 it writes nothing and exits 0",
+    "verification": "go test ./cmd/cli -run '^TestHostInit_RequiresConfig$' -count=1 -v | grep -q -- '--- PASS: TestHostInit_RequiresConfig ' && go test ./cmd/cli -run '^TestHostInit_WritesYAML$' -count=1 -v | grep -q -- '--- PASS: TestHostInit_WritesYAML '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-005-host-config-f8",
+    "behavior": "AC8: host init refuses to overwrite without confirmation or --force, and refuses an unreadable existing path even with --force",
+    "verification": "go test ./cmd/cli -run '^TestHostInit_Overwrite$' -count=1 -v | grep -q -- '--- PASS: TestHostInit_Overwrite '",
+    "state": "pending",
+    "evidence": ""
+  }
+]
