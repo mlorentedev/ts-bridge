@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -225,7 +226,20 @@ func validateControlURL(raw *string) error {
 		// Not echoed: an opaque or scheme-less value can hide user info from u.User.
 		return errors.New("host.control_url: must be an http or https URL with a host")
 	}
+	if !validURLPort(u.Port()) {
+		return errors.New("host.control_url: port must be between 1 and 65535")
+	}
 	return nil
+}
+
+// validURLPort reports whether p, a URL's port ("" when it has none), is
+// absent or within 1-65535. url.Parse checks only that it is digits.
+func validURLPort(p string) bool {
+	if p == "" {
+		return true
+	}
+	n, err := strconv.Atoi(p)
+	return err == nil && n >= 1 && n <= 65535
 }
 
 // Known keys per level of the file. Anything else is warned about and ignored.
@@ -243,8 +257,10 @@ var (
 // value is an error, so it cannot pass for an absent one (ADR-017 §4, #282).
 func checkKeys(doc *yaml.Node, warn io.Writer) error {
 	var raw map[string]any
-	if doc.Decode(&raw) != nil {
-		return nil // the struct decode reports what is wrong
+	if err := doc.Decode(&raw); err != nil {
+		// Failing here must not skip the checks below while the struct decode,
+		// which ignores unknown subtrees, still succeeds.
+		return fmt.Errorf("decode: %w", err)
 	}
 	hostMap := asMap(raw["host"])
 	levels := []keyLevel{
