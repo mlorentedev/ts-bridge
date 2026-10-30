@@ -49,11 +49,12 @@ for name_rc in $CASES; do
 done
 
 # One repository per trailer value, so dropping any single name from the guard fails a case.
-# Names that are also human names (Cline, Goose, Amp, Hermes) count only beside agent/bot/ai.
-AGENT_VALUES=('Antigravity <a@example.com>' 'OpenCode <o@example.com>' 'Qwen Code <q@example.com>'
+# Names that are also human names (Cline, Goose, Amp, Hermes, Qwen) count only beside agent,
+# bot, ai, code or coder.
+AGENT_VALUES=('Antigravity <a@example.com>' 'OpenCode <o@example.com>' 'Qwen-Coder <q@example.com>'
   'Cline Bot <c@example.com>' 'Goose AI <g@example.com>' 'Amp Agent <a@example.com>' 'Hermes-Agent <h@example.com>')
 HUMAN_VALUES=('Sam Cline <sam@example.com>' 'Lucy Goose <lucy@example.com>' 'Amp Patel <amp@example.com>'
-  'Hermes Conrad <hermes@example.com>')
+  'Hermes Conrad <hermes@example.com>' 'Qwen Zhang <qwen@example.com>')
 i=0
 for value in "${AGENT_VALUES[@]}"; do
   i=$((i + 1)); git init -q "$WORK/agent-$i"; commit "$WORK/agent-$i" "chore: base"; git -C "$WORK/agent-$i" tag base

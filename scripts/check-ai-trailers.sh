@@ -13,10 +13,10 @@ REPO="${3:-.}"
 # Matched case-insensitively against the trailer value (name and address), as whole words, so
 # `Claudette` is a human while `Copilot@users`, `cursoragent@cursor.com` and `Claude <...>` match.
 # A denylist: an agent not named here passes, so the harnesses in use are listed explicitly.
-AI_AGENTS='copilot|claude|anthropic|chatgpt|openai|gemini|codex|cursor|devin|aider|windsurf|codeium|tabnine|codewhisperer|opencode|antigravity|qwen'
-# Agent names that are also human names count only beside agent, bot or ai: `Cline Bot` and
-# `Hermes-Agent` match, `Sam Cline` and `Hermes Conrad` are people.
-AI_QUALIFIED='cline|goose|amp|hermes'
+AI_AGENTS='copilot|claude|anthropic|chatgpt|openai|gemini|codex|cursor|devin|aider|windsurf|codeium|tabnine|codewhisperer|opencode|antigravity'
+# Agent names that are also human names count only beside agent, bot, ai, code or coder:
+# `Cline Bot`, `Hermes-Agent` and `Qwen-Coder` match, `Sam Cline` and `Qwen Zhang` are people.
+AI_QUALIFIED='cline|goose|amp|hermes|qwen'
 
 # Git parses the trailer block itself, so a mention in the body prose is not a trailer, and
 # the key matches in any case (`Co-Authored-By`). `unfold` joins a value continued on an
@@ -38,7 +38,7 @@ found="$(printf '%s\n' "$log" | awk -F '\t' -v agents="$AI_AGENTS" -v qualified=
     for (i = 1; i <= n; i++) {
       v = tolower(values[i])
       if (v ~ "(^|[^a-z])(" agents ")([^a-z]|$)" ||
-          v ~ "(^|[^a-z])(" qualified ")[ _-]+(agent|bot|ai)([^a-z]|$)")
+          v ~ "(^|[^a-z])(" qualified ")[ _-]+(agent|bot|ai|code|coder)([^a-z]|$)")
         print $1 ": Co-authored-by: " values[i]
     }
   }
