@@ -1,9 +1,11 @@
 package host
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
 	"os"
 	"slices"
@@ -65,13 +67,14 @@ type FilePower struct {
 // osCapability is what one OS's steps can converge in this version. Each
 // per-OS ticket widens its row (ADR-017 §5); ticket names that work in errors.
 type osCapability struct {
-	kinds  []string
-	power  bool
-	ticket string
+	kinds        []string
+	power        bool
+	firewallRule bool // a named firewall rule; only the Windows step uses one
+	ticket       string
 }
 
 var osCapabilities = map[string]osCapability{
-	goosWindows: {kinds: []string{ServiceRDP}, power: true, ticket: "#455"},
+	goosWindows: {kinds: []string{ServiceRDP}, power: true, firewallRule: true, ticket: "#455"},
 	goosLinux:   {kinds: []string{ServiceRDP}, ticket: "#454"},
 	goosDarwin:  {ticket: "#459"},
 }
@@ -85,8 +88,12 @@ func capabilityFor(goos string) osCapability {
 }
 
 // LoadFile reads the host configuration at path and validates it for goos. It
-// writes one warning to warn for each unknown key, which it ignores.
+// writes one warning to warn (nil discards them) for each unknown key, which
+// it ignores.
 func LoadFile(path, goos string, warn io.Writer) (File, error) {
+	if warn == nil {
+		warn = io.Discard
+	}
 	// #nosec G304 -- path is the operator's explicit --config.
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -102,17 +109,23 @@ func LoadFile(path, goos string, warn io.Writer) (File, error) {
 	return f, nil
 }
 
+// decodeFile decodes the single YAML document in data. A second document is
+// an error rather than silently dropped.
 func decodeFile(data []byte, warn io.Writer) (File, error) {
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	f := File{Version: fileVersion}
+	var doc yaml.Node
+	switch err := dec.Decode(&doc); {
+	case errors.Is(err, io.EOF):
+		return f, nil
+	case err != nil:
 		return File{}, fmt.Errorf("parse YAML: %w", err)
 	}
-	f := File{Version: fileVersion}
-	if len(root.Content) == 0 {
-		return f, nil
+	var extra yaml.Node
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return File{}, errors.New("more than one YAML document; declare the host in a single document")
 	}
-	doc := root.Content[0]
-	warnUnknownKeys(doc, warn)
+	warnUnknownKeys(&doc, warn)
 	if err := doc.Decode(&f); err != nil {
 		return File{}, fmt.Errorf("decode: %w", err)
 	}
@@ -127,15 +140,29 @@ func (f File) validate(goos string) error {
 	if err := validateServices(f.Host.Services, goos, capab); err != nil {
 		return err
 	}
-	if fw := f.Host.Firewall; fw != nil && fw.Rule != nil {
-		if _, err := sanitizeFirewallRule(*fw.Rule); err != nil {
-			return fmt.Errorf("host.firewall.rule: %w", err)
-		}
+	if err := validateFirewall(f.Host.Firewall, goos, capab); err != nil {
+		return err
 	}
 	if f.Host.Power != nil && !capab.power {
 		return fmt.Errorf("host.power: %s has no power step (ADR-017 §5)", goos)
 	}
 	return validateControlURL(f.Host.ControlURL)
+}
+
+func validateFirewall(fw *FileFirewall, goos string, capab osCapability) error {
+	if fw == nil {
+		return nil
+	}
+	if !capab.firewallRule {
+		return fmt.Errorf("host.firewall: %s has no named firewall rule (ADR-017 §5)", goos)
+	}
+	if fw.Rule == nil {
+		return nil
+	}
+	if _, err := sanitizeFirewallRule(*fw.Rule); err != nil {
+		return fmt.Errorf("host.firewall.rule: %w", err)
+	}
+	return nil
 }
 
 func validateServices(services []FileService, goos string, capab osCapability) error {
@@ -182,8 +209,12 @@ func validateControlURL(raw *string) error {
 		return errors.New("host.control_url: empty; omit it to use the detected control plane")
 	}
 	u, err := url.Parse(*raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return fmt.Errorf("host.control_url %q: must be an http or https URL with a host", *raw)
+	}
+	if u.User != nil {
+		// The URL is not echoed: it carries a secret.
+		return errors.New("host.control_url: must not carry credentials; the host needs none")
 	}
 	return nil
 }
@@ -197,27 +228,33 @@ var (
 	powerKeys    = []string{"prevent_sleep"}
 )
 
+// warnUnknownKeys walks the document as the decoder resolves it, so keys
+// reached through an alias or a merge key are checked and a merge key itself
+// is not reported as ignored.
 func warnUnknownKeys(doc *yaml.Node, warn io.Writer) {
-	warnMapping(doc, "", topKeys, warn)
-	hostNode := mappingValue(doc, "host")
-	warnMapping(hostNode, "host", hostKeys, warn)
-	warnMapping(mappingValue(hostNode, "firewall"), "host.firewall", firewallKeys, warn)
-	warnMapping(mappingValue(hostNode, "power"), "host.power", powerKeys, warn)
-	if svcs := mappingValue(hostNode, "services"); svcs != nil && svcs.Kind == yaml.SequenceNode {
-		for i, s := range svcs.Content {
-			warnMapping(s, fmt.Sprintf("host.services[%d]", i), serviceKeys, warn)
-		}
+	var raw map[string]any
+	if doc.Decode(&raw) != nil {
+		return // the struct decode reports what is wrong
+	}
+	warnKeys(raw, "", topKeys, warn)
+	hostMap := asMap(raw["host"])
+	warnKeys(hostMap, "host", hostKeys, warn)
+	warnKeys(asMap(hostMap["firewall"]), "host.firewall", firewallKeys, warn)
+	warnKeys(asMap(hostMap["power"]), "host.power", powerKeys, warn)
+	services, _ := hostMap["services"].([]any)
+	for i, s := range services {
+		warnKeys(asMap(s), fmt.Sprintf("host.services[%d]", i), serviceKeys, warn)
 	}
 }
 
-// warnMapping warns about each key of mapping n outside known. A nil or
-// non-mapping n is left for the decoder to reject.
-func warnMapping(n *yaml.Node, prefix string, known []string, warn io.Writer) {
-	if n == nil || n.Kind != yaml.MappingNode {
-		return
-	}
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		key := n.Content[i].Value
+func asMap(v any) map[string]any {
+	m, _ := v.(map[string]any)
+	return m
+}
+
+// warnKeys warns, in key order, about each key of m outside known.
+func warnKeys(m map[string]any, prefix string, known []string, warn io.Writer) {
+	for _, key := range slices.Sorted(maps.Keys(m)) {
 		if slices.Contains(known, key) {
 			continue
 		}
@@ -226,16 +263,4 @@ func warnMapping(n *yaml.Node, prefix string, known []string, warn io.Writer) {
 		}
 		fmt.Fprintf(warn, "WARNING: unknown host config key %q ignored\n", key)
 	}
-}
-
-func mappingValue(n *yaml.Node, key string) *yaml.Node {
-	if n == nil || n.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		if n.Content[i].Value == key {
-			return n.Content[i+1]
-		}
-	}
-	return nil
 }

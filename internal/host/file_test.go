@@ -89,6 +89,18 @@ host:
 			}},
 			wantWarn: []string{`"theme"`, `"host.extra"`, `"host.services[0].label"`, `"host.firewall.profile"`, `"host.power.hibernate"`},
 		},
+		{
+			name:     "unknown keys behind an alias are warned",
+			content:  "base: &h\n  services:\n    - kind: rdp\n      label: office\nhost: *h\n",
+			want:     File{Version: 1, Host: FileHost{Services: []FileService{{Kind: ServiceRDP}}}},
+			wantWarn: []string{`"base"`, `"host.services[0].label"`},
+		},
+		{
+			name:     "a merge key is applied, not reported as ignored",
+			content:  "base: &b\n  services:\n    - kind: rdp\n      label: x\nhost:\n  <<: *b\n",
+			want:     File{Version: 1, Host: FileHost{Services: []FileService{{Kind: ServiceRDP}}}},
+			wantWarn: []string{`"base"`, `"host.services[0].label"`},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -111,11 +123,17 @@ host:
 					t.Errorf("warnings %q do not name %s", warn.String(), w)
 				}
 			}
-			if len(tc.wantWarn) == 0 && warn.Len() != 0 {
-				t.Errorf("unexpected warnings: %q", warn.String())
+			if got := strings.Count(warn.String(), "WARNING:"); got != len(tc.wantWarn) {
+				t.Errorf("got %d warnings, want one per unknown key (%d): %q", got, len(tc.wantWarn), warn.String())
 			}
 		})
 	}
+
+	t.Run("nil warning writer", func(t *testing.T) {
+		if _, err := LoadFile(writeHostFile(t, "theme: dark\n"), "windows", nil); err != nil {
+			t.Fatalf("LoadFile() error = %v", err)
+		}
+	})
 }
 
 func TestLoadFile_InvalidEntries(t *testing.T) {
@@ -135,6 +153,9 @@ func TestLoadFile_InvalidEntries(t *testing.T) {
 		{"empty control_url", "host:\n  control_url: \"\"\n", []string{"host.control_url", "omit it"}},
 		{"non-http control_url", "host:\n  control_url: ftp://x\n", []string{"host.control_url", "http or https"}},
 		{"control_url without host", "host:\n  control_url: https://\n", []string{"host.control_url"}},
+		{"control_url with only a port", "host:\n  control_url: http://:8080\n", []string{"host.control_url", "with a host"}},
+		{"control_url with credentials", "host:\n  control_url: https://user:secret@hs.example\n", []string{"host.control_url", "credentials"}},
+		{"two YAML documents", "host:\n  services:\n    - kind: rdp\n---\nhost:\n  control_url: https://hs.example\n", []string{"more than one YAML document"}},
 		{"not YAML", "host: [\n", []string{"parse"}},
 		{"services not a list", "host:\n  services: rdp\n", []string{"line 2"}},
 	}
@@ -172,6 +193,7 @@ func TestLoadFile_InvalidEntries(t *testing.T) {
 func TestLoadFile_OSCapability(t *testing.T) {
 	svc := func(kind string) string { return "host:\n  services:\n    - kind: " + kind + "\n" }
 	power := "host:\n  power:\n    prevent_sleep: true\n"
+	firewall := "host:\n  firewall:\n    rule: R\n"
 	tests := []struct {
 		goos    string
 		content string
@@ -180,12 +202,17 @@ func TestLoadFile_OSCapability(t *testing.T) {
 		{"windows", svc("rdp"), nil},
 		{"linux", svc("rdp"), nil},
 		{"windows", power, nil},
+		{"windows", firewall, nil},
 		{"linux", svc("ssh"), []string{"host.services[0].kind", `"ssh"`, "linux", "#454"}},
+		{"linux", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "linux", "#454"}},
+		{"windows", svc("ssh"), []string{"host.services[0].kind", `"ssh"`, "windows", "#455"}},
 		{"windows", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "windows", "#455"}},
 		{"darwin", svc("ssh"), []string{"host.services[0].kind", "darwin", "#459"}},
 		{"darwin", svc("rdp"), []string{"darwin", "#459"}},
 		{"linux", power, []string{"host.power", "linux"}},
 		{"darwin", power, []string{"host.power", "darwin"}},
+		{"linux", firewall, []string{"host.firewall", "linux"}},
+		{"darwin", firewall, []string{"host.firewall", "darwin"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.goos+"/"+strings.ReplaceAll(strings.TrimSpace(tc.content), "\n", " "), func(t *testing.T) {
