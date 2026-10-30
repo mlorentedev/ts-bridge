@@ -45,7 +45,9 @@ go build -o ts-bridge ./cmd/ts-bridge/
 # Test (CI runs -race on Linux; the Windows job omits it — it needs a C toolchain)
 go test -race -v ./...
 
-# Lint (the version is pinned in mise.toml, which CI must match; the toolchain guard checks both)
+# Lint (the version is pinned in mise.toml, which CI must match; the toolchain guard checks both).
+# The CI `lint` job is authoritative. Where endpoint security blocks the linter, do not retry,
+# wrap or rebuild it: run `gofmt -l .` and `go vet ./...` (GOOS=linux|windows|darwin) instead.
 mise install
 golangci-lint run
 
