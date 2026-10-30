@@ -19,12 +19,12 @@ created: "2026-10-30"
 
 ### The file (`internal/host/file.go`, `internal/host/file_test.go`)
 
-- [ ] [P] [AC1] Failing table test `TestLoadFile_Schema`: a full valid file decodes to `File{Version:1, Host:{Services:[{rdp 3389}], Firewall rule, PreventSleep, ControlURL}}`; absent `version` is 1; `version: 2` errors naming version 1; unknown keys at top, `host`, a service, `firewall`, `power` are each named in the warning writer and the decode still succeeds. Run `go test ./internal/host -run TestLoadFile_Schema -count=1`. Expected: FAIL, `LoadFile` undefined.
-- [ ] [AC1] Implement `File`, `DeclaredService`, `LoadFile(path, goos string, warn io.Writer) (File, error)`: `os.ReadFile`, `yaml.Unmarshal` into a `yaml.Node`, walk it against the known-key sets, then decode. Pointers distinguish absent from empty (`Services` nil vs empty, `*string` control_url, `*bool` prevent_sleep). Same command. Expected: PASS.
-- [ ] [AC1] Failing table test `TestLoadFile_InvalidEntries`: kind `ftp`, port 0 and 70000, duplicate `rdp`, `services: []`, `firewall.rule: ""` and an unsafe rule, `control_url: ""`, `control_url: ftp://x`, a missing path, a directory path. Each error names the entry (`host.services[1].kind`, ...). Expected: FAIL.
-- [ ] [AC1] [AC6] Implement `validate`; reuse `sanitizeFirewallRule`; `control_url` must parse with scheme `http`/`https` and a host. Expected: PASS.
-- [ ] [AC4] Failing table test `TestLoadFile_OSCapability`: `rdp` on windows/linux ok; `ssh` on linux errors naming `linux` and `#454`; `vnc` on windows errors naming `#455`; any kind on darwin errors naming `#459`; `power` on linux and darwin errors; `power` on windows ok. Expected: FAIL.
-- [ ] [AC4] Implement the capability table (`supportedKinds`, `powerSupported` keyed by GOOS, with the ticket that widens each). Expected: PASS. `go test ./internal/host -count=1` all green.
+- [x] [P] [AC1] Failing table test `TestLoadFile_Schema`: a full valid file decodes to `File{Version:1, Host:{Services:[{rdp 3389}], Firewall rule, PreventSleep, ControlURL}}`; absent `version` is 1; `version: 2` errors naming version 1; unknown keys at top, `host`, a service, `firewall`, `power` are each named in the warning writer and the decode still succeeds. Run `go test ./internal/host -run TestLoadFile_Schema -count=1`. Expected: FAIL, `LoadFile` undefined.
+- [x] [AC1] Implement `File`, `DeclaredService`, `LoadFile(path, goos string, warn io.Writer) (File, error)`: `os.ReadFile`, `yaml.Unmarshal` into a `yaml.Node`, walk it against the known-key sets, then decode. Pointers distinguish absent from empty (`Services` nil vs empty, `*string` control_url, `*bool` prevent_sleep). Same command. Expected: PASS.
+- [x] [AC1] Failing table test `TestLoadFile_InvalidEntries`: kind `ftp`, port 0 and 70000, duplicate `rdp`, `services: []`, `firewall.rule: ""` and an unsafe rule, `control_url: ""`, `control_url: ftp://x`, a missing path, a directory path. Each error names the entry (`host.services[1].kind`, ...). Expected: FAIL.
+- [x] [AC1] [AC6] Implement `validate`; reuse `sanitizeFirewallRule`; `control_url` must parse with scheme `http`/`https` and a host. Expected: PASS.
+- [x] [AC4] Failing table test `TestLoadFile_OSCapability`: `rdp` on windows/linux ok; `ssh` on linux errors naming `linux` and `#454`; `vnc` on windows errors naming `#455`; any kind on darwin errors naming `#459`; `power` on linux and darwin errors; `power` on windows ok. Expected: FAIL.
+- [x] [AC4] Implement the capability table (`supportedKinds`, `powerSupported` keyed by GOOS, with the ticket that widens each). Expected: PASS. `go test ./internal/host -count=1` all green.
 
 ### Resolution (`internal/host/config.go`, `internal/host/config_test.go`)
 
