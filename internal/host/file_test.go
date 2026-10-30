@@ -69,7 +69,7 @@ host:
 		{
 			name: "unknown keys warn and are ignored",
 			content: `version: 1
-colour: blue
+theme: dark
 host:
   extra: 1
   services:
@@ -87,7 +87,7 @@ host:
 				Firewall: &FileFirewall{Rule: strPtr("R")},
 				Power:    &FilePower{PreventSleep: boolPtr(true)},
 			}},
-			wantWarn: []string{`"colour"`, `"host.extra"`, `"host.services[0].label"`, `"host.firewall.profile"`, `"host.power.hibernate"`},
+			wantWarn: []string{`"theme"`, `"host.extra"`, `"host.services[0].label"`, `"host.firewall.profile"`, `"host.power.hibernate"`},
 		},
 	}
 	for _, tc := range tests {
