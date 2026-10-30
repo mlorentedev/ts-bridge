@@ -9,9 +9,14 @@ created: "2026-10-30"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [ ] AC1 (schema, loader and `--config`) -> commit `<hash>` / test `<name>`
+- [ ] AC2 (precedence, `--firewall-rule` unset) -> commit `<hash>` / test `<name>`
+- [ ] AC3 (no per-user store read, C9) -> commit `<hash>` / test `<name>`
+- [ ] AC4 (per-OS capability errors) -> commit `<hash>` / test `<name>`
+- [ ] AC5 (per-OS defaults) -> commit `<hash>` / test `<name>`
+- [ ] AC6 (`control_url` in the descriptor) -> commit `<hash>` / test `<name>`
+- [ ] AC7 (`host init` writes the YAML) -> commit `<hash>` / test `<name>`
+- [ ] AC8 (`host init` overwrite and unreadable-path refusal) -> commit `<hash>` / test `<name>`
 
 ## Test status
 

@@ -46,9 +46,9 @@ The file and its rules (A1), and how the commands use it (A2):
 - Per-OS default when no file declares `services`: Windows `rdp`, Linux `rdp`, macOS `ssh` (port defaults per kind).
 - Validation, before any step runs:
   - `version` absent is version 1; any other value than 1 is an error naming the supported version.
-  - Unknown keys at any level are ignored with a warning on stderr, as the client YAML does.
-  - `kind` outside `rdp|ssh|vnc`, a port outside 1-65535, a duplicate `kind`, an empty `services` list, an invalid `firewall.rule`, or an empty or non-`http(s)` `control_url` is an error naming the entry.
-  - **Against the target OS** (owner decision 2026-10-30): an entry the OS has no step for *in this version* is an error naming the entry and the OS, never skipped (ADR-017 §1). The capability table is what the steps implement today, and each per-OS ticket widens it: Windows `{rdp}` + `power`; Linux `{rdp}`; macOS `{}`. So `ssh` on Linux errors until #454, any service on macOS errors until #459, and `power` errors outside Windows.
+  - Unknown keys at any level are ignored with one warning each on stderr, as the client YAML does. Keys reached through an alias or a merge key are checked as the decoder resolves them. A second YAML document is an error, not silently dropped (review of #519).
+  - `kind` outside `rdp|ssh|vnc`, a port outside 1-65535, a duplicate `kind`, an empty `services` list, an invalid `firewall.rule`, or an empty, non-`http(s)`, host-less or credential-carrying `control_url` is an error naming the entry. A `control_url` with user info is rejected because the host needs no credential and PR B writes the file `0644` (review of #519).
+  - **Against the target OS** (owner decision 2026-10-30): an entry the OS has no step for *in this version* is an error naming the entry and the OS, never skipped (ADR-017 §1). The capability table is what the steps implement today, and each per-OS ticket widens it: Windows `{rdp}` + `power` + named `firewall.rule`; Linux `{rdp}`; macOS `{}`. So `ssh` on Linux errors until #454, any service on macOS errors until #459, and `power` and `firewall` error outside Windows (only the Windows firewall step uses a rule name; review of #519).
   - Validation applies to the file only. Flags and env keep today's behaviour on every OS (for example, `--no-sleep` on Linux stays accepted and has no effect).
 - A declared `control_url` is honoured now (owner decision 2026-10-30): it becomes the `cp=` of the `tsb://` descriptor printed by `setup` and `check` (text and `--json`). Absent means today's behaviour; detection is #453.
 - Host commands never read the per-user profile or credential store (ADR-017 C9).
@@ -57,9 +57,9 @@ The file and its rules (A1), and how the commands use it (A2):
 **PR B: `host init` writes the file.**
 
 - `host init` requires `--config <path>` (owner decision 2026-10-30: explicit, no default path, per ADR-017's rejected "default machine-wide config path"). Without it, the command fails before prompting, naming the flag.
-- It writes the YAML above instead of `.env`, with only the keys the target OS accepts, so the file it writes always loads back under the same validation. `power` is written on Windows only. On macOS it prints "not applicable" and exits 0, as `host setup` does, until #459.
+- It writes the YAML above instead of `.env`, with only the keys the target OS accepts, so the file it writes always loads back under the same validation. `power` and `firewall` are written on Windows only. On macOS it prints "not applicable" and exits 0, as `host setup` does, until #459.
 - An existing file is not overwritten without interactive confirmation or `--force`; non-interactive without `--force` refuses. An existing path that cannot be read (permission, a directory) is refused even with `--force` (#408 second site).
-- The file is written `0644`: it holds no secret, and `host check` runs unelevated and must be able to read a file root wrote.
+- The file is written `0644`: it holds no secret, and `host check` runs unelevated and must be able to read a file root wrote. `0644` is necessary, not sufficient: the parent directories must be traversable too, so the docs recommend a path such as `/etc/ts-bridge/host.yaml` rather than one under `/root` (review of #519).
 - Docs: `cli-reference.md`, `configuration.md`, `README.md` host section, and the G3/G5 rows of `docs/design/host-client-parity.md`.
 
 ## Out of scope
@@ -86,7 +86,7 @@ The file and its rules (A1), and how the commands use it (A2):
 - [ ] AC4: A file entry the target OS has no step for in this version (`kind`, or `power` outside Windows) is a configuration error naming the entry and the OS (loader in PR A1, wired in PR A2).
 - [ ] AC5: Without a file, the declared state is the per-OS default: Windows `rdp`, Linux `rdp`, macOS `ssh`, each on its kind's default port (PR A2).
 - [ ] AC6: A declared `control_url` is the descriptor's control plane in `setup` and `check` output; an empty one is a configuration error (validation in PR A1, descriptor in PR A2).
-- [ ] AC7: `host init` requires `--config`, writes the YAML (never `.env`) with only the keys the target OS accepts, and the written file loads back unchanged (PR B).
+- [ ] AC7: `host init` requires `--config`, writes the YAML (never `.env`) with only the keys the target OS accepts, and the written file loads back unchanged. On macOS, until #459, it prints "not applicable", exits 0 and writes nothing (PR B).
 - [ ] AC8: `host init` refuses to overwrite an existing file without confirmation or `--force`, and refuses to write when an existing path cannot be read, even with `--force` (#408 second site) (PR B).
 
 ## References
