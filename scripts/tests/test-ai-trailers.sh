@@ -48,6 +48,25 @@ for name_rc in $CASES; do
   build "${name_rc%%:*}"
 done
 
+# One repository per trailer value, so dropping any single name from the guard fails a case.
+# Names that are also human names (Cline, Goose, Amp, Hermes) count only beside agent/bot/ai.
+AGENT_VALUES=('Antigravity <a@example.com>' 'OpenCode <o@example.com>' 'Qwen Code <q@example.com>'
+  'Cline Bot <c@example.com>' 'Goose AI <g@example.com>' 'Amp Agent <a@example.com>' 'Hermes-Agent <h@example.com>')
+HUMAN_VALUES=('Sam Cline <sam@example.com>' 'Lucy Goose <lucy@example.com>' 'Amp Patel <amp@example.com>'
+  'Hermes Conrad <hermes@example.com>')
+i=0
+for value in "${AGENT_VALUES[@]}"; do
+  i=$((i + 1)); git init -q "$WORK/agent-$i"; commit "$WORK/agent-$i" "chore: base"; git -C "$WORK/agent-$i" tag base
+  commit "$WORK/agent-$i" "$(printf 'fix: x\n\nCo-authored-by: %s' "$value")"
+  CASES="$CASES agent-$i:1"
+done
+i=0
+for value in "${HUMAN_VALUES[@]}"; do
+  i=$((i + 1)); git init -q "$WORK/human-$i"; commit "$WORK/human-$i" "chore: base"; git -C "$WORK/human-$i" tag base
+  commit "$WORK/human-$i" "$(printf 'fix: x\n\nCo-authored-by: %s' "$value")"
+  CASES="$CASES human-$i:0"
+done
+
 failed=0
 for sh in $SHELLS; do
   if ! command -v "$sh" >/dev/null 2>&1; then
