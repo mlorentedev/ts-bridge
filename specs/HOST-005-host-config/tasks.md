@@ -15,7 +15,7 @@ created: "2026-10-30"
 - [x] `proposal.md` is complete and acceptance criteria are testable
 - [x] No open questions left in `proposal.md` "Risks / open questions" (owner decisions recorded 2026-10-30)
 
-## Implementation — PR A (declared state read by `setup` and `check`)
+## Implementation — PR A1 (the loader)
 
 ### The file (`internal/host/file.go`, `internal/host/file_test.go`)
 
@@ -25,6 +25,10 @@ created: "2026-10-30"
 - [x] [AC1] [AC6] Implement `validate`; reuse `sanitizeFirewallRule`; `control_url` must parse with scheme `http`/`https` and a host. Expected: PASS.
 - [x] [AC4] Failing table test `TestLoadFile_OSCapability`: `rdp` on windows/linux ok; `ssh` on linux errors naming `linux` and `#454`; `vnc` on windows errors naming `#455`; any kind on darwin errors naming `#459`; `power` on linux and darwin errors; `power` on windows ok. Expected: FAIL.
 - [x] [AC4] Implement the capability table (`supportedKinds`, `powerSupported` keyed by GOOS, with the ticket that widens each). Expected: PASS. `go test ./internal/host -count=1` all green.
+
+- [x] PR A1 close: `go test ./internal/host`, `go vet` for linux/windows/darwin; lint runs in CI (golangci-lint is blocked on the maintainer's workstation).
+
+## Implementation — PR A2 (declared state read by `setup` and `check`)
 
 ### Resolution (`internal/host/config.go`, `internal/host/config_test.go`)
 
@@ -48,7 +52,7 @@ created: "2026-10-30"
 - [ ] [AC6] Failing tests: `checkFor` and `setupFor` copy `cfg.ControlURL` into `CheckResult.ControlURL` / `SetupResult.ControlURL`; `checkJSON`, `printCheckText` and `printSetupSummary` emit a `tsb://` descriptor whose control plane is that URL (`cp=` per `internal/profile`). Expected: FAIL.
 - [ ] [AC6] Add `ControlURL` to both results and pass it to `buildDescriptorLine`. Expected: PASS.
 
-### PR A close
+### PR A2 close
 
 - [ ] Help text of `setup`/`check` documents `--config` and the precedence; `go test -race ./...`, `GOOS=windows go vet ./...`, `GOOS=darwin go vet ./...`, `golangci-lint run`, `gosec ./...` green.
 - [ ] `bats scripts/tests/smoke.bats` (Git Bash) unchanged and green.

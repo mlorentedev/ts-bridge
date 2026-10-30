@@ -18,9 +18,13 @@ ADR-017 makes `host setup` converge a declared state and `host check` diff it, b
 
 ## What
 
-Two PRs.
+Three PRs.
 
-**PR A: the declared state, read by `setup` and `check`.**
+**PR A1: the loader.** `internal/host` gains `LoadFile(path, goos, warn)`: the schema, version check, unknown-key warnings and validation below, including the per-OS capability table. Nothing calls it yet; no command changes. Split from PR A on 2026-10-30 (owner) because the loader alone is ~240 lines.
+
+**PR A2: the declared state, read by `setup` and `check`.** Everything below that is not the loader: resolution, `--config` on the commands, C9, the descriptor.
+
+The file and its rules (A1), and how the commands use it (A2):
 
 - `host setup` and `host check` take `--config <path>`, a YAML file declaring the host's desired state (ADR-017 §1):
 
@@ -61,7 +65,7 @@ Two PRs.
 ## Out of scope
 
 - Steps for new kinds or read-first behaviour: Linux `ssh` and convergence (#454), Windows `ssh` and state-first firewall (#455), macOS Remote Login / Screen Sharing (#459). They widen the capability table here.
-- Control-plane detection, per-service descriptors and `svc=` (#453). PR A only passes a declared `control_url` through.
+- Control-plane detection, per-service descriptors and `svc=` (#453). PR A2 only passes a declared `control_url` through.
 - A default or machine-wide config path, `TS_HOST_CONFIG`, or `--profile` on host commands (ADR-017 rejected alternatives).
 - Removing `.env` support from `setup`/`check`, or migrating an existing `.env` into the YAML file.
 - JSON contract changes beyond the descriptor's `cp=` value.
@@ -72,16 +76,16 @@ Two PRs.
 - **macOS default is declared but unused.** With no file, macOS declares `ssh`, but no darwin step reads it until #459, and `check` keeps reporting no service. The default is not a user declaration, so §1's "never skipped" holds for the file; #459 consumes it.
 - **Strict capability table.** A user who declares `ssh` on Linux gets an error, not partial convergence. That is the point of §1; the message names the ticket that adds the step.
 - **`.env` and the file disagree.** A stale `.env` in the working directory overrides the file (env beats file). This is the documented precedence; `host check --verbose` logs the resolved values.
-- **The ~300 LOC cap.** PR A is estimated at ~220 production lines, PR B at ~150 net (the `.env` writer is removed). If PR A runs over, the descriptor `control_url` pass-through moves to its own PR with AC6.
+- **The ~300 LOC cap.** The loader alone is ~240 production lines, so PR A was split into A1 (loader) and A2 (resolution, commands, C9, descriptor; ~120 estimated). PR B is ~150 net (the `.env` writer is removed). If A2 runs over, the descriptor `control_url` pass-through moves to its own PR with AC6.
 
 ## Acceptance criteria
 
-- [ ] AC1: `--config` on `host setup` / `host check` loads the schema above (ADR-017 §1). `version` is checked, unknown keys warn and are ignored, and invalid entries fail with exit 1 before any step runs, naming the entry (PR A).
-- [ ] AC2: Resolution order is `flags > env (TS_HOST_*) > file > per-OS defaults`, with `.env` in the working directory still loading into the env layer. `--firewall-rule` no longer overrides env or file when not passed (PR A).
-- [ ] AC3: Host commands never read the per-user profile or credential store (ADR-017 C9). A test proves it with elevation simulated and the home directories pointed at a store whose values, if read, would change the result (PR A, `host init` added in PR B).
-- [ ] AC4: A file entry the target OS has no step for in this version (`kind`, or `power` outside Windows) is a configuration error naming the entry and the OS (PR A).
-- [ ] AC5: Without a file, the declared state is the per-OS default: Windows `rdp`, Linux `rdp`, macOS `ssh`, each on its kind's default port (PR A).
-- [ ] AC6: A declared `control_url` is the descriptor's control plane in `setup` and `check` output; an empty one is a configuration error (PR A).
+- [ ] AC1: `--config` on `host setup` / `host check` loads the schema above (ADR-017 §1). `version` is checked, unknown keys warn and are ignored, and invalid entries fail with exit 1 before any step runs, naming the entry (loader in PR A1, commands in PR A2).
+- [ ] AC2: Resolution order is `flags > env (TS_HOST_*) > file > per-OS defaults`, with `.env` in the working directory still loading into the env layer. `--firewall-rule` no longer overrides env or file when not passed (PR A2).
+- [ ] AC3: Host commands never read the per-user profile or credential store (ADR-017 C9). A test proves it with elevation simulated and the home directories pointed at a store whose values, if read, would change the result (PR A2, `host init` added in PR B).
+- [ ] AC4: A file entry the target OS has no step for in this version (`kind`, or `power` outside Windows) is a configuration error naming the entry and the OS (loader in PR A1, wired in PR A2).
+- [ ] AC5: Without a file, the declared state is the per-OS default: Windows `rdp`, Linux `rdp`, macOS `ssh`, each on its kind's default port (PR A2).
+- [ ] AC6: A declared `control_url` is the descriptor's control plane in `setup` and `check` output; an empty one is a configuration error (validation in PR A1, descriptor in PR A2).
 - [ ] AC7: `host init` requires `--config`, writes the YAML (never `.env`) with only the keys the target OS accepts, and the written file loads back unchanged (PR B).
 - [ ] AC8: `host init` refuses to overwrite an existing file without confirmation or `--force`, and refuses to write when an existing path cannot be read, even with `--force` (#408 second site) (PR B).
 
