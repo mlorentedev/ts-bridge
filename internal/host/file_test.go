@@ -155,6 +155,12 @@ func TestLoadFile_InvalidEntries(t *testing.T) {
 		{"control_url without host", "host:\n  control_url: https://\n", []string{"host.control_url"}},
 		{"control_url with only a port", "host:\n  control_url: http://:8080\n", []string{"host.control_url", "with a host"}},
 		{"control_url with credentials", "host:\n  control_url: https://user:secret@hs.example\n", []string{"host.control_url", "credentials"}},
+		{"control_url with credentials and a bad scheme", "host:\n  control_url: ftp://user:secret@hs.example\n", []string{"host.control_url", "credentials"}},
+		{"null host", "host:\n", []string{"host", "no value"}},
+		{"null services", "host:\n  services:\n", []string{"host.services", "no value"}},
+		{"null control_url", "host:\n  control_url:\n", []string{"host.control_url", "no value"}},
+		{"null firewall rule", "host:\n  firewall:\n    rule:\n", []string{"host.firewall.rule", "no value"}},
+		{"null service port", "host:\n  services:\n    - kind: rdp\n      port:\n", []string{"host.services[0].port", "no value"}},
 		{"two YAML documents", "host:\n  services:\n    - kind: rdp\n---\nhost:\n  control_url: https://hs.example\n", []string{"more than one YAML document"}},
 		{"not YAML", "host: [\n", []string{"parse"}},
 		{"services not a list", "host:\n  services: rdp\n", []string{"line 2"}},
@@ -169,6 +175,9 @@ func TestLoadFile_InvalidEntries(t *testing.T) {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error %q does not contain %q", err, want)
 				}
+			}
+			if strings.Contains(err.Error(), "secret") {
+				t.Errorf("error %q echoes a credential", err)
 			}
 		})
 	}

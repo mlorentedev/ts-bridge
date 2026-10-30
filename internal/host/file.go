@@ -125,7 +125,9 @@ func decodeFile(data []byte, warn io.Writer) (File, error) {
 	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
 		return File{}, errors.New("more than one YAML document; declare the host in a single document")
 	}
-	warnUnknownKeys(&doc, warn)
+	if err := checkKeys(&doc, warn); err != nil {
+		return File{}, err
+	}
 	if err := doc.Decode(&f); err != nil {
 		return File{}, fmt.Errorf("decode: %w", err)
 	}
@@ -209,12 +211,15 @@ func validateControlURL(raw *string) error {
 		return errors.New("host.control_url: empty; omit it to use the detected control plane")
 	}
 	u, err := url.Parse(*raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
-		return fmt.Errorf("host.control_url %q: must be an http or https URL with a host", *raw)
+	if err != nil {
+		// The value is not echoed: it may carry a secret.
+		return errors.New("host.control_url: not a valid URL")
 	}
 	if u.User != nil {
-		// The URL is not echoed: it carries a secret.
 		return errors.New("host.control_url: must not carry credentials; the host needs none")
+	}
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return fmt.Errorf("host.control_url %q: must be an http or https URL with a host", *raw)
 	}
 	return nil
 }
@@ -228,39 +233,59 @@ var (
 	powerKeys    = []string{"prevent_sleep"}
 )
 
-// warnUnknownKeys walks the document as the decoder resolves it, so keys
-// reached through an alias or a merge key are checked and a merge key itself
-// is not reported as ignored.
-func warnUnknownKeys(doc *yaml.Node, warn io.Writer) {
+// checkKeys walks the document as the decoder resolves it, so keys reached
+// through an alias or a merge key are checked and a merge key itself is not
+// reported as ignored. Unknown keys are warned about; a known key with no
+// value is an error, so it cannot pass for an absent one (ADR-017 §4, #282).
+func checkKeys(doc *yaml.Node, warn io.Writer) error {
 	var raw map[string]any
 	if doc.Decode(&raw) != nil {
-		return // the struct decode reports what is wrong
+		return nil // the struct decode reports what is wrong
 	}
-	warnKeys(raw, "", topKeys, warn)
 	hostMap := asMap(raw["host"])
-	warnKeys(hostMap, "host", hostKeys, warn)
-	warnKeys(asMap(hostMap["firewall"]), "host.firewall", firewallKeys, warn)
-	warnKeys(asMap(hostMap["power"]), "host.power", powerKeys, warn)
+	levels := []keyLevel{
+		{raw, "", topKeys},
+		{hostMap, "host", hostKeys},
+		{asMap(hostMap["firewall"]), "host.firewall", firewallKeys},
+		{asMap(hostMap["power"]), "host.power", powerKeys},
+	}
 	services, _ := hostMap["services"].([]any)
 	for i, s := range services {
-		warnKeys(asMap(s), fmt.Sprintf("host.services[%d]", i), serviceKeys, warn)
+		levels = append(levels, keyLevel{asMap(s), fmt.Sprintf("host.services[%d]", i), serviceKeys})
 	}
+	for _, l := range levels {
+		if err := l.check(warn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// keyLevel is one mapping of the file and the keys it may hold.
+type keyLevel struct {
+	m      map[string]any
+	prefix string
+	known  []string
+}
+
+func (l keyLevel) check(warn io.Writer) error {
+	for _, key := range slices.Sorted(maps.Keys(l.m)) {
+		path := key
+		if l.prefix != "" {
+			path = l.prefix + "." + key
+		}
+		if !slices.Contains(l.known, key) {
+			fmt.Fprintf(warn, "WARNING: unknown host config key %q ignored\n", path)
+			continue
+		}
+		if l.m[key] == nil {
+			return fmt.Errorf("%s: no value; omit the key or give it one", path)
+		}
+	}
+	return nil
 }
 
 func asMap(v any) map[string]any {
 	m, _ := v.(map[string]any)
 	return m
-}
-
-// warnKeys warns, in key order, about each key of m outside known.
-func warnKeys(m map[string]any, prefix string, known []string, warn io.Writer) {
-	for _, key := range slices.Sorted(maps.Keys(m)) {
-		if slices.Contains(known, key) {
-			continue
-		}
-		if prefix != "" {
-			key = prefix + "." + key
-		}
-		fmt.Fprintf(warn, "WARNING: unknown host config key %q ignored\n", key)
-	}
 }
