@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.0](https://github.com/mlorentedev/ts-bridge/compare/v1.20.0...v1.21.0) (2026-10-30)
+
+
+### Features
+
+* **host:** load and validate the declared host configuration file ([#519](https://github.com/mlorentedev/ts-bridge/issues/519)) ([4363338](https://github.com/mlorentedev/ts-bridge/commit/436333857c079d5d3b80578b54507045941ca6f5))
+
 ## [1.20.0](https://github.com/mlorentedev/ts-bridge/compare/v1.19.1...v1.20.0) (2026-10-30)
 
 
