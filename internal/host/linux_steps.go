@@ -175,12 +175,50 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 	if _, err := r.LookPath(backendIPT); err != nil {
 		return firewallRead{noBackend: true, reason: "neither ufw nor iptables is installed"}
 	}
+	return readIptables(r, port)
+}
+
+// tsInputChain is the chain tailscaled fills with `-i tailscale0 -j ACCEPT`;
+// with --netfilter-mode=on it inserts tsInputJump at the top of INPUT (#492).
+const tsInputChain = "ts-input"
+
+var tsInputJump = []string{"-A", "INPUT", "-j", tsInputChain}
+
+// readIptables reads INPUT and, behind tailscaled's unqualified jump, the
+// ts-input chain. A failed read of either is an unknown state, so setup never
+// appends an open rule on a guess.
+func readIptables(r Runner, port int) firewallRead {
 	out, err := r.Output(backendIPT, "-S", "INPUT")
 	if err != nil {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
 	}
-	state, rule := iptablesDecide(string(out), port)
+	rules := string(out)
+	if slices.ContainsFunc(strings.Split(rules, "\n"), iptTSInputJump) {
+		chain, err := r.Output(backendIPT, "-S", tsInputChain)
+		if err != nil {
+			return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S %s: %v", tsInputChain, err)}
+		}
+		rules = iptInlineChain(rules, string(chain))
+	}
+	state, rule := iptablesDecide(rules, port)
 	return firewallRead{state: state, backend: backendIPT, blockedBy: rule}
+}
+
+// iptInlineChain puts the ts-input chain's rules in place of each unqualified
+// jump to it, so the walk evaluates them where a packet meets them. A jump with
+// a qualifier applies the chain to part of the traffic only and stays opaque.
+func iptInlineChain(input, chain string) string {
+	lines := strings.Split(input, "\n")
+	for i, line := range lines {
+		if iptTSInputJump(line) {
+			lines[i] = strings.TrimRight(chain, "\n")
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func iptTSInputJump(line string) bool {
+	return slices.Equal(strings.Fields(line), tsInputJump)
 }
 
 // iptQuoted matches a quoted value (a `--comment` or `--string`), escaped
