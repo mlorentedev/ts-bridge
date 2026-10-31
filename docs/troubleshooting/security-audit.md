@@ -121,10 +121,19 @@ Boundaries to defend (in order of blast radius):
   `CHANGELOG.md` entry 2026-05-18) scoped to this repo only with
   `contents: write` + `pull_requests: write`. Limits blast radius if the
   release-please-action upstream is compromised.
-- Branch protection on `master`: required checks `test`, `lint`, `security`
-  (gosec), `shellcheck`; strict up-to-date; no force-push.
-- `gosec` runs as a separate step (containerised `securego/gosec@v2.23.0`)
-  on every PR. Findings fail the build (see ARCH-004 PR #24 retry for an
+- Branch protection on `master` (verified 2026-10-30 with
+  `gh api repos/mlorentedev/ts-bridge/branches/master/protection`): required
+  checks `test`, `lint`, `security` and `hygiene`; strict up-to-date; no
+  force-push, no deletion. `hygiene` is the `Repo hygiene` job
+  (`.github/workflows/repo-hygiene.yml`), so its guards block a merge; it also
+  runs `actionlint` with `shellcheck` over every workflow's embedded shell,
+  which is where shellcheck lives (there is no separate `shellcheck` check).
+  Other CI jobs (`test-windows`, `test-macos`, `smoke`, `build-matrix`) run on
+  every PR but do not block a merge. The protection is set by hand, not as
+  code (#351).
+- `gosec` runs in the `security` job of `.github/workflows/ci.yml` on every
+  PR, installed with `go install github.com/securego/gosec/v2/cmd/gosec@latest`
+  (unpinned, #528). Findings fail the build (see ARCH-004 PR #24 retry for an
   example).
 - `GitGuardian` scans every commit for leaked secrets.
 
