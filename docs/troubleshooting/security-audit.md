@@ -129,10 +129,10 @@ Boundaries to defend (in order of blast radius):
   runs `actionlint` with `shellcheck` over every workflow's embedded shell,
   which is where shellcheck lives (there is no separate `shellcheck` check).
   Other CI jobs (`test-windows`, `test-macos`, `smoke`, `build-matrix`) run on
-  every PR but do not block a merge. The protection is set by hand, not as
+  every PR to `master` (the `ci.yml` trigger) but do not block a merge. The protection is set by hand, not as
   code (#351).
 - `gosec` runs in the `security` job of `.github/workflows/ci.yml` on every
-  PR, installed with `go install github.com/securego/gosec/v2/cmd/gosec@latest`
+  PR to `master`, installed with `go install github.com/securego/gosec/v2/cmd/gosec@latest`
   (unpinned, #528). Findings fail the build (see ARCH-004 PR #24 retry for an
   example).
 - `GitGuardian` scans every commit for leaked secrets.
