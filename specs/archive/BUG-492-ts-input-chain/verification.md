@@ -58,7 +58,7 @@ created: "2026-10-30"
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BUG-492-ts-input-chain/` -> `specs/archive/BUG-492-ts-input-chain/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BUG-492-ts-input-chain/` -> `specs/archive/BUG-492-ts-input-chain/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)

@@ -1,7 +1,7 @@
 ---
 id: "BUG-492-ts-input-chain"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-10-30"
 issue: "mlorentedev/ts-bridge#492"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, host, linux, firewall]
