@@ -43,6 +43,13 @@ created: "2026-10-30"
 - F5 Minor, declined as an accepted risk: between the two reads, tailscaled's `ClearChain` can leave `ts-input` empty. The read then reports absent, and setup appends the unscoped ACCEPT it appended before #492. The window lasts only while tailscaled restarts, it leaves the host no worse than before this change, and closing it would take an atomic read (`iptables-save`) that the proposal does not cover.
 - F6 Minor, ticketed: hosts with ufw still run the unscoped `ufw allow <port>/tcp`, because `ufw show added` does not list tailscaled's rules. Tracked as #530 (Backlog/P2/bug, `BUG-530-ufw-unscoped-allow`).
 
+## Review round 2 (nan/deepseek-v4-flash, PASS at `8313545`)
+
+- Minor, fixture order, recorded: `tsInputDefault` uses the order of the replay. On a live host, `router_linux.go` writes the magicsock UDP ACCEPT before the CGNAT `RETURN`/`DROP` rules. No answer changes, because the rules that move decide nothing in any order. The fixture stays as recorded on #492 (AC5), and the proposal already says the replay pins the printed form, not runtime order.
+- Minor, non-atomic reads: the round 1 F5 disposition stands, an accepted risk that fails toward the behaviour before #492.
+- Minor, `tsInputJump` is a mutable `var` and the jump match runs twice: declined. Both call sites share `iptTSInputJump`, so they cannot disagree, and the second pass touches only the few lines of INPUT.
+- Minor, AC3 is not pinned on the check path: applied after the review. `TestCheckForLinux/iptables, no ts-input jump: one read` asserts a call list with no `iptables -S ts-input`. This change touches tests only, so the contract digests are unchanged.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-050-2026-10-30.md

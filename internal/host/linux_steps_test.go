@@ -563,6 +563,14 @@ func TestCheckForLinux(t *testing.T) {
 			message:  iptChain,
 		},
 		{
+			name:     "iptables, no ts-input jump: one read",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+		},
+		{
 			name:     "iptables -S fails",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(nil), exit: map[string]int{iptRead: 2}},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
