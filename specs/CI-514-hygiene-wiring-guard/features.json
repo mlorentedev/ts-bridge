@@ -1,0 +1,37 @@
+[
+  {
+    "id": "CI-514-hygiene-wiring-guard-f1",
+    "behavior": "continue-on-error on a guarded step, on the hygiene job or on any other step fails the check, whatever its value.",
+    "verification": "bash scripts/tests/test-hygiene-wiring.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-514-hygiene-wiring-guard-f2",
+    "behavior": "An if on a guarded step or on the job, needs on the job, or a guarded run missing or nested under another key fails the check.",
+    "verification": "bash scripts/tests/test-hygiene-wiring.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-514-hygiene-wiring-guard-f3",
+    "behavior": "The current repo-hygiene.yml, a comment naming continue-on-error, the AI-trailer step's if and a CRLF copy are accepted; a CRLF copy of a red case stays red.",
+    "verification": "bash scripts/tests/test-hygiene-wiring.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-514-hygiene-wiring-guard-f4",
+    "behavior": "Adding continue-on-error: true to either guarded step of the real workflow makes the check exit non-zero.",
+    "verification": "d=$(mktemp -d) && for c in 'scripts/check-conflict-markers.sh' 'scripts/tests/test-conflict-markers.sh'; do awk -v c=\"        run: bash $c\" '{print} $0==c{print \"        continue-on-error: true\"}' .github/workflows/repo-hygiene.yml > \"$d/p.yml\" && ! bash scripts/tests/test-hygiene-wiring.sh \"$d/p.yml\" >/dev/null 2>&1 || exit 1; done",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-514-hygiene-wiring-guard-f5",
+    "behavior": "Repository hygiene runs the wiring check as its own step.",
+    "verification": "grep -qE '^        run: bash scripts/tests/test-hygiene-wiring.sh$' .github/workflows/repo-hygiene.yml",
+    "state": "pending",
+    "evidence": ""
+  }
+]
