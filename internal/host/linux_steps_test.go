@@ -174,20 +174,26 @@ func TestIptablesRule(t *testing.T) {
 		name   string
 		runner *recordingRunner
 		want   ruleState
+		reason string // a substring an unknown read's reason must carry
 	}{
-		{"present", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptScoped}}, rulePresent},
-		{"absent behind a ts-input jump", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty}}, ruleAbsent},
-		{"present inside ts-input", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty, iptChain: tsInputDefault}}, rulePresent},
-		{"ts-input unreadable", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty}, exit: map[string]int{iptChain: 1}}, ruleUnknown},
-		{"permission", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, exit: map[string]int{iptRead: 4}}, ruleUnknown},
-		{"no exit status", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, fail: map[string]bool{iptRead: true}}, ruleUnknown},
-		{"no backend", &recordingRunner{elevated: true}, ruleUnknown},
-		{"not root", &recordingRunner{onPath: map[string]bool{"iptables": true}}, ruleUnknown},
+		{"present", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptScoped}}, rulePresent, ""},
+		{"absent behind a ts-input jump", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty}}, ruleAbsent, ""},
+		{"present inside ts-input", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty, iptChain: tsInputDefault}}, rulePresent, ""},
+		{"a deny after the jump is shadowed by ts-input", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptDropFirst, iptChain: tsInputDefault}}, rulePresent, ""},
+		{"ts-input unreadable", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty}, exit: map[string]int{iptChain: 1}}, ruleUnknown, iptChain},
+		{"permission", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, exit: map[string]int{iptRead: 4}}, ruleUnknown, ""},
+		{"no exit status", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, fail: map[string]bool{iptRead: true}}, ruleUnknown, ""},
+		{"no backend", &recordingRunner{elevated: true}, ruleUnknown, ""},
+		{"not root", &recordingRunner{onPath: map[string]bool{"iptables": true}}, ruleUnknown, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := readLinuxFirewall(tt.runner, 3389); got.state != tt.want {
+			got := readLinuxFirewall(tt.runner, 3389)
+			if got.state != tt.want {
 				t.Errorf("state = %v, want %v (reason %q)", got.state, tt.want, got.reason)
+			}
+			if !strings.Contains(got.reason, tt.reason) {
+				t.Errorf("reason %q does not name %q", got.reason, tt.reason)
 			}
 		})
 	}
@@ -261,6 +267,7 @@ func TestSetupForLinux(t *testing.T) {
 		calls    []string
 		outcomes []Outcome
 		blocked  string // the rule a manual firewall step must name
+		message  string // a substring the firewall step's message must carry
 	}{
 		{
 			name:     "ufw, converged",
@@ -344,6 +351,13 @@ func TestSetupForLinux(t *testing.T) {
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty}), exit: map[string]int{iptChain: 1}},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  iptChain,
+		},
+		{
+			name:     "iptables, a deny after the jump is shadowed by ts-input",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptDropFirst, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 		},
 		{
 			name:     "iptables, no ts-input jump: one read",
@@ -398,6 +412,7 @@ func TestSetupForLinux(t *testing.T) {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}
 				assertNamesBlockedRule(t, s, tt.blocked)
+				assertFirewallMessage(t, s, tt.message)
 			}
 			if !reflect.DeepEqual(outcomes, tt.outcomes) {
 				t.Errorf("outcomes = %v, want %v", outcomes, tt.outcomes)
@@ -453,6 +468,7 @@ func TestCheckForLinux(t *testing.T) {
 		services []Service
 		legacy   CheckResult
 		blocked  string // the rule a manual firewall step must name
+		message  string // a substring the firewall step's message must carry
 	}{
 		{
 			name:     "converged",
@@ -544,6 +560,7 @@ func TestCheckForLinux(t *testing.T) {
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  iptChain,
 		},
 		{
 			name:     "iptables -S fails",
@@ -583,6 +600,7 @@ func TestCheckForLinux(t *testing.T) {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}
 				assertNamesBlockedRule(t, s, tt.blocked)
+				assertFirewallMessage(t, s, tt.message)
 			}
 			if !reflect.DeepEqual(steps, tt.steps) {
 				t.Errorf("steps = %q, want %q", steps, tt.steps)
@@ -683,6 +701,15 @@ func assertNamesBlockedRule(t *testing.T, s SetupStep, rule string) {
 	}
 	if rule == "" || !strings.Contains(s.Message, rule) {
 		t.Errorf("step %q message %q does not name the blocking rule %q", s.Name, s.Message, rule)
+	}
+}
+
+// assertFirewallMessage checks that the firewall step's message carries want,
+// such as the command whose read failed (#492).
+func assertFirewallMessage(t *testing.T, s SetupStep, want string) {
+	t.Helper()
+	if s.Name == linuxFwName && !strings.Contains(s.Message, want) {
+		t.Errorf("step %q message %q does not contain %q", s.Name, s.Message, want)
 	}
 }
 
