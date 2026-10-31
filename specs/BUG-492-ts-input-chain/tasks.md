@@ -19,18 +19,18 @@ created: "2026-10-30"
 
 ## Implementation
 
-- [ ] [AC1] [AC2] [AC5] Failing `TestIptablesTSInput`: one table of INPUT + `ts-input` pairs in printed form (tailscaled default, deny before the jump, deny after it, tailscaled's rules without the ACCEPT, a qualified jump)
-- [ ] [AC1] [AC2] [AC3] `iptInlineChain` evaluates the chain at an unqualified jump's position; `iptablesDecide` is unchanged
-- [ ] [AC1] [AC3] [AC4] Failing setup/check cases: the tailscaled default appends nothing, an unreadable `ts-input` means `failed`/`unverified`, and no second read without a jump
-- [ ] [AC3] [AC4] `readIptables` reads `ts-input` only behind the jump and reports a failed read as unknown; existing call lists gain the second read where their fixture jumps
+- [x] [AC1] [AC2] [AC5] Failing `TestIptablesTSInput`: one table of INPUT + `ts-input` pairs in printed form (tailscaled default, deny before the jump, deny after it, tailscaled's rules without the ACCEPT, a qualified jump)
+- [x] [AC1] [AC2] [AC3] `iptInlineChain` evaluates the chain at an unqualified jump's position; `iptablesDecide` is unchanged
+- [x] [AC1] [AC3] [AC4] Failing setup/check cases: the tailscaled default appends nothing, an unreadable `ts-input` means `failed`/`unverified`, and no second read without a jump
+- [x] [AC3] [AC4] `readIptables` reads `ts-input` only behind the jump and reports a failed read as unknown; existing call lists gain the second read where their fixture jumps
 
 ## Closing
 
-- [ ] Every acceptance criterion covered by a named test
-- [ ] `features.json` entries with executable verification
-- [ ] `go test -race ./...`, `gofmt -l .`, `go vet` on linux/windows/darwin; `golangci-lint run` locally or the CI `lint` job
-- [ ] Lesson in `docs/lessons/`, `docs/design/host-client-parity.md` row updated
-- [ ] `verification.md` filled in
+- [x] Every acceptance criterion covered by a named test
+- [x] `features.json` entries with executable verification
+- [x] `go test -race ./...`, `gofmt -l .`, `go vet` on linux/windows/darwin; `golangci-lint run` locally or the CI `lint` job
+- [x] Lesson in `docs/lessons/`, `docs/design/host-client-parity.md` row updated
+- [x] `verification.md` filled in
 - [ ] PR opened referencing this spec folder
 
 ## Machine-readable features
