@@ -1,0 +1,30 @@
+[
+  {
+    "id": "BUG-492-ts-input-chain-f1",
+    "behavior": "A ts-input chain holding -i tailscale0 -j ACCEPT behind an unqualified INPUT jump reads as present; setup appends nothing and check reports ok",
+    "verification": "go test ./internal/host/ -run 'TestIptablesTSInput|TestSetupForLinux|TestCheckForLinux' -count=1 -v 2>&1 | grep -q -- '--- PASS: TestIptablesTSInput/tailscaled_default'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-492-ts-input-chain-f2",
+    "behavior": "The chain decides at the jump's position: a deny before the jump blocks, a deny after it is shadowed, tailscaled's other rules decide nothing",
+    "verification": "go test ./internal/host/ -run 'TestIptablesTSInput' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-492-ts-input-chain-f3",
+    "behavior": "ts-input is read only for an unqualified -A INPUT -j ts-input; otherwise no second read runs",
+    "verification": "go test ./internal/host/ -run 'TestIptablesRule|TestSetupForLinux|TestCheckForLinux' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-492-ts-input-chain-f4",
+    "behavior": "A failed iptables -S ts-input behind the jump makes setup failed with nothing appended and check unverified",
+    "verification": "go test ./internal/host/ -run 'TestSetupForLinux|TestCheckForLinux' -count=1 -v 2>&1 | grep -q -- '--- PASS: TestSetupForLinux/iptables,_ts-input_unreadable'",
+    "state": "pending",
+    "evidence": ""
+  }
+]
