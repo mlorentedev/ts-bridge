@@ -14,7 +14,7 @@ created: "2026-10-20"
 ## Status
 
 Accepted by the operator on 2026-10-20. Implementation is tracked by #450 and its
-sub-tickets.
+sub-tickets. Amendment A below (HOST-008, #522) is **proposed**, not accepted.
 
 ## Context
 
@@ -228,6 +228,31 @@ Each item is its own spec and atomic PR, in this order:
 3. Linux convergence (#454), Windows convergence (#455), macOS host (#459). These can run in
    parallel after 1 and 2.
 4. Per-service descriptors with control-plane detection (#453). Can start after 1.
+
+## Amendment A (Proposed, 2026-10-30): `host serve`, supervised by the OS
+
+Status: proposed for HOST-008 (#522); the owner accepts or rejects it in #525.
+
+Context: a host on a network that sinkholes or TLS-inspects a self-hosted control plane
+cannot enrol with native Tailscale, which has no SSH bootstrap (lesson-014). Clients
+already reach that control plane with `connect --bootstrap-ssh` (CLI-363), so the host
+side needs the same path, and it needs a process that stays up.
+
+Decision, if accepted:
+
+- `ts-bridge host serve --config <path>` joins the tailnet as a **persistent** node and
+  publishes exactly the services the host file declares (§1, §3). It reads only the host
+  file and the paths it names (C9 holds: no per-user profile or credential store).
+- Serve runs **in the foreground**, like `connect`. ts-bridge stays daemonless: it
+  installs no service and supervises nothing. The OS starts and restarts it (Windows
+  Scheduled Task at startup as SYSTEM; a systemd unit on Linux), registered by the
+  consumer's provisioning, with the recipes documented here.
+- The Neutral consequence "installing the bridge as an OS service is out of scope"
+  still holds for ts-bridge itself; #451 remains the place for a local control plane.
+
+Rejected for this amendment: an OS service inside ts-bridge (Windows SCM or systemd
+integration in the binary), which is #451's question and would add a supervisor before
+that architecture is decided.
 
 ## References
 
