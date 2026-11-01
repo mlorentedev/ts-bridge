@@ -76,6 +76,7 @@ const (
 const (
 	iptScoped       = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
 	iptEmpty        = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	iptQualified    = "-P INPUT ACCEPT\n-A INPUT -i tailscale0 -j ts-input\n"
 	iptTailnet      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -i tailscale0 -j ACCEPT\n"
 	iptDropFirst    = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n"
 	iptAckOnly      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK -j ACCEPT\n"
@@ -366,10 +367,11 @@ func TestSetupForLinux(t *testing.T) {
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
-			name:     "iptables, a qualified ts-input jump is not followed",
-			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n-A INPUT -i eth0 -j ts-input\n", iptChain: tsInputDefault})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
-			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+			name:     "iptables, a qualified ts-input jump: nothing appended",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptQualified, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  "-A INPUT -i tailscale0 -j ts-input",
 		},
 		{
 			name:     "iptables -S fails",
@@ -571,6 +573,15 @@ func TestCheckForLinux(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 		},
 		{
+			name:     "iptables, a qualified ts-input jump",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptQualified, iptChain: tsInputDefault})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "-A INPUT -i tailscale0 -j ts-input",
+		},
+		{
 			name:     "iptables -S fails",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(nil), exit: map[string]int{iptRead: 2}},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
@@ -752,8 +763,9 @@ func TestIptablesDecideOnly(t *testing.T) {
 }
 
 // TestIptablesTSInput pins how tailscaled's ts-input chain decides (#492): its
-// rules count at the position of an unqualified `-A INPUT -j ts-input`, and a
-// qualified jump is not followed. Chains are in printed form (tsInputDefault).
+// rules count at the position of an unqualified `-A INPUT -j ts-input`. A
+// qualified jump never reaches this walk (TestIptQualifiedTSInputJump).
+// Chains are in printed form (tsInputDefault).
 func TestIptablesTSInput(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -766,13 +778,39 @@ func TestIptablesTSInput(t *testing.T) {
 		{"deny after the jump is shadowed", iptDropFirst, tsInputDefault, rulePresent},
 		{"tailscaled's other rules decide nothing", iptEmpty, tsInputNoAccept, ruleAbsent},
 		{"and an INPUT allow after the jump still counts", iptScoped, tsInputNoAccept, rulePresent},
-		{"a qualified jump is not followed", "-P INPUT ACCEPT\n-A INPUT -i eth0 -j ts-input\n", tsInputDefault, ruleAbsent},
 		{"no jump, nothing to follow", "-P INPUT ACCEPT\n", tsInputDefault, ruleAbsent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got, _ := iptablesDecide(iptInlineChain(tt.input, tt.chain), 3389); got != tt.want {
 				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestIptQualifiedTSInputJump pins which INPUT rules make the read unknown
+// (#532): any jump or goto into ts-input other than tailscaled's unqualified
+// one. A quoted comment that spells a jump is not one.
+func TestIptQualifiedTSInputJump(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"tailscaled's unqualified jump", iptEmpty, ""},
+		{"no jump", "-P INPUT ACCEPT\n", ""},
+		{"interface-scoped jump", iptQualified, "-A INPUT -i tailscale0 -j ts-input"},
+		{"source-scoped jump", "-A INPUT -s 100.64.0.0/10 -j ts-input\n", "-A INPUT -s 100.64.0.0/10 -j ts-input"},
+		{"goto into ts-input", "-A INPUT -g ts-input\n", "-A INPUT -g ts-input"},
+		{"a qualified jump next to the exact one", "-A INPUT -j ts-input\n-A INPUT -i eth0 -j ts-input\n", "-A INPUT -i eth0 -j ts-input"},
+		{"a comment spelling the jump", `-A INPUT -p tcp -m comment --comment "see -j ts-input above" -j DROP` + "\n", ""},
+		{"another chain", "-A INPUT -i eth0 -j ts-input-extra\n", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := iptQualifiedTSInputJump(tt.input); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
 	}

@@ -185,14 +185,17 @@ const tsInputChain = "ts-input"
 var tsInputJump = []string{"-A", "INPUT", "-j", tsInputChain}
 
 // readIptables reads INPUT and, behind tailscaled's unqualified jump, the
-// ts-input chain. A failed read of either is an unknown state, so setup never
-// appends an open rule on a guess.
+// ts-input chain. A failed read of either, or a qualified jump into ts-input,
+// is an unknown state, so setup never appends an open rule on a guess (#532).
 func readIptables(r Runner, port int) firewallRead {
 	out, err := r.Output(backendIPT, "-S", "INPUT")
 	if err != nil {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
 	}
 	rules := string(out)
+	if jump := iptQualifiedTSInputJump(rules); jump != "" {
+		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("INPUT reaches %s through %q, which ts-bridge cannot evaluate", tsInputChain, jump)}
+	}
 	if slices.ContainsFunc(strings.Split(rules, "\n"), iptTSInputJump) {
 		chain, err := r.Output(backendIPT, "-S", tsInputChain)
 		if err != nil {
@@ -206,7 +209,8 @@ func readIptables(r Runner, port int) firewallRead {
 
 // iptInlineChain puts the ts-input chain's rules in place of each unqualified
 // jump to it, so the walk evaluates them where a packet meets them. A jump with
-// a qualifier applies the chain to part of the traffic only and stays opaque.
+// a qualifier applies the chain to part of the traffic only; readIptables
+// stops before this on one (iptQualifiedTSInputJump).
 func iptInlineChain(input, chain string) string {
 	lines := strings.Split(input, "\n")
 	for i, line := range lines {
@@ -219,6 +223,24 @@ func iptInlineChain(input, chain string) string {
 
 func iptTSInputJump(line string) bool {
 	return slices.Equal(strings.Fields(line), tsInputJump)
+}
+
+// iptQualifiedTSInputJump returns the first INPUT rule that jumps or goes to
+// ts-input in any form but tailscaled's unqualified jump, or "". Quoted values
+// are blanked first, so a comment that spells a jump is not one.
+func iptQualifiedTSInputJump(input string) string {
+	for _, line := range strings.Split(input, "\n") {
+		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+		if iptTSInputJump(line) || len(f) < 2 || f[0] != "-A" {
+			continue
+		}
+		for i := 2; i+1 < len(f); i++ {
+			if (f[i] == "-j" || f[i] == "-g") && f[i+1] == tsInputChain {
+				return strings.TrimSpace(line)
+			}
+		}
+	}
+	return ""
 }
 
 // iptQuoted matches a quoted value (a `--comment` or `--string`), escaped
