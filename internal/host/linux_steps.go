@@ -155,6 +155,7 @@ type firewallRead struct {
 	noBackend bool
 	reason    string
 	blockedBy string // the deny rule, when state is ruleBlocked
+	copies    int    // copies of the rule setup appends (iptables only, #480)
 }
 
 // readLinuxFirewall reads with ufw when it is installed, otherwise iptables.
@@ -201,7 +202,7 @@ func readIptables(r Runner, port int) firewallRead {
 		rules = iptInlineChain(rules, string(chain))
 	}
 	state, rule := iptablesDecide(rules, port)
-	return firewallRead{state: state, backend: backendIPT, blockedBy: rule}
+	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: iptSetupCopies(rules, port)}
 }
 
 // iptInlineChain puts the ts-input chain's rules in place of each unqualified
@@ -215,6 +216,27 @@ func iptInlineChain(input, chain string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// iptSetupCopies counts the lines of rules that are the rule setup appends,
+// in the form `iptables -S` prints it.
+func iptSetupCopies(rules string, port int) int {
+	printed := iptSetupPrinted(port)
+	n := 0
+	for _, line := range strings.Split(rules, "\n") {
+		if slices.Equal(strings.Fields(line), printed) {
+			n++
+		}
+	}
+	return n
+}
+
+// iptSetupPrinted is iptablesAppend's rule as `iptables -S` prints it: the
+// protocol after `-p` gains an explicit `-m <protocol>` match.
+func iptSetupPrinted(port int) []string {
+	rule := iptablesAppend(port)
+	i := slices.Index(rule, "-p") + 2
+	return slices.Insert(rule, i, "-m", rule[i-1])
 }
 
 func iptTSInputJump(line string) bool {
@@ -507,7 +529,21 @@ func firewallCheckStep(read firewallRead, port int) SetupStep {
 	if read.state == ruleBlocked {
 		return firewallBlockedStep(read, port)
 	}
+	if read.copies > 1 {
+		return firewallCopiesStep(read, port)
+	}
 	return firewallReadStep(linuxFwName, read.state == rulePresent, port)
+}
+
+// firewallCopiesStep reports the copies of its own rule that setup appended on
+// every run before #477. The port is allowed; setup never deletes rules, so
+// removing the extras is the operator's.
+func firewallCopiesStep(read firewallRead, port int) SetupStep {
+	return newStep(linuxFwName, OutcomeManual,
+		fmt.Sprintf("Firewall allows TCP %d (%s), but holds %d copies of %s", port, read.backend, read.copies,
+			strings.Join(iptSetupPrinted(port), " ")),
+		fmt.Sprintf("run `iptables -D %s` %d time(s), as root, so one copy remains; setup does not delete firewall rules",
+			strings.Join(iptablesAppend(port)[1:], " "), read.copies-1))
 }
 
 // firewallBlockedStep reports a deny that decides the port before any allow.
