@@ -46,7 +46,7 @@ created: "2026-11-01"
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BUG-480-iptables-duplicate-rules/` -> `specs/archive/BUG-480-iptables-duplicate-rules/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BUG-480-iptables-duplicate-rules/` -> `specs/archive/BUG-480-iptables-duplicate-rules/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
