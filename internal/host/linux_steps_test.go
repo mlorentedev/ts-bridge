@@ -269,6 +269,7 @@ func TestSetupForLinux(t *testing.T) {
 		outcomes []Outcome
 		blocked  string // the rule a manual firewall step must name
 		message  string // a substring the firewall step's message must carry
+		fix      string // a substring the firewall step's fix must carry
 	}{
 		{
 			name:     "ufw, converged",
@@ -372,6 +373,7 @@ func TestSetupForLinux(t *testing.T) {
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
 			message:  "-A INPUT -i tailscale0 -j ts-input",
+			fix:      "-A INPUT -i tailscale0 -j ts-input",
 		},
 		{
 			name:     "iptables -S fails",
@@ -415,6 +417,7 @@ func TestSetupForLinux(t *testing.T) {
 				}
 				assertNamesBlockedRule(t, s, tt.blocked)
 				assertFirewallMessage(t, s, tt.message)
+				assertFirewallFix(t, s, tt.fix)
 			}
 			if !reflect.DeepEqual(outcomes, tt.outcomes) {
 				t.Errorf("outcomes = %v, want %v", outcomes, tt.outcomes)
@@ -471,6 +474,7 @@ func TestCheckForLinux(t *testing.T) {
 		legacy   CheckResult
 		blocked  string // the rule a manual firewall step must name
 		message  string // a substring the firewall step's message must carry
+		fix      string // a substring the firewall step's fix must carry
 	}{
 		{
 			name:     "converged",
@@ -580,6 +584,7 @@ func TestCheckForLinux(t *testing.T) {
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 			message:  "-A INPUT -i tailscale0 -j ts-input",
+			fix:      "-A INPUT -i tailscale0 -j ts-input",
 		},
 		{
 			name:     "iptables -S fails",
@@ -620,6 +625,7 @@ func TestCheckForLinux(t *testing.T) {
 				}
 				assertNamesBlockedRule(t, s, tt.blocked)
 				assertFirewallMessage(t, s, tt.message)
+				assertFirewallFix(t, s, tt.fix)
 			}
 			if !reflect.DeepEqual(steps, tt.steps) {
 				t.Errorf("steps = %q, want %q", steps, tt.steps)
@@ -720,6 +726,14 @@ func assertNamesBlockedRule(t *testing.T, s SetupStep, rule string) {
 	}
 	if rule == "" || !strings.Contains(s.Message, rule) {
 		t.Errorf("step %q message %q does not name the blocking rule %q", s.Name, s.Message, rule)
+	}
+}
+
+// assertFirewallFix checks that the firewall step's fix carries want, when want is set.
+func assertFirewallFix(t *testing.T, s SetupStep, want string) {
+	t.Helper()
+	if want != "" && s.Name == linuxFwName && !strings.Contains(s.Fix, want) {
+		t.Errorf("step %q fix %q does not contain %q", s.Name, s.Fix, want)
 	}
 }
 
