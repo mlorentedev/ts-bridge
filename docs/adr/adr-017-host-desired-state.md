@@ -14,7 +14,7 @@ created: "2026-10-20"
 ## Status
 
 Accepted by the operator on 2026-10-20. Implementation is tracked by #450 and its
-sub-tickets. Amendment A below (HOST-008, #522) is **proposed**, not accepted.
+sub-tickets. Amendment A below (HOST-008, #522) was accepted by the operator on 2026-11-01 in #525.
 
 ## Context
 
@@ -229,16 +229,16 @@ Each item is its own spec and atomic PR, in this order:
    parallel after 1 and 2.
 4. Per-service descriptors with control-plane detection (#453). Can start after 1.
 
-## Amendment A (Proposed, 2026-10-30): `host serve`, supervised by the OS
+## Amendment A (Accepted, 2026-11-01): `host serve`, supervised by the OS
 
-Status: proposed for HOST-008 (#522); the owner accepts or rejects it in #525.
+Status: proposed 2026-10-30 for HOST-008 (#522); accepted by the operator on 2026-11-01 in #525.
 
 Context: a host on a network that sinkholes or TLS-inspects a self-hosted control plane
 cannot enrol with native Tailscale, which has no SSH bootstrap (lesson-014). Clients
 already reach that control plane with `connect --bootstrap-ssh` (CLI-363), so the host
 side needs the same path, and it needs a process that stays up.
 
-Decision, if accepted:
+Decision:
 
 - `ts-bridge host serve --config <path>` joins the tailnet as a **persistent** node and
   publishes exactly the services the host file declares (§1, §3). It reads only the host

@@ -62,23 +62,27 @@ the tailnet as a persistent node and publishes the host's declared services.
 
 ## Risks / open questions
 
-- **[BLOCKING] ADR-017 boundary.** ADR-017 is "daemonless host setup", and its
-  consequences put "installing the bridge as an OS service" in #451. Serve is a
-  long-lived process, so this needs the operator's decision: an ADR-017 amendment (serve
-  is a foreground host command, the OS supervises it) or waiting for #451.
-  [AGENT-SUGGESTION — accept or remove] Amend ADR-017; #451 is broader and undecided.
-- **[BLOCKING] Bootstrap identity on the SSH endpoint.** Today the forward works only
-  because the live control host allows it for the operator's account, while its IaC
-  template forbids it (mlorentedev/kubelab#2862). A host must get its own narrow identity
-  (forward to the control plane only) before serve can depend on it.
+- **ADR-017 boundary (decided 2026-11-01).** ADR-017 is "daemonless host setup", and its
+  consequences put "installing the bridge as an OS service" in #451. The operator accepted
+  ADR-017 Amendment A in #525: serve is a foreground host command, the OS supervises it,
+  and #451 keeps the question of a service inside the binary.
+- **Bootstrap identity on the SSH endpoint (gates live acceptance only, decided
+  2026-11-01).** Today the forward works only because the live control host allows it for
+  the operator's account, while its IaC template forbids it (mlorentedev/kubelab#2862).
+  A host must get its own narrow identity (forward to the control plane only) before serve
+  depends on it in production. The operator decided in #525 that #2862 gates the live AC4
+  run and the archive, not the tasks: the PRs test against a fake SSH/SOCKS endpoint, as
+  CLI-363 did.
 - **State and key protection.** `state_dir` holds the node key and the SSH identity
   sits beside it. Windows: under ProgramData, ACL SYSTEM and Administrators only; Linux
   `0700` root. The auth key file is deleted by the provisioning script after
   `enrolled=true`, never by serve.
 - **Tag ownership.** The node must enrol with the key's tag (Headscale tagged node), not
   as a user node; a key without a tag would put a host under a user identity.
-- **Reconnect storms.** Backoff bounds and the health signal need numbers before tasks
-  are frozen.
+- **Reconnect storms (decided 2026-11-01).** Serve reuses `connect`'s values, so that no
+  new numbers are invented: exponential backoff with jitter between `DialBackoffBase`
+  (1 s) and `DialBackoffMax` (30 s), from `internal/config`, and readiness on
+  `/health/ready` as `connect` does. The operator chose this in #525.
 - **~300 LOC cap.** Likely three PRs: the `host.mesh` schema and loader, the serve
   command with forwarding, then reconnect and health.
 
