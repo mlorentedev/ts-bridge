@@ -232,11 +232,11 @@ func iptSetupCopies(rules string, port int) int {
 }
 
 // iptSetupPrinted is iptablesAppend's rule as `iptables -S` prints it: the
-// tcp protocol match gains an explicit `-m tcp`.
+// protocol after `-p` gains an explicit `-m <protocol>` match.
 func iptSetupPrinted(port int) []string {
 	rule := iptablesAppend(port)
-	i := slices.Index(rule, protoTCP) + 1
-	return slices.Insert(rule, i, "-m", protoTCP)
+	i := slices.Index(rule, "-p") + 2
+	return slices.Insert(rule, i, "-m", rule[i-1])
 }
 
 func iptTSInputJump(line string) bool {
