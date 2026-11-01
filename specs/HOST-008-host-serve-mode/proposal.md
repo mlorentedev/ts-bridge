@@ -25,8 +25,6 @@ that cannot finish.
 
 ## What
 
-[AGENT-DRAFT — review before archive]
-
 `ts-bridge host serve --config <path>`: a foreground process, like `connect`, that joins
 the tailnet as a persistent node and publishes the host's declared services.
 
@@ -88,7 +86,7 @@ the tailnet as a persistent node and publishes the host's declared services.
 
 ## Acceptance criteria
 
-[AGENT-DRAFT — review before archive]
+AC1, AC2 and AC4 need the live control plane, so they gate on mlorentedev/kubelab#2862 (see Risks). AC3, AC5 and AC6 run against fakes.
 
 - [ ] AC1: with a fresh `state_dir` and a tagged one-off key, serve enrols, prints
   `READY ... enrolled=true`, and an authorized tailnet client completes an SSH and an RDP
@@ -102,7 +100,10 @@ the tailnet as a persistent node and publishes the host's declared services.
   succeed through `bootstrap_ssh`; with the SSH endpoint down, serve emits `ERROR
   reason=ssh_bootstrap_failed`, keeps retrying, and recovers when the endpoint returns.
 - [ ] AC5: a `host.mesh` block with an unknown key warns, an empty key errors, and a
-  `state_dir` writable by non-administrators is refused on Windows.
+  `state_dir` writable by non-administrators is refused on Windows, and one that is not
+  `0700` and owned by root is refused on Linux.
+- [ ] AC6: `host check --json` reports, for each declared service, whether serve
+  publishes it, and a service that serve does not publish reads as not published.
 
 ## References
 
