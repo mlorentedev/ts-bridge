@@ -1,7 +1,7 @@
 ---
 id: "CI-514-hygiene-wiring-guard"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-10-31"
 issue: "mlorentedev/ts-bridge#514"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
