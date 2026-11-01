@@ -46,6 +46,16 @@ created: "2026-11-01"
 - Minor, `iptSetupPrinted` used `slices.Index(rule, "tcp")`, so a missing protocol would quietly count zero: applied after the review (`34fe9e0`). The `-m` match is now inserted after the value of `-p` and takes that protocol's name. An off-by-one mutant of the new index fails 9 subtests. The change is code only, so the contract digests are unchanged.
 - Minor, the AC boxes in `proposal.md` are unticked: declined. This repo's archived specs keep their ACs as `- [ ]` (BUG-035, BUG-481, BUG-492), and the evidence lives here.
 
+## PR review (CodeRabbit on #534, at `1701981`)
+
+Three nitpicks, all applied in `71f450d`, tests only. Each new row fails a mutant that the suite missed before:
+
+- The copies message is asserted against the full printed rule, not just `2 copies`.
+- `iptables, three copies: two to delete` pins the deletion count at `2 time`. It fails a fix whose count is hard-coded at 1.
+- `the same rule inside ts-input is not a copy` makes chain scoping explicit. It fails a match that ignores the chain name.
+
+PR-Agent published no review: #535 (a skipped run cancelled the reviewing one), then #430 (NaN timeout).
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-051-2026-11-01.md
