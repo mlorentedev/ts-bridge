@@ -789,7 +789,7 @@ func TestIptablesTSInput(t *testing.T) {
 	}
 }
 
-// TestIptQualifiedTSInputJump pins which INPUT rules make the read unknown
+// TestIptQualifiedTSInputJump pins which INPUT rules the walk cannot pass
 // (#532): any jump or goto into ts-input other than tailscaled's unqualified
 // one. A quoted comment that spells a jump is not one.
 func TestIptQualifiedTSInputJump(t *testing.T) {
@@ -809,8 +809,39 @@ func TestIptQualifiedTSInputJump(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := iptQualifiedTSInputJump(tt.input); got != tt.want {
+			if _, got := iptBeforeQualifiedJump(tt.input); got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestReadIptablesQualifiedJump pins the walk up to a qualified jump into
+// ts-input (#532): what the rules before it decide stands, and when they
+// decide nothing the read is unknown, with a fix that names the jump.
+func TestReadIptablesQualifiedJump(t *testing.T) {
+	const jump = "-A INPUT -i tailscale0 -j ts-input"
+	tests := []struct {
+		name    string
+		input   string
+		want    ruleState // when the read decides
+		unknown bool
+	}{
+		{"nothing before the jump", iptQualified, 0, true},
+		{"a deny before the jump decides", "-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n" + jump + "\n", ruleBlocked, false},
+		{"an allow before the jump decides", "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\n" + jump + "\n", rulePresent, false},
+		{"tailscaled's jump before it decides", "-A INPUT -j ts-input\n" + jump + "\n", rulePresent, false},
+		{"a deny after the jump does not", jump + "\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{output: map[string]string{iptRead: tt.input, iptChain: tsInputDefault}}
+			got := readIptables(r, 3389)
+			if (got.reason != "") != tt.unknown || (!tt.unknown && got.state != tt.want) {
+				t.Fatalf("got state %v reason %q, want state %v unknown %v", got.state, got.reason, tt.want, tt.unknown)
+			}
+			if fix := firewallFix(got, 3389, "setup"); tt.unknown && !strings.Contains(fix, jump) {
+				t.Errorf("fix %q does not name the jump %q", fix, jump)
 			}
 		})
 	}
