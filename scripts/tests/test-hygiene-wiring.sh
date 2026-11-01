@@ -59,6 +59,7 @@ check_workflow() {
 SPECS="valid:0:OK
 comment-mentions-coe:0:OK
 crlf-valid:0:OK
+matrix-before-steps:0:OK
 guard-coe:1:continue-on-error
 suite-coe:1:continue-on-error
 job-coe:1:continue-on-error

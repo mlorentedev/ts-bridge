@@ -10,18 +10,21 @@ strip_comments() {
 # Lines are keyed by where they sit, not by what they say: a step key prints bare (`run: npm ci`),
 # anything nested under one prints with its parent (`with.persist-credentials: false`,
 # `env.run: npm ci`), and a job-level key prints as `job.<key>`. So `^run:` matches only a
-# step's own command, never a look-alike parked under `env:` or `with:`.
+# step's own command, never a look-alike parked under `env:` or `with:`. Only list items under
+# the job's own `steps:` key are steps: a list elsewhere (`strategy.matrix.include`) is not.
 job_steps() {
   awk -v job="$1" '
     /^jobs:[[:space:]]*$/ { in_jobs = 1; next }
     in_jobs && /^[^[:space:]]/ { in_jobs = 0; in_job = 0 }
     in_jobs && /^  [^[:space:]][^:]*:[[:space:]]*$/ {
       key = $0; sub(/^  /, "", key); sub(/:[[:space:]]*$/, "", key)
-      in_job = (key == job); step_indent = ""; next
+      in_job = (key == job); step_indent = ""; job_indent = ""; in_steps = 0; next
     }
     in_job && !/^[[:space:]]*$/ {
       match($0, /^[[:space:]]*/); ind = RLENGTH; body = substr($0, ind + 1)
-      if (body ~ /^- / && (step_indent == "" || ind == step_indent)) {
+      if (job_indent == "") job_indent = ind
+      if (ind == job_indent && body !~ /^- /) in_steps = (body ~ /^steps:[[:space:]]*$/)
+      if (in_steps && body ~ /^- / && (step_indent == "" || ind == step_indent)) {
         step_indent = ind; print "@@STEP"
         body = substr(body, 3); sub(/^[[:space:]]+/, "", body); ind += 2
       }

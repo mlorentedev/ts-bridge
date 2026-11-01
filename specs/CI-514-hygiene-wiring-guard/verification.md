@@ -26,7 +26,7 @@ created: "2026-10-31"
 ## Test status
 
 - RED: with a stub check that only echoes `OK`, every red fixture exits 0 and the suite fails.
-- GREEN: `bash scripts/tests/test-hygiene-wiring.sh` -> `OK (17 fixtures + .github/workflows/repo-hygiene.yml)`.
+- GREEN: `bash scripts/tests/test-hygiene-wiring.sh` -> `OK (17 fixtures + .github/workflows/repo-hygiene.yml)`; 18 after the CodeRabbit fix below.
 - Mutants of the check, each reddening the suite: the `continue-on-error` rule removed; the
   guarded `run:` matched as a substring instead of an exact step key; the step `if:` rule
   removed; the job `if:` rule removed. One equivalent mutant: dropping the CR strip changes
@@ -73,6 +73,25 @@ created: "2026-10-31"
 6. **Is `hygiene` a required check? (Question).** Yes. The live branch-protection read of
    2026-10-30 lists `test`, `lint`, `security` and `hygiene` as required on `master` (#507,
    `docs/troubleshooting/security-audit.md`). Protection as code is tracked in #351.
+
+## CodeRabbit dispositions (review at `226b457`)
+
+- **`job_steps` takes the first list in the job as the step list. Applied.** A
+  `strategy.matrix.include` placed before `steps:` turned the matrix items into "steps", and the
+  real steps read as job-level keys. The `valid` workflow with a matrix added then failed with
+  `forbidden: if condition on job 'hygiene'`, because the AI-trailer step's `if:` was read as the
+  job's. Now only list items under the job's own `steps:` key start a step. The new fixture
+  `matrix-before-steps` was red first and is now green, the suite reports
+  `OK (18 fixtures + …)`, the sibling `test-site-pr-workflow.sh` is still `OK (26 fixtures + …)`,
+  and `shellcheck -x` exits 0. The contract set is untouched, so the PASS above stays fresh.
+- **Quoted or spaced keys (`"if":`, `continue-on-error :`). Declined.** This is the same as
+  review finding 1 above.
+- **f4 passes vacuously if awk inserts no probe line. Declined.** That happens only when a
+  guarded `run:` line is gone, and then the real-workflow run of the check, in this suite and
+  in CI, already fails with `missing step`. Fixing it means editing `features.json`, which
+  invalidates the PASS for a case that is already red.
+- **f5's grep is not scoped to the `hygiene` job. Declined.** `repo-hygiene.yml` has one job,
+  and the same contract cost applies.
 
 ## Promotion candidates
 
