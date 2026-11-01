@@ -48,6 +48,32 @@ created: "2026-10-31"
 - `strip_comments` and `job_steps` moved to `scripts/tests/helpers/workflow_yaml.bash` rather
   than being copied, so both workflow guards share one reader.
 
+## Review dispositions (`review.md`, PASS, nan/deepseek-v4-flash at `c7e0ae0`)
+
+1. **Spaced or quoted `continue-on-error` key passes (Minor, theoretical). Declined.** These
+   spellings take a deliberate edit, and the proposal's threat model is a regression lint for
+   workflows maintainers write, not a defence against evasion (CI-348). Matching every YAML key
+   spelling is the enumeration that lesson 036 warns against.
+2. **`valid.yml` drifted from the real workflow (Minor, real). Applied.** `valid.yml` was
+   re-copied from `repo-hygiene.yml` after the new step landed, and the suite stays green.
+   Correctness never depended on it: the real file is checked separately at the end of the
+   suite.
+3. **Nothing asserts that the check's own step stays wired (Minor, theoretical). Accepted.**
+   Every guard in this repo has the same self-reference, and the proposal records disabling
+   this step as the accepted residual risk.
+4. **Bash-only, while the sibling suite runs under two shells (Minor, speculative). Declined.**
+   The reviewer ran it under zsh and it exits 0. The check reads a YAML file on the CI runner
+   and does not test shell portability, which is why the proposal declares it bash-only, like
+   `test-site-pr-workflow.sh`.
+5. **Proposal omits the helper extraction, and the AC boxes are unticked (Minor, real).
+   Recorded here, with no contract edit.** `strip_comments` and `job_steps` moved into
+   `scripts/tests/helpers/workflow_yaml.bash`, and `test-site-pr-workflow.sh` sources it (26
+   fixtures, still green). Tasks and the PR body record this. All four acceptance criteria are
+   met, according to the Evidence section above and to the review's own table.
+6. **Is `hygiene` a required check? (Question).** Yes. The live branch-protection read of
+   2026-10-30 lists `test`, `lint`, `security` and `hygiene` as required on `master` (#507,
+   `docs/troubleshooting/security-audit.md`). Protection as code is tracked in #351.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? no: the one durable point (a check folded into the step it guards is disabled by the same edit) is recorded in the test header and proposal; lesson 036 already covers structure over spelling
