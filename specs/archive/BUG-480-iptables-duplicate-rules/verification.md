@@ -38,6 +38,14 @@ created: "2026-11-01"
 - `firewallCheckStep` tests `copies > 1` without also testing `rulePresent`. Unknown and blocked return before it, and a copy is an unscoped ACCEPT, so copies cannot exist on an absent read. A guard on `rulePresent` would be code no test can reach.
 - `assertNamesBlockedRule` now accepts a `manual` step without a blocked rule, provided its message does not report a block. The copies step is the first `manual` firewall step that is not BUG-481's.
 
+## Review round 1 (nan/deepseek-v4-flash, PASS at `38f3cd7`)
+
+- Minor, the text report shows `Firewall: ✓ OK` above the `manual` copies step: declined as an accepted trade-off. The summary row prints `firewall_ok`, which means "the port is allowed", and that stays true. The `manual` step is printed in the same block, directly below, with the fix. Making the row depend on the step outcome would change the meaning of `firewall_ok` in text mode only, and the JSON contract (C2) keeps that meaning.
+- Minor, iptables copies that predate a later ufw install are invisible because the ufw read is preferred: ticketed on #530 (comment of 2026-11-01). It has the same root cause as #530: the ufw read never looks at raw iptables, and that ticket's option 2 covers both cases.
+- Minor, the `features.json` entries are still `pending`: declined. Only the harness may write `passing`, and the agent may not (template rule). This repo has no command that records the evidence, and the archived specs carry 102 `pending` entries against 7 `passing`. All four verification commands exit 0, as the reviewer confirmed.
+- Minor, `iptSetupPrinted` used `slices.Index(rule, "tcp")`, so a missing protocol would quietly count zero: applied after the review (`34fe9e0`). The `-m` match is now inserted after the value of `-p` and takes that protocol's name. An off-by-one mutant of the new index fails 9 subtests. The change is code only, so the contract digests are unchanged.
+- Minor, the AC boxes in `proposal.md` are unticked: declined. This repo's archived specs keep their ACs as `- [ ]` (BUG-035, BUG-481, BUG-492), and the evidence lives here.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-051-2026-11-01.md
