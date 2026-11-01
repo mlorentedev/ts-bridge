@@ -19,7 +19,9 @@ created: "2026-10-31"
 - [x] Criterion 4 -> negative probes: a copy of the real workflow with `continue-on-error: true`
       under `run: bash scripts/check-conflict-markers.sh` -> exit 1; under
       `run: bash scripts/tests/test-conflict-markers.sh` -> exit 1 (`features.json` f4 runs both).
-- [ ] CI wiring -> pending the owner's step in `.github/workflows/repo-hygiene.yml` (f5).
+- [x] CI wiring -> `.github/workflows/repo-hygiene.yml` runs `bash scripts/tests/test-hygiene-wiring.sh`
+      as its own step (the f5 grep passes); `actionlint -shellcheck=shellcheck` exits 0, the check
+      accepts the edited workflow, and the f4 probes still exit non-zero on it.
 
 ## Test status
 

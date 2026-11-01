@@ -16,8 +16,8 @@ created: "2026-10-31"
 - [x] Worktree from `origin/master@fcb7746` via `dotf worktree add --issue 514`: `fix/hygiene-wiring-guard`
 - [x] `proposal.md` is complete and acceptance criteria are testable
 - [x] No open questions left in `proposal.md` "Risks / open questions"
-- [x] Confirmed the check needs its own `repo-hygiene.yml` step; the owner keeps that edit (same
-      split as CI-491)
+- [x] Confirmed the check needs its own `repo-hygiene.yml` step. The owner first kept that edit
+      (same split as CI-491), then asked for it in this PR on 2026-11-01.
 
 ## Implementation
 
@@ -32,7 +32,7 @@ created: "2026-10-31"
 - [x] [AC4] Negative probes: `continue-on-error: true` on each guarded step of a copy of the real
       workflow, passed as the optional argument; both exit 1.
 - [x] Mutants of the check (five); `crlf-valid` added for the CRLF accepting side.
-- [ ] Owner adds the `repo-hygiene.yml` step.
+- [x] `repo-hygiene.yml` runs the check as its own step, right after the fixture suite.
 
 ## Closing
 

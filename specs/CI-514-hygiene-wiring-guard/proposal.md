@@ -36,8 +36,6 @@ spellings) and then over the real workflow. `repo-hygiene.yml` runs it as its ow
 
 ## Out of scope
 
-- Editing `.github/workflows/repo-hygiene.yml`. The owner adds the step, and its YAML is in the
-  PR body. Until then the check runs only locally.
 - Editing the archived CI-491 `features.json` f4. It is a signed record, and the gap is that no
   CI step asserts the wiring, not the wording of f4.
 - The wiring of other guards and other workflows. The `if:` rule covers only the guarded steps
