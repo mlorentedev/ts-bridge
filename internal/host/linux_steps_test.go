@@ -89,7 +89,7 @@ const (
 	iptSetupRule  = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\n"
 	iptTwoCopies  = iptEmpty + iptSetupRule + iptSetupRule
 	iptCopiesFix  = "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time"
-	iptCopiesNote = "2 copies"
+	iptCopiesNote = "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
 )
 
 // tsInputDefault is tailscaled's ts-input chain as `iptables -S ts-input`
@@ -609,6 +609,16 @@ func TestCheckForLinux(t *testing.T) {
 			fix:      iptCopiesFix,
 		},
 		{
+			name:     "iptables, three copies: two to delete",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTwoCopies + iptSetupRule, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+			message:  "3 copies",
+			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 2 time",
+		},
+		{
 			name:     "iptables, one copy beside a scoped allow",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + iptSetupRule, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
@@ -815,6 +825,7 @@ func TestIptablesSetupCopies(t *testing.T) {
 		{"another port is not a copy", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n" + iptSetupRule, 1},
 		{"a drop on the port is not a copy", iptDropFirst + iptSetupRule, 1},
 		{"ts-input rules are not copies", iptInlineChain(iptTwoCopies, tsInputDefault), 2},
+		{"the same rule inside ts-input is not a copy", iptInlineChain(iptEmpty+iptSetupRule, tsInputDefault+"-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT\n"), 1},
 		{"setup's own command line is not the printed form", iptEmpty + "-A INPUT -p tcp --dport 3389 -j ACCEPT\n", 0},
 	}
 	for _, tt := range tests {
