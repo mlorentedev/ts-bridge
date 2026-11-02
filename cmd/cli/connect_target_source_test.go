@@ -250,3 +250,34 @@ func restoreConnectLogging(t *testing.T) {
 		config.SetLogger(oldLogger)
 	})
 }
+
+func TestWarnConnectTargetOverrideComparesHostCaseInsensitively(t *testing.T) {
+	tests := []struct {
+		name, profileTarget, target string
+		warn                        bool
+	}{
+		{"same target", "acemagic-office:45000", "acemagic-office:45000", false},
+		{"host differs only in case", "acemagic-office:45000", "ACEMAGIC-OFFICE:45000", false},
+		{"different host", "acemagic-office:45000", "other-host:45000", true},
+		{"different port", "acemagic-office:45000", "acemagic-office:45001", true},
+		{"same host, port differs only by a leading zero", "acemagic-office:45000", "ACEMAGIC-OFFICE:045000", true},
+		{"no port, host differs only in case", "acemagic-office", "ACEMAGIC-OFFICE", false},
+		{"IPv6 zone differs only in case", "[fe80::1%eth0]:3389", "[FE80::1%ETH0]:3389", true},
+		{"no port, IPv6 zone differs only in case", "fe80::1%eth0", "FE80::1%ETH0", true},
+		{"IPv6 address differs only in case, same zone", "[fe80::1%eth0]:3389", "[FE80::1%eth0]:3389", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var logs bytes.Buffer
+			oldLogger := logger
+			t.Cleanup(func() { logger = oldLogger })
+			logger = slog.New(slog.NewJSONHandler(&logs, nil))
+
+			warnConnectTargetOverride("office", tt.profileTarget, tt.target, "")
+
+			if got := logs.Len() > 0; got != tt.warn {
+				t.Fatalf("warned = %v, want %v: %q", got, tt.warn, logs.String())
+			}
+		})
+	}
+}
