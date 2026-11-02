@@ -4,7 +4,7 @@ version: 1
 run_id: "ts-bridge-overnight-2026-11-02"
 armed_by: manu
 armed_at: 2026-11-02T16:05:53Z
-expires_at: 2026-11-03T04:05:53Z
+expires_at: 2026-11-02T22:11:38Z
 objective: "Work the operator-approved ts-bridge backlog below to merged PRs, one ticket at a time, leaving every PR triaged and every park answerable."
 scope:
   write_paths:
@@ -34,9 +34,10 @@ queue:
   order: [508, 402, 401, 498, 505, 499, 427, 403, 530, 526, 466]
   exclude_note: "#498 needs .gitattributes only; any go.mod/go.sum rewrite parks it. #466 runs last (wide diff)."
   max_items: 11
+  land_first: [541, 543, 538, 539]   # operator-opened-by-agent PRs from the prior session; operator asked the run to land them under the grant, #541 before any firewall ticket
 budget:
-  max_iterations: 14
-  max_minutes_per_iteration: 60
+  max_iterations: 8
+  max_minutes_per_iteration: 40
   max_consecutive_failures: 2
 authority:
   merge: standing-grant          # .github/merge-grant.yml on master; excludes .github/, harness/, .agent/, release-please
