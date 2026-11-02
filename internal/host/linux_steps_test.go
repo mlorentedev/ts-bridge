@@ -988,7 +988,8 @@ func TestIptRules(t *testing.T) {
 		{"plain rules", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"},
 		{"a newline in a comment", "-A INPUT -m comment --comment \"a\nb\" -j DROP\n-A INPUT -j ts-input\n", "-A INPUT -m comment --comment \"a b\" -j DROP\n-A INPUT -j ts-input\n"},
 		{"an escaped quote before the newline", "-A INPUT -m comment --comment \"a\\\"\nb\" -j DROP\n", "-A INPUT -m comment --comment \"a\\\" b\" -j DROP\n"},
-		{"an escaped backslash ends no quote", "-A INPUT -m comment --comment \"a\\\\\" -j DROP\n-A INPUT -j ts-input\n", "-A INPUT -m comment --comment \"a\\\\\" -j DROP\n-A INPUT -j ts-input\n"},
+		{"an escaped backslash ends no quote", "-A INPUT -m comment --comment \"a\\\\\" -j DROP\n-A INPUT -m comment --comment \"c\nd\" -j LOG\n", "-A INPUT -m comment --comment \"a\\\\\" -j DROP\n-A INPUT -m comment --comment \"c d\" -j LOG\n"},
+		{"an escaped backslash before the newline", "-A INPUT -m comment --comment \"a\\\\\nb\" -j DROP\n", "-A INPUT -m comment --comment \"a\\\\ b\" -j DROP\n"},
 		{"an unterminated quote", "-A INPUT -m comment --comment \"a\n-A INPUT -j DROP\n", "-A INPUT -m comment --comment \"a\n-A INPUT -j DROP\n"},
 	}
 	for _, tt := range tests {
