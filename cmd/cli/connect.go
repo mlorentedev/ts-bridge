@@ -194,11 +194,18 @@ func sameConnectTarget(a, b string) bool {
 	hostA, portA, errA := net.SplitHostPort(a)
 	hostB, portB, errB := net.SplitHostPort(b)
 	if errA != nil || errB != nil {
-		return strings.EqualFold(a, b)
+		// No parseable port on one side: compare the whole targets as hosts.
+		return sameConnectHost(a, b)
 	}
-	addrA, zoneA, _ := strings.Cut(hostA, "%")
-	addrB, zoneB, _ := strings.Cut(hostB, "%")
-	return strings.EqualFold(addrA, addrB) && zoneA == zoneB && portA == portB
+	return sameConnectHost(hostA, hostB) && portA == portB
+}
+
+// sameConnectHost folds the case of the address but not of an IPv6 zone, which
+// names an interface and is case-sensitive.
+func sameConnectHost(a, b string) bool {
+	addrA, zoneA, _ := strings.Cut(a, "%")
+	addrB, zoneB, _ := strings.Cut(b, "%")
+	return strings.EqualFold(addrA, addrB) && zoneA == zoneB
 }
 
 func warnConnectTargetOverride(profileName, profileTarget, target, flagTarget string) {
