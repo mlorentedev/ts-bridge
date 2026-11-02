@@ -95,11 +95,16 @@ scan() {
       if (code ~ /(^|[ \t{,-])with:[ \t]*$/) { withcol = k; withchild = -1; return }
       # Flat flow mappings only: a nested `{...}` is the value of another input, never a
       # direct child, so it is left unmatched and the step fails closed.
+      # The `with:` must also belong to the step: at brace depth 1 on a `- {...}` step line,
+      # depth 0 on a block key line. `env: {with: {...}}` is a variable, not the input.
       if (match(code, /(^|[ \t{,-])with:[ \t]*\{[^{}]*\}/)) {
         flow = substr(code, RSTART, RLENGTH)
-        if (flow ~ ("[{,][ \t]*" R_PC)) take_persist(flow)
+        if (braces(substr(code, 1, RSTART)) == (substr(code, k + 1, 1) == "{") && flow ~ ("[{,][ \t]*" R_PC))
+          take_persist(flow)
       }
     }
+    # Open braces minus closed ones in s: how deep a flow mapping the end of s sits.
+    function braces(s,   t) { t = s; return gsub(/\{/, "", t) - gsub(/\}/, "", s) }
     function take_persist(s) {
       if (!match(s, R_PC)) return
       persist = substr(s, RSTART, RLENGTH)

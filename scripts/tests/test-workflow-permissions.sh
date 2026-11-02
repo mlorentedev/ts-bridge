@@ -70,6 +70,7 @@ flow-style-persist-under-env:1:no-except
 persist-nested-under-with-input:1:no-except
 env-then-with-hardened:0:OK
 flow-style-persist-nested-under-with-input:1:no-except
+flow-style-with-nested-under-env:1:no-except
 with-blank-and-comment-hardened:0:OK'
 
 # Each fixture is one workflow, written as data rather than as a mutation of another: the diff
@@ -452,6 +453,17 @@ jobs:
         with:
           sparse-checkout:
             persist-credentials: false
+YAML
+    ;;
+    flow-style-with-nested-under-env) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - {uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5, env: {with: {persist-credentials: false}}}
 YAML
     ;;
     flow-style-persist-nested-under-with-input) cat > "$1/w.yml" <<'YAML'
