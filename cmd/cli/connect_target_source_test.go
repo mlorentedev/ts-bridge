@@ -262,6 +262,8 @@ func TestWarnConnectTargetOverrideComparesHostCaseInsensitively(t *testing.T) {
 		{"different port", "acemagic-office:45000", "acemagic-office:45001", true},
 		{"same host, port differs only by a leading zero", "acemagic-office:45000", "ACEMAGIC-OFFICE:045000", true},
 		{"no port, host differs only in case", "acemagic-office", "ACEMAGIC-OFFICE", false},
+		{"IPv6 zone differs only in case", "[fe80::1%eth0]:3389", "[FE80::1%ETH0]:3389", true},
+		{"IPv6 address differs only in case, same zone", "[fe80::1%eth0]:3389", "[FE80::1%eth0]:3389", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

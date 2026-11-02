@@ -189,14 +189,16 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 }
 
 // sameConnectTarget reports whether two targets name one destination: host names
-// are case-insensitive, ports are compared exactly (#508).
+// are case-insensitive, ports and IPv6 zone identifiers are compared exactly (#508).
 func sameConnectTarget(a, b string) bool {
 	hostA, portA, errA := net.SplitHostPort(a)
 	hostB, portB, errB := net.SplitHostPort(b)
 	if errA != nil || errB != nil {
 		return strings.EqualFold(a, b)
 	}
-	return strings.EqualFold(hostA, hostB) && portA == portB
+	addrA, zoneA, _ := strings.Cut(hostA, "%")
+	addrB, zoneB, _ := strings.Cut(hostB, "%")
+	return strings.EqualFold(addrA, addrB) && zoneA == zoneB && portA == portB
 }
 
 func warnConnectTargetOverride(profileName, profileTarget, target, flagTarget string) {
