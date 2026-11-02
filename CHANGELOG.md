@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.21.0](https://github.com/mlorentedev/ts-bridge/compare/v1.20.0...v1.21.0) (2026-11-02)
+
+
+### Features
+
+* **host:** load and validate the declared host configuration file ([#519](https://github.com/mlorentedev/ts-bridge/issues/519)) ([4363338](https://github.com/mlorentedev/ts-bridge/commit/436333857c079d5d3b80578b54507045941ca6f5))
+
+
+### Bug Fixes
+
+* **host:** fail closed on a qualified jump into ts-input ([#533](https://github.com/mlorentedev/ts-bridge/issues/533)) ([aafda54](https://github.com/mlorentedev/ts-bridge/commit/aafda54f96c71359071309615d92ea4269e56624))
+* **host:** read tailscaled's ts-input chain before appending an open iptables rule ([#527](https://github.com/mlorentedev/ts-bridge/issues/527)) ([41f5a06](https://github.com/mlorentedev/ts-bridge/commit/41f5a0694b3c731387c55b86e4b8f7718d19aeea))
+* **host:** report copies of setup's own iptables rule in host check ([#534](https://github.com/mlorentedev/ts-bridge/issues/534)) ([50b0c3b](https://github.com/mlorentedev/ts-bridge/commit/50b0c3b4b1b391e6e7cbb63bdf80f2191e92987b))
+
 ## [1.20.0](https://github.com/mlorentedev/ts-bridge/compare/v1.19.1...v1.20.0) (2026-10-30)
 
 
