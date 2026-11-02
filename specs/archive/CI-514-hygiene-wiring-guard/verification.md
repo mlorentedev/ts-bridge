@@ -101,7 +101,7 @@ created: "2026-10-31"
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/CI-514-hygiene-wiring-guard/` -> `specs/archive/CI-514-hygiene-wiring-guard/`
-- [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/CI-514-hygiene-wiring-guard/` -> `specs/archive/CI-514-hygiene-wiring-guard/`
+- [x] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018): #514 closed by #531 (`d351f10`), board Done
+- [x] Promotions above executed (if any)
