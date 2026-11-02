@@ -1,8 +1,43 @@
 [
   {
     "id": "HOST-008-host-serve-mode-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
+    "behavior": "AC1: a fresh state_dir and a tagged key enrol, READY reports enrolled=true, and the declared services are published (live SSH/RDP handshake gates on kubelab#2862)",
+    "verification": "go test ./internal/serve -run '^TestNodeConfig_Enrolment$' -count=1 -v | grep -q -- '--- PASS: TestNodeConfig_Enrolment ' && go test ./internal/serve -run '^TestPublish_ForwardsToLoopback$' -count=1 -v | grep -q -- '--- PASS: TestPublish_ForwardsToLoopback ' && go test ./cmd/cli -run '^TestHostServeCmd_Ready$' -count=1 -v | grep -q -- '--- PASS: TestHostServeCmd_Ready '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-008-host-serve-mode-f2",
+    "behavior": "AC2: with node state present the key file is never read and READY reports enrolled=false, keeping one persistent node (live node count gates on kubelab#2862)",
+    "verification": "go test ./internal/serve -run '^TestNodeConfig_Enrolment$' -count=1 -v | grep -q -- '--- PASS: TestNodeConfig_Enrolment ' && go test ./cmd/cli -run '^TestHostServeCmd_Ready$' -count=1 -v | grep -q -- '--- PASS: TestHostServeCmd_Ready '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-008-host-serve-mode-f3",
+    "behavior": "AC3: only the ports host.services declares listen on the node; nothing else answers",
+    "verification": "go test ./internal/serve -run '^TestPublish_OnlyDeclaredPorts$' -count=1 -v | grep -q -- '--- PASS: TestPublish_OnlyDeclaredPorts ' && go test ./internal/serve -run '^TestPublish_ForwardsToLoopback$' -count=1 -v | grep -q -- '--- PASS: TestPublish_ForwardsToLoopback '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-008-host-serve-mode-f4",
+    "behavior": "AC4: a bootstrap that dies after READY emits ERROR reason=ssh_bootstrap_failed, retries with 1-30 s backoff and recovers (live sinkholed run gates on kubelab#2862)",
+    "verification": "go test ./internal/serve -run '^TestSupervisedBootstrap_Retries$' -count=1 -v | grep -q -- '--- PASS: TestSupervisedBootstrap_Retries '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-008-host-serve-mode-f5",
+    "behavior": "AC5: host.mesh unknown keys warn, empty keys error, and a state_dir writable by non-administrators (Windows) or not 0700 root (Linux) is refused",
+    "verification": "go test ./internal/host -run '^TestLoadFile_Mesh$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_Mesh ' && go test ./internal/host -run '^TestLoadFile_MeshInvalid$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_MeshInvalid ' && go test ./internal/host -run '^TestCheckUnixStateDir$' -count=1 -v | grep -q -- '--- PASS: TestCheckUnixStateDir ' && go test ./internal/host -run '^TestEnsureStateDir$' -count=1 -v | grep -q -- '--- PASS: TestEnsureStateDir ' && go test ./cmd/cli -run '^TestHostServeCmd_Requires$' -count=1 -v | grep -q -- '--- PASS: TestHostServeCmd_Requires '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-008-host-serve-mode-f6",
+    "behavior": "AC6: host check --json reports published per declared service from serve's health endpoint on host.mesh.health_addr; a service serve does not publish reads as not published",
+    "verification": "go test ./internal/health -run '^TestStartServer_Services$' -count=1 -v | grep -q -- '--- PASS: TestStartServer_Services ' && go test ./cmd/cli -run '^TestHostCheckCmd_Published$' -count=1 -v | grep -q -- '--- PASS: TestHostCheckCmd_Published '",
     "state": "pending",
     "evidence": ""
   }

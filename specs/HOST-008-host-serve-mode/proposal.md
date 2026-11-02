@@ -33,7 +33,8 @@ the tailnet as a persistent node and publishes the host's declared services.
   `127.0.0.1:<port>`. Nothing else answers on the node.
 - The control plane is the file's `control_url`. A new optional `host.mesh` block holds
   what serve alone needs: `bootstrap_ssh` (`user@host[:port]`, CLI-363), `hostname`,
-  `state_dir` and `auth_key_file`. Unknown keys warn and empty keys error, as HOST-005.
+  `state_dir`, `auth_key_file` and `health_addr` (loopback only). Unknown keys warn and
+  empty keys error, as HOST-005.
 - Persistent node: `Ephemeral: false`, node state in `state_dir`. A restart reuses the
   node identity without a key. The auth key file is read only when no state exists, and
   serve reports whether it used it (`READY ... enrolled=true|false`).
@@ -43,7 +44,8 @@ the tailnet as a persistent node and publishes the host's declared services.
 - Signals and health as `connect`: `READY` on stdout, `ERROR reason=...` on stderr,
   `/health/ready`. When the SSH child or the control session dies after `READY`, serve
   retries with backoff instead of exiting, and reports the state on `/health`.
-- `host check --json` reports, per declared service, whether serve publishes it.
+- `host check --json` reports, per declared service, whether serve publishes it, read
+  from serve's `/health/ready` on `host.mesh.health_addr`.
 - Installing serve as a boot-time task is the provisioning layer's job (ADR-017 keeps
   ts-bridge daemonless): the docs give the Windows Scheduled Task (SYSTEM, at startup,
   restart on failure) and the Linux systemd unit, and the consumer's provisioning
@@ -81,8 +83,16 @@ the tailnet as a persistent node and publishes the host's declared services.
   new numbers are invented: exponential backoff with jitter between `DialBackoffBase`
   (1 s) and `DialBackoffMax` (30 s), from `internal/config`, and readiness on
   `/health/ready` as `connect` does. The operator chose this in #525.
-- **~300 LOC cap.** Likely three PRs: the `host.mesh` schema and loader, the serve
-  command with forwarding, then reconnect and health.
+- **How `host check` learns what serve publishes (decided 2026-11-02).** `check` runs
+  unelevated and `state_dir` is readable only by SYSTEM/Administrators or root, so a
+  status file there is out. The operator chose an optional loopback-only
+  `host.mesh.health_addr`: serve serves `/health/ready` there with a `services` list, and
+  `check` reads it when the key is declared. Serve down means every service reads as not
+  published; without the key, `check` omits the field. Rejected: a fixed default address
+  (port collisions) and moving AC6 to its own ticket.
+- **~300 LOC cap (decided 2026-11-02).** Three PRs: the `host.mesh` schema and the
+  `state_dir` guard, the serve command with forwarding and enrolment, then reconnect,
+  health and `host check`. Docs move to a fourth PR if the third passes the cap.
 
 ## Acceptance criteria
 
@@ -102,8 +112,9 @@ AC1, AC2 and AC4 need the live control plane, so they gate on mlorentedev/kubela
 - [ ] AC5: a `host.mesh` block with an unknown key warns, an empty key errors, and a
   `state_dir` writable by non-administrators is refused on Windows, and one that is not
   `0700` and owned by root is refused on Linux.
-- [ ] AC6: `host check --json` reports, for each declared service, whether serve
-  publishes it, and a service that serve does not publish reads as not published.
+- [ ] AC6: with `host.mesh.health_addr` declared, `host check --json` reports, for each
+  declared service, whether serve publishes it, and a service that serve does not
+  publish (or serve not running) reads as not published.
 
 ## References
 
