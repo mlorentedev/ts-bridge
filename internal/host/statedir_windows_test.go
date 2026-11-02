@@ -49,13 +49,19 @@ func TestCheckWindowsDACL(t *testing.T) {
 	}
 }
 
-// A directory the current user created is theirs, so it is refused.
+// A directory the current user created is refused for that user: as its owner
+// (unelevated) or through its inherited ACE (elevated tokens default the owner
+// to Administrators). Either way the real GetNamedSecurityInfo read reached
+// the DACL check.
 func TestCheckStateDir_Windows(t *testing.T) {
-	if err := CheckStateDir(t.TempDir()); err == nil {
-		t.Error("CheckStateDir(user temp dir) = nil, want it refused")
+	err := CheckStateDir(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "S-1-5-21-") ||
+		!(strings.Contains(err.Error(), "owned by") || strings.Contains(err.Error(), "can write it")) {
+		t.Errorf("CheckStateDir(user temp dir) = %v, want it refused for the user's SID", err)
 	}
-	if err := CheckStateDir(filepath.Join(t.TempDir(), "absent")); err == nil {
-		t.Error("CheckStateDir(absent) = nil, want an error")
+	absent := filepath.Join(t.TempDir(), "absent")
+	if err := CheckStateDir(absent); err == nil || !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("CheckStateDir(absent) = %v, want a not-exist error", err)
 	}
 }
 

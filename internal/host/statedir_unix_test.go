@@ -28,9 +28,18 @@ func TestEnsureStateDir(t *testing.T) {
 		t.Fatalf("EnsureStateDir(absent) left %v (%v), want a 0700 directory", info, statErr)
 	}
 	if os.Geteuid() != 0 {
-		// The uid-0 half needs root; as a user the new directory is refused for its owner.
-		if err == nil || !strings.Contains(err.Error(), "uid") {
-			t.Errorf("EnsureStateDir as uid %d = %v, want it refused for its owner", os.Geteuid(), err)
+		// The uid-0 half needs root; as a user the new directory is refused for
+		// its owner, and a second run refuses it the same way, changing nothing.
+		for run := 1; run <= 2; run++ {
+			if run == 2 {
+				err = EnsureStateDir(dir)
+			}
+			if err == nil || !strings.Contains(err.Error(), "owned by uid") {
+				t.Errorf("EnsureStateDir run %d as uid %d = %v, want it refused for its owner", run, os.Geteuid(), err)
+			}
+		}
+		if info, err := os.Stat(dir); err != nil || info.Mode().Perm() != 0o700 {
+			t.Errorf("a second EnsureStateDir changed the directory: %v %v", info, err)
 		}
 		return
 	}

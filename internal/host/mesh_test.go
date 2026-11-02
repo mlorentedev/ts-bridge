@@ -73,6 +73,7 @@ func TestLoadFile_MeshInvalid(t *testing.T) {
 		{"health port 0", goosLinux, mesh("health_addr: 127.0.0.1:0"), "host.mesh.health_addr"},
 		{"health without a port", goosLinux, mesh("health_addr: localhost"), "host.mesh.health_addr"},
 		{"bootstrap without a control plane", goosLinux, "host:\n  mesh:\n    bootstrap_ssh: jump\n", "host.mesh.bootstrap_ssh needs host.control_url"},
+		{"bootstrap with an empty control plane", goosLinux, "host:\n  control_url: \"\"\n  mesh:\n    bootstrap_ssh: jump\n", "host.control_url: empty"},
 		{"no serve on darwin", goosDarwin, mesh("hostname: mac"), "#459"},
 	}
 	for _, tc := range tests {
