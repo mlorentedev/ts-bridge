@@ -152,7 +152,8 @@ func collectBrowserFlags(command *cobra.Command) (config.FlagSet, error) {
 	if flags.AuthKeyFile != "" {
 		key, err := readAuthKeyFile(flags.AuthKeyFile)
 		if err != nil {
-			return config.FlagSet{}, fmt.Errorf("read auth key file: %w", err)
+			// readAuthKeyFile names the file in every error it returns (#401).
+			return config.FlagSet{}, err
 		}
 		flags.AuthKey = key
 	}

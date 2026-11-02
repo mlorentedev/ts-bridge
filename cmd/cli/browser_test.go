@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ts-bridge/internal/config"
@@ -120,5 +121,24 @@ func TestBrowserCommandRequiresAuthKeyFile(t *testing.T) {
 	err := command.Execute()
 	if err == nil || err.Error() != "browser requires --auth-key-file or --profile" {
 		t.Fatalf("browser error = %v", err)
+	}
+}
+
+func TestBrowserCommandAuthKeyFileErrorHasOnePrefix(t *testing.T) {
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_CONTROL_URL", "")
+
+	command := newBrowserCmd()
+	command.SetArgs([]string{
+		"--url", "https://forge.example.internal/",
+		"--route", "forge.example.internal:443=apps:443",
+		"--auth-key-file", filepath.Join(t.TempDir(), "missing"),
+	})
+	command.SilenceUsage = true
+	command.SilenceErrors = true
+	err := command.Execute()
+	if err == nil || !strings.HasPrefix(err.Error(), "stat auth key file: ") {
+		t.Fatalf("browser error = %v, want one stat auth key file prefix (#401)", err)
 	}
 }

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "BUG-480-iptables-duplicate-rules-f1",
+    "behavior": "Two copies of the setup rule make host check report the firewall step as manual, naming the count and iptables -D, with firewall_ok still true",
+    "verification": "go test ./internal/host/ -run 'TestCheckForLinux' -count=1 -v 2>&1 | grep -q -- '--- PASS: TestCheckForLinux/iptables,_two_copies_of_the_setup_rule'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-480-iptables-duplicate-rules-f2",
+    "behavior": "Only the exact printed form counts: one copy, a scoped allow beside it, another port and ts-input rules never count as copies",
+    "verification": "go test ./internal/host/ -run 'TestIptablesSetupCopies' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-480-iptables-duplicate-rules-f3",
+    "behavior": "A deny before the copies reports the blocked step, not the copies",
+    "verification": "go test ./internal/host/ -run 'TestCheckForLinux' -count=1 -v 2>&1 | grep -q -- '--- PASS: TestCheckForLinux/iptables,_a_drop_before_two_copies'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-480-iptables-duplicate-rules-f4",
+    "behavior": "host setup on a host with copies reports ok and runs no iptables -D",
+    "verification": "go test ./internal/host/ -run 'TestSetupForLinux' -count=1 -v 2>&1 | grep -q -- '--- PASS: TestSetupForLinux/iptables,_two_copies_of_the_setup_rule'",
+    "state": "pending",
+    "evidence": ""
+  }
+]

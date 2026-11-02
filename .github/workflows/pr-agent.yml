@@ -94,7 +94,10 @@ jobs:
         && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
         && startsWith(github.event.comment.body, '/'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Above the PR-Agent step's own cap, so a hung review ends that step and the
+    # guard still runs and says no review was published, instead of the whole job
+    # ending CANCELLED with nothing on the PR (#430).
+    timeout-minutes: 18
     steps:
       # Read-only, credential-free per CI-322: the only file this job's later steps
       # need from the repo is scripts/check-review-published.sh (the guard below).
@@ -141,8 +144,13 @@ jobs:
               "dotfiles/secrets/registry.yaml, then run: dotf secrets sync ci --repo ${GITHUB_REPOSITORY}"
             exit 1
           fi
+      # Capped below the job, and its failure left to the guard below, which is the
+      # one verdict on whether a review exists (#430). Only on the paths that guard
+      # checks: a failed `/improve` or `/describe` has no guard and keeps the job red.
       - name: PR-Agent
         uses: The-PR-Agent/pr-agent@efdde4afe14aa401a3889012c7f3e9ef3081a430  # v0.49.0
+        timeout-minutes: 14
+        continue-on-error: ${{ github.event_name == 'pull_request' || contains(github.event.comment.body, '/review') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI__KEY: ${{ secrets.NAN_API_KEY }}
@@ -156,6 +164,19 @@ jobs:
           CONFIG__MODEL: openai/mimo-v2.6-flash
           CONFIG__FALLBACK_MODELS: '["openai/deepseek-v4-flash"]'
           CONFIG__CUSTOM_MODEL_MAX_TOKENS: "200000"
+          # Stream every NaN call (#430). Non-streamed, a request NaN holds open sits
+          # silent past `ai_timeout`, which bounds the gap between reads, not the call:
+          # measured on #527, `timeout value=120.0, time taken=361.81 seconds`, twice,
+          # so the job hit 15 minutes before the fallback ran. Streamed, the timeout
+          # measures the gap between chunks. PR-Agent streams only when the provider
+          # and a substring of the base URL both match, so the provider is set too.
+          # Same settings as dotfiles' workflow (AI-045 AC6).
+          LITELLM__CUSTOM_LLM_PROVIDER: openai
+          LITELLM__FORCE_STREAMING_CUSTOM_LLM_PROVIDER: openai
+          LITELLM__FORCE_STREAMING_API_BASE_SUBSTRINGS: '["api.nan.builders"]'
+          # A timed-out call moves to the fallback instead of retrying the model that
+          # just timed out: a NaN model that times out once is usually saturated.
+          CONFIG__RETRY_SAME_MODEL_ON_TIMEOUT: "false"
           CONFIG__PUBLISH_OUTPUT_PROGRESS: false
           # Stated rather than defaulted, so the event lists are visible. `synchronize`
           # is absent for the reason in the trigger comment above, and `push_commands`

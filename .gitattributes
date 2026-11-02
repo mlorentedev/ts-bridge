@@ -12,3 +12,9 @@ specs export-ignore
 *.sh text eol=lf
 *.bash text eol=lf
 *.bats text eol=lf
+
+# go.mod and go.sum MUST be LF on every OS: with core.autocrlf=true a Windows
+# checkout gets CRLF copies, and `go mod tidy -diff` then reports a whole-file
+# diff that Git itself does not (#498).
+go.mod text eol=lf
+go.sum text eol=lf

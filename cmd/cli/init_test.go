@@ -295,6 +295,7 @@ func TestInitAuthKeyFile(t *testing.T) {
 		name           string
 		keyFileContent *string
 		emptyKeyPath   bool
+		keyPathIsDir   bool
 		includeInline  bool
 		profile        string
 		wantErr        string
@@ -315,7 +316,12 @@ func TestInitAuthKeyFile(t *testing.T) {
 		},
 		{
 			name:    "missing file returns clear error",
-			wantErr: "read auth key file: stat auth key file",
+			wantErr: "stat auth key file: ",
+		},
+		{
+			name:         "unreadable file carries one read prefix",
+			keyPathIsDir: true,
+			wantErr:      "read auth key file: ",
 		},
 		{
 			name:         "explicit empty file path returns clear error",
@@ -368,6 +374,9 @@ func TestInitAuthKeyFile(t *testing.T) {
 			if tt.emptyKeyPath {
 				args[1] = ""
 			}
+			if tt.keyPathIsDir {
+				args[1] = tmpDir
+			}
 			if tt.includeInline {
 				args = append(args, "--auth-key", "tskey-auth-from-inline")
 			}
@@ -392,6 +401,10 @@ func TestInitAuthKeyFile(t *testing.T) {
 				if !strings.Contains(runErr.Error(), tt.wantErr) {
 					t.Fatalf("error = %q, want substring %q", runErr, tt.wantErr)
 				}
+				// One contextual prefix: the reader already names the file (#401).
+				if n := strings.Count(runErr.Error(), "auth key file: "); n > 1 {
+					t.Fatalf("error = %q carries %d auth key file prefixes, want one", runErr, n)
+				}
 				return
 			}
 			if runErr != nil {
@@ -408,8 +421,8 @@ func TestInitAuthKeyFile(t *testing.T) {
 			if tt.includeInline && strings.Contains(string(data), "tskey-auth-from-inline") {
 				t.Errorf("generated config contains lower-precedence inline key:\n%s", data)
 			}
-			if tt.wantWarning && !strings.Contains(stderr, "--auth-key is visible in the process list") {
-				t.Errorf("stderr does not contain process-table warning:\n%s", stderr)
+			if got := strings.Contains(stderr, "--auth-key is visible in the process list"); got != tt.wantWarning {
+				t.Errorf("process-table warning printed = %v, want %v:\n%s", got, tt.wantWarning, stderr)
 			}
 		})
 	}
