@@ -63,6 +63,7 @@ func TestUFWAllows(t *testing.T) {
 const (
 	ufwAdded   = "ufw show added"
 	iptRead    = "iptables -S INPUT"
+	iptChain   = "iptables -S ts-input"
 	iptAppend  = "iptables -A INPUT -p tcp --dport 3389 -j ACCEPT"
 	isEnabled  = "systemctl is-enabled xrdp"
 	isActive   = "systemctl is-active xrdp"
@@ -75,10 +76,31 @@ const (
 const (
 	iptScoped       = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
 	iptEmpty        = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	iptQualified    = "-P INPUT ACCEPT\n-A INPUT -i tailscale0 -j ts-input\n"
 	iptTailnet      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -i tailscale0 -j ACCEPT\n"
 	iptDropFirst    = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n"
 	iptAckOnly      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK -j ACCEPT\n"
 	iptLoopbackOnly = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n"
+)
+
+// iptSetupRule is the rule `host setup` appends, as `iptables -S INPUT` prints
+// it (iptables 1.8.10 adds `-m tcp`; recorded end to end in BUG-492). Setup
+// before #477 appended it on every run, so old hosts carry copies (#480).
+const (
+	iptSetupRule  = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	iptTwoCopies  = iptEmpty + iptSetupRule + iptSetupRule
+	iptCopiesFix  = "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time"
+	iptCopiesNote = "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
+)
+
+// tsInputDefault is tailscaled's ts-input chain as `iptables -S ts-input`
+// prints it: tailscale.com v1.104.2's AddChains, addBase4, AddExternalCGNATRules,
+// AddLoopbackRule and AddMagicsockPortRule replayed in that order with iptables
+// 1.8.10 (nf_tables) in ubuntu:24.04 (#492). tsInputNoAccept is the same chain
+// without the tailnet ACCEPT, so only rules that never decide remain.
+const (
+	tsInputDefault  = "-N ts-input\n-A ts-input -s 100.64.0.5/32 -i lo -j ACCEPT\n-A ts-input -i tailscale0 -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n-A ts-input -p udp -m udp --dport 41641 -j ACCEPT\n"
+	tsInputNoAccept = "-N ts-input\n-A ts-input -s 100.64.0.5/32 -i lo -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n-A ts-input -p udp -m udp --dport 41641 -j ACCEPT\n"
 )
 
 var xrdpReads = []string{"lookpath systemctl", "output " + isEnabled, "output " + isActive}
@@ -163,18 +185,26 @@ func TestIptablesRule(t *testing.T) {
 		name   string
 		runner *recordingRunner
 		want   ruleState
+		reason string // a substring an unknown read's reason must carry
 	}{
-		{"present", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptScoped}}, rulePresent},
-		{"absent behind a ts-input jump", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty}}, ruleAbsent},
-		{"permission", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, exit: map[string]int{iptRead: 4}}, ruleUnknown},
-		{"no exit status", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, fail: map[string]bool{iptRead: true}}, ruleUnknown},
-		{"no backend", &recordingRunner{elevated: true}, ruleUnknown},
-		{"not root", &recordingRunner{onPath: map[string]bool{"iptables": true}}, ruleUnknown},
+		{"present", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptScoped}}, rulePresent, ""},
+		{"absent behind a ts-input jump", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty}}, ruleAbsent, ""},
+		{"present inside ts-input", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty, iptChain: tsInputDefault}}, rulePresent, ""},
+		{"a deny after the jump is shadowed by ts-input", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptDropFirst, iptChain: tsInputDefault}}, rulePresent, ""},
+		{"ts-input unreadable", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty}, exit: map[string]int{iptChain: 1}}, ruleUnknown, iptChain},
+		{"permission", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, exit: map[string]int{iptRead: 4}}, ruleUnknown, ""},
+		{"no exit status", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, fail: map[string]bool{iptRead: true}}, ruleUnknown, ""},
+		{"no backend", &recordingRunner{elevated: true}, ruleUnknown, ""},
+		{"not root", &recordingRunner{onPath: map[string]bool{"iptables": true}}, ruleUnknown, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := readLinuxFirewall(tt.runner, 3389); got.state != tt.want {
+			got := readLinuxFirewall(tt.runner, 3389)
+			if got.state != tt.want {
 				t.Errorf("state = %v, want %v (reason %q)", got.state, tt.want, got.reason)
+			}
+			if !strings.Contains(got.reason, tt.reason) {
+				t.Errorf("reason %q does not name %q", got.reason, tt.reason)
 			}
 		})
 	}
@@ -248,6 +278,8 @@ func TestSetupForLinux(t *testing.T) {
 		calls    []string
 		outcomes []Outcome
 		blocked  string // the rule a manual firewall step must name
+		message  string // a substring the firewall step's message must carry
+		fix      string // a substring the firewall step's fix must carry
 	}{
 		{
 			name:     "ufw, converged",
@@ -279,31 +311,31 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "iptables, converged",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptScoped})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 		},
 		{
 			name:     "iptables, rule missing",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
 			name:     "iptables, port-less tailnet allow",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptTailnet})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 		},
 		{
 			name:     "iptables, only loopback and established allowed",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptLoopbackOnly})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
 			name:     "iptables, only an established-traffic tcp-flags allow",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptAckOnly})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
@@ -316,9 +348,48 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "iptables, a drop and no allow: nothing appended after it",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptDropFirst})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
 			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
+		},
+		{
+			name:     "iptables, tailscaled's ts-input accepts the tailnet",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
+		},
+		{
+			name:     "iptables, ts-input unreadable: nothing appended",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty}), exit: map[string]int{iptChain: 1}},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  iptChain,
+		},
+		{
+			name:     "iptables, a deny after the jump is shadowed by ts-input",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptDropFirst, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
+		},
+		{
+			name:     "iptables, two copies of the setup rule",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptTwoCopies, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
+		},
+		{
+			name:     "iptables, no ts-input jump: one read",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
+			name:     "iptables, a qualified ts-input jump: nothing appended",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptQualified, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  "-A INPUT -i tailscale0 -j ts-input",
+			fix:      "-A INPUT -i tailscale0 -j ts-input",
 		},
 		{
 			name:     "iptables -S fails",
@@ -361,6 +432,8 @@ func TestSetupForLinux(t *testing.T) {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}
 				assertNamesBlockedRule(t, s, tt.blocked)
+				assertFirewallMessage(t, s, tt.message)
+				assertFirewallFix(t, s, tt.fix, "")
 			}
 			if !reflect.DeepEqual(outcomes, tt.outcomes) {
 				t.Errorf("outcomes = %v, want %v", outcomes, tt.outcomes)
@@ -416,6 +489,9 @@ func TestCheckForLinux(t *testing.T) {
 		services []Service
 		legacy   CheckResult
 		blocked  string // the rule a manual firewall step must name
+		message  string // a substring the firewall step's message must carry
+		fix      string // a substring the firewall step's fix must carry
+		absent   string // a substring the firewall step's message must not carry
 	}{
 		{
 			name:     "converged",
@@ -462,7 +538,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "iptables, scoped allow",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
@@ -470,7 +546,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "iptables, port-less tailnet allow",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTailnet})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
@@ -478,7 +554,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "iptables, only loopback and established allowed",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptLoopbackOnly})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
@@ -486,11 +562,94 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "iptables, a drop decides the port first",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptDropFirst + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
+		},
+		{
+			name:     "iptables, tailscaled's ts-input accepts the tailnet",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptEmpty, iptChain: tsInputDefault})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "iptables, ts-input unreadable",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptEmpty}), exit: map[string]int{iptChain: 1}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  iptChain,
+		},
+		{
+			name:     "iptables, no ts-input jump: one read",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+		},
+		{
+			name:     "iptables, a qualified ts-input jump",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptQualified, iptChain: tsInputDefault})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "-A INPUT -i tailscale0 -j ts-input",
+			fix:      "-A INPUT -i tailscale0 -j ts-input",
+		},
+		{
+			name:     "iptables, two copies of the setup rule",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTwoCopies, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+			message:  iptCopiesNote,
+			fix:      iptCopiesFix,
+		},
+		{
+			name:     "iptables, two copies behind tailscaled's ts-input",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTwoCopies, iptChain: tsInputDefault})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+			message:  iptCopiesNote,
+			fix:      iptCopiesFix,
+		},
+		{
+			name:     "iptables, three copies: two to delete",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTwoCopies + iptSetupRule, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+			message:  "3 copies",
+			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 2 time",
+		},
+		{
+			name:     "iptables, one copy beside a scoped allow",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + iptSetupRule, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "iptables, a drop before two copies",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptDropFirst + iptSetupRule + iptSetupRule, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
+			absent:   "copies",
 		},
 		{
 			name:     "iptables -S fails",
@@ -503,7 +662,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "xrdp not installed",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: linuxUp(map[string]string{iptRead: iptEmpty})},
-			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "lookpath iptables", "output " + iptRead},
+			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain},
 			steps:    []string{"Tailscale IP=ok", "xrdp service=failed", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
@@ -530,6 +689,8 @@ func TestCheckForLinux(t *testing.T) {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}
 				assertNamesBlockedRule(t, s, tt.blocked)
+				assertFirewallMessage(t, s, tt.message)
+				assertFirewallFix(t, s, tt.fix, tt.absent)
 			}
 			if !reflect.DeepEqual(steps, tt.steps) {
 				t.Errorf("steps = %q, want %q", steps, tt.steps)
@@ -628,8 +789,66 @@ func assertNamesBlockedRule(t *testing.T, s SetupStep, rule string) {
 	if s.Name != linuxFwName || s.Outcome != OutcomeManual {
 		return
 	}
-	if rule == "" || !strings.Contains(s.Message, rule) {
+	if rule == "" {
+		if strings.Contains(s.Message, "blocks") {
+			t.Errorf("step %q message %q reports a block the row does not name", s.Name, s.Message)
+		}
+		return
+	}
+	if !strings.Contains(s.Message, rule) {
 		t.Errorf("step %q message %q does not name the blocking rule %q", s.Name, s.Message, rule)
+	}
+}
+
+// assertFirewallMessage checks that the firewall step's message carries want,
+// such as the command whose read failed (#492).
+func assertFirewallMessage(t *testing.T, s SetupStep, want string) {
+	t.Helper()
+	if s.Name == linuxFwName && !strings.Contains(s.Message, want) {
+		t.Errorf("step %q message %q does not contain %q", s.Name, s.Message, want)
+	}
+}
+
+// assertFirewallFix checks the firewall step's fix carries fix and its message
+// does not carry absent (#480).
+func assertFirewallFix(t *testing.T, s SetupStep, fix, absent string) {
+	t.Helper()
+	if s.Name != linuxFwName {
+		return
+	}
+	if !strings.Contains(s.Fix, fix) {
+		t.Errorf("step %q fix %q does not contain %q", s.Name, s.Fix, fix)
+	}
+	if absent != "" && strings.Contains(s.Message, absent) {
+		t.Errorf("step %q message %q contains %q", s.Name, s.Message, absent)
+	}
+}
+
+// TestIptablesSetupCopies pins which lines count as copies of the rule setup
+// appends (#480): only its exact printed form, in INPUT, for this port.
+func TestIptablesSetupCopies(t *testing.T) {
+	tests := []struct {
+		name  string
+		rules string
+		want  int
+	}{
+		{"none", iptEmpty, 0},
+		{"one", iptEmpty + iptSetupRule, 1},
+		{"two", iptTwoCopies, 2},
+		{"three, with a rule between", iptTwoCopies + "-A INPUT -i lo -j ACCEPT\n" + iptSetupRule, 3},
+		{"a scoped allow is not a copy", iptScoped + iptSetupRule, 1},
+		{"another port is not a copy", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n" + iptSetupRule, 1},
+		{"a drop on the port is not a copy", iptDropFirst + iptSetupRule, 1},
+		{"ts-input rules are not copies", iptInlineChain(iptTwoCopies, tsInputDefault), 2},
+		{"the same rule inside ts-input is not a copy", iptInlineChain(iptEmpty+iptSetupRule, tsInputDefault+"-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT\n"), 1},
+		{"setup's own command line is not the printed form", iptEmpty + "-A INPUT -p tcp --dport 3389 -j ACCEPT\n", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := iptSetupCopies(tt.rules, 3389); got != tt.want {
+				t.Errorf("got %d, want %d", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -660,5 +879,101 @@ func TestIptablesDecideOnly(t *testing.T) {
 				t.Errorf("blocking rule = %q for state %v", rule, got)
 			}
 		})
+	}
+}
+
+// TestIptablesTSInput pins how tailscaled's ts-input chain decides (#492): its
+// rules count at the position of an unqualified `-A INPUT -j ts-input`. A
+// qualified jump never reaches this walk (TestIptQualifiedTSInputJump).
+// Chains are in printed form (tsInputDefault).
+func TestIptablesTSInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		chain string
+		want  ruleState
+	}{
+		{"tailscaled default", iptEmpty, tsInputDefault, rulePresent},
+		{"deny before the jump decides first", "-P INPUT ACCEPT\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n-A INPUT -j ts-input\n", tsInputDefault, ruleBlocked},
+		{"deny after the jump is shadowed", iptDropFirst, tsInputDefault, rulePresent},
+		{"tailscaled's other rules decide nothing", iptEmpty, tsInputNoAccept, ruleAbsent},
+		{"and an INPUT allow after the jump still counts", iptScoped, tsInputNoAccept, rulePresent},
+		{"no jump, nothing to follow", "-P INPUT ACCEPT\n", tsInputDefault, ruleAbsent},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, _ := iptablesDecide(iptInlineChain(tt.input, tt.chain), 3389); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestIptQualifiedTSInputJump pins which INPUT rules the walk cannot pass
+// (#532): any jump or goto into ts-input other than tailscaled's unqualified
+// one. A quoted comment that spells a jump is not one.
+func TestIptQualifiedTSInputJump(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"tailscaled's unqualified jump", iptEmpty, ""},
+		{"no jump", "-P INPUT ACCEPT\n", ""},
+		{"interface-scoped jump", iptQualified, "-A INPUT -i tailscale0 -j ts-input"},
+		{"source-scoped jump", "-A INPUT -s 100.64.0.0/10 -j ts-input\n", "-A INPUT -s 100.64.0.0/10 -j ts-input"},
+		{"goto into ts-input", "-A INPUT -g ts-input\n", "-A INPUT -g ts-input"},
+		{"a qualified jump next to the exact one", "-A INPUT -j ts-input\n-A INPUT -i eth0 -j ts-input\n", "-A INPUT -i eth0 -j ts-input"},
+		{"a comment spelling the jump", `-A INPUT -p tcp -m comment --comment "see -j ts-input above" -j DROP` + "\n", ""},
+		{"another chain", "-A INPUT -i eth0 -j ts-input-extra\n", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, got := iptBeforeQualifiedJump(tt.input); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestReadIptablesQualifiedJump pins the walk up to a qualified jump into
+// ts-input (#532): what the rules before it decide stands, and when they
+// decide nothing the read is unknown, with a fix that names the jump.
+func TestReadIptablesQualifiedJump(t *testing.T) {
+	const jump = "-A INPUT -i tailscale0 -j ts-input"
+	tests := []struct {
+		name    string
+		input   string
+		want    ruleState // when the read decides
+		unknown bool
+	}{
+		{"nothing before the jump", iptQualified, 0, true},
+		{"a deny before the jump decides", "-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n" + jump + "\n", ruleBlocked, false},
+		{"an allow before the jump decides", "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\n" + jump + "\n", rulePresent, false},
+		{"tailscaled's jump before it decides", "-A INPUT -j ts-input\n" + jump + "\n", rulePresent, false},
+		{"a deny after the jump does not", jump + "\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{output: map[string]string{iptRead: tt.input, iptChain: tsInputDefault}}
+			got := readIptables(r, 3389)
+			if (got.reason != "") != tt.unknown || (!tt.unknown && got.state != tt.want) {
+				t.Fatalf("got state %v reason %q, want state %v unknown %v", got.state, got.reason, tt.want, tt.unknown)
+			}
+			if fix := firewallFix(got, 3389, "setup"); tt.unknown && !strings.Contains(fix, jump) {
+				t.Errorf("fix %q does not name the jump %q", fix, jump)
+			}
+		})
+	}
+}
+
+// TestReadIptablesQualifiedJumpCopies pins that the cut at a qualified jump
+// limits what decides, not what is counted: copies of setup's rule behind the
+// jump are still copies (#480, #532).
+func TestReadIptablesQualifiedJumpCopies(t *testing.T) {
+	input := iptSetupRule + "-A INPUT -i tailscale0 -j ts-input\n" + iptSetupRule
+	r := &recordingRunner{output: map[string]string{iptRead: input, iptChain: tsInputDefault}}
+	if got := readIptables(r, 3389); got.state != rulePresent || got.copies != 2 {
+		t.Fatalf("got state %v copies %d, want present with 2 copies", got.state, got.copies)
 	}
 }

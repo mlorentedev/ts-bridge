@@ -155,6 +155,8 @@ type firewallRead struct {
 	noBackend bool
 	reason    string
 	blockedBy string // the deny rule, when state is ruleBlocked
+	fix       string // the fix for an unknown read, when the generic one does not apply
+	copies    int    // copies of the rule setup appends (iptables only, #480)
 }
 
 // readLinuxFirewall reads with ufw when it is installed, otherwise iptables.
@@ -175,12 +177,100 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 	if _, err := r.LookPath(backendIPT); err != nil {
 		return firewallRead{noBackend: true, reason: "neither ufw nor iptables is installed"}
 	}
+	return readIptables(r, port)
+}
+
+// tsInputChain is the chain tailscaled fills with `-i tailscale0 -j ACCEPT`;
+// with --netfilter-mode=on it inserts tsInputJump at the top of INPUT (#492).
+const tsInputChain = "ts-input"
+
+var tsInputJump = []string{"-A", "INPUT", "-j", tsInputChain}
+
+// readIptables reads INPUT and, behind tailscaled's unqualified jump, the
+// ts-input chain. A failed read of either is an unknown state, and so is a
+// qualified jump into ts-input that the walk reaches with nothing decided:
+// setup never appends an open rule on a guess (#532).
+func readIptables(r Runner, port int) firewallRead {
 	out, err := r.Output(backendIPT, "-S", "INPUT")
 	if err != nil {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
 	}
-	state, rule := iptablesDecide(string(out), port)
-	return firewallRead{state: state, backend: backendIPT, blockedBy: rule}
+	rules, jump := iptBeforeQualifiedJump(string(out))
+	if slices.ContainsFunc(strings.Split(rules, "\n"), iptTSInputJump) {
+		chain, err := r.Output(backendIPT, "-S", tsInputChain)
+		if err != nil {
+			return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S %s: %v", tsInputChain, err)}
+		}
+		rules = iptInlineChain(rules, string(chain))
+	}
+	state, rule := iptablesDecide(rules, port)
+	if state == ruleAbsent && jump != "" {
+		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("INPUT reaches %s through %q, which ts-bridge cannot evaluate", tsInputChain, jump),
+			fix: fmt.Sprintf("allow TCP %d inbound on the Tailscale interface ahead of %q, or confirm by hand that the jump admits it", port, jump)}
+	}
+	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: iptSetupCopies(string(out), port)}
+}
+
+// iptInlineChain puts the ts-input chain's rules in place of each unqualified
+// jump to it, so the walk evaluates them where a packet meets them. A jump with
+// a qualifier applies the chain to part of the traffic only; the walk stops
+// before one (iptBeforeQualifiedJump).
+func iptInlineChain(input, chain string) string {
+	lines := strings.Split(input, "\n")
+	for i, line := range lines {
+		if iptTSInputJump(line) {
+			lines[i] = strings.TrimRight(chain, "\n")
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// iptSetupCopies counts the lines of rules that are the rule setup appends,
+// in the form `iptables -S` prints it.
+func iptSetupCopies(rules string, port int) int {
+	printed := iptSetupPrinted(port)
+	n := 0
+	for _, line := range strings.Split(rules, "\n") {
+		if slices.Equal(strings.Fields(line), printed) {
+			n++
+		}
+	}
+	return n
+}
+
+// iptSetupPrinted is iptablesAppend's rule as `iptables -S` prints it: the
+// protocol after `-p` gains an explicit `-m <protocol>` match.
+func iptSetupPrinted(port int) []string {
+	rule := iptablesAppend(port)
+	i := slices.Index(rule, "-p") + 2
+	return slices.Insert(rule, i, "-m", rule[i-1])
+}
+
+func iptTSInputJump(line string) bool {
+	return slices.Equal(strings.Fields(line), tsInputJump)
+}
+
+// iptQualifiedTSInputJump returns the first INPUT rule that jumps or goes to
+// ts-input in any form but tailscaled's unqualified jump, or "". Quoted values
+// are blanked first, so a comment that spells a jump is not one.
+// iptBeforeQualifiedJump splits INPUT at the first rule that jumps or goes to
+// ts-input in any form but tailscaled's unqualified jump. It returns the rules
+// before that one and the rule itself, or all of INPUT and "". Quoted values
+// are blanked first, so a comment that spells a jump is not one.
+func iptBeforeQualifiedJump(input string) (string, string) {
+	lines := strings.Split(input, "\n")
+	for n, line := range lines {
+		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+		if iptTSInputJump(line) || len(f) < 2 || f[0] != "-A" {
+			continue
+		}
+		for i := 2; i+1 < len(f); i++ {
+			if (f[i] == "-j" || f[i] == "-g") && f[i+1] == tsInputChain {
+				return strings.Join(lines[:n], "\n"), strings.TrimSpace(line)
+			}
+		}
+	}
+	return input, ""
 }
 
 // iptQuoted matches a quoted value (a `--comment` or `--string`), escaped
@@ -469,7 +559,21 @@ func firewallCheckStep(read firewallRead, port int) SetupStep {
 	if read.state == ruleBlocked {
 		return firewallBlockedStep(read, port)
 	}
+	if read.copies > 1 {
+		return firewallCopiesStep(read, port)
+	}
 	return firewallReadStep(linuxFwName, read.state == rulePresent, port)
+}
+
+// firewallCopiesStep reports the copies of its own rule that setup appended on
+// every run before #477. The port is allowed; setup never deletes rules, so
+// removing the extras is the operator's.
+func firewallCopiesStep(read firewallRead, port int) SetupStep {
+	return newStep(linuxFwName, OutcomeManual,
+		fmt.Sprintf("Firewall allows TCP %d (%s), but holds %d copies of %s", port, read.backend, read.copies,
+			strings.Join(iptSetupPrinted(port), " ")),
+		fmt.Sprintf("run `iptables -D %s` %d time(s), as root, so one copy remains; setup does not delete firewall rules",
+			strings.Join(iptablesAppend(port)[1:], " "), read.copies-1))
 }
 
 // firewallBlockedStep reports a deny that decides the port before any allow.
@@ -483,6 +587,9 @@ func firewallBlockedStep(read firewallRead, port int) SetupStep {
 func firewallFix(read firewallRead, port int, command string) string {
 	if read.noBackend {
 		return fmt.Sprintf("install ufw, or allow TCP %d inbound with your firewall", port)
+	}
+	if read.fix != "" {
+		return read.fix
 	}
 	return "run ts-bridge host " + command + " as root"
 }
