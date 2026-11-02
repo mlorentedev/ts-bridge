@@ -46,6 +46,7 @@ type FileHost struct {
 	Firewall   *FileFirewall `yaml:"firewall"`
 	Power      *FilePower    `yaml:"power"`
 	ControlURL *string       `yaml:"control_url"`
+	Mesh       *FileMesh     `yaml:"mesh"`
 }
 
 // FileService is one declared remote-access service. A nil Port is the
@@ -71,12 +72,13 @@ type osCapability struct {
 	kinds        []string
 	power        bool
 	firewallRule bool              // a named firewall rule; only the Windows step uses one
+	serve        bool              // host serve runs here (HOST-008)
 	planned      map[string]string // kind -> the ticket adding its step, where one exists
 }
 
 var osCapabilities = map[string]osCapability{
-	goosWindows: {kinds: []string{ServiceRDP}, power: true, firewallRule: true, planned: map[string]string{ServiceSSH: "#521"}},
-	goosLinux:   {kinds: []string{ServiceRDP}, planned: map[string]string{ServiceSSH: "#521"}},
+	goosWindows: {kinds: []string{ServiceRDP}, power: true, firewallRule: true, serve: true, planned: map[string]string{ServiceSSH: "#521"}},
+	goosLinux:   {kinds: []string{ServiceRDP}, serve: true, planned: map[string]string{ServiceSSH: "#521"}},
 	goosDarwin:  {planned: map[string]string{ServiceSSH: "#459", ServiceVNC: "#459"}},
 }
 
@@ -149,7 +151,10 @@ func (f File) validate(goos string) error {
 	if f.Host.Power != nil && !capab.power {
 		return fmt.Errorf("host.power: %s has no power step (ADR-017 §5)", goos)
 	}
-	return validateControlURL(f.Host.ControlURL)
+	if err := validateControlURL(f.Host.ControlURL); err != nil {
+		return err
+	}
+	return validateMesh(f.Host.Mesh, f.Host.ControlURL != nil, goos, capab)
 }
 
 func validateFirewall(fw *FileFirewall, goos string, capab osCapability) error {
@@ -245,10 +250,11 @@ func validURLPort(p string) bool {
 // Known keys per level of the file. Anything else is warned about and ignored.
 var (
 	topKeys      = []string{"version", "host"}
-	hostKeys     = []string{"services", "firewall", "power", "control_url"}
+	hostKeys     = []string{"services", "firewall", "power", "control_url", "mesh"}
 	serviceKeys  = []string{"kind", "port"}
 	firewallKeys = []string{"rule"}
 	powerKeys    = []string{"prevent_sleep"}
+	meshKeys     = []string{"bootstrap_ssh", "hostname", "state_dir", "auth_key_file", "health_addr"}
 )
 
 // checkKeys walks the document as the decoder resolves it, so keys reached
@@ -268,6 +274,7 @@ func checkKeys(doc *yaml.Node, warn io.Writer) error {
 		{hostMap, "host", hostKeys},
 		{asMap(hostMap["firewall"]), "host.firewall", firewallKeys},
 		{asMap(hostMap["power"]), "host.power", powerKeys},
+		{asMap(hostMap["mesh"]), "host.mesh", meshKeys},
 	}
 	services, _ := hostMap["services"].([]any)
 	for i, s := range services {
