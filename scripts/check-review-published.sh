@@ -57,8 +57,43 @@ if [ "$found" -gt 0 ]; then
   echo "review published (marker: ${marker})"
   exit 0
 fi
+
+# Prints how many changed files survive the base branch's .pr_agent.toml [ignore]
+# list, or nothing when either read fails. PR-Agent reads the toml from the default
+# branch too, so a PR cannot widen its own ignore list here.
+reviewable_files() {
+  local cfg files
+  cfg=$(gh api "repos/${GITHUB_REPOSITORY}/contents/.pr_agent.toml?ref=${BASE_REF}" \
+    --jq '.content' 2>/dev/null | base64 -d 2>/dev/null) || return 0
+  files=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate \
+    --jq '.[].filename' 2>/dev/null) || return 0
+  CFG="$cfg" FILES="$files" python3 - <<'PY' 2>/dev/null || true
+import fnmatch, os, re, tomllib
+ignore = tomllib.loads(os.environ["CFG"]).get("ignore", {})
+patterns = list(ignore.get("regex", []) or [])
+for glob in ignore.get("glob", []) or []:
+    patterns.append(fnmatch.translate(glob))
+compiled = [re.compile(p) for p in patterns]
+files = [f for f in os.environ["FILES"].splitlines() if f]
+if files:
+    print(sum(1 for f in files if not any(r.match(f) for r in compiled)))
+PY
+}
+
+# A diff that [ignore] empties gives PR-Agent nothing to read: it logs "no
+# analyzable files" and publishes nothing (#429, measured on #538 and #539). That is
+# a skip, not a failed review. Any read that fails, or any file left, falls through
+# to the error, so this can only turn red into a notice when the diff is provably
+# out of PR-Agent's reach.
+if [ "$(reviewable_files)" = "0" ]; then
+  echo "::notice::every changed file is in .pr_agent.toml's [ignore] list (${BASE_REF})," \
+    "so there is nothing PR-Agent may read; no review was expected. This is not a review:" \
+    "attestation still needs CodeRabbit or a human."
+  exit 0
+fi
 echo "::error::PR-Agent reported success but published no review" \
   "(no github-actions[bot] comment updated since ${STARTED} carries \"${marker}\")."
-echo "::error::Most likely cause: NaN concurrency exhaustion - the cluster allows 5 simultaneous"
-echo "::error::requests, shared with pi, qq and hive embeddings. See #1107."
+echo "::error::Possible causes: NaN concurrency exhaustion (5 simultaneous requests, shared" \
+  "with pi, qq and hive embeddings; #1107), or a model that hung or returned nothing (#430," \
+  "#542). The PR-Agent step's log names which."
 exit 1
