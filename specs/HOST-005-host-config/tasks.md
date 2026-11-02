@@ -55,7 +55,7 @@ created: "2026-10-30"
 ### PR A2 close
 
 - [x] Help text of `setup`/`check` documents `--config` and the precedence; `go test -race ./...`, `GOOS=windows go vet ./...`, `GOOS=darwin go vet ./...` green; `lint` and `security` CI jobs green (golangci-lint is blocked on the maintainer's workstation).
-- [x] `bats scripts/tests/smoke.bats` (Git Bash) unchanged and green.
+- [x] `bats scripts/tests/smoke.bats` unchanged: the CI `smoke` job (Linux, authoritative per ADR-013) is green. Under Git Bash on Windows 54 of 56 pass; #55 and #56 fail only on Windows OS error strings (`connectex`, "cannot find the path"), unrelated to `host`.
 
 ## Implementation — PR B (`host init` writes the file)
 
