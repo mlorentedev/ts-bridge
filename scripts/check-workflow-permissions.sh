@@ -93,7 +93,9 @@ scan() {
       if (skey == 999) skey = k                          # a bare `-` line: the keys start below
       if (k != skey) return
       if (code ~ /(^|[ \t{,-])with:[ \t]*$/) { withcol = k; withchild = -1; return }
-      if (match(code, /(^|[ \t{,-])with:[ \t]*\{[^}]*\}/)) {
+      # Flat flow mappings only: a nested `{...}` is the value of another input, never a
+      # direct child, so it is left unmatched and the step fails closed.
+      if (match(code, /(^|[ \t{,-])with:[ \t]*\{[^{}]*\}/)) {
         flow = substr(code, RSTART, RLENGTH)
         if (flow ~ ("[{,][ \t]*" R_PC)) take_persist(flow)
       }

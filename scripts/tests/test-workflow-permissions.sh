@@ -68,7 +68,9 @@ persist-under-env:1:no-except
 persist-under-env-beside-with:1:no-except
 flow-style-persist-under-env:1:no-except
 persist-nested-under-with-input:1:no-except
-env-then-with-hardened:0:OK'
+env-then-with-hardened:0:OK
+flow-style-persist-nested-under-with-input:1:no-except
+with-blank-and-comment-hardened:0:OK'
 
 # Each fixture is one workflow, written as data rather than as a mutation of another: the diff
 # between a passing and a failing case should be readable, not derivable.
@@ -450,6 +452,32 @@ jobs:
         with:
           sparse-checkout:
             persist-credentials: false
+YAML
+    ;;
+    flow-style-persist-nested-under-with-input) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - {uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5, with: {sparse-checkout: {persist-credentials: false}}}
+YAML
+    ;;
+    with-blank-and-comment-hardened) cat > "$1/w.yml" <<'YAML'
+name: t
+on: push
+permissions:
+  contents: read
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@028fa82250a01b7d398affb59a3b85b679bb34d5 # v7
+        with:
+
+          # keep the token out of .git/config
+          persist-credentials: false
 YAML
     ;;
     env-then-with-hardened) cat > "$1/w.yml" <<'YAML'
