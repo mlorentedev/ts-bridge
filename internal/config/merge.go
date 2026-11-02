@@ -239,6 +239,13 @@ func validateIdleTimeout(cfg Config) error {
 	return nil
 }
 
+// Defaults returns the built-in defaults without reading any file or the
+// environment. host serve takes its proxy timeouts and limits from here, so
+// it forwards exactly as connect does.
+func Defaults() Config {
+	return defaults()
+}
+
 // defaults returns a Config with built-in defaults.
 func defaults() Config {
 	return Config{
