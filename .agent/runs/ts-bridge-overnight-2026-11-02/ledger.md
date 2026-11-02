@@ -26,3 +26,7 @@ Armed 2026-11-02T16:05:53Z, expires 2026-11-02T22:11:38Z. Cold start on 9374ed7:
 | 17:50 | #549 | smoke red: bats asserted the removed "read auth key file" prefix; now asserts "stat auth key file" (0a0f159) | bats 54/56, 2 Linux-only host cases fail on macOS as before |
 | 17:50 | #551 | PR-Agent fixture finding applied (go-version-file added); old-depth + disabled-rule mutants FAIL | bash+zsh OK |
 | 17:50 | #548 #550 | re-reviews repeated already-applied findings; triaged | — |
+| 17:50 | #548 | MERGED under the grant at aecb2f7; #402 board Done | lander |
+| 18:07 | #549 | MERGED under the grant at a26e67f (Refs #401; #401 stays Blocked on the --target decision) | lander |
+| 18:09 | #552 | PR-Agent: blank-line finding not reproduced (fixture added); nested flow finding RED then fixed (dcbcdf8) | 33 fixtures x bash+zsh; real tree 13/13 |
+| 18:09 | #553 | triaged (no major issues; criteria 2-5 parked on #403) | hygiene green |
