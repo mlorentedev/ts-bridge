@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
@@ -28,13 +29,29 @@ func CheckStateDir(path string) error {
 // it. An existing directory is checked, never repaired.
 func EnsureStateDir(path string) error {
 	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
-		if err := os.MkdirAll(path, 0o700); err != nil {
+		if err := createStateDir(path); err != nil {
 			return fmt.Errorf("create state_dir %s: %w", path, err)
-		}
-		// MkdirAll applies the umask; the mode must be exactly 0700.
-		if err := os.Chmod(path, 0o700); err != nil {
-			return fmt.Errorf("protect state_dir %s: %w", path, err)
 		}
 	}
 	return CheckStateDir(path)
+}
+
+// createStateDir makes the last element itself, so a link planted there in the
+// meantime fails with EEXIST instead of being followed, and sets the mode
+// through a descriptor opened without following links.
+func createStateDir(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if err := os.Mkdir(path, 0o700); err != nil {
+		return err
+	}
+	// #nosec G304 -- path is the operator's declared host.mesh.state_dir, just created.
+	dir, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_DIRECTORY, 0)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	// Mkdir applies the umask; the mode must be exactly 0700.
+	return dir.Chmod(0o700)
 }

@@ -9,6 +9,25 @@ import (
 	"testing"
 )
 
+// A link at state_dir is refused, not followed, even when it points at a
+// 0700 directory: the refusal names the link, not the target's owner.
+func TestCheckStateDir_Symlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "serve")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	for name, fn := range map[string]func(string) error{"CheckStateDir": CheckStateDir, "EnsureStateDir": EnsureStateDir} {
+		if err := fn(link); err == nil || !strings.Contains(err.Error(), "not a directory") {
+			t.Errorf("%s(symlink) = %v, want it refused as not a directory", name, err)
+		}
+	}
+}
+
 func TestEnsureStateDir(t *testing.T) {
 	loose := t.TempDir()
 	if err := os.Chmod(loose, 0o755); err != nil {
