@@ -8,9 +8,10 @@
 # can see them without a shell parser: Go run by wrapper scripts (`make test`,
 # `./scripts/*.sh`), Go run inside other actions, and `go${IFS}test`-style
 # word splitting. Also out of scope: `GOTOOLCHAIN` and the go.mod `toolchain`
-# directive. setup-go with `go-version-file: go.mod` installs the version go.mod
-# names and honours its `toolchain` line, this guard requires exactly that
-# pairing, and no workflow here sets `GOTOOLCHAIN`.
+# directive. go.mod has no `toolchain` line, so the `go` version setup-go installs
+# from it is the only one the module asks for, and no workflow here sets
+# `GOTOOLCHAIN`. Adding either one reopens this decision: whether the pinned
+# setup-go reads a `toolchain` line is not checked here.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
