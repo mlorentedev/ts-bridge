@@ -394,6 +394,7 @@ jobs:
         steps:
             - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
               with:
+                  go-version-file: go.mod
                   cache: true
                   go-version: '1.26'
 YAML
