@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# Guard: every workflow job that runs Go installs it with setup-go from go.mod,
+# and the linter pins agree with the module's Go version.
+#
+# Scope (#499). A Go command is recognised on the workflow line itself: any
+# `go` or `go.exe` subcommand from `go help`, with or without flags before it,
+# quoted, continued or inside `sh -c`. Out of scope, because no line matcher
+# can see them without a shell parser: Go run by wrapper scripts (`make test`,
+# `./scripts/*.sh`), Go run inside other actions, and `go${IFS}test`-style
+# word splitting. Also out of scope: `GOTOOLCHAIN` and the go.mod `toolchain`
+# directive. setup-go with `go-version-file: go.mod` installs the version go.mod
+# names and honours its `toolchain` line, this guard requires exactly that
+# pairing, and no workflow here sets `GOTOOLCHAIN`.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -32,8 +44,10 @@ check_file() {
     # parser cannot place fails closed, so an unrecognised key spelling can
     # never switch the checks off. Any non-word character may precede the
     # token (a quote, `sh -c "`, a subshell) or follow the subcommand (`;`,
-    # `&&`, `|`), not only whitespace.
-    !is_name && cmd ~ /(^|[^[:alnum:]_.-])go[[:space:]]+(build|clean|env|fmt|generate|install|list|mod|run|test|tool|version|vet|work)([^[:alnum:]_.-]|$)/ {
+    # `&&`, `|`), not only whitespace. The subcommands are the full `go help`
+    # list, `go.exe` is the same tool, and a flag after `go` (`go -C sub test`)
+    # can only be the Go tool, so it counts whatever follows (#499).
+    !is_name && cmd ~ /(^|[^[:alnum:]_.-])go(\.exe)?[[:space:]]+(-|(bug|build|clean|doc|env|fix|fmt|generate|get|install|list|mod|run|telemetry|test|tool|version|vet|work)([^[:alnum:]_.-]|$))/ {
       if (!job_setup) bad = 1
       job_go = 1
     }
@@ -400,6 +414,59 @@ jobs:
 YAML
 if check_file "$tmp"; then
   echo "test-go-toolchain: accepted a pinned toolchain under a 4-space with:" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
+      - run: go -C sub test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted a flag before the subcommand without setup-go" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
+      - run: go.exe test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted the Windows binary name without setup-go" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
+      - run: go get tool example.com/x@v1.0.0
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted go get without setup-go" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
+      - run: go fix ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted go fix without setup-go" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
+      - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+        with:
+          go-version-file: go.mod
+      - run: go -C sub test ./...
+YAML
+if ! check_file "$tmp"; then
+  echo "test-go-toolchain: rejected a flag before the subcommand in a configured job" >&2
   exit 1
 fi
 cat > "$tmp" <<'YAML'
