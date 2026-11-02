@@ -178,7 +178,8 @@ func TestHostCmds_NeverReadUserStore(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(filepath.Dir(store), "credentials"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	writeTestFile(t, store, "profiles:\n  default:\n    target: 100.64.0.9:3389\n    control_url: https://poison.invalid\n    credential: poison\n")
+	// Malformed on purpose: a store read fails the command instead of passing silently.
+	writeTestFile(t, store, "profiles:\n  default: [target: 100.64.0.9:3389, control_url: https://poison.invalid, credential: poison\n")
 	writeTestFile(t, filepath.Join(filepath.Dir(store), "credentials", "poison"), "tskey-poison")
 	path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  services:\n    - kind: rdp\n      port: 3390\n")
 	ready := host.CheckResult{TailscaleIP: "100.64.0.1", RDPPort: 3389}
