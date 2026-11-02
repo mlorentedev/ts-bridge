@@ -92,6 +92,15 @@ if [ "$1" = "api" ]; then
       base64 < "$FIXTURE_REGISTRY" | tr -d '\n'
       echo
       ;;
+    */contents/.pr_agent.toml*)
+      [ -f "$FIXTURE_TOML" ] || exit 1
+      base64 < "$FIXTURE_TOML" | tr -d '\n'
+      echo
+      ;;
+    */pulls/*/files)
+      [ -f "$FIXTURE_FILES" ] || exit 1
+      cat "$FIXTURE_FILES"
+      ;;
     */pulls/*)
       echo '{"head":{"sha":"deadbeef"}}'
       ;;
@@ -111,12 +120,23 @@ STUB
   chmod +x "$WORK/gh"
 }
 
-run_case() { # $1=fixture $2=expected_exit $3=expected_substring
-  local fixture="$1" want_exit="$2" want_sub="$3"
+# The PR's changed files, one name per line as `--jq '.[].filename'` prints them,
+# and the base branch's .pr_agent.toml. "none" leaves the file absent, so the stub
+# fails that call the way an unreadable API answer would.
+TOML='[ignore]
+glob = ["site/package-lock.json", "specs/archive/**"]
+'
+
+run_case() { # $1=fixture $2=expected_exit $3=expected_substring [$4=files] [$5=toml]
+  local fixture="$1" want_exit="$2" want_sub="$3" files="${4:-cmd/main.go}" toml="${5-$TOML}"
   write_comments "$fixture"
   registry_json > "$WORK/registry.json"
   export FIXTURE_REGISTRY="$WORK/registry.json"
   export FIXTURE_COMMENTS="$WORK/comments.json"
+  export FIXTURE_FILES="$WORK/files.txt" FIXTURE_TOML="$WORK/pr_agent.toml"
+  rm -f "$FIXTURE_FILES" "$FIXTURE_TOML"
+  [ "$files" = none ] || tr ' ' '\n' <<<"$files" > "$FIXTURE_FILES"
+  [ "$toml" = none ] || printf '%s' "$toml" > "$FIXTURE_TOML"
 
   out=$(PATH="$WORK:$PATH" \
     GH_TOKEN=x GITHUB_REPOSITORY=owner/repo PR_NUMBER=1 BASE_REF=master \
@@ -143,6 +163,16 @@ run_case null-body       0 "review published"    || fail=1
 run_case only-null-body  1 "published no review" || fail=1
 run_case clean-match     0 "review published"    || fail=1
 run_case no-match        1 "published no review" || fail=1
+# #429: a diff that [ignore] empties gives PR-Agent nothing to read. That is a
+# skip with a notice, not a missing review; anything left to read, or anything
+# unreadable, still fails closed.
+run_case no-match 0 "nothing PR-Agent may read" "site/package-lock.json specs/archive/x/review.md" || fail=1
+run_case no-match 1 "published no review" "site/package-lock.json cmd/main.go"                   || fail=1
+run_case no-match 1 "published no review" "site/package-lock.json" none                           || fail=1
+run_case no-match 1 "published no review" none                                                    || fail=1
+run_case no-match 1 "published no review" "site/package-lock.json" '[config]
+model = "x"
+'                                                                                                  || fail=1
 
 if [ "$fail" -ne 0 ]; then
   echo "test-check-review-published: FAILED" >&2
