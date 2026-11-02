@@ -22,3 +22,7 @@ Armed 2026-11-02T16:05:53Z, expires 2026-11-02T22:11:38Z. Cold start on 9374ed7:
 | 17:30 | #547 #550 | lander re-reviews: #547 clean (finding resolved); #550 vacuous-skip finding applied (skip only without .git; GIT_DIR mutant now FAIL) | ok |
 | 17:31 | #427 | PR #552 opened: persist-credentials read only from the step's with: (block + flow) | 4 fixtures RED first, control OK; bash+zsh; real tree 13/13; shellcheck clean |
 | 17:33 | #403 | PR #553 (Refs) two-page pagination fixture; criteria 2-5 PARKED (A split / B one ticket), board Blocked | 2 pagination mutants FAIL |
+| 17:47 | #547 | MERGED under the grant at 0db1664; #508 board Done | lander |
+| 17:50 | #549 | smoke red: bats asserted the removed "read auth key file" prefix; now asserts "stat auth key file" (0a0f159) | bats 54/56, 2 Linux-only host cases fail on macOS as before |
+| 17:50 | #551 | PR-Agent fixture finding applied (go-version-file added); old-depth + disabled-rule mutants FAIL | bash+zsh OK |
+| 17:50 | #548 #550 | re-reviews repeated already-applied findings; triaged | — |
