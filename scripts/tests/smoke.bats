@@ -562,14 +562,16 @@ TARGET="100.64.0.1:3389"
 }
 
 @test "error wiring: deterministic network errors write to stderr and exit non-zero" {
-  # We use the discover command hitting the Tailscale API with a dummy key.
-  # This deterministically returns an API token invalid error over the network
-  # without requiring real credentials, proving runtime network dial errors are
-  # routed cleanly to stderr without stack traces.
-  run bash -c '"${BIN}" discover --auth-key tskey-auth-dummy-secret --tailnet hs 2>stderr.log >stdout.log'
+  # discover against a Headscale control URL on a closed loopback port: the dial
+  # is refused at once, with no network and no credentials, so a runtime network
+  # error is proven to reach stderr without a stack trace. It used to ask the live
+  # api.tailscale.com for "API token invalid", and went red whenever the runner
+  # could not reach it in time (#520).
+  run bash -c 'TS_CONTROL_URL=http://127.0.0.1:1 TS_HEADSCALE_API_KEY=dummy-key "${BIN}" discover 2>stderr.log >stdout.log'
   assert_failure
   run cat stderr.log
-  assert_contains "API token invalid"
+  assert_contains "discover from Headscale"
+  assert_contains "connection refused"
   run cat stdout.log
   [ -z "$output" ]
 }
