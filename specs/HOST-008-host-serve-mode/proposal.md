@@ -32,9 +32,11 @@ the tailnet as a persistent node and publishes the host's declared services.
   `host.services` declares (kind and port), each forwarded from the tailnet to
   `127.0.0.1:<port>`. Nothing else answers on the node.
 - The control plane is the file's `control_url`. A new optional `host.mesh` block holds
-  what serve alone needs: `bootstrap_ssh` (`user@host[:port]`, CLI-363), `hostname`,
-  `state_dir`, `auth_key_file` and `health_addr` (loopback only). Unknown keys warn and
-  empty keys error, as HOST-005.
+  what serve alone needs: `bootstrap_ssh` (`user@host[:port]`, CLI-363),
+  `bootstrap_socks_addr` (loopback, default `127.0.0.1:1055` as `connect`; it must differ
+  from a bootstrap-enabled `connect` on the same host), `hostname`, `state_dir`,
+  `auth_key_file` and `health_addr` (loopback only). Unknown keys warn and empty keys
+  error, as HOST-005.
 - Persistent node: `Ephemeral: false`, node state in `state_dir`. A restart reuses the
   node identity without a key. The auth key file is read only when no state exists, and
   serve reports whether it used it (`READY ... enrolled=true|false`).
@@ -42,10 +44,14 @@ the tailnet as a persistent node and publishes the host's declared services.
   dynamic SOCKS plus the loopback HTTP CONNECT adapter, BUG-031). Other DERP regions keep
   today's behaviour.
 - Signals and health as `connect`: `READY` on stdout, `ERROR reason=...` on stderr,
-  `/health/ready`. When the SSH child or the control session dies after `READY`, serve
-  retries with backoff instead of exiting, and reports the state on `/health`.
+  `/health/ready`. When the SSH child dies after `READY`, serve restarts it with backoff
+  instead of exiting. When the node's control session drops (tsnet state leaves
+  `Running`; tsnet's control client already retries), `/health/ready` reads not ready
+  with `reason=control_plane_unreachable` until it is back.
 - `host check --json` reports, per declared service, whether serve publishes it, read
-  from serve's `/health/ready` on `host.mesh.health_addr`.
+  from serve's `/health/ready` on `host.mesh.health_addr`. That body names the node
+  (`"node": "<hostname>"`), and `check` trusts only a response that names the file's
+  node; anything else on that port reads as serve not running.
 - Installing serve as a boot-time task is the provisioning layer's job (ADR-017 keeps
   ts-bridge daemonless): the docs give the Windows Scheduled Task (SYSTEM, at startup,
   restart on failure) and the Linux systemd unit, and the consumer's provisioning
@@ -77,8 +83,10 @@ the tailnet as a persistent node and publishes the host's declared services.
   sits beside it. Windows: under ProgramData, ACL SYSTEM and Administrators only; Linux
   `0700` root. The auth key file is deleted by the provisioning script after
   `enrolled=true`, never by serve.
-- **Tag ownership.** The node must enrol with the key's tag (Headscale tagged node), not
-  as a user node; a key without a tag would put a host under a user identity.
+- **Tag ownership (enforced, 2026-11-02, from the #525 review).** The node must enrol with
+  the key's tag (Headscale tagged node), not as a user node; a key without a tag would put
+  a host under a user identity. Serve checks the node after `Up`: a node without tags
+  emits `ERROR reason=node_not_tagged`, prints no `READY`, publishes nothing and exits 1.
 - **Reconnect storms (decided 2026-11-01).** Serve reuses `connect`'s values, so that no
   new numbers are invented: exponential backoff with jitter between `DialBackoffBase`
   (1 s) and `DialBackoffMax` (30 s), from `internal/config`, and readiness on
@@ -96,7 +104,7 @@ the tailnet as a persistent node and publishes the host's declared services.
 
 ## Acceptance criteria
 
-AC1, AC2 and AC4 need the live control plane, so they gate on mlorentedev/kubelab#2862 (see Risks). AC3, AC5 and AC6 run against fakes.
+AC1, AC2 and AC4 need the live control plane, so they gate on mlorentedev/kubelab#2862 (see Risks). AC3, AC5, AC6 and AC7 run against fakes.
 
 - [ ] AC1: with a fresh `state_dir` and a tagged one-off key, serve enrols, prints
   `READY ... enrolled=true`, and an authorized tailnet client completes an SSH and an RDP
@@ -108,13 +116,18 @@ AC1, AC2 and AC4 need the live control plane, so they gate on mlorentedev/kubela
   tailnet.
 - [ ] AC4: with the control hostname unresolvable locally, enrolment and reconnect
   succeed through `bootstrap_ssh`; with the SSH endpoint down, serve emits `ERROR
-  reason=ssh_bootstrap_failed`, keeps retrying, and recovers when the endpoint returns.
+  reason=ssh_bootstrap_failed`, keeps retrying, and recovers when the endpoint returns;
+  while the control session is down, `/health/ready` reads not ready with
+  `reason=control_plane_unreachable`.
 - [ ] AC5: a `host.mesh` block with an unknown key warns, an empty key errors, and a
   `state_dir` writable by non-administrators is refused on Windows, and one that is not
   `0700` and owned by root is refused on Linux.
 - [ ] AC6: with `host.mesh.health_addr` declared, `host check --json` reports, for each
   declared service, whether serve publishes it, and a service that serve does not
-  publish (or serve not running) reads as not published.
+  publish (or serve not running, or a responder that does not name the file's node)
+  reads as not published.
+- [ ] AC7: a node that comes up without tags is refused: `ERROR reason=node_not_tagged`,
+  no `READY`, nothing published, exit 1.
 
 ## References
 

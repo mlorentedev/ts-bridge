@@ -22,22 +22,29 @@
   },
   {
     "id": "HOST-008-host-serve-mode-f4",
-    "behavior": "AC4: a bootstrap that dies after READY emits ERROR reason=ssh_bootstrap_failed, retries with 1-30 s backoff and recovers (live sinkholed run gates on kubelab#2862)",
-    "verification": "go test ./internal/serve -run '^TestSupervisedBootstrap_Retries$' -count=1 -v | grep -q -- '--- PASS: TestSupervisedBootstrap_Retries '",
+    "behavior": "AC4: a bootstrap that dies after READY emits ERROR reason=ssh_bootstrap_failed, retries with 1-30 s backoff and recovers; a dropped control session reads not ready with reason=control_plane_unreachable (live sinkholed run gates on kubelab#2862)",
+    "verification": "go test ./internal/serve -run '^TestSupervisedBootstrap_Retries$' -count=1 -v | grep -q -- '--- PASS: TestSupervisedBootstrap_Retries ' && go test ./internal/serve -run '^TestServeHealth_ControlSession$' -count=1 -v | grep -q -- '--- PASS: TestServeHealth_ControlSession '",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "HOST-008-host-serve-mode-f5",
     "behavior": "AC5: host.mesh unknown keys warn, empty keys error, and a state_dir writable by non-administrators (Windows) or not 0700 root (Linux) is refused",
-    "verification": "go test ./internal/host -run '^TestLoadFile_Mesh$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_Mesh ' && go test ./internal/host -run '^TestLoadFile_MeshInvalid$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_MeshInvalid ' && go test ./internal/host -run '^TestCheckUnixStateDir$' -count=1 -v | grep -q -- '--- PASS: TestCheckUnixStateDir ' && go test ./internal/host -run '^TestEnsureStateDir$' -count=1 -v | grep -q -- '--- PASS: TestEnsureStateDir ' && go test ./cmd/cli -run '^TestHostServeCmd_Requires$' -count=1 -v | grep -q -- '--- PASS: TestHostServeCmd_Requires '",
+    "verification": "go test ./internal/host -run '^TestLoadFile_Mesh$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_Mesh ' && go test ./internal/host -run '^TestLoadFile_MeshInvalid$' -count=1 -v | grep -q -- '--- PASS: TestLoadFile_MeshInvalid ' && go test ./internal/host -run '^TestCheckUnixStateDir$' -count=1 -v | grep -q -- '--- PASS: TestCheckUnixStateDir ' && go test ./internal/host -run '^TestEnsureStateDir$' -count=1 -v | grep -q -- '--- PASS: TestEnsureStateDir ' && go test ./cmd/cli -run '^TestHostServeCmd_Requires$' -count=1 -v | grep -q -- '--- PASS: TestHostServeCmd_Requires ' && { [ \"$(go env GOOS)\" != windows ] || { go test ./internal/host -run '^TestCheckWindowsDACL$' -count=1 -v | grep -q -- '--- PASS: TestCheckWindowsDACL ' && go test ./internal/host -run '^TestCheckStateDir_Windows$' -count=1 -v | grep -q -- '--- PASS: TestCheckStateDir_Windows '; }; }",
     "state": "pending",
     "evidence": ""
   },
   {
     "id": "HOST-008-host-serve-mode-f6",
-    "behavior": "AC6: host check --json reports published per declared service from serve's health endpoint on host.mesh.health_addr; a service serve does not publish reads as not published",
+    "behavior": "AC6: host check --json reports published per declared service from serve's health endpoint on host.mesh.health_addr; a service serve does not publish, serve not running, or a responder that does not name the file's node reads as not published",
     "verification": "go test ./internal/health -run '^TestStartServer_Services$' -count=1 -v | grep -q -- '--- PASS: TestStartServer_Services ' && go test ./cmd/cli -run '^TestHostCheckCmd_Published$' -count=1 -v | grep -q -- '--- PASS: TestHostCheckCmd_Published '",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-008-host-serve-mode-f7",
+    "behavior": "AC7: a node that comes up without tags is refused with ERROR reason=node_not_tagged, no READY, nothing published, exit 1",
+    "verification": "go test ./cmd/cli -run '^TestHostServeCmd_RefusesUntaggedNode$' -count=1 -v | grep -q -- '--- PASS: TestHostServeCmd_RefusesUntaggedNode '",
     "state": "pending",
     "evidence": ""
   }

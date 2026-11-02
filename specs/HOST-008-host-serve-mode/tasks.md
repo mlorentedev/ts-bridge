@@ -28,9 +28,9 @@ created: "2026-10-30"
 
 ### The schema (`internal/host/file.go`, `internal/host/file_test.go`)
 
-- [ ] [P] [AC5] Failing table test `TestLoadFile_Mesh`: a full `host.mesh` (`bootstrap_ssh`, `hostname`, `state_dir`, `auth_key_file`, `health_addr`) decodes into `FileHost.Mesh`; an unknown `host.mesh.x` key is named in the warning and ignored; a `host.mesh.<key>:` with no value errors naming it. Expected: FAIL, `Mesh` undefined.
+- [ ] [P] [AC5] Failing table test `TestLoadFile_Mesh`: a full `host.mesh` (`bootstrap_ssh`, `bootstrap_socks_addr`, `hostname`, `state_dir`, `auth_key_file`, `health_addr`) decodes into `FileHost.Mesh`; an unknown `host.mesh.x` key is named in the warning and ignored; a `host.mesh.<key>:` with no value errors naming it. Expected: FAIL, `Mesh` undefined.
 - [ ] [AC5] Add `FileMesh` (pointer fields), `meshKeys`, and the `host.mesh` level to `checkKeys`. Expected: PASS.
-- [ ] [AC5] Failing table test `TestLoadFile_MeshInvalid`: each key `""` errors naming it; `bootstrap_ssh` `-oProxyCommand=x`, `user@` and `host:0` error (same rules as `connect --bootstrap-ssh`); `hostname` with a space or longer than 63 errors; a relative `state_dir` or `auth_key_file` errors; `health_addr` `0.0.0.0:9099`, `10.0.0.1:9099` and `127.0.0.1:0` error (loopback only, port 1-65535); `bootstrap_ssh` without `host.control_url` errors naming both; `host.mesh` on darwin errors citing #459. Expected: FAIL.
+- [ ] [AC5] Failing table test `TestLoadFile_MeshInvalid`: each key `""` errors naming it; `bootstrap_ssh` `-oProxyCommand=x`, `user@` and `host:0` error (same rules as `connect --bootstrap-ssh`); `hostname` with a space or longer than 63 errors; a relative `state_dir` or `auth_key_file` errors; `health_addr` `0.0.0.0:9099`, `10.0.0.1:9099` and `127.0.0.1:0` error (loopback only, port 1-65535), and `bootstrap_socks_addr` follows the same loopback rule; `bootstrap_ssh` without `host.control_url` errors naming both; `host.mesh` on darwin errors citing #459. Expected: FAIL.
 - [ ] [AC5] Implement `validateMesh`; export `bootstrapssh.ValidateEndpoint` (wraps `parseEndpoint`) so file and flag share one rule; add `serve bool` to `osCapability` (windows, linux). Expected: PASS, and `go test ./internal/host ./internal/bootstrapssh -count=1` green.
 
 ### The state directory (`internal/host/statedir.go`, `statedir_windows.go`, `statedir_unix.go`)
@@ -60,7 +60,8 @@ created: "2026-10-30"
 
 - [ ] [AC5] Failing table test `TestHostServeCmd_Requires`: without `--config`, without `host.mesh`, or without `host.control_url`, serve exits 1 naming what is missing and starts nothing; a loose `state_dir` (fake `CheckStateDir` error) exits 1 naming it. Expected: FAIL, command missing.
 - [ ] [AC1] [AC2] Failing test `TestHostServeCmd_Ready`: with fake node and bootstrap starters, serve prints `READY node=<hostname> services=rdp:3389,ssh:22 enrolled=true` on stdout (then `enrolled=false` with state present) and publishes the resolved services. Expected: FAIL.
-- [ ] [AC1] [AC2] Implement `host serve --config`: `LoadFile`, `Resolve`, `EnsureStateDir`, the CLI-363 bootstrap when `bootstrap_ssh` is set (SOCKS on `127.0.0.1:1055`, as `connect`), `tsnet.Server.Up`, `Publish`, `READY`; init failures emit `ERROR reason=...` as `connect`. Expected: PASS.
+- [ ] [AC1] [AC2] Implement `host serve --config`: `LoadFile`, `Resolve`, `EnsureStateDir`, the CLI-363 bootstrap when `bootstrap_ssh` is set (SOCKS on `bootstrap_socks_addr`, default `127.0.0.1:1055` as `connect`), `tsnet.Server.Up`, `Publish`, `READY`; init failures emit `ERROR reason=...` as `connect`. Expected: PASS.
+- [ ] [AC7] Failing test `TestHostServeCmd_RefusesUntaggedNode`: when the fake node's status after `Up` has no tags, serve emits `ERROR reason=node_not_tagged`, prints no `READY`, never calls `Publish`, closes the node and exits 1. Expected: FAIL, then implement the check on `status.Self.Tags`. Expected: PASS.
 - [ ] [AC5] Extend `TestHostCmds_NeverReadUserStore` to `host serve` (fake node): no store read under the malformed-store fixture. Expected: PASS.
 
 - [ ] PR 2 close: `go test ./...`, cross-GOOS vet, `smoke.bats` green; CI `test` (`-race`), `test-windows`, `lint`, `security` green.
@@ -71,15 +72,16 @@ created: "2026-10-30"
 
 - [ ] [P] [AC4] Failing test `TestSupervisedBootstrap_Retries`: with a fake tunnel starter and a fake sleep, a tunnel that exits after `READY` emits `ERROR reason=ssh_bootstrap_failed` once per outage, marks health not ready with that reason, restarts with backoff from 1 s doubling to 30 s with jitter (`DialBackoffBase`/`DialBackoffMax` defaults), and on a successful restart marks health ready and resets the backoff; a cancelled context stops it. Expected: FAIL.
 - [ ] [AC4] Implement the supervisor; `host serve` uses it instead of `monitorBootstrap`'s cancel-on-exit. Expected: PASS.
+- [ ] [P] [AC4] Failing test `TestServeHealth_ControlSession`: with a fake node-state source (the IPN bus states `tsnet` reports), a state other than `Running` after `READY` marks `/health/ready` not ready with `reason=control_plane_unreachable`, and `Running` again marks it ready; serve itself does not reconnect (tsnet's control client retries). Expected: FAIL, then implement the watcher over `LocalClient.WatchIPNBus`. Expected: PASS.
 
 ### Health (`internal/health`, `internal/serve`)
 
-- [ ] [P] [AC6] Failing test `TestStartServer_Services`: with a services provider, `/health/ready` adds `services: [{kind, port, published}]` to its body in both the ready and not-ready states; without one, the body is unchanged (connect's contract). Expected: FAIL.
+- [ ] [P] [AC6] Failing test `TestStartServer_Services`: with a services provider, `/health/ready` adds `node: <hostname>` and `services: [{kind, port, published}]` to its body in both the ready and not-ready states; without one, the body is unchanged (connect's contract). Expected: FAIL.
 - [ ] [AC6] Implement the optional provider; `host serve` starts the server on `host.mesh.health_addr` when declared and reports a service `published` once its listener is up. Expected: PASS.
 
 ### `host check` (`cmd/cli/host.go`)
 
-- [ ] [AC6] Failing table test `TestHostCheckCmd_Published`: with `health_addr` declared and a fake serve health endpoint, `check --json` reports `published: true|false` per declared service; with the endpoint down every service is `published: false`; without `health_addr` the field is absent. Expected: FAIL.
+- [ ] [AC6] Failing table test `TestHostCheckCmd_Published`: with `health_addr` declared and a fake serve health endpoint, `check --json` reports `published: true|false` per declared service; with the endpoint down, or answered by a responder whose body does not name the file's node, every service is `published: false`; without `health_addr` the field is absent. Expected: FAIL.
 - [ ] [AC6] Implement the probe (loopback GET, 2 s timeout) and `serviceJSON.Published *bool` (`omitempty`). Expected: PASS.
 
 ### Docs

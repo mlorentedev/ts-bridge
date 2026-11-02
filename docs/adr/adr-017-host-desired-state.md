@@ -246,7 +246,8 @@ Decision:
 - Serve runs **in the foreground**, like `connect`. ts-bridge stays daemonless: it
   installs no service and supervises nothing. The OS starts and restarts it (Windows
   Scheduled Task at startup as SYSTEM; a systemd unit on Linux), registered by the
-  consumer's provisioning, with the recipes documented here.
+  consumer's provisioning, with the recipes in `docs/runbooks/host-serve.md` (added by
+  HOST-008).
 - The Neutral consequence "installing the bridge as an OS service is out of scope"
   still holds for ts-bridge itself; #451 remains the place for a local control plane.
 
