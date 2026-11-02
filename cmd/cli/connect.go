@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -187,8 +188,19 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 	return selectedProfile.Target, err
 }
 
+// sameConnectTarget reports whether two targets name one destination: host names
+// are case-insensitive, ports are compared exactly (#508).
+func sameConnectTarget(a, b string) bool {
+	hostA, portA, errA := net.SplitHostPort(a)
+	hostB, portB, errB := net.SplitHostPort(b)
+	if errA != nil || errB != nil {
+		return strings.EqualFold(a, b)
+	}
+	return strings.EqualFold(hostA, hostB) && portA == portB
+}
+
 func warnConnectTargetOverride(profileName, profileTarget, target, flagTarget string) {
-	if profileName == "" || profileTarget == "" || target == "" || target == profileTarget {
+	if profileName == "" || profileTarget == "" || target == "" || sameConnectTarget(target, profileTarget) {
 		return
 	}
 	source := "YAML"
