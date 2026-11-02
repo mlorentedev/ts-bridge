@@ -1,0 +1,47 @@
+# Arming envelope for the overnight unattended run. Committed on the run branch,
+# never merged; the run reads the committed copy and halts if the working tree differs.
+version: 1
+run_id: "ts-bridge-overnight-2026-11-02"
+armed_by: manu
+armed_at: 2026-11-02T16:05:53Z
+expires_at: 2026-11-03T04:05:53Z
+objective: "Work the operator-approved ts-bridge backlog below to merged PRs, one ticket at a time, leaving every PR triaged and every park answerable."
+scope:
+  write_paths:
+    - "cmd/**"
+    - "internal/**"
+    - "scripts/**"
+    - "docs/**"
+    - "specs/**"
+    - ".golangci.yml"
+    - ".gitattributes"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - ".agent/**"
+    - "**/AGENTS.md"
+    - "site/**"
+    - "go.mod"
+    - "go.sum"
+    - "mise.toml"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, go, golangci-lint, gosec, bats, shellcheck, bash, zsh, make, mise]
+queue:
+  source: bitacora
+  # Operator's choice at arming, in this order. Only these items; an empty set ends the run.
+  filter: "issues #508 #402 #401 #498 #505 #499 #427 #403 #530 #526 #466"
+  order: [508, 402, 401, 498, 505, 499, 427, 403, 530, 526, 466]
+  exclude_note: "#498 needs .gitattributes only; any go.mod/go.sum rewrite parks it. #466 runs last (wide diff)."
+  max_items: 11
+budget:
+  max_iterations: 14
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant          # .github/merge-grant.yml on master; excludes .github/, harness/, .agent/, release-please
+  push: true
+  open_pr: true
+  advisor_tier: top
+host:
+  wake_lock: "caffeinate -dimsu, AC power, lid open"
