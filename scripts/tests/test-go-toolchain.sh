@@ -9,11 +9,14 @@ check_file() {
       if (job_go && !job_setup) bad = 1
       job_go = 0; job_setup = 0
     }
-    /^jobs:[[:space:]]*(#.*)?$/ { in_jobs = 1; next }
+    function indent_of(line) { match(line, /[^ ]/); return RSTART - 1 }
+    /^jobs:[[:space:]]*(#.*)?$/ { in_jobs = 1; job_indent = -1; next }
     in_jobs && /^[^[:space:]]/ { finish_job(); in_jobs = 0; in_job = 0 }
-    # Any line at job depth opens a new job, whatever the key spelling
-    # (quoted, commented), so one job never inherits the setup-go of another.
-    in_jobs && /^  [^[:space:]#]/ {
+    # Job depth is the indent of the first key under jobs:, not a literal two
+    # spaces (#505). Any line at that depth opens a new job, whatever the key
+    # spelling (quoted, commented), so one job never inherits another job setup-go.
+    in_jobs && job_indent < 0 && /^ +[^[:space:]#]/ { job_indent = indent_of($0) }
+    in_jobs && job_indent > 0 && /^ +[^[:space:]#]/ && indent_of($0) == job_indent {
       finish_job(); in_job = 1; cont = ""; next
     }
     /^[[:space:]]*#/ { next }
@@ -37,7 +40,7 @@ check_file() {
     /^[[:space:]]*-[[:space:]]*uses:[[:space:]]+actions\/setup-go@/ {
       if (active && !valid) bad = 1
       if (in_job) job_setup = 1
-      active = 1; valid = 0; with_indent = -1
+      active = 1; valid = 0; with_indent = -1; child_indent = -1
       next
     }
     active && /^[[:space:]]*-[[:space:]]/ {
@@ -45,14 +48,17 @@ check_file() {
       active = 0
     }
     active && /^[[:space:]]*with:[[:space:]]*$/ {
-      with_indent = index($0, "with:") - 1
+      with_indent = index($0, "with:") - 1; child_indent = -1; next
     }
+    # A with: child sits at the depth of the first key below with:, whatever it is.
+    active && with_indent >= 0 && child_indent < 0 && /^ +[^[:space:]#]/ &&
+      indent_of($0) > with_indent { child_indent = indent_of($0) }
     active && with_indent >= 0 &&
-      /^[[:space:]]*go-version-file:[[:space:]]*go\.mod([[:space:]]*(#.*)?)?$/ {
-      if (index($0, "go-version-file:") - 1 == with_indent + 2) valid = 1
+      /^[[:space:]]*go-version-file:[[:space:]]*(\.\/)?go\.mod([[:space:]]*(#.*)?)?$/ {
+      if (indent_of($0) == child_indent) valid = 1
     }
     active && with_indent >= 0 && /^[[:space:]]*go-version:[[:space:]]*/ {
-      if (index($0, "go-version:") - 1 == with_indent + 2) bad = 1
+      if (indent_of($0) == child_indent) bad = 1
     }
     END {
       if (active && !valid) bad = 1
@@ -337,6 +343,77 @@ jobs:
 YAML
 if ! check_file "$tmp"; then
   echo "test-go-toolchain: matched go inside another command name" >&2
+  exit 1
+fi
+
+# Depth comes from the file, not from a literal two spaces (#505).
+cat > "$tmp" <<'YAML'
+jobs:
+    build:
+        steps:
+            - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+              with:
+                  go-version-file: go.mod
+            - run: go test ./...
+YAML
+if ! check_file "$tmp"; then
+  echo "test-go-toolchain: rejected a 4-space-indented module-derived toolchain" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+    build:
+        steps:
+            - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+              with:
+                  go-version-file: ./go.mod
+            - run: go test ./...
+YAML
+if ! check_file "$tmp"; then
+  echo "test-go-toolchain: rejected go-version-file: ./go.mod" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+    lint:
+        steps:
+            - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+              with:
+                  go-version-file: go.mod
+    build:
+        steps:
+            - run: go test ./...
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted a 4-space-indented Go job without setup-go" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+    build:
+        steps:
+            - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+              with:
+                  go-version-file: go.mod
+                  cache: true
+                  go-version: '1.26'
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted a pinned toolchain under a 4-space with:" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
+      - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
+        with:
+          cache: true
+          options:
+            go-version-file: go.mod
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted go-version-file nested below a with: child" >&2
   exit 1
 fi
 
