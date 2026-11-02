@@ -36,7 +36,12 @@ the tailnet as a persistent node and publishes the host's declared services.
   `bootstrap_socks_addr` (loopback, default `127.0.0.1:1055` as `connect`; it must differ
   from a bootstrap-enabled `connect` on the same host), `hostname`, `state_dir`,
   `auth_key_file` and `health_addr` (loopback only). Unknown keys warn and empty keys
-  error, as HOST-005.
+  error, as HOST-005. Serve requires `host.control_url`, `host.mesh` and
+  `host.mesh.state_dir`, and refuses to start without them; `auth_key_file` is required
+  only for the first enrolment (no node state yet); `hostname` defaults to the OS
+  hostname in lower case; `bootstrap_ssh` and `health_addr` are optional, and
+  `bootstrap_socks_addr` defaults as above. AC6's trust rule compares against that
+  resolved hostname.
 - Persistent node: `Ephemeral: false`, node state in `state_dir`. A restart reuses the
   node identity without a key. The auth key file is read only when no state exists, and
   serve reports whether it used it (`READY ... enrolled=true|false`).
@@ -82,7 +87,10 @@ the tailnet as a persistent node and publishes the host's declared services.
 - **State and key protection.** `state_dir` holds the node key and the SSH identity
   sits beside it. Windows: under ProgramData, ACL SYSTEM and Administrators only; Linux
   `0700` root. The auth key file is deleted by the provisioning script after
-  `enrolled=true`, never by serve.
+  `enrolled=true`, never by serve. It holds a live tagged key, so serve refuses an
+  `auth_key_file` that others may read: on Unix a regular file owned by root with no
+  group or other bits; on Windows one whose DACL grants read or write only to SYSTEM and
+  Administrators (review of #525; PR 3).
 - **Tag ownership (enforced, 2026-11-02, from the #525 review).** The node must enrol with
   the key's tag (Headscale tagged node), not as a user node; a key without a tag would put
   a host under a user identity. Serve checks the node after `Up`: a node without tags
