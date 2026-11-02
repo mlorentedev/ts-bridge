@@ -1,0 +1,19 @@
+# Standing merge grant: this repository opts in (pattern-git-workflow §9,
+# dotfiles#2178). An agent may merge a PR it opened in this repository, without
+# asking for that PR, when every condition below holds on one head commit.
+#
+# `dotf pr land` reads this file from the base branch and refuses without it,
+# so a PR cannot grant itself the merge by adding it. Widening the grant is the
+# owner's decision, and a PR that changes this file is never merged under it.
+grant: prs-the-agent-opened
+conditions:
+  - ci-green            # every check passes or is skipped
+  - no-conflicts        # merge state CLEAN
+  - reviewer-triaged    # a `## Review triage` comment disposes every reviewer finding
+excluded:
+  - release-please      # cutting a release stays the owner's
+  - path:.github/       # workflows, this grant and repo config stay human
+  - path:harness/       # review gates read by dotf
+  - path:.agent/        # the unattended-run envelope
+merge: squash --match-head-commit
+disclose: who reviewed, or that no review ran, in the triage comment
