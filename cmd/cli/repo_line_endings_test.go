@@ -19,10 +19,15 @@ func TestGoModuleFilesCheckOutLF(t *testing.T) {
 		t.Skip("git not on PATH")
 	}
 	root := filepath.Join("..", "..")
+	// Skip only a tree that is not a checkout (a source archive). Inside one, a failing
+	// git command is a broken environment, and skipping it would pass while asserting nothing.
+	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
+		t.Skipf("not a git checkout: %v", err)
+	}
 	//nolint:gosec // fixed arguments; git is resolved from PATH like any developer tool.
 	out, err := exec.Command(git, "-C", root, "check-attr", "eol", "--", "go.mod", "go.sum").Output()
 	if err != nil {
-		t.Skipf("not a git checkout: %v", err)
+		t.Fatalf("git check-attr: %v", err)
 	}
 	for _, file := range []string{"go.mod", "go.sum"} {
 		if want := file + ": eol: lf"; !strings.Contains(string(out), want) {
