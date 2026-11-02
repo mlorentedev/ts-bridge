@@ -35,3 +35,8 @@ Armed 2026-11-02T16:05:53Z, expires 2026-11-02T22:11:38Z. Cold start on 9374ed7:
 | 18:40 | #553 | PR-Agent one-sided fixture: mirror two-pages-marker-first added | .[-1] and .[0] mutants FAIL |
 | 18:40 | #499 | PR #555 opened: go flags, go.exe, full go help list; wrappers/other actions/IFS/GOTOOLCHAIN declared out of scope in header (advisor-checked scope fork) | 4 fixtures RED first + control; 4 mutants FAIL; bash+zsh OK |
 | 18:40 | budget | 8 of 8 items attempted (508 402 401 498 505 427 403 499); #530 #526 #466 not started | — |
+| 18:51 | #550 | MERGED under the grant at bb57d0d; #498 board Done | lander |
+| 19:05 | #553 | MERGED under the grant at 88a424e (Refs #403; #403 stays Blocked) | lander |
+| 19:10 | #555 | PR-Agent: toolchain premise softened to verified facts (b045e1e) | go.mod toolchain=0; GOTOOLCHAIN in .github=0 |
+| 19:19 | #555 | PR-Agent: bug/doc/telemetry fixtures added | 3 mutants FAIL; bash+zsh OK |
+| 19:19 | #552 | blank-line finding declined again (hygiene green on cce518c); nested-flow false red declined (fail-closed, by design) | hygiene success |
