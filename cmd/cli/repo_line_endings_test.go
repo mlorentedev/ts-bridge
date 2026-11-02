@@ -35,7 +35,7 @@ func TestGoModuleFilesCheckOutLF(t *testing.T) {
 			t.Fatal(err)
 		}
 		if bytes.Contains(data, []byte("\r")) {
-			t.Errorf("%s contains CR bytes; check it out again (git rm --cached %s && git checkout -- %s)", file, file, file)
+			t.Errorf("%s contains CR bytes; delete it and check it out again (git checkout -- %s)", file, file)
 		}
 	}
 }
