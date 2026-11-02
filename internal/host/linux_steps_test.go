@@ -76,6 +76,7 @@ const (
 const (
 	iptScoped       = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
 	iptEmpty        = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	iptQualified    = "-P INPUT ACCEPT\n-A INPUT -i tailscale0 -j ts-input\n"
 	iptTailnet      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -i tailscale0 -j ACCEPT\n"
 	iptDropFirst    = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n"
 	iptAckOnly      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK -j ACCEPT\n"
@@ -278,6 +279,7 @@ func TestSetupForLinux(t *testing.T) {
 		outcomes []Outcome
 		blocked  string // the rule a manual firewall step must name
 		message  string // a substring the firewall step's message must carry
+		fix      string // a substring the firewall step's fix must carry
 	}{
 		{
 			name:     "ufw, converged",
@@ -382,10 +384,12 @@ func TestSetupForLinux(t *testing.T) {
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
-			name:     "iptables, a qualified ts-input jump is not followed",
-			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n-A INPUT -i eth0 -j ts-input\n", iptChain: tsInputDefault})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
-			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+			name:     "iptables, a qualified ts-input jump: nothing appended",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptQualified, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  "-A INPUT -i tailscale0 -j ts-input",
+			fix:      "-A INPUT -i tailscale0 -j ts-input",
 		},
 		{
 			name:     "iptables -S fails",
@@ -429,6 +433,7 @@ func TestSetupForLinux(t *testing.T) {
 				}
 				assertNamesBlockedRule(t, s, tt.blocked)
 				assertFirewallMessage(t, s, tt.message)
+				assertFirewallFix(t, s, tt.fix, "")
 			}
 			if !reflect.DeepEqual(outcomes, tt.outcomes) {
 				t.Errorf("outcomes = %v, want %v", outcomes, tt.outcomes)
@@ -587,6 +592,16 @@ func TestCheckForLinux(t *testing.T) {
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+		},
+		{
+			name:     "iptables, a qualified ts-input jump",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptQualified, iptChain: tsInputDefault})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "-A INPUT -i tailscale0 -j ts-input",
+			fix:      "-A INPUT -i tailscale0 -j ts-input",
 		},
 		{
 			name:     "iptables, two copies of the setup rule",
@@ -868,8 +883,9 @@ func TestIptablesDecideOnly(t *testing.T) {
 }
 
 // TestIptablesTSInput pins how tailscaled's ts-input chain decides (#492): its
-// rules count at the position of an unqualified `-A INPUT -j ts-input`, and a
-// qualified jump is not followed. Chains are in printed form (tsInputDefault).
+// rules count at the position of an unqualified `-A INPUT -j ts-input`. A
+// qualified jump never reaches this walk (TestIptQualifiedTSInputJump).
+// Chains are in printed form (tsInputDefault).
 func TestIptablesTSInput(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -882,7 +898,6 @@ func TestIptablesTSInput(t *testing.T) {
 		{"deny after the jump is shadowed", iptDropFirst, tsInputDefault, rulePresent},
 		{"tailscaled's other rules decide nothing", iptEmpty, tsInputNoAccept, ruleAbsent},
 		{"and an INPUT allow after the jump still counts", iptScoped, tsInputNoAccept, rulePresent},
-		{"a qualified jump is not followed", "-P INPUT ACCEPT\n-A INPUT -i eth0 -j ts-input\n", tsInputDefault, ruleAbsent},
 		{"no jump, nothing to follow", "-P INPUT ACCEPT\n", tsInputDefault, ruleAbsent},
 	}
 	for _, tt := range tests {
@@ -891,5 +906,74 @@ func TestIptablesTSInput(t *testing.T) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestIptQualifiedTSInputJump pins which INPUT rules the walk cannot pass
+// (#532): any jump or goto into ts-input other than tailscaled's unqualified
+// one. A quoted comment that spells a jump is not one.
+func TestIptQualifiedTSInputJump(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"tailscaled's unqualified jump", iptEmpty, ""},
+		{"no jump", "-P INPUT ACCEPT\n", ""},
+		{"interface-scoped jump", iptQualified, "-A INPUT -i tailscale0 -j ts-input"},
+		{"source-scoped jump", "-A INPUT -s 100.64.0.0/10 -j ts-input\n", "-A INPUT -s 100.64.0.0/10 -j ts-input"},
+		{"goto into ts-input", "-A INPUT -g ts-input\n", "-A INPUT -g ts-input"},
+		{"a qualified jump next to the exact one", "-A INPUT -j ts-input\n-A INPUT -i eth0 -j ts-input\n", "-A INPUT -i eth0 -j ts-input"},
+		{"a comment spelling the jump", `-A INPUT -p tcp -m comment --comment "see -j ts-input above" -j DROP` + "\n", ""},
+		{"another chain", "-A INPUT -i eth0 -j ts-input-extra\n", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, got := iptBeforeQualifiedJump(tt.input); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestReadIptablesQualifiedJump pins the walk up to a qualified jump into
+// ts-input (#532): what the rules before it decide stands, and when they
+// decide nothing the read is unknown, with a fix that names the jump.
+func TestReadIptablesQualifiedJump(t *testing.T) {
+	const jump = "-A INPUT -i tailscale0 -j ts-input"
+	tests := []struct {
+		name    string
+		input   string
+		want    ruleState // when the read decides
+		unknown bool
+	}{
+		{"nothing before the jump", iptQualified, 0, true},
+		{"a deny before the jump decides", "-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n" + jump + "\n", ruleBlocked, false},
+		{"an allow before the jump decides", "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\n" + jump + "\n", rulePresent, false},
+		{"tailscaled's jump before it decides", "-A INPUT -j ts-input\n" + jump + "\n", rulePresent, false},
+		{"a deny after the jump does not", jump + "\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{output: map[string]string{iptRead: tt.input, iptChain: tsInputDefault}}
+			got := readIptables(r, 3389)
+			if (got.reason != "") != tt.unknown || (!tt.unknown && got.state != tt.want) {
+				t.Fatalf("got state %v reason %q, want state %v unknown %v", got.state, got.reason, tt.want, tt.unknown)
+			}
+			if fix := firewallFix(got, 3389, "setup"); tt.unknown && !strings.Contains(fix, jump) {
+				t.Errorf("fix %q does not name the jump %q", fix, jump)
+			}
+		})
+	}
+}
+
+// TestReadIptablesQualifiedJumpCopies pins that the cut at a qualified jump
+// limits what decides, not what is counted: copies of setup's rule behind the
+// jump are still copies (#480, #532).
+func TestReadIptablesQualifiedJumpCopies(t *testing.T) {
+	input := iptSetupRule + "-A INPUT -i tailscale0 -j ts-input\n" + iptSetupRule
+	r := &recordingRunner{output: map[string]string{iptRead: input, iptChain: tsInputDefault}}
+	if got := readIptables(r, 3389); got.state != rulePresent || got.copies != 2 {
+		t.Fatalf("got state %v copies %d, want present with 2 copies", got.state, got.copies)
 	}
 }
