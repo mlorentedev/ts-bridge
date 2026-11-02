@@ -19,3 +19,6 @@ Armed 2026-11-02T16:05:53Z, expires 2026-11-02T22:11:38Z. Cold start on 9374ed7:
 | 17:18 | #498 | PR #550 opened | check-attr unspecified→lf; 13 pkgs ok; lint 0 |
 | 17:27 | #547 #550 | re-review findings applied (0db1664 zone in no-port fallback; 29476f2/00e5217 CR byte check + working recovery hint); #548 #549 re-triaged | 13 pkgs ok; CRLF mutant FAIL |
 | 17:27 | #505 | PR #551 opened | 5 fixtures, RED first; bash+zsh OK; shellcheck clean |
+| 17:30 | #547 #550 | lander re-reviews: #547 clean (finding resolved); #550 vacuous-skip finding applied (skip only without .git; GIT_DIR mutant now FAIL) | ok |
+| 17:31 | #427 | PR #552 opened: persist-credentials read only from the step's with: (block + flow) | 4 fixtures RED first, control OK; bash+zsh; real tree 13/13; shellcheck clean |
+| 17:33 | #403 | PR #553 (Refs) two-page pagination fixture; criteria 2-5 PARKED (A split / B one ticket), board Blocked | 2 pagination mutants FAIL |
