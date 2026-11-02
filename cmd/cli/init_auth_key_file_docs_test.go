@@ -19,6 +19,10 @@ func TestInitAuthKeyFileDocumentation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// A source that moves or changes extension must fail here, not drop out silently.
+		if len(matches) == 0 {
+			t.Fatalf("%s matches no file; the guard would stop reading that source", pattern)
+		}
 		for _, m := range matches {
 			rel, _ := filepath.Rel(root, m)
 			files = append(files, filepath.ToSlash(rel))
