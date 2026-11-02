@@ -2,6 +2,7 @@
 package host
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -106,6 +107,106 @@ func TestMerge_LogFormatFlag(t *testing.T) {
 	if cfg.LogFormat != "json" {
 		t.Errorf("LogFormat = %q, want %q", cfg.LogFormat, "json")
 	}
+}
+
+// ─── Resolve tests (HOST-005 A2) ─────────────────────────────────
+
+// clearHostEnv unsets every TS_HOST_* variable Resolve reads.
+func clearHostEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{"TS_HOST_FIREWALL_RULE", "TS_HOST_NO_SLEEP", "TS_HOST_RDP_PORT", "TS_HOST_VERBOSE", "TS_HOST_LOG_FORMAT"} {
+		t.Setenv(k, "")
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func TestResolve_PerOSDefaults(t *testing.T) {
+	clearHostEnv(t)
+	rdp := []DeclaredService{{Kind: ServiceRDP, Port: 3389}}
+	tests := []struct {
+		name string
+		goos string
+		file File
+		want []DeclaredService
+	}{
+		{"windows, no file", goosWindows, File{}, rdp},
+		{"linux, no file", goosLinux, File{}, rdp},
+		{"darwin, no file", goosDarwin, File{}, []DeclaredService{{Kind: ServiceSSH, Port: 22}}},
+		{"host without services keeps the OS default", goosDarwin, File{Version: 1, Host: FileHost{ControlURL: ptr("https://hs.example")}}, []DeclaredService{{Kind: ServiceSSH, Port: 22}}},
+		{"rdp without port takes the kind default", goosLinux, File{Host: FileHost{Services: []FileService{{Kind: ServiceRDP}}}}, rdp},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Resolve(tt.goos, tt.file, Flags{})
+			if !slices.Equal(cfg.Services, tt.want) {
+				t.Errorf("Services = %v, want %v", cfg.Services, tt.want)
+			}
+			if cfg.Port != defaultRDPPort {
+				t.Errorf("Port = %d, want %d on every OS (legacy field)", cfg.Port, defaultRDPPort)
+			}
+		})
+	}
+}
+
+func TestResolve_Precedence(t *testing.T) {
+	file := File{Host: FileHost{
+		Services:   []FileService{{Kind: ServiceRDP, Port: ptr(3391)}},
+		Firewall:   &FileFirewall{Rule: ptr("FileRule")},
+		Power:      &FilePower{PreventSleep: ptr(false)},
+		ControlURL: ptr("https://hs.example"),
+	}}
+	tests := []struct {
+		name      string
+		file      File
+		env       map[string]string
+		flags     Flags
+		wantPort  int
+		wantRule  string
+		wantSleep bool // NoSleep
+	}{
+		{"defaults", File{}, nil, Flags{}, 3389, defaultFirewallRuleName, false},
+		{"file beats defaults", file, nil, Flags{}, 3391, "FileRule", true},
+		{"env beats file", file,
+			map[string]string{"TS_HOST_RDP_PORT": "3392", "TS_HOST_FIREWALL_RULE": "EnvRule", "TS_HOST_NO_SLEEP": "false"},
+			Flags{}, 3392, "EnvRule", false},
+		{"flags beat env", file,
+			map[string]string{"TS_HOST_RDP_PORT": "3392", "TS_HOST_FIREWALL_RULE": "EnvRule", "TS_HOST_NO_SLEEP": "false"},
+			Flags{Port: 3393, FirewallRule: "FlagRule", NoSleep: true, NoSleepSet: true}, 3393, "FlagRule", true},
+		{"prevent_sleep true keeps sleep disabled", File{Host: FileHost{Power: &FilePower{PreventSleep: ptr(true)}}}, nil, Flags{}, 3389, defaultFirewallRuleName, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearHostEnv(t)
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+			cfg := Resolve(goosWindows, tt.file, tt.flags)
+			if cfg.Port != tt.wantPort {
+				t.Errorf("Port = %d, want %d", cfg.Port, tt.wantPort)
+			}
+			if want := []DeclaredService{{Kind: ServiceRDP, Port: tt.wantPort}}; !slices.Equal(cfg.Services, want) {
+				t.Errorf("Services = %v, want %v (rdp follows Port)", cfg.Services, want)
+			}
+			if cfg.FirewallRule != tt.wantRule {
+				t.Errorf("FirewallRule = %q, want %q", cfg.FirewallRule, tt.wantRule)
+			}
+			if cfg.NoSleep != tt.wantSleep {
+				t.Errorf("NoSleep = %v, want %v", cfg.NoSleep, tt.wantSleep)
+			}
+		})
+	}
+
+	t.Run("control_url comes from the file only", func(t *testing.T) {
+		clearHostEnv(t)
+		t.Setenv("TS_CONTROL_URL", "https://env.invalid")
+		if got := Resolve(goosLinux, File{}, Flags{}).ControlURL; got != "" {
+			t.Errorf("ControlURL without file = %q, want empty", got)
+		}
+		if got := Resolve(goosLinux, File{Host: FileHost{ControlURL: ptr("https://hs.example")}}, Flags{}).ControlURL; got != "https://hs.example" {
+			t.Errorf("ControlURL = %q, want the file's", got)
+		}
+	})
 }
 
 // ─── LoadConfig tests ────────────────────────────────────────────
