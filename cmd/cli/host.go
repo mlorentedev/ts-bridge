@@ -58,6 +58,13 @@ On Linux:
 On macOS:
   - Not applicable — use ts-bridge connect to connect to a remote host.
 
+Declared state:
+  --config names a YAML host configuration file (version, host.services,
+  host.firewall.rule, host.power.prevent_sleep, host.control_url). Values
+  resolve flags > env (TS_HOST_*, including ./.env) > file > per-OS defaults.
+  An invalid file, or an entry this OS has no step for, exits 1 before any
+  step runs.
+
 Exit status:
   0  every step is ok, changed or manual (a manual step prints what is left to you)
   2  setup ran and at least one step failed
@@ -66,13 +73,15 @@ Run ts-bridge host check afterwards to confirm the host converged.
 
 Examples:
   ts-bridge host setup
+  ts-bridge host setup --config /etc/ts-bridge/host.yaml
   ts-bridge host setup --no-sleep
   ts-bridge host setup --firewall-rule "MyRDPRule"
 `,
 		RunE: runHostSetup,
 	}
+	cmd.Flags().String("config", "", "Host configuration file (YAML) declaring the desired state")
 	cmd.Flags().Bool("no-sleep", false, "Skip disabling sleep mode")
-	cmd.Flags().String("firewall-rule", "Tailscale-RDP-Ingress", "Custom firewall rule name")
+	cmd.Flags().String("firewall-rule", "", `Custom firewall rule name (default "Tailscale-RDP-Ingress")`)
 	cmd.Flags().Int("port", 0, "RDP port (default: 3389)")
 	cmd.Flags().Bool("json", false, "Output in JSON format")
 	cmd.Flags().Bool("verbose", false, "Enable verbose (debug) logging")
@@ -95,6 +104,9 @@ Outputs:
 
 Use --json for machine-readable output.
 
+--config names the same YAML host configuration file as host setup, so the
+check diffs the declared state (flags > env > file > per-OS defaults).
+
 Exit status:
   0  every step is ok
   1  the check could not run
@@ -102,10 +114,12 @@ Exit status:
 
 Examples:
   ts-bridge host check
+  ts-bridge host check --config /etc/ts-bridge/host.yaml
   ts-bridge host check --json
 `,
 		RunE: runHostCheck,
 	}
+	cmd.Flags().String("config", "", "Host configuration file (YAML) declaring the desired state")
 	cmd.Flags().Bool("json", false, "Output in JSON format")
 	cmd.Flags().Bool("verbose", false, "Enable verbose (debug) logging")
 	cmd.Flags().String("log-format", "", "Log format (text|json)")
@@ -135,6 +149,10 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	if err := envfile.Load(".env"); err != nil {
 		return fmt.Errorf("load .env: %w", err)
 	}
+	file, err := loadHostFile(cmd)
+	if err != nil {
+		return err
+	}
 
 	// Collect CLI flags. The *Set fields record whether each bool flag was
 	// explicitly passed, so an unset flag does not clobber the env layer.
@@ -148,8 +166,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		LogFormat:    mustString(cmd, "log-format"),
 	}
 
-	// Merge: flags > env > defaults.
-	cfg := host.Merge(flags)
+	cfg := host.Resolve(hostGOOS, file, flags)
 
 	// Validate firewall rule early (before any side effects).
 	if _, err := host.SanitizeFirewallRule(cfg.FirewallRule); err != nil {
@@ -203,8 +220,18 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 
 	// Report the port that was actually configured (result.RDPPort), which on
 	// Windows comes from the registry and may differ from the requested --port.
-	printSetupSummary(cmd.OutOrStdout(), result.RDPPort)
+	printSetupSummary(cmd.OutOrStdout(), host.TailscaleIP(), result)
 	return setupConvergence(result.Steps)
+}
+
+// loadHostFile loads and validates the --config host file for hostGOOS,
+// warning on the command's stderr. No --config is no file.
+func loadHostFile(cmd *cobra.Command) (host.File, error) {
+	path := mustString(cmd, "config")
+	if path == "" {
+		return host.File{}, nil
+	}
+	return host.LoadFile(path, hostGOOS, cmd.ErrOrStderr())
 }
 
 // setupConvergence returns an ExitError with exitNotConverged when any step
@@ -232,9 +259,13 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 	if err := envfile.Load(".env"); err != nil {
 		return fmt.Errorf("load .env: %w", err)
 	}
+	file, err := loadHostFile(cmd)
+	if err != nil {
+		return err
+	}
 
-	// check has no firewall-rule/port flags; those resolve from env + defaults.
-	cfg := host.Merge(host.Flags{
+	// check has no firewall-rule/port flags; those resolve from env, file and defaults.
+	cfg := host.Resolve(hostGOOS, file, host.Flags{
 		Verbose:    mustBool(cmd, "verbose"),
 		VerboseSet: cmd.Flags().Changed("verbose"),
 		LogFormat:  mustString(cmd, "log-format"),
@@ -387,13 +418,13 @@ func printElevationError(w io.Writer) {
 	}
 }
 
-func printSetupSummary(w io.Writer, rdpPort int) {
+func printSetupSummary(w io.Writer, tsIP string, result host.SetupResult) {
+	rdpPort := result.RDPPort
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  ---------------------------------------")
 	fmt.Fprintln(w, "  HOST READY")
 	fmt.Fprintln(w, "  ---------------------------------------")
 
-	tsIP := host.TailscaleIP()
 	if tsIP != "" {
 		fmt.Fprintf(w, "  Tailscale IP: %s\n", tsIP)
 	}
@@ -401,7 +432,7 @@ func printSetupSummary(w io.Writer, rdpPort int) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  Client .env config:")
 	fmt.Fprintf(w, "  TS_TARGET=%s:%d\n", tsIP, rdpPort)
-	if desc := buildDescriptorLine(tsIP, rdpPort, ""); desc != "" {
+	if desc := buildDescriptorLine(tsIP, rdpPort, result.ControlURL); desc != "" {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "  Shareable descriptor:")
 		fmt.Fprintf(w, "  %s\n", desc)
@@ -497,7 +528,7 @@ func printCheckText(w io.Writer, r host.CheckResult) {
 			fmt.Fprintf(w, "  ! %s (%s): %s\n", step.Name, step.Outcome, step.Fix)
 		}
 	}
-	if desc := buildDescriptorLine(r.TailscaleIP, r.RDPPort, ""); desc != "" {
+	if desc := buildDescriptorLine(r.TailscaleIP, r.RDPPort, r.ControlURL); desc != "" {
 		fmt.Fprintf(w, "  Descriptor:    %s\n", desc)
 	}
 	fmt.Fprintln(w, "  ---------------------------------------")
@@ -524,7 +555,7 @@ func checkJSON(r host.CheckResult) ([]byte, error) {
 		FirewallOK:  r.FirewallOK,
 		TailscaleUp: r.TailscaleUp,
 		Platform:    runtime.GOOS,
-		Descriptor:  buildDescriptorLine(r.TailscaleIP, r.RDPPort, ""),
+		Descriptor:  buildDescriptorLine(r.TailscaleIP, r.RDPPort, r.ControlURL),
 		Services:    make([]serviceJSON, 0, len(r.Services)),
 		Steps:       stepsJSON(r.Steps),
 	}
