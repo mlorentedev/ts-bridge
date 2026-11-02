@@ -130,6 +130,13 @@ Examples:
 // ─── Setup ───────────────────────────────────────────────────────
 
 func runHostSetup(cmd *cobra.Command, args []string) error {
+	// The file is validated on every OS, so an invalid --config is an error
+	// even where setup has no steps.
+	file, err := loadHostFile(cmd)
+	if err != nil {
+		return err
+	}
+
 	// macOS: not applicable.
 	if hostGOOS == "darwin" {
 		out := cmd.OutOrStdout()
@@ -149,10 +156,6 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	// Explicit env vars and CLI flags still win over .env (merge precedence).
 	if err := envfile.Load(".env"); err != nil {
 		return fmt.Errorf("load .env: %w", err)
-	}
-	file, err := loadHostFile(cmd)
-	if err != nil {
-		return err
 	}
 
 	// Collect CLI flags. The *Set fields record whether each bool flag was
@@ -191,12 +194,12 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	}
 
 	// On Windows the RDP listening port is read from the registry, not set by
-	// ts-bridge; the firewall opens the actual (registry) port. If the user
-	// explicitly requested a different --port, say so rather than leaving the
-	// flag silently ineffective.
-	if hostGOOS == windowsOS && cmd.Flags().Changed("port") && cfg.Port != result.RDPPort {
+	// ts-bridge; the firewall opens the actual (registry) port. If a port was
+	// declared (--port, TS_HOST_RDP_PORT or the file) and differs, say so
+	// rather than leaving the declaration silently ineffective.
+	if hostGOOS == windowsOS && rdpPortDeclared(cmd, file) && cfg.Port != result.RDPPort {
 		printWarn(cmd.ErrOrStderr(), fmt.Sprintf(
-			"--port %d not applied: Windows RDP listens on port %d (set in the registry). "+
+			"RDP port %d not applied: Windows RDP listens on port %d (set in the registry). "+
 				"Change the RDP port in Windows, then re-run host setup.",
 			cfg.Port, result.RDPPort))
 	}
@@ -223,6 +226,20 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	// Windows comes from the registry and may differ from the requested --port.
 	printSetupSummary(cmd.OutOrStdout(), host.TailscaleIP(), result)
 	return setupConvergence(result.Steps)
+}
+
+// rdpPortDeclared reports whether the RDP port came from --port, the env layer
+// or the file rather than the default.
+func rdpPortDeclared(cmd *cobra.Command, file host.File) bool {
+	if cmd.Flags().Changed("port") || os.Getenv("TS_HOST_RDP_PORT") != "" {
+		return true
+	}
+	for _, s := range file.Host.Services {
+		if s.Kind == host.ServiceRDP && s.Port != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // loadHostFile loads and validates the --config host file for hostGOOS,

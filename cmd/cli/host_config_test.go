@@ -164,6 +164,38 @@ func assertExit1Naming(t *testing.T, err error, want string) {
 	}
 }
 
+// On macOS setup has no steps, but an invalid --config is still an error,
+// not "not applicable" with exit 0 (review of #554).
+func TestHostSetupCmd_ConfigInvalidOnDarwin(t *testing.T) {
+	dir := isolateHostEnv(t)
+	path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  services:\n    - kind: rdp\n")
+	run := runHostCmd(t, "setup", "darwin", []string{"--config", path}, host.CheckResult{})
+	assertExit1Naming(t, run.err, "darwin")
+	if strings.Contains(run.stdout, "not applicable") {
+		t.Errorf("stdout = %q, want the file error instead of not applicable", run.stdout)
+	}
+}
+
+// Windows RDP listens on the registry's port; a port the file declares and
+// setup cannot apply is warned about, as --port is (review of #554).
+func TestHostSetupCmd_FilePortNotAppliedWarns(t *testing.T) {
+	dir := isolateHostEnv(t)
+	path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  services:\n    - kind: rdp\n      port: 3390\n")
+	var c = cmdpkg.HostSetupCmdForTest(t, "windows", true, func(cfg host.Config, _ *slog.Logger) (host.SetupResult, error) {
+		return host.SetupResult{RDPPort: 3389}, nil
+	})
+	var out, errOut bytes.Buffer
+	c.SetOut(&out)
+	c.SetErr(&errOut)
+	c.SetArgs([]string{"--json", "--config", path})
+	if err := c.Execute(); err != nil {
+		t.Fatalf("Execute() = %v", err)
+	}
+	if !strings.Contains(errOut.String(), "RDP port 3390 not applied") || !strings.Contains(errOut.String(), "port 3389") {
+		t.Errorf("stderr = %q, want a warning that 3390 is not applied and RDP listens on 3389", errOut.String())
+	}
+}
+
 // TestHostCmds_NeverReadUserStore pins ADR-017 C9: elevated host commands
 // never read the per-user profile or credential store, even when it sits
 // where the process's home directories point. Run directly and through the
