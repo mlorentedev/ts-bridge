@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -100,7 +101,8 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	if flags.AuthKeyFile != "" {
 		key, err := readAuthKeyFile(flags.AuthKeyFile)
 		if err != nil {
-			return fmt.Errorf("read auth key file: %w", err)
+			// readAuthKeyFile names the file in every error it returns (#401).
+			return err
 		}
 		flags.AuthKey = key
 	}
@@ -187,8 +189,28 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 	return selectedProfile.Target, err
 }
 
+// sameConnectTarget reports whether two targets name one destination: host names
+// are case-insensitive, ports and IPv6 zone identifiers are compared exactly (#508).
+func sameConnectTarget(a, b string) bool {
+	hostA, portA, errA := net.SplitHostPort(a)
+	hostB, portB, errB := net.SplitHostPort(b)
+	if errA != nil || errB != nil {
+		// No parseable port on one side: compare the whole targets as hosts.
+		return sameConnectHost(a, b)
+	}
+	return sameConnectHost(hostA, hostB) && portA == portB
+}
+
+// sameConnectHost folds the case of the address but not of an IPv6 zone, which
+// names an interface and is case-sensitive.
+func sameConnectHost(a, b string) bool {
+	addrA, zoneA, _ := strings.Cut(a, "%")
+	addrB, zoneB, _ := strings.Cut(b, "%")
+	return strings.EqualFold(addrA, addrB) && zoneA == zoneB
+}
+
 func warnConnectTargetOverride(profileName, profileTarget, target, flagTarget string) {
-	if profileName == "" || profileTarget == "" || target == "" || target == profileTarget {
+	if profileName == "" || profileTarget == "" || target == "" || sameConnectTarget(target, profileTarget) {
 		return
 	}
 	source := "YAML"
@@ -270,7 +292,7 @@ func readAuthKeyFile(path string) (string, error) {
 	// Resolve to absolute path for permission checks.
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("resolve path: %w", err)
+		return "", fmt.Errorf("resolve auth key file path: %w", err)
 	}
 
 	info, err := os.Stat(absPath)

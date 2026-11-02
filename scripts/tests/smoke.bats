@@ -322,7 +322,7 @@ TARGET="100.64.0.1:3389"
 @test "connect: --auth-key-file pointing at a missing file fails fast" {
   run "${BIN}" connect --auth-key-file "${BATS_TEST_TMPDIR}/nope" --target 100.64.0.1:3389
   assert_failure
-  assert_contains "read auth key file"
+  assert_contains "stat auth key file"
 }
 
 @test "connect: an invalid flag value is a parse error" {
