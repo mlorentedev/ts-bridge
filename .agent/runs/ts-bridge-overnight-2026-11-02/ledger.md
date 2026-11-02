@@ -30,3 +30,8 @@ Armed 2026-11-02T16:05:53Z, expires 2026-11-02T22:11:38Z. Cold start on 9374ed7:
 | 18:07 | #549 | MERGED under the grant at a26e67f (Refs #401; #401 stays Blocked on the --target decision) | lander |
 | 18:09 | #552 | PR-Agent: blank-line finding not reproduced (fixture added); nested flow finding RED then fixed (dcbcdf8) | 33 fixtures x bash+zsh; real tree 13/13 |
 | 18:09 | #553 | triaged (no major issues; criteria 2-5 parked on #403) | hygiene green |
+| 18:23 | #551 | MERGED under the grant at d80a313; #505 board Done | lander |
+| 18:25 | #550 | CodeRabbit: skip only on ErrNotExist, fail other stat errors (9fa613d) | go test ok; lint 0 |
+| 18:40 | #553 | PR-Agent one-sided fixture: mirror two-pages-marker-first added | .[-1] and .[0] mutants FAIL |
+| 18:40 | #499 | PR #555 opened: go flags, go.exe, full go help list; wrappers/other actions/IFS/GOTOOLCHAIN declared out of scope in header (advisor-checked scope fork) | 4 fixtures RED first + control; 4 mutants FAIL; bash+zsh OK |
+| 18:40 | budget | 8 of 8 items attempted (508 402 401 498 505 427 403 499); #530 #526 #466 not started | — |
