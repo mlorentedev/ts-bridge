@@ -461,6 +461,36 @@ cat > "$tmp" <<'YAML'
 jobs:
   build:
     steps:
+      - run: go bug
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted go bug without setup-go" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
+      - run: go doc fmt.Println
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted go doc without setup-go" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
+      - run: go telemetry off
+YAML
+if check_file "$tmp"; then
+  echo "test-go-toolchain: accepted go telemetry without setup-go" >&2
+  exit 1
+fi
+cat > "$tmp" <<'YAML'
+jobs:
+  build:
+    steps:
       - uses: actions/setup-go@0123456789abcdef0123456789abcdef01234567
         with:
           go-version-file: go.mod
