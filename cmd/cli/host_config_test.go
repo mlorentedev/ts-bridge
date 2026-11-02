@@ -27,6 +27,18 @@ type hostRun struct {
 // setup/check records the config it received; check returns ready.
 func runHostCmd(t *testing.T, name, goos string, args []string, ready host.CheckResult) hostRun {
 	t.Helper()
+	return runHost(t, name, goos, args, ready, false)
+}
+
+// runHostCmdViaRoot is runHostCmd through the full command tree, so root's
+// persistent flags and pre-run take part as in `ts-bridge host <name>`.
+func runHostCmdViaRoot(t *testing.T, name, goos string, args []string, ready host.CheckResult) hostRun {
+	t.Helper()
+	return runHost(t, name, goos, args, ready, true)
+}
+
+func runHost(t *testing.T, name, goos string, args []string, ready host.CheckResult, viaRoot bool) hostRun {
+	t.Helper()
 	var run hostRun
 	var c *cobra.Command
 	if name == "setup" {
@@ -40,6 +52,10 @@ func runHostCmd(t *testing.T, name, goos string, args []string, ready host.Check
 			ready.ControlURL = cfg.ControlURL
 			return ready, nil
 		})
+	}
+	if viaRoot {
+		c = cmdpkg.NewRootCmd()
+		args = append([]string{"host", name}, args...)
 	}
 	var out, errOut bytes.Buffer
 	c.SetOut(&out)
@@ -150,7 +166,8 @@ func assertExit1Naming(t *testing.T, err error, want string) {
 
 // TestHostCmds_NeverReadUserStore pins ADR-017 C9: elevated host commands
 // never read the per-user profile or credential store, even when it sits
-// where the process's home directories point.
+// where the process's home directories point. Run directly and through the
+// root command, whose persistent --config the local one must shadow.
 func TestHostCmds_NeverReadUserStore(t *testing.T) {
 	dir := isolateHostEnv(t)
 	home := filepath.Join(dir, "root-home")
@@ -163,18 +180,24 @@ func TestHostCmds_NeverReadUserStore(t *testing.T) {
 	}
 	writeTestFile(t, store, "profiles:\n  default:\n    target: 100.64.0.9:3389\n    control_url: https://poison.invalid\n    credential: poison\n")
 	writeTestFile(t, filepath.Join(filepath.Dir(store), "credentials", "poison"), "tskey-poison")
-	path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  services:\n    - kind: rdp\n")
+	path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  services:\n    - kind: rdp\n      port: 3390\n")
 	ready := host.CheckResult{TailscaleIP: "100.64.0.1", RDPPort: 3389}
+	runners := map[string]func(*testing.T, string, string, []string, host.CheckResult) hostRun{
+		"direct": runHostCmd, "via root": runHostCmdViaRoot,
+	}
 	for _, name := range []string{"setup", "check"} {
-		t.Run(name, func(t *testing.T) {
-			run := runHostCmd(t, name, "linux", []string{"--json", "--config", path}, ready)
-			if run.calls != 1 || run.cfg.ControlURL != "" {
-				t.Errorf("calls %d, ControlURL %q; want 1 and none (err %v)", run.calls, run.cfg.ControlURL, run.err)
-			}
-			if strings.Contains(run.stdout+run.stderr, "poison") {
-				t.Errorf("output reads the user store: %q", run.stdout+run.stderr)
-			}
-		})
+		for how, run := range runners {
+			t.Run(name+"/"+how, func(t *testing.T) {
+				got := run(t, name, "linux", []string{"--json", "--config", path}, ready)
+				if got.calls != 1 || got.cfg.Port != 3390 || got.cfg.ControlURL != "" {
+					t.Errorf("calls %d, Port %d, ControlURL %q; want 1, 3390 from the file, none (err %v)",
+						got.calls, got.cfg.Port, got.cfg.ControlURL, got.err)
+				}
+				if strings.Contains(got.stdout+got.stderr, "poison") {
+					t.Errorf("output reads the user store: %q", got.stdout+got.stderr)
+				}
+			})
+		}
 	}
 }
 
