@@ -19,6 +19,8 @@
 # the guard's own `jq -s` is what slurps however many pages arrive into an
 # array-of-arrays. A fixture must therefore be a single flat array (one page), never
 # pre-wrapped in an extra `[...]`, or it no longer represents what `--paginate` emits.
+# `two-pages` is the exception that proves the shape: two flat arrays back to back, the
+# marker only on the second, so a guard that reads just the first page fails it (#403).
 #
 # Run: bash scripts/tests/test-check-review-published.sh
 set -euo pipefail
@@ -62,6 +64,17 @@ JSON
       ;;
     clean-match)
       cat > "$WORK/comments.json" <<JSON
+[
+  {"user":{"login":"github-actions[bot]"},"updated_at":"2026-09-23T00:00:10Z","body":"${MARKER}\n\nLGTM"}
+]
+JSON
+      ;;
+    two-pages)
+      # What `--paginate` prints for a PR with more comments than one page holds.
+      cat > "$WORK/comments.json" <<JSON
+[
+  {"user":{"login":"someone-else"},"updated_at":"2026-09-23T00:00:05Z","body":"first page"}
+]
 [
   {"user":{"login":"github-actions[bot]"},"updated_at":"2026-09-23T00:00:10Z","body":"${MARKER}\n\nLGTM"}
 ]
@@ -163,6 +176,7 @@ run_case null-body       0 "review published"    || fail=1
 run_case only-null-body  1 "published no review" || fail=1
 run_case clean-match     0 "review published"    || fail=1
 run_case no-match        1 "published no review" || fail=1
+run_case two-pages       0 "review published"    || fail=1
 # #429: a diff that [ignore] empties gives PR-Agent nothing to read. That is a
 # skip with a notice, not a missing review; anything left to read, or anything
 # unreadable, still fails closed.
