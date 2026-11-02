@@ -21,6 +21,11 @@
 # covers YAML's case-insensitive booleans. `name-first-persists` and `block-scalar-read-all` are
 # the controls that stop the new step and scalar handling from passing everything.
 #
+# #427 is the same flaw in a different key: `persist-credentials: false` counted anywhere in
+# the step, so parking it under `env:` passed while checkout kept the token. The `persist-*`
+# fixtures place it everywhere except as a direct child of the step's `with:`, and
+# `env-then-with-hardened` is the control that the real placement still passes.
+#
 # And why two shells: the first version of this guard passed under bash and died under zsh with
 # "cannot parse guard output" on a clean repository, because `set -- $sum` does not word-split
 # where zsh is concerned. A guard that fails differently per shell is a guard that gets deleted,
