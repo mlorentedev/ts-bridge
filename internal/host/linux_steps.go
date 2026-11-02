@@ -195,20 +195,21 @@ func readIptables(r Runner, port int) firewallRead {
 	if err != nil {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
 	}
-	rules, jump := iptBeforeQualifiedJump(string(out))
+	input := iptRules(string(out))
+	rules, jump := iptBeforeQualifiedJump(input)
 	if slices.ContainsFunc(strings.Split(rules, "\n"), iptTSInputJump) {
 		chain, err := r.Output(backendIPT, "-S", tsInputChain)
 		if err != nil {
 			return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S %s: %v", tsInputChain, err)}
 		}
-		rules = iptInlineChain(rules, string(chain))
+		rules = iptInlineChain(rules, iptRules(string(chain)))
 	}
 	state, rule := iptablesDecide(rules, port)
 	if state == ruleAbsent && jump != "" {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("INPUT reaches %s through %q, which ts-bridge cannot evaluate", tsInputChain, jump),
 			fix: fmt.Sprintf("allow TCP %d inbound on the Tailscale interface ahead of %q, or confirm by hand that the jump admits it", port, jump)}
 	}
-	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: iptSetupCopies(string(out), port)}
+	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: iptSetupCopies(input, port)}
 }
 
 // iptInlineChain puts the ts-input chain's rules in place of each unqualified
@@ -250,9 +251,6 @@ func iptTSInputJump(line string) bool {
 	return slices.Equal(strings.Fields(line), tsInputJump)
 }
 
-// iptQualifiedTSInputJump returns the first INPUT rule that jumps or goes to
-// ts-input in any form but tailscaled's unqualified jump, or "". Quoted values
-// are blanked first, so a comment that spells a jump is not one.
 // iptBeforeQualifiedJump splits INPUT at the first rule that jumps or goes to
 // ts-input in any form but tailscaled's unqualified jump. It returns the rules
 // before that one and the rule itself, or all of INPUT and "". Quoted values
@@ -271,6 +269,36 @@ func iptBeforeQualifiedJump(input string) (string, string) {
 		}
 	}
 	return input, ""
+}
+
+// iptRules cuts `iptables -S` output into one rule per line, once, before any
+// reader splits it (#540). xtables_save_string escapes only `\` and `"`, so a
+// newline inside a quoted value (a `--comment`) prints raw, and the text after
+// it would read as a rule of its own; here it becomes a space. An unterminated
+// quote is not iptables' output: it is returned as printed, so the rules after
+// it are not swallowed into one line.
+func iptRules(out string) string {
+	b := []byte(out)
+	quoted, escaped := false, false
+	for i, c := range b {
+		switch {
+		case escaped:
+			escaped = false
+			if c == '\n' {
+				b[i] = ' '
+			}
+		case quoted && c == '\\':
+			escaped = true
+		case c == '"':
+			quoted = !quoted
+		case quoted && c == '\n':
+			b[i] = ' '
+		}
+	}
+	if quoted {
+		return out
+	}
+	return string(b)
 }
 
 // iptQuoted matches a quoted value (a `--comment` or `--string`), escaped
