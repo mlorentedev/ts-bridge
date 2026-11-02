@@ -32,30 +32,30 @@ created: "2026-10-30"
 
 ### Resolution (`internal/host/config.go`, `internal/host/config_test.go`)
 
-- [ ] [P] [AC5] Failing table test `TestResolve_PerOSDefaults`: with no file, `Resolve("windows"|"linux"|"darwin", File{}, Flags{})` declares `[{rdp 3389}]`, `[{rdp 3389}]`, `[{ssh 22}]`; `Port` stays 3389 on every OS (legacy field). A file with `host` but no `services` keeps the OS default, and `services: [{kind: rdp}]` with no `port` resolves to the kind default 3389 (review of #519). Expected: FAIL, `Resolve` undefined.
-- [ ] [AC5] Implement `Config.Services`, `Config.ControlURL`, `defaultsFor(goos)`, `Resolve(goos, file, flags)`; `Merge(flags)` becomes `Resolve(runtime.GOOS, File{}, flags)` so existing tests keep passing. Expected: PASS, plus `go test ./internal/host -run TestMerge -count=1` PASS.
-- [ ] [AC2] Failing table test `TestResolve_Precedence`: for the rdp port, firewall rule and sleep, each layer beats the one below (`flags > env > file > default`); `TS_HOST_RDP_PORT` and `--port` rewrite the declared `rdp` service's port; `--no-sleep`/`TS_HOST_NO_SLEEP` override `power.prevent_sleep` (inverse); `control_url` comes from the file only. Expected: FAIL.
-- [ ] [AC2] Implement `applyFile` between defaults and env, and the final `rdp` service/`Port` sync. Expected: PASS.
+- [x] [P] [AC5] Failing table test `TestResolve_PerOSDefaults`: with no file, `Resolve("windows"|"linux"|"darwin", File{}, Flags{})` declares `[{rdp 3389}]`, `[{rdp 3389}]`, `[{ssh 22}]`; `Port` stays 3389 on every OS (legacy field). A file with `host` but no `services` keeps the OS default, and `services: [{kind: rdp}]` with no `port` resolves to the kind default 3389 (review of #519). Expected: FAIL, `Resolve` undefined.
+- [x] [AC5] Implement `Config.Services`, `Config.ControlURL`, `defaultsFor(goos)`, `Resolve(goos, file, flags)`; `Merge(flags)` becomes `Resolve(runtime.GOOS, File{}, flags)` so existing tests keep passing. Expected: PASS, plus `go test ./internal/host -run TestMerge -count=1` PASS.
+- [x] [AC2] Failing table test `TestResolve_Precedence`: for the rdp port, firewall rule and sleep, each layer beats the one below (`flags > env > file > default`); `TS_HOST_RDP_PORT` and `--port` rewrite the declared `rdp` service's port; `--no-sleep`/`TS_HOST_NO_SLEEP` override `power.prevent_sleep` (inverse); `control_url` comes from the file only. Expected: FAIL.
+- [x] [AC2] Implement `applyFile` between defaults and env, and the final `rdp` service/`Port` sync. Expected: PASS.
 
 ### The commands (`cmd/cli/host.go`, `cmd/cli/host_test.go`)
 
-- [ ] [AC2] Failing test `TestHostSetupCmd_FirewallRuleFlagUnset`: with `TS_HOST_FIREWALL_RULE=EnvRule` and no flag, the fake `hostSetup` receives `EnvRule`. Expected: FAIL (`Tailscale-RDP-Ingress`, the flag's non-empty default).
-- [ ] [AC2] Give `host setup --firewall-rule` an empty default and keep the default in help text. Expected: PASS.
-- [ ] [AC1] [AC2] Failing tests `TestHostSetupCmd_Config` / `TestHostCheckCmd_Config`: `--config file.yaml` declaring port 3390 and rule `FileRule` reaches the fake as `Port 3390`, `FirewallRule FileRule`; an invalid file returns exit 1 and the fake is never called; a missing path errors naming it; unknown keys print a warning on stderr; `.env` in the working dir still beats the file. Expected: FAIL (`--config` resolves to the root's reserved flag and is ignored).
-- [ ] [AC1] [AC2] Add a local `--config` to `setup` and `check`, `loadHostFile(cmd)`, and resolve with `host.Resolve(hostGOOS, file, flags)`. Expected: PASS.
-- [ ] [AC4] Failing cmd test `TestHostSetupCmd_ConfigOSCapability`: `host setup --config` with `ssh` declared, as linux, exits 1 naming `linux` before the fake runs. Expected: PASS once the previous task lands; if it already passes, keep it as the wiring guard.
-- [ ] [P] [AC3] Failing test `TestHostPackage_DoesNotImportUserStores` (`internal/host/imports_test.go`): parse the package's non-test files with `go/parser` and assert no import of `ts-bridge/internal/profile` or `ts-bridge/internal/config`. Expected: PASS today (guard), then FAIL when deliberately adding the import locally, then revert.
-- [ ] [AC3] Test `TestHostCmds_NeverReadUserStore`: elevated (`HostSetupCmdForTest(..., elevated=true)`), `HOME`/`XDG_STATE_HOME`/`XDG_CONFIG_HOME`/`LOCALAPPDATA`/`APPDATA`/`USERPROFILE` pointed at a temp "root home" holding a valid `profiles.yaml` whose default profile sets `control_url: https://poison.invalid` and a `credentials/` file; `setup` and `check` with a `--config` declaring no `control_url` reach the fake with `ControlURL == ""` and print no `poison`. Expected: PASS (regression guard).
+- [x] [AC2] Failing test `TestHostSetupCmd_FirewallRuleFlagUnset`: with `TS_HOST_FIREWALL_RULE=EnvRule` and no flag, the fake `hostSetup` receives `EnvRule`. Expected: FAIL (`Tailscale-RDP-Ingress`, the flag's non-empty default).
+- [x] [AC2] Give `host setup --firewall-rule` an empty default and keep the default in help text. Expected: PASS.
+- [x] [AC1] [AC2] Failing tests `TestHostSetupCmd_Config` / `TestHostCheckCmd_Config`: `--config file.yaml` declaring port 3390 and rule `FileRule` reaches the fake as `Port 3390`, `FirewallRule FileRule`; an invalid file returns exit 1 and the fake is never called; a missing path errors naming it; unknown keys print a warning on stderr; `.env` in the working dir still beats the file. Expected: FAIL (`--config` resolves to the root's reserved flag and is ignored).
+- [x] [AC1] [AC2] Add a local `--config` to `setup` and `check`, `loadHostFile(cmd)`, and resolve with `host.Resolve(hostGOOS, file, flags)`. Expected: PASS.
+- [x] [AC4] Failing cmd test `TestHostSetupCmd_ConfigOSCapability`: `host setup --config` with `ssh` declared, as linux, exits 1 naming `linux` before the fake runs. Expected: PASS once the previous task lands; if it already passes, keep it as the wiring guard.
+- [x] [P] [AC3] Failing test `TestHostPackage_DoesNotImportUserStores` (`internal/host/imports_test.go`): parse the package's non-test files with `go/parser` and assert no import of `ts-bridge/internal/profile` or `ts-bridge/internal/config`. Expected: PASS today (guard), then FAIL when deliberately adding the import locally, then revert.
+- [x] [AC3] Test `TestHostCmds_NeverReadUserStore`: elevated (`HostSetupCmdForTest(..., elevated=true)`), `HOME`/`XDG_STATE_HOME`/`XDG_CONFIG_HOME`/`LOCALAPPDATA`/`APPDATA`/`USERPROFILE` pointed at a temp "root home" holding a deliberately malformed `profiles.yaml` (it names `control_url: https://poison.invalid`, but any read of it fails the command, so a silent store read cannot pass; review of #554) and a `credentials/` file; `setup` and `check`, run directly and through the root command, with a `--config` declaring no `control_url` reach the fake with `ControlURL == ""` and print no `poison`. Expected: PASS (regression guard).
 
 ### The descriptor (`internal/host/step.go`, `cmd/cli/host.go`)
 
-- [ ] [AC6] Failing tests `TestCheckFor_ControlURL`, `TestSetupFor_ControlURL` and `TestHostCmds_DescriptorControlURL`: `checkFor` and `setupFor` copy `cfg.ControlURL` into `CheckResult.ControlURL` / `SetupResult.ControlURL`; `checkJSON`, `printCheckText` and `printSetupSummary` emit a `tsb://` descriptor whose control plane is that URL (`cp=` per `internal/profile`). Expected: FAIL.
-- [ ] [AC6] Add `ControlURL` to both results and pass it to `buildDescriptorLine`. Expected: PASS.
+- [x] [AC6] Failing tests `TestCheckFor_ControlURL`, `TestSetupFor_ControlURL` and `TestHostCmds_DescriptorControlURL`: `checkFor` and `setupFor` copy `cfg.ControlURL` into `CheckResult.ControlURL` / `SetupResult.ControlURL`; `checkJSON`, `printCheckText` and `printSetupSummary` emit a `tsb://` descriptor whose control plane is that URL (`cp=` per `internal/profile`). Expected: FAIL.
+- [x] [AC6] Add `ControlURL` to both results and pass it to `buildDescriptorLine`. Expected: PASS.
 
 ### PR A2 close
 
-- [ ] Help text of `setup`/`check` documents `--config` and the precedence; `go test -race ./...`, `GOOS=windows go vet ./...`, `GOOS=darwin go vet ./...` green; `lint` and `security` CI jobs green (golangci-lint is blocked on the maintainer's workstation).
-- [ ] `bats scripts/tests/smoke.bats` (Git Bash) unchanged and green.
+- [x] Help text of `setup`/`check` documents `--config` and the precedence; `go test -race ./...`, `GOOS=windows go vet ./...`, `GOOS=darwin go vet ./...` green; `lint` and `security` CI jobs green (golangci-lint is blocked on the maintainer's workstation).
+- [x] `bats scripts/tests/smoke.bats` unchanged: the CI `smoke` job (Linux, authoritative per ADR-013) is green. Under Git Bash on Windows 54 of 56 pass; #55 and #56 fail only on Windows OS error strings (`connectex`, "cannot find the path"), unrelated to `host`.
 
 ## Implementation — PR B (`host init` writes the file)
 

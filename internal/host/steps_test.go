@@ -258,3 +258,22 @@ func TestOutcomeSucceeded(t *testing.T) {
 		}
 	}
 }
+
+// The declared control_url reaches both results, for the descriptor (AC6).
+func TestCheckFor_ControlURL(t *testing.T) {
+	for _, goos := range []string{goosWindows, goosLinux, goosDarwin} {
+		got := checkFor(goos, Config{Port: 3389, ControlURL: "https://hs.example"}, &recordingRunner{})
+		if got.ControlURL != "https://hs.example" {
+			t.Errorf("%s: ControlURL = %q, want the declared one", goos, got.ControlURL)
+		}
+	}
+}
+
+func TestSetupFor_ControlURL(t *testing.T) {
+	for _, goos := range []string{goosWindows, goosLinux, goosDarwin} {
+		got := setupFor(goos, Config{Port: 3389, FirewallRule: "Rule", ControlURL: "https://hs.example"}, &recordingRunner{elevated: true})
+		if got.ControlURL != "https://hs.example" {
+			t.Errorf("%s: ControlURL = %q, want the declared one", goos, got.ControlURL)
+		}
+	}
+}

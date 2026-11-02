@@ -12,8 +12,9 @@ type SetupFlags = Flags
 
 // SetupResult holds the result of a host setup operation.
 type SetupResult struct {
-	RDPPort int
-	Steps   []SetupStep
+	RDPPort    int
+	ControlURL string // the declared control plane, for the descriptor
+	Steps      []SetupStep
 }
 
 // SetupStep describes a single setup step and its outcome. Success is
@@ -42,6 +43,7 @@ type CheckResult struct {
 	RDPEnabled  bool
 	FirewallOK  bool
 	TailscaleUp bool
+	ControlURL  string // the declared control plane, for the descriptor
 	Services    []Service
 	Steps       []SetupStep
 }

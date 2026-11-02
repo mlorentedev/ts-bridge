@@ -79,6 +79,21 @@ func HostCheckCmdForTest(t interface{ Cleanup(func()) }, check func(host.Config,
 	return newHostCheckCmd()
 }
 
+// HostCheckCmdOnForTest is HostCheckCmdForTest as goos.
+func HostCheckCmdOnForTest(t interface{ Cleanup(func()) }, goos string, check func(host.Config, *slog.Logger) (host.CheckResult, error)) *cobra.Command {
+	prevGOOS := hostGOOS
+	hostGOOS = goos
+	t.Cleanup(func() { hostGOOS = prevGOOS })
+	c := HostCheckCmdForTest(t, check)
+	c.SilenceUsage = true
+	return c
+}
+
+// PrintSetupSummaryForTest is a test-only wrapper for printSetupSummary.
+func PrintSetupSummaryForTest(w io.Writer, tsIP string, result host.SetupResult) {
+	printSetupSummary(w, tsIP, result)
+}
+
 // HostSetupCmdForTest returns a host setup command that runs setup instead of
 // host.Setup, as on goos, and treats the process as elevated or not.
 func HostSetupCmdForTest(t interface{ Cleanup(func()) }, goos string, elevated bool, setup func(host.Config, *slog.Logger) (host.SetupResult, error)) *cobra.Command {

@@ -4,6 +4,7 @@ package host
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -51,22 +52,82 @@ type Flags struct {
 	LogFormat    string
 }
 
-// Config holds the resolved host configuration after merge.
+// Config holds the resolved host configuration after merge. Port is the
+// legacy RDP port: it stays 3389 on every OS and mirrors the declared rdp
+// service's port when one is declared.
 type Config struct {
 	FirewallRule string
 	NoSleep      bool
 	Port         int
 	Verbose      bool
 	LogFormat    string
+	Services     []DeclaredService
+	ControlURL   string // declared control plane; empty means none declared
 }
 
-// Merge applies the precedence chain: flags > env > defaults.
-// Returns a fully-populated Config.
+// DeclaredService is one service the host is declared to serve, after defaults.
+type DeclaredService struct {
+	Kind string
+	Port int
+}
+
+// Merge applies the precedence chain flags > env > per-OS defaults for the
+// running OS, with no configuration file.
 func Merge(flags Flags) Config {
-	cfg := defaults()
+	return Resolve(runtime.GOOS, File{}, flags)
+}
+
+// Resolve applies the precedence chain flags > env > file > per-OS defaults
+// (ADR-017 §1). The file must already be validated for goos (LoadFile).
+func Resolve(goos string, file File, flags Flags) Config {
+	cfg := defaultsFor(goos)
+	applyFile(&cfg, file.Host)
 	applyEnv(&cfg)
 	applyFlags(&cfg, flags)
+	for i := range cfg.Services {
+		if cfg.Services[i].Kind == ServiceRDP {
+			cfg.Services[i].Port = cfg.Port
+		}
+	}
 	return cfg
+}
+
+// defaultsFor returns the built-in defaults with goos's default service.
+func defaultsFor(goos string) Config {
+	cfg := defaults()
+	kind := ServiceRDP
+	if goos == goosDarwin {
+		kind = ServiceSSH
+	}
+	cfg.Services = []DeclaredService{{Kind: kind, Port: defaultPorts[kind]}}
+	return cfg
+}
+
+// applyFile layers the declared state over the defaults. power.prevent_sleep
+// is the inverse of NoSleep.
+func applyFile(cfg *Config, h FileHost) {
+	if h.Services != nil {
+		cfg.Services = make([]DeclaredService, 0, len(h.Services))
+		for _, s := range h.Services {
+			port := defaultPorts[s.Kind]
+			if s.Port != nil {
+				port = *s.Port
+			}
+			cfg.Services = append(cfg.Services, DeclaredService{Kind: s.Kind, Port: port})
+			if s.Kind == ServiceRDP {
+				cfg.Port = port
+			}
+		}
+	}
+	if h.Firewall != nil && h.Firewall.Rule != nil {
+		cfg.FirewallRule = *h.Firewall.Rule
+	}
+	if h.Power != nil && h.Power.PreventSleep != nil {
+		cfg.NoSleep = !*h.Power.PreventSleep
+	}
+	if h.ControlURL != nil {
+		cfg.ControlURL = *h.ControlURL
+	}
 }
 
 // defaults returns a Config with built-in defaults.
