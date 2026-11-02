@@ -32,7 +32,7 @@ Examples:
   ts-bridge host check --json
 `,
 	}
-	cmd.AddCommand(newHostSetupCmd(), newHostCheckCmd(), newHostInitCmd())
+	cmd.AddCommand(newHostSetupCmd(), newHostCheckCmd(), newHostInitCmd(), newHostServeCmd())
 	return cmd
 }
 
