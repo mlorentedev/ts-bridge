@@ -232,6 +232,16 @@ func TestHostCmds_NeverReadUserStore(t *testing.T) {
 			})
 		}
 	}
+	t.Run("serve", func(t *testing.T) {
+		servePath, _ := serveFile(t, "")
+		got := runHostServe(t, serveGOOS(), []string{"--config", servePath}, []string{"tag:lab"}, nil)
+		if got.err != nil || got.starts != 1 || got.nc.ControlURL != "https://hs.example" {
+			t.Errorf("starts %d, ControlURL %q, err %v; want one start with the file's control plane", got.starts, got.nc.ControlURL, got.err)
+		}
+		if strings.Contains(got.stdout+got.stderr, "poison") {
+			t.Errorf("output reads the user store: %q", got.stdout+got.stderr)
+		}
+	})
 }
 
 // TestHostCmds_DescriptorControlURL: a declared control_url is the
