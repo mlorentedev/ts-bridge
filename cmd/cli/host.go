@@ -60,10 +60,11 @@ On macOS:
 
 Declared state:
   --config names a YAML host configuration file (version, host.services,
-  host.firewall.rule, host.power.prevent_sleep, host.control_url). Values
-  resolve flags > env (TS_HOST_*, including ./.env) > file > per-OS defaults.
-  An invalid file, or an entry this OS has no step for, exits 1 before any
-  step runs.
+  host.firewall.rule, host.power.prevent_sleep, host.control_url). Ports,
+  the firewall rule and sleep resolve flags > env (TS_HOST_*, including
+  ./.env) > file > per-OS defaults; host.control_url is read from the file
+  only. An invalid file, or an entry this OS has no step for, exits 1
+  before any step runs.
 
 Exit status:
   0  every step is ok, changed or manual (a manual step prints what is left to you)
