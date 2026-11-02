@@ -12,6 +12,7 @@ func TestLoadFile_Mesh(t *testing.T) {
   control_url: https://hs.example
   mesh:
     bootstrap_ssh: tsb@jump.example:2222
+    bootstrap_socks_addr: 127.0.0.1:1056
     hostname: lab-pc-01
     state_dir: 'C:\ProgramData\ts-bridge\serve'
     auth_key_file: 'C:\ProgramData\ts-bridge\authkey'
@@ -24,11 +25,12 @@ func TestLoadFile_Mesh(t *testing.T) {
 		t.Fatalf("LoadFile() error = %v", err)
 	}
 	want := &FileMesh{
-		BootstrapSSH: strPtr("tsb@jump.example:2222"),
-		Hostname:     strPtr("lab-pc-01"),
-		StateDir:     strPtr(`C:\ProgramData\ts-bridge\serve`),
-		AuthKeyFile:  strPtr(`C:\ProgramData\ts-bridge\authkey`),
-		HealthAddr:   strPtr("127.0.0.1:9099"),
+		BootstrapSSH:       strPtr("tsb@jump.example:2222"),
+		BootstrapSOCKSAddr: strPtr("127.0.0.1:1056"),
+		Hostname:           strPtr("lab-pc-01"),
+		StateDir:           strPtr(`C:\ProgramData\ts-bridge\serve`),
+		AuthKeyFile:        strPtr(`C:\ProgramData\ts-bridge\authkey`),
+		HealthAddr:         strPtr("127.0.0.1:9099"),
 	}
 	if !reflect.DeepEqual(got.Host.Mesh, want) {
 		t.Errorf("Mesh = %+v, want %+v", got.Host.Mesh, want)
@@ -54,6 +56,9 @@ func TestLoadFile_MeshInvalid(t *testing.T) {
 		{"empty state_dir", goosLinux, mesh(`state_dir: ""`), "host.mesh.state_dir: empty"},
 		{"empty auth_key_file", goosLinux, mesh(`auth_key_file: ""`), "host.mesh.auth_key_file: empty"},
 		{"empty health_addr", goosLinux, mesh(`health_addr: ""`), "host.mesh.health_addr: empty"},
+		{"empty bootstrap_socks_addr", goosLinux, mesh(`bootstrap_socks_addr: ""`), "host.mesh.bootstrap_socks_addr: empty"},
+		{"bootstrap SOCKS on every interface", goosLinux, mesh("bootstrap_socks_addr: 0.0.0.0:1055"), "host.mesh.bootstrap_socks_addr"},
+		{"bootstrap SOCKS port 0", goosLinux, mesh("bootstrap_socks_addr: 127.0.0.1:0"), "host.mesh.bootstrap_socks_addr"},
 		{"ssh option as endpoint", goosLinux, mesh(`bootstrap_ssh: -oProxyCommand=x`), "host.mesh.bootstrap_ssh"},
 		{"ssh user without host", goosLinux, mesh(`bootstrap_ssh: "user@"`), "host.mesh.bootstrap_ssh"},
 		{"ssh port 0", goosLinux, mesh(`bootstrap_ssh: jump:0`), "host.mesh.bootstrap_ssh"},

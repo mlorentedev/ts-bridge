@@ -14,15 +14,22 @@ import (
 // FileMesh is the host.mesh section: what host serve alone needs to join the
 // tailnet as a persistent node (HOST-008). Pointers tell absent from empty.
 type FileMesh struct {
-	BootstrapSSH *string `yaml:"bootstrap_ssh"`
-	Hostname     *string `yaml:"hostname"`
-	StateDir     *string `yaml:"state_dir"`
-	AuthKeyFile  *string `yaml:"auth_key_file"`
-	HealthAddr   *string `yaml:"health_addr"`
+	BootstrapSSH       *string `yaml:"bootstrap_ssh"`
+	BootstrapSOCKSAddr *string `yaml:"bootstrap_socks_addr"`
+	Hostname           *string `yaml:"hostname"`
+	StateDir           *string `yaml:"state_dir"`
+	AuthKeyFile        *string `yaml:"auth_key_file"`
+	HealthAddr         *string `yaml:"health_addr"`
 }
 
 // hostnameLabel is one DNS label: what the control plane accepts as a node name.
 var hostnameLabel = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
+
+// meshField is one string key of host.mesh.
+type meshField struct {
+	key   string
+	value *string
+}
 
 func validateMesh(m *FileMesh, hasControlURL bool, goos string, capab osCapability) error {
 	if m == nil {
@@ -31,17 +38,8 @@ func validateMesh(m *FileMesh, hasControlURL bool, goos string, capab osCapabili
 	if !capab.serve {
 		return fmt.Errorf("host.mesh: %s has no host serve in this version (#459)", goos)
 	}
-	fields := []struct {
-		key   string
-		value *string
-	}{
-		{"bootstrap_ssh", m.BootstrapSSH}, {"hostname", m.Hostname}, {"state_dir", m.StateDir},
-		{"auth_key_file", m.AuthKeyFile}, {"health_addr", m.HealthAddr},
-	}
-	for _, f := range fields {
-		if f.value != nil && *f.value == "" {
-			return fmt.Errorf("host.mesh.%s: empty; omit it or give it a value", f.key)
-		}
+	if err := checkMeshEmpty(m); err != nil {
+		return err
 	}
 	if err := validateBootstrapSSH(m.BootstrapSSH, hasControlURL); err != nil {
 		return err
@@ -49,15 +47,35 @@ func validateMesh(m *FileMesh, hasControlURL bool, goos string, capab osCapabili
 	if m.Hostname != nil && !hostnameLabel.MatchString(*m.Hostname) {
 		return errors.New("host.mesh.hostname: must be 1-63 letters, digits or inner hyphens")
 	}
-	for _, p := range []struct {
-		key   string
-		value *string
-	}{{"state_dir", m.StateDir}, {"auth_key_file", m.AuthKeyFile}} {
+	if err := checkMeshPaths(m, goos); err != nil {
+		return err
+	}
+	if err := validateLoopbackAddr("bootstrap_socks_addr", m.BootstrapSOCKSAddr); err != nil {
+		return err
+	}
+	return validateLoopbackAddr("health_addr", m.HealthAddr)
+}
+
+// checkMeshEmpty rejects an empty key, so it cannot pass for an absent one.
+func checkMeshEmpty(m *FileMesh) error {
+	for _, f := range []meshField{
+		{"bootstrap_ssh", m.BootstrapSSH}, {"bootstrap_socks_addr", m.BootstrapSOCKSAddr}, {"hostname", m.Hostname},
+		{"state_dir", m.StateDir}, {"auth_key_file", m.AuthKeyFile}, {"health_addr", m.HealthAddr},
+	} {
+		if f.value != nil && *f.value == "" {
+			return fmt.Errorf("host.mesh.%s: empty; omit it or give it a value", f.key)
+		}
+	}
+	return nil
+}
+
+func checkMeshPaths(m *FileMesh, goos string) error {
+	for _, p := range []meshField{{"state_dir", m.StateDir}, {"auth_key_file", m.AuthKeyFile}} {
 		if p.value != nil && !isAbsFor(goos, *p.value) {
 			return fmt.Errorf("host.mesh.%s: must be an absolute path on %s", p.key, goos)
 		}
 	}
-	return validateHealthAddr(m.HealthAddr)
+	return nil
 }
 
 func validateBootstrapSSH(endpoint *string, hasControlURL bool) error {
@@ -73,21 +91,21 @@ func validateBootstrapSSH(endpoint *string, hasControlURL bool) error {
 	return nil
 }
 
-// validateHealthAddr accepts a loopback host:port only: the endpoint reports
-// what the node publishes and must not be reachable from the network.
-func validateHealthAddr(addr *string) error {
+// validateLoopbackAddr accepts a loopback host:port only: the bootstrap SOCKS
+// listener and the health endpoint must not be reachable from the network.
+func validateLoopbackAddr(key string, addr *string) error {
 	if addr == nil {
 		return nil
 	}
 	h, p, err := net.SplitHostPort(*addr)
 	if err != nil {
-		return fmt.Errorf("host.mesh.health_addr: %w", err)
+		return fmt.Errorf("host.mesh.%s: %w", key, err)
 	}
 	if ip := net.ParseIP(h); h != "localhost" && (ip == nil || !ip.IsLoopback()) {
-		return errors.New("host.mesh.health_addr: must be a loopback address (127.0.0.1, [::1] or localhost)")
+		return fmt.Errorf("host.mesh.%s: must be a loopback address (127.0.0.1, [::1] or localhost)", key)
 	}
 	if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
-		return errors.New("host.mesh.health_addr: port must be between 1 and 65535")
+		return fmt.Errorf("host.mesh.%s: port must be between 1 and 65535", key)
 	}
 	return nil
 }

@@ -254,7 +254,7 @@ var (
 	serviceKeys  = []string{"kind", "port"}
 	firewallKeys = []string{"rule"}
 	powerKeys    = []string{"prevent_sleep"}
-	meshKeys     = []string{"bootstrap_ssh", "hostname", "state_dir", "auth_key_file", "health_addr"}
+	meshKeys     = []string{"bootstrap_ssh", "bootstrap_socks_addr", "hostname", "state_dir", "auth_key_file", "health_addr"}
 )
 
 // checkKeys walks the document as the decoder resolves it, so keys reached
