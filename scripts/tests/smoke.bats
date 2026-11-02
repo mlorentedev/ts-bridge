@@ -568,10 +568,12 @@ TARGET="100.64.0.1:3389"
   # api.tailscale.com for "API token invalid", and went red whenever the runner
   # could not reach it in time (#520).
   run bash -c 'TS_CONTROL_URL=http://127.0.0.1:1 TS_HEADSCALE_API_KEY=dummy-key "${BIN}" discover 2>stderr.log >stdout.log'
-  assert_failure
+  # 1, not just non-zero: a Go panic exits 2.
+  [ "$status" -eq 1 ]
   run cat stderr.log
   assert_contains "discover from Headscale"
   assert_contains "connection refused"
+  [[ "$output" != *"panic:"* && "$output" != *"goroutine "* ]]
   run cat stdout.log
   [ -z "$output" ]
 }
