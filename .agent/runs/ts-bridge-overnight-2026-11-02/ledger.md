@@ -17,3 +17,5 @@ Armed 2026-11-02T16:05:53Z, expires 2026-11-02T22:11:38Z. Cold start on 9374ed7:
 | 17:12 | #548 | PR-Agent one-sided bound: comment narrowed a2050ff; triaged | ok |
 | 17:15 | #549 | PR-Agent: per-source glob + connect/browser prefix applied 4db3cda; 2 declined with reasons | wrapper mutants FAIL; 13 pkgs ok |
 | 17:18 | #498 | PR #550 opened | check-attr unspecified→lf; 13 pkgs ok; lint 0 |
+| 17:27 | #547 #550 | re-review findings applied (0db1664 zone in no-port fallback; 29476f2/00e5217 CR byte check + working recovery hint); #548 #549 re-triaged | 13 pkgs ok; CRLF mutant FAIL |
+| 17:27 | #505 | PR #551 opened | 5 fixtures, RED first; bash+zsh OK; shellcheck clean |
