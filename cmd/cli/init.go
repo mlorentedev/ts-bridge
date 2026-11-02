@@ -131,7 +131,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if f.AuthKeyFile != "" {
 		key, err := readAuthKeyFile(f.AuthKeyFile)
 		if err != nil {
-			return fmt.Errorf("read auth key file: %w", err)
+			// readAuthKeyFile names the file in every error it returns (#401).
+			return err
 		}
 		f.AuthKey = key
 	}

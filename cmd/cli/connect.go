@@ -101,7 +101,8 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	if flags.AuthKeyFile != "" {
 		key, err := readAuthKeyFile(flags.AuthKeyFile)
 		if err != nil {
-			return fmt.Errorf("read auth key file: %w", err)
+			// readAuthKeyFile names the file in every error it returns (#401).
+			return err
 		}
 		flags.AuthKey = key
 	}
@@ -291,7 +292,7 @@ func readAuthKeyFile(path string) (string, error) {
 	// Resolve to absolute path for permission checks.
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("resolve path: %w", err)
+		return "", fmt.Errorf("resolve auth key file path: %w", err)
 	}
 
 	info, err := os.Stat(absPath)
