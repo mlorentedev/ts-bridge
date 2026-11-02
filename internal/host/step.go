@@ -59,21 +59,24 @@ func newStep(name string, outcome Outcome, message, fix string) SetupStep {
 
 // setupFor builds and runs the setup steps of goos. darwin has none until #459.
 func setupFor(goos string, cfg Config, r Runner) SetupResult {
+	var result SetupResult
 	switch goos {
 	case "windows":
-		return setupWindows(cfg, r)
+		result = setupWindows(cfg, r)
 	case "darwin":
-		return SetupResult{RDPPort: defaultRDPPort}
+		result = SetupResult{RDPPort: defaultRDPPort}
 	default:
-		return setupLinux(cfg, r)
+		result = setupLinux(cfg, r)
 	}
+	result.ControlURL = cfg.ControlURL
+	return result
 }
 
 // checkFor runs the read half of goos's setup steps and runs no mutating
 // command (the Linux iptables read is `iptables -S INPUT` through Output).
 // darwin declares no service until #459.
 func checkFor(goos string, cfg Config, r Runner) CheckResult {
-	result := CheckResult{TailscaleIP: tailscaleIP(r)}
+	result := CheckResult{TailscaleIP: tailscaleIP(r), ControlURL: cfg.ControlURL}
 	result.TailscaleUp = result.TailscaleIP != ""
 	result.Steps = []SetupStep{tailscaleStep(result.TailscaleIP)}
 	switch goos {
