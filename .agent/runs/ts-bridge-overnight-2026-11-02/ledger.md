@@ -43,3 +43,5 @@ Armed 2026-11-02T16:05:53Z, expires 2026-11-02T22:11:38Z. Cold start on 9374ed7:
 | 19:35 | #555 | MERGED under the grant at d0e4c8b; #499 board Done | lander |
 | 19:40 | #552 | PR-Agent security note (flow with: under env bypass) RED then fixed (8694942, brace depth) | fixtures bash+zsh; real 13/13 |
 | 19:52 | #552 | review check failed: PR-Agent action timeout (notice, not review); branch update reruns it | — |
+| 20:36 | #552 | review re-run failed again (no review published; third time on 81b5c9c); test-macos re-run green; left open for the owner | triage update 6 |
+| 20:40 | run | disarmed early: budget 8/8 spent, nothing left to land under the grant | report.md |
