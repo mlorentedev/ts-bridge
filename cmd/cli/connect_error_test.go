@@ -101,6 +101,10 @@ func TestConnectErrorHandling(t *testing.T) {
 			if !strings.Contains(err.Error(), c.errContains) {
 				t.Errorf("expected error to contain %q, got: %v", c.errContains, err)
 			}
+			// readAuthKeyFile names the file once; a caller re-wrapping it doubles it (#401).
+			if n := strings.Count(err.Error(), "auth key file: "); n > 1 {
+				t.Errorf("error carries %d auth key file prefixes, want at most one: %v", n, err)
+			}
 		})
 	}
 }
