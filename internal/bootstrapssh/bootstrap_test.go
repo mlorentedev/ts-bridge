@@ -311,10 +311,12 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "was not ready within 20ms") {
 		t.Fatalf("start() error = %v", err)
 	}
-	// The 5s parent also carries a deadline, so require the dial's own to be the 20ms
-	// readiness timeout, and require the dial to have ended on that deadline while the
-	// parent was still live. Both are conditions, not wall-clock ceilings: scheduling
-	// jitter under full-suite load cannot fail them (#402).
+	// The 5s parent also carries a deadline, so require the dial's own to be no later
+	// than the 20ms readiness timeout (the parent's would be ~5s away), and require the
+	// dial to have ended on that deadline while the parent was still live. Both are
+	// conditions, not wall-clock ceilings: scheduling jitter under full-suite load cannot
+	// fail them (#402). A deadline shorter than the timeout is not detected here; no
+	// lower bound survives scheduling jitter without becoming another fragile ceiling.
 	if !dialHasDeadline || dialRemaining > 20*time.Millisecond {
 		t.Fatalf("readiness dial deadline set = %t, remaining %s, want <= 20ms remaining",
 			dialHasDeadline, dialRemaining)
