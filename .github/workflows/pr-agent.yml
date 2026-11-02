@@ -145,11 +145,12 @@ jobs:
             exit 1
           fi
       # Capped below the job, and its failure left to the guard below, which is the
-      # one verdict on whether a review exists (#430).
+      # one verdict on whether a review exists (#430). Only on the paths that guard
+      # checks: a failed `/improve` or `/describe` has no guard and keeps the job red.
       - name: PR-Agent
         uses: The-PR-Agent/pr-agent@efdde4afe14aa401a3889012c7f3e9ef3081a430  # v0.49.0
         timeout-minutes: 14
-        continue-on-error: true
+        continue-on-error: ${{ github.event_name == 'pull_request' || contains(github.event.comment.body, '/review') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI__KEY: ${{ secrets.NAN_API_KEY }}
