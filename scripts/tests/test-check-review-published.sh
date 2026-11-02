@@ -173,6 +173,11 @@ run_case no-match 1 "published no review" none                                  
 run_case no-match 1 "published no review" "site/package-lock.json" '[config]
 model = "x"
 '                                                                                                  || fail=1
+# The repository's own .pr_agent.toml, not a replica: a spec archive and a site
+# lockfile bump (#538, #539) must read as nothing to review under the real list.
+real_toml=$(cat "$ROOT/.pr_agent.toml")
+run_case no-match 0 "nothing PR-Agent may read" "specs/archive/CI-514-x/proposal.md site/package-lock.json" "$real_toml" || fail=1
+run_case no-match 1 "published no review" "specs/archive/CI-514-x/proposal.md internal/host/linux_steps.go" "$real_toml" || fail=1
 
 if [ "$fail" -ne 0 ]; then
   echo "test-check-review-published: FAILED" >&2

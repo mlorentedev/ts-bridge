@@ -62,9 +62,13 @@ fi
 # list, or nothing when either read fails. PR-Agent reads the toml from the default
 # branch too, so a PR cannot widen its own ignore list here.
 reviewable_files() {
-  local cfg files
-  cfg=$(gh api "repos/${GITHUB_REPOSITORY}/contents/.pr_agent.toml?ref=${BASE_REF}" \
-    --jq '.content' 2>/dev/null | base64 -d 2>/dev/null) || return 0
+  local raw cfg files
+  # Each read stands alone: in `a | b` only b's status counts, and `base64 -d`
+  # on empty input exits 0, so a failed fetch would read as an empty config.
+  raw=$(gh api "repos/${GITHUB_REPOSITORY}/contents/.pr_agent.toml?ref=${BASE_REF}" \
+    --jq '.content' 2>/dev/null) || return 0
+  cfg=$(base64 -d <<<"$raw" 2>/dev/null) || return 0
+  [ -n "$cfg" ] || return 0
   files=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate \
     --jq '.[].filename' 2>/dev/null) || return 0
   CFG="$cfg" FILES="$files" python3 - <<'PY' 2>/dev/null || true
