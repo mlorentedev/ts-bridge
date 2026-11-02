@@ -129,7 +129,8 @@ AC1, AC2 and AC4 need the live control plane, so they gate on mlorentedev/kubela
   `reason=control_plane_unreachable`.
 - [ ] AC5: a `host.mesh` block with an unknown key warns, an empty key errors, and a
   `state_dir` writable by non-administrators is refused on Windows, and one that is not
-  `0700` and owned by root is refused on Linux.
+  `0700` and owned by root is refused on Linux; an `auth_key_file` that others may read is refused
+  on both.
 - [ ] AC6: with `host.mesh.health_addr` declared, `host check --json` reports, for each
   declared service, whether serve publishes it, and a service that serve does not
   publish (or serve not running, or a responder that does not name the file's node)

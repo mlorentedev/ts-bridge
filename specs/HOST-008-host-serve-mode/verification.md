@@ -9,9 +9,13 @@ created: "2026-10-30"
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [ ] AC1 (enrol, READY enrolled=true, live SSH/RDP handshake) -> commit `<hash>` / test `<name>` / live run
+- [ ] AC2 (restart without the key, enrolled=false, one node) -> commit `<hash>` / test `<name>` / live run
+- [ ] AC3 (only declared ports answer) -> commit `<hash>` / test `<name>`
+- [ ] AC4 (bootstrap and control-session loss, retry, recovery) -> commit `<hash>` / test `<name>` / live run
+- [ ] AC5 (host.mesh keys, state_dir and auth_key_file guards) -> commit `<hash>` / test `<name>`
+- [ ] AC6 (host check published, trusted responder) -> commit `<hash>` / test `<name>`
+- [ ] AC7 (untagged node refused) -> commit `<hash>` / test `<name>`
 
 ## Test status
 
