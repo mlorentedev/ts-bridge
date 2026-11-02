@@ -40,3 +40,6 @@ Armed 2026-11-02T16:05:53Z, expires 2026-11-02T22:11:38Z. Cold start on 9374ed7:
 | 19:10 | #555 | PR-Agent: toolchain premise softened to verified facts (b045e1e) | go.mod toolchain=0; GOTOOLCHAIN in .github=0 |
 | 19:19 | #555 | PR-Agent: bug/doc/telemetry fixtures added | 3 mutants FAIL; bash+zsh OK |
 | 19:19 | #552 | blank-line finding declined again (hygiene green on cce518c); nested-flow false red declined (fail-closed, by design) | hygiene success |
+| 19:35 | #555 | MERGED under the grant at d0e4c8b; #499 board Done | lander |
+| 19:40 | #552 | PR-Agent security note (flow with: under env bypass) RED then fixed (8694942, brace depth) | fixtures bash+zsh; real 13/13 |
+| 19:52 | #552 | review check failed: PR-Agent action timeout (notice, not review); branch update reruns it | — |
