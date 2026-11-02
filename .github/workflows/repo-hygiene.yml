@@ -39,6 +39,9 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq zsh
       - name: Conflict-marker guard rejects markers, tolerates setext headings
         run: bash scripts/tests/test-conflict-markers.sh
+      # Its own step, so one continue-on-error cannot switch off both the gate and this check (#514).
+      - name: Conflict-marker gate stays wired to block a merge
+        run: bash scripts/tests/test-hygiene-wiring.sh
       # Only a pull request's own commits are checked: history already on master cannot be
       # rewritten, so a push run would fail on commits nobody can fix.
       - name: Pull request commits carry no AI-attribution trailer
