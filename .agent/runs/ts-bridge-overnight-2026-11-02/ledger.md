@@ -12,3 +12,8 @@ Armed 2026-11-02T16:05:53Z, expires 2026-11-02T22:11:38Z. Cold start on 9374ed7:
 | 16:13 | #541 | first land refused (re-review after --update-branch); triaged; re-landing | — |
 | 16:44 | #402 | PR #548 opened (ready) | mutants M1/M2 FAIL, 400 stress runs ok, 13 pkgs ok, lint 0 |
 | 16:48 | #401 | criterion 1 PARKED (A refuse / B wizard keeps key), board Blocked; criteria 2-4 in PR #549 (Refs) | 4 RED/GREEN rows in PR body; 13 pkgs ok; lint 0 |
+| 17:05 | #541 | merged by the operator (land had refused: test-macos cancelled + re-review) | master 3683300 |
+| 17:25 | #547 | CodeRabbit Minor (IPv6 zone) applied b2b6ad2; triaged | 13 pkgs ok |
+| 17:25 | #548 | PR-Agent one-sided bound: comment narrowed a2050ff; triaged | ok |
+| 17:30 | #549 | PR-Agent: per-source glob + connect/browser prefix applied 4db3cda; 2 declined with reasons | wrapper mutants FAIL; 13 pkgs ok |
+| 17:35 | #498 | PR #550 opened | check-attr unspecified→lf; 13 pkgs ok; lint 0 |
