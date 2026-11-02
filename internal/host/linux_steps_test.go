@@ -977,3 +977,46 @@ func TestReadIptablesQualifiedJumpCopies(t *testing.T) {
 		t.Fatalf("got state %v copies %d, want present with 2 copies", got.state, got.copies)
 	}
 }
+
+// TestIptRules pins how `iptables -S` output is cut into rules (#540): a
+// newline inside a quoted value does not end a rule, and an unterminated quote
+// leaves the output as printed rather than swallowing the rules after it.
+func TestIptRules(t *testing.T) {
+	tests := []struct {
+		name, input, want string
+	}{
+		{"plain rules", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"},
+		{"a newline in a comment", "-A INPUT -m comment --comment \"a\nb\" -j DROP\n-A INPUT -j ts-input\n", "-A INPUT -m comment --comment \"a b\" -j DROP\n-A INPUT -j ts-input\n"},
+		{"an escaped quote before the newline", "-A INPUT -m comment --comment \"a\\\"\nb\" -j DROP\n", "-A INPUT -m comment --comment \"a\\\" b\" -j DROP\n"},
+		{"an escaped backslash ends no quote", "-A INPUT -m comment --comment \"a\\\\\" -j DROP\n-A INPUT -j ts-input\n", "-A INPUT -m comment --comment \"a\\\\\" -j DROP\n-A INPUT -j ts-input\n"},
+		{"an unterminated quote", "-A INPUT -m comment --comment \"a\n-A INPUT -j DROP\n", "-A INPUT -m comment --comment \"a\n-A INPUT -j DROP\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := iptRules(tt.input); got != tt.want {
+				t.Errorf("iptRules(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestReadIptablesMultilineComment pins that text after a newline in a
+// comment is never read as a rule (#540): not as an allow, which would fail
+// open, and not as a qualified jump into ts-input, which would fail closed.
+func TestReadIptablesMultilineComment(t *testing.T) {
+	tests := []struct {
+		name, input, chain string
+	}{
+		{"a comment that spells an allow", "-P INPUT ACCEPT\n-A INPUT -m comment --comment \"see\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT \" -j LOG\n", ""},
+		{"a comment that spells a qualified jump", "-P INPUT ACCEPT\n-A INPUT -m comment --comment \"see\n-A INPUT -i eth0 -j ts-input \" -j LOG\n-A INPUT -j ts-input\n", tsInputNoAccept},
+		{"a comment in ts-input that spells an allow", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n", tsInputNoAccept + "-A ts-input -m comment --comment \"see\n-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT \" -j LOG\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{output: map[string]string{iptRead: tt.input, iptChain: tt.chain}}
+			if got := readIptables(r, 3389); got.reason != "" || got.state != ruleAbsent {
+				t.Fatalf("got state %v reason %q, want absent with no reason", got.state, got.reason)
+			}
+		})
+	}
+}
