@@ -279,9 +279,9 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 	addr := listener.Addr().String()
 	_ = listener.Close()
 
-	var dialElapsed time.Duration
 	var dialRemaining time.Duration
 	var dialHasDeadline bool
+	var dialErr error
 	deps := dependencies{
 		lookPath: func(string) (string, error) { return "ssh", nil },
 		commandContext: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
@@ -294,10 +294,9 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 			var deadline time.Time
 			deadline, dialHasDeadline = ctx.Deadline()
 			dialRemaining = time.Until(deadline)
-			started := time.Now()
 			<-ctx.Done()
-			dialElapsed = time.Since(started)
-			return nil, ctx.Err()
+			dialErr = ctx.Err()
+			return nil, dialErr
 		},
 		pollInterval: time.Millisecond,
 	}
@@ -312,12 +311,17 @@ func TestStartEnforcesReadyTimeoutDuringDial(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "was not ready within 20ms") {
 		t.Fatalf("start() error = %v", err)
 	}
-	// Helper process startup/teardown is not part of the readiness dial deadline.
-	// The 5s parent also carries a deadline, so require the dial's own to be the 20ms readiness timeout.
-	// Elapsed time is only an upper bound because Windows clock resolution can read 0.
-	if !dialHasDeadline || dialRemaining > 20*time.Millisecond || dialElapsed > 200*time.Millisecond {
-		t.Fatalf("readiness dial deadline set = %t, remaining %s, took %s, want <= 20ms remaining and <= 200ms",
-			dialHasDeadline, dialRemaining, dialElapsed)
+	// The 5s parent also carries a deadline, so require the dial's own to be the 20ms
+	// readiness timeout, and require the dial to have ended on that deadline while the
+	// parent was still live. Both are conditions, not wall-clock ceilings: scheduling
+	// jitter under full-suite load cannot fail them (#402).
+	if !dialHasDeadline || dialRemaining > 20*time.Millisecond {
+		t.Fatalf("readiness dial deadline set = %t, remaining %s, want <= 20ms remaining",
+			dialHasDeadline, dialRemaining)
+	}
+	if !errors.Is(dialErr, context.DeadlineExceeded) || ctx.Err() != nil {
+		t.Fatalf("dial ended with %v while parent context reported %v; want the readiness deadline with the parent live",
+			dialErr, ctx.Err())
 	}
 }
 
