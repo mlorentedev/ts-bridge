@@ -79,7 +79,10 @@ func TestEnsureStateDir(t *testing.T) {
 
 	dir := filepath.Join(t.TempDir(), "serve")
 	err := EnsureStateDir(dir)
-	if errors.Is(err, windows.ERROR_INVALID_OWNER) || errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_PRIVILEGE_NOT_HELD) {
+	if !windows.GetCurrentProcessToken().IsElevated() {
+		if err == nil {
+			t.Fatal("EnsureStateDir succeeded unelevated; it must not be able to own the directory by Administrators")
+		}
 		t.Skipf("owning a directory by Administrators needs an elevated token: %v", err)
 	}
 	if err != nil {

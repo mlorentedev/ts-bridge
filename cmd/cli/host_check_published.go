@@ -38,6 +38,10 @@ func probeServePublished(file host.File, declared []host.DeclaredService) map[st
 		return published
 	}
 	defer resp.Body.Close()
+	// Not ready (a bootstrap or control outage): no client reaches the ports.
+	if resp.StatusCode != http.StatusOK {
+		return published
+	}
 	var body struct {
 		Node     string                `json:"node"`
 		Services []health.ServiceState `json:"services"`

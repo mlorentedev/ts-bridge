@@ -20,6 +20,7 @@ func TestCheckUnixSecretFile(t *testing.T) {
 		{"owned by a user", 0o600, 1000, "uid 1000"},
 		{"a directory", fs.ModeDir | 0o700, 0, "not a regular file"},
 		{"a symlink", fs.ModeSymlink | 0o600, 0, "not a regular file"},
+		{"setuid", fs.ModeSetuid | 0o600, 0, "setuid"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

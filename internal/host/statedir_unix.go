@@ -14,6 +14,7 @@ import (
 // CheckStateDir refuses a state directory that is not a 0700 directory owned
 // by root. A symlink is refused rather than followed.
 func CheckStateDir(path string) error {
+	path = filepath.Clean(path) // a trailing slash would make Lstat follow a final link
 	info, err := os.Lstat(path)
 	if err != nil {
 		return fmt.Errorf("state_dir %s: %w", path, err)
@@ -28,6 +29,7 @@ func CheckStateDir(path string) error {
 // EnsureStateDir creates an absent state directory with mode 0700, then checks
 // it. An existing directory is checked, never repaired.
 func EnsureStateDir(path string) error {
+	path = filepath.Clean(path)
 	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
 		if err := createStateDir(path); err != nil {
 			return fmt.Errorf("create state_dir %s: %w", path, err)
@@ -59,6 +61,7 @@ func createStateDir(path string) error {
 // CheckSecretFile refuses an auth key file that is not a root-owned regular
 // file, or that group or others may read. A symlink is refused, not followed.
 func CheckSecretFile(path string) error {
+	path = filepath.Clean(path)
 	info, err := os.Lstat(path)
 	if err != nil {
 		return fmt.Errorf("auth_key_file %s: %w", path, err)

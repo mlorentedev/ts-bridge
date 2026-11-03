@@ -152,3 +152,15 @@ func HostServeCmdForTest(
 	c.SilenceUsage = true
 	return c
 }
+
+// shippedServeKeyCheck is serveCheckKeyFile as the package initialised it,
+// captured before any test stubs it.
+var shippedServeKeyCheck = serveCheckKeyFile
+
+// UseProductionServeKeyCheckForTest undoes HostServeCmdForTest's key-check
+// stub, so the test runs the guard serve ships with.
+func UseProductionServeKeyCheckForTest(t interface{ Cleanup(func()) }) {
+	prev := serveCheckKeyFile
+	serveCheckKeyFile = shippedServeKeyCheck
+	t.Cleanup(func() { serveCheckKeyFile = prev })
+}

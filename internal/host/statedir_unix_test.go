@@ -22,8 +22,11 @@ func TestCheckStateDir_Symlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, fn := range map[string]func(string) error{"CheckStateDir": CheckStateDir, "EnsureStateDir": EnsureStateDir} {
-		if err := fn(link); err == nil || !strings.Contains(err.Error(), "not a directory") {
-			t.Errorf("%s(symlink) = %v, want it refused as not a directory", name, err)
+		// With a trailing slash POSIX resolves the final link; it must not help.
+		for _, p := range []string{link, link + "/"} {
+			if err := fn(p); err == nil || !strings.Contains(err.Error(), "not a directory") {
+				t.Errorf("%s(%q) = %v, want it refused as not a directory", name, p, err)
+			}
 		}
 	}
 }

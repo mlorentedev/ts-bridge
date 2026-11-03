@@ -38,9 +38,12 @@ type Supervisor struct {
 	Start     func(context.Context) (Tunnel, error)
 	Readiness Readiness
 	OnExit    func(error) // once per outage, e.g. to print the ERROR line
-	Base, Max time.Duration
-	Sleep     func(context.Context, time.Duration) error // nil sleeps on a timer
-	Jitter    func(time.Duration) time.Duration          // nil adds up to 20%
+	// OnStartError, if set, hears every failed restart and the delay before the
+	// next attempt, so a long outage says why it does not recover.
+	OnStartError func(err error, next time.Duration)
+	Base, Max    time.Duration
+	Sleep        func(context.Context, time.Duration) error // nil sleeps on a timer
+	Jitter       func(time.Duration) time.Duration          // nil adds up to 20%
 }
 
 // Run watches running until ctx ends, restarting it whenever it exits, and
@@ -74,10 +77,14 @@ func (s *Supervisor) restart(ctx context.Context) Tunnel {
 		if err := s.sleep(ctx, s.jitter(delay)); err != nil {
 			return nil
 		}
-		if t, err := s.Start(ctx); err == nil {
+		t, err := s.Start(ctx)
+		if err == nil {
 			return t
 		}
 		delay = min(delay*2, s.Max)
+		if s.OnStartError != nil {
+			s.OnStartError(err, delay)
+		}
 	}
 }
 

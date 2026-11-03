@@ -183,8 +183,11 @@ func startServeBootstrap(ctx context.Context, plan servePlan, stderr io.Writer, 
 		Start:     start,
 		Readiness: ready,
 		OnExit:    func(err error) { emitError(stderr, reasonSSHBootstrapFailed, err.Error()) },
-		Base:      defaults.DialBackoffBase,
-		Max:       defaults.DialBackoffMax,
+		OnStartError: func(err error, next time.Duration) {
+			plan.logger.Warn("SSH bootstrap restart failed", "error", err, "next_attempt_in", next)
+		},
+		Base: defaults.DialBackoffBase,
+		Max:  defaults.DialBackoffMax,
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
@@ -292,9 +295,5 @@ func startServeNode(ctx context.Context, nc serve.NodeConfig) (serveNode, []stri
 		_ = s.Close()
 		return nil, nil, err
 	}
-	var tags []string
-	if status.Self != nil && status.Self.Tags != nil {
-		tags = status.Self.Tags.AsSlice()
-	}
-	return s, tags, nil
+	return s, serve.NodeTags(status), nil
 }

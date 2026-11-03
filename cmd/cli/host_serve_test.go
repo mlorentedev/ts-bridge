@@ -467,3 +467,26 @@ func TestHostServeCmd_VerboseShowsNodeLogs(t *testing.T) {
 		}
 	}
 }
+
+// The shipped auth key guard runs on the real command path: a key file in the
+// user's temp dir (owned by the user, not root or Administrators) is refused
+// before the node starts (AC5, review of #560).
+func TestHostServeCmd_RefusesExposedKeyFile(t *testing.T) {
+	path, _ := serveFile(t, "")
+	started := 0
+	start := func(context.Context, serve.NodeConfig) (cmdpkg.ServeNodeForTest, []string, error) {
+		started++
+		return &fakeServeNode{}, []string{"tag:lab"}, nil
+	}
+	c := cmdpkg.HostServeCmdForTest(t, serveGOOS(), start, func(string) error { return nil })
+	cmdpkg.UseProductionServeKeyCheckForTest(t)
+	c.SetOut(io.Discard)
+	c.SetErr(io.Discard)
+	c.SetArgs([]string{"--config", path})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := c.ExecuteContext(ctx)
+	if started != 0 || cmdpkg.ExitCode(err) != 1 || err == nil || !strings.Contains(err.Error(), "auth_key_file") {
+		t.Errorf("started %d, err %v (exit %d); want no node and exit 1 naming auth_key_file", started, err, cmdpkg.ExitCode(err))
+	}
+}

@@ -297,7 +297,10 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 		logger.Error("host check failed", "error", err)
 		return fmt.Errorf("host check failed: %w", err)
 	}
-	result.Published = probeServePublished(file, cfg.Services)
+	// Only --json prints published, so only it spends the probe's timeout.
+	if jsonOut {
+		result.Published = probeServePublished(file, cfg.Services)
+	}
 
 	return reportCheck(cmd.OutOrStdout(), result, jsonOut)
 }

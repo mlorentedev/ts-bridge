@@ -32,6 +32,8 @@ func TestCheckUnixStateDir(t *testing.T) {
 		{"owned by a user", fs.ModeDir | 0o700, 1000, "uid 1000"},
 		{"a regular file", 0o700, 0, "not a directory"},
 		{"a symlink", fs.ModeSymlink | 0o777, 0, "not a directory"},
+		{"setgid", fs.ModeDir | fs.ModeSetgid | 0o700, 0, "setgid"},
+		{"sticky", fs.ModeDir | fs.ModeSticky | 0o700, 0, "sticky"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

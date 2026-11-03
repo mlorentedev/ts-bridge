@@ -52,6 +52,7 @@ func TestSupervisedBootstrap_Retries(t *testing.T) {
 	started := make(chan *fakeTunnel, 2)
 	var delays []time.Duration
 	var errs []error
+	var startErrs []time.Duration
 	ready := &fakeReadiness{}
 	s := &Supervisor{
 		Start: func(context.Context) (Tunnel, error) {
@@ -73,8 +74,11 @@ func TestSupervisedBootstrap_Retries(t *testing.T) {
 		},
 		Readiness: ready,
 		OnExit:    func(err error) { errs = append(errs, err) },
-		Base:      time.Second,
-		Max:       30 * time.Second,
+		OnStartError: func(err error, next time.Duration) {
+			startErrs = append(startErrs, next)
+		},
+		Base: time.Second,
+		Max:  30 * time.Second,
 		Sleep: func(ctx context.Context, d time.Duration) error {
 			delays = append(delays, d)
 			return ctx.Err()
@@ -106,6 +110,10 @@ func TestSupervisedBootstrap_Retries(t *testing.T) {
 	}
 	if len(errs) != 2 {
 		t.Errorf("OnExit called %d times, want once per outage (2): %v", len(errs), errs)
+	}
+	// Each of the 6 failed restarts is reported with the delay before the next.
+	if want := scale([]time.Duration{2, 4, 8, 16, 30, 30}); !slices.Equal(startErrs, want) {
+		t.Errorf("OnStartError delays = %v, want %v", startErrs, want)
 	}
 	want := []string{"down bootstrap ssh_bootstrap_failed", "up bootstrap", "down bootstrap ssh_bootstrap_failed", "up bootstrap"}
 	ready.mu.Lock()
