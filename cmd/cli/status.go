@@ -241,6 +241,7 @@ func formatDuration(d time.Duration) string {
 // Note: runtime.GOOS is a compile-time constant, so golangci-lint may flag
 // this as "always true/false" on non-Windows runners. The //nolint comment
 // below suppresses that false-positive lint warning.
+//
 //nolint:unparam // runtime.GOOS is platform-dependent, not always true
 func supportsClearScreen() bool {
 	return runtime.GOOS != windowsOS

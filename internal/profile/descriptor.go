@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	scheme   = "tsb"
-	cpSaas   = "saas"
-	maxPort  = 65535
+	scheme  = "tsb"
+	cpSaas  = "saas"
+	maxPort = 65535
 )
 
 // Descriptor is a shareable, copy-paste connection token for a ts-bridge host.
