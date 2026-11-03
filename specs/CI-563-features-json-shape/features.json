@@ -29,7 +29,7 @@
   },
   {
     "id": "CI-563-features-json-shape-f5",
-    "behavior": "The real tree either passes or every reported spec is listed in the PR.",
+    "behavior": "The check runs to a verdict on the real tree (exit 0 or 1, never 2); the PR lists every spec it reports, which is a review step and not machine-checkable.",
     "verification": "bash scripts/check-features-shape.sh; test $? -le 1",
     "state": "pending",
     "evidence": ""
