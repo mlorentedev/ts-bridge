@@ -8,8 +8,9 @@
 # `scripts/tests/fixtures/**` (inputs that are bad on purpose). Adding a script under a
 # covered path puts it in scope with no edit here.
 #
-# `-x` follows `source` directives annotated with `# shellcheck source-path=SCRIPTDIR`.
-# An empty scope fails: a glob that matches nothing must not read as a pass.
+# `-x` follows `source` directives annotated with `# shellcheck source-path=SCRIPTDIR` to
+# resolve what a covered script reads; it reports nothing found inside the sourced helper.
+# Each glob that matches nothing fails: an emptied depth must not read as a pass.
 #
 # Run: bash scripts/check-shellcheck.sh [root]  (default: the repository root)
 set -euo pipefail
@@ -20,8 +21,13 @@ cd "$ROOT"
 command -v shellcheck >/dev/null || { echo "check-shellcheck: shellcheck is not installed" >&2; exit 1; }
 
 shopt -s nullglob
-files=(scripts/*.sh scripts/tests/*.sh)
-[ "${#files[@]}" -gt 0 ] || { echo "check-shellcheck: no scripts under $ROOT/scripts" >&2; exit 1; }
+files=()
+for glob in 'scripts/*.sh' 'scripts/tests/*.sh'; do
+  # shellcheck disable=SC2206 # the glob must expand here
+  matched=($glob)
+  [ "${#matched[@]}" -gt 0 ] || { echo "check-shellcheck: no scripts match $ROOT/$glob" >&2; exit 1; }
+  files+=("${matched[@]}")
+done
 
 shellcheck -x "${files[@]}"
 echo "check-shellcheck: OK (${#files[@]} scripts)"

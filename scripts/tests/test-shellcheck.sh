@@ -57,8 +57,25 @@ mkdir -p "$tmp/fixture/scripts/tests/fixtures/x"
 write_bad "$tmp/fixture/scripts/tests/fixtures/x/bad.sh"
 expect "fixtures are not scanned" 0 "$tmp/fixture"
 
+# `-x` resolves a sourced helper without reporting on it: helpers stay out of scope.
+make_tree "$tmp/helper"
+mkdir -p "$tmp/helper/scripts/tests/helpers"
+write_bad "$tmp/helper/scripts/tests/helpers/bad.bash"
+printf '#!/usr/bin/env bash\n# shellcheck source-path=SCRIPTDIR\nsource helpers/bad.bash\n' \
+  >"$tmp/helper/scripts/tests/uses-helper.sh"
+expect "a sourced helper is not reported" 0 "$tmp/helper"
+
 mkdir -p "$tmp/empty/scripts/tests"
 expect "an empty scope fails closed" 1 "$tmp/empty"
+
+# Each covered depth fails closed on its own: one populated glob must not hide an empty one.
+make_tree "$tmp/no-tests"
+rm "$tmp/no-tests/scripts/tests/clean-test.sh"
+expect "an empty scripts/tests fails closed" 1 "$tmp/no-tests"
+
+make_tree "$tmp/no-top"
+rm "$tmp/no-top/scripts/clean.sh"
+expect "an empty scripts/ fails closed" 1 "$tmp/no-top"
 
 # The real tree is clean, which is what the CI step asserts.
 expect "the repository scripts pass" 0 "$ROOT"
