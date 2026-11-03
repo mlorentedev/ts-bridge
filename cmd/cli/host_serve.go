@@ -6,16 +6,20 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
+	"tailscale.com/client/local"
 
 	"ts-bridge/internal/bootstrapssh"
 	"ts-bridge/internal/config"
+	"ts-bridge/internal/health"
 	"ts-bridge/internal/host"
 	"ts-bridge/internal/serve"
 )
@@ -84,18 +88,17 @@ func runHostServe(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	sigCtx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	ctx, cancel := context.WithCancelCause(sigCtx)
-	defer cancel(nil)
 
-	closeBootstrap, err := startServeBootstrap(ctx, cancel, plan)
+	ready := &serve.Health{Status: new(health.TunnelStatus)}
+	stopBootstrap, err := startServeBootstrap(ctx, plan, cmd.ErrOrStderr(), ready)
 	if err != nil {
 		emitError(cmd.ErrOrStderr(), reasonSSHBootstrapFailed, err.Error())
 		return err
 	}
-	defer closeBootstrap()
-	return runServeNode(ctx, cmd.OutOrStdout(), cmd.ErrOrStderr(), plan)
+	defer stopBootstrap()
+	return runServeNode(ctx, cmd.OutOrStdout(), cmd.ErrOrStderr(), plan, ready)
 }
 
 // loadServePlan reads the host file and refuses, before anything starts, one
@@ -145,8 +148,10 @@ func serveServices(cfg host.Config) []serve.Service {
 }
 
 // startServeBootstrap starts the CLI-363 SSH bootstrap when host.mesh declares
-// one. Until PR 3's supervisor, its exit stops serve.
-func startServeBootstrap(ctx context.Context, cancel context.CancelCauseFunc, plan servePlan) (func(), error) {
+// one, then supervises it: an exit after start is reported once on stderr and
+// in readiness, and the tunnel is restarted with connect's backoff (AC4). The
+// returned func stops the supervisor and closes the tunnel.
+func startServeBootstrap(ctx context.Context, plan servePlan, stderr io.Writer, ready serve.Readiness) (func(), error) {
 	if plan.mesh.BootstrapSSH == nil {
 		return func() {}, nil
 	}
@@ -154,11 +159,16 @@ func startServeBootstrap(ctx context.Context, cancel context.CancelCauseFunc, pl
 	if plan.mesh.BootstrapSOCKSAddr != nil {
 		socks = *plan.mesh.BootstrapSOCKSAddr
 	}
-	tunnel, err := sshTunnelStarter(ctx, bootstrapssh.Config{
-		Endpoint:     *plan.mesh.BootstrapSSH,
-		SOCKSAddr:    socks,
-		ReadyTimeout: config.Defaults().ConnectTimeout,
-	})
+	defaults := config.Defaults()
+	tunnelCfg := bootstrapssh.Config{Endpoint: *plan.mesh.BootstrapSSH, SOCKSAddr: socks, ReadyTimeout: defaults.ConnectTimeout}
+	start := func(ctx context.Context) (serve.Tunnel, error) {
+		t, err := sshTunnelStarter(ctx, tunnelCfg)
+		if err != nil {
+			return nil, err
+		}
+		return t, nil
+	}
+	tunnel, err := start(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("start SSH control-plane bootstrap: %w", err)
 	}
@@ -167,17 +177,26 @@ func startServeBootstrap(ctx context.Context, cancel context.CancelCauseFunc, pl
 		return nil, fmt.Errorf("configure SSH control-plane bootstrap: %w", err)
 	}
 	plan.logger.Info("SSH control-plane bootstrap ready", "endpoint", *plan.mesh.BootstrapSSH, "socks_addr", socks)
-	go monitorBootstrap(ctx, tunnel, cancel)
-	return func() { _ = tunnel.Close() }, nil
+	sup := &serve.Supervisor{
+		Start:     start,
+		Readiness: ready,
+		OnExit:    func(err error) { emitError(stderr, reasonSSHBootstrapFailed, err.Error()) },
+		Base:      defaults.DialBackoffBase,
+		Max:       defaults.DialBackoffMax,
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); sup.Run(runCtx, tunnel) }()
+	return func() { cancel(); <-done }, nil
 }
 
 // runServeNode brings the node up, refuses it without tags, publishes the
-// services, prints READY and serves until ctx ends.
-func runServeNode(ctx context.Context, stdout, stderr io.Writer, plan servePlan) error {
+// services, serves health, prints READY and serves until ctx ends.
+func runServeNode(ctx context.Context, stdout, stderr io.Writer, plan servePlan, ready *serve.Health) error {
 	node, tags, err := serveNodeStarter(ctx, plan.node)
 	if err != nil {
-		if cause := emitRunCause(ctx, stderr); cause != nil {
-			return cause
+		if ctx.Err() != nil {
+			return nil
 		}
 		reason, _, _ := diagnoseTailscaleInitError(err)
 		emitError(stderr, reason, err.Error())
@@ -195,12 +214,49 @@ func runServeNode(ctx context.Context, stdout, stderr io.Writer, plan servePlan)
 		return err
 	}
 	defer func() { _ = published.Close() }()
+	watchServeControl(ctx, node, ready, plan.logger)
+	ready.Up("serve")
+	if plan.mesh.HealthAddr != nil {
+		srv := health.StartServerWithReport(*plan.mesh.HealthAddr, ready.Status, serveReport(plan), plan.logger)
+		defer shutdownHealth(srv)
+	}
 	fmt.Fprintln(stdout, formatServeReady(plan.node.Hostname, plan.services, plan.node.Enrolling))
 	<-ctx.Done()
-	if cause := emitRunCause(ctx, stderr); cause != nil && !errors.Is(cause, context.Canceled) {
-		return cause
-	}
 	return nil
+}
+
+// serveReport names the node and reports every declared service published:
+// Publish opened them all, or serve did not get this far.
+func serveReport(plan servePlan) health.Report {
+	services := make([]health.ServiceState, 0, len(plan.services))
+	for _, s := range plan.services {
+		services = append(services, health.ServiceState{Kind: s.Kind, Port: s.Port, Published: true})
+	}
+	return func() (string, []health.ServiceState) { return plan.node.Hostname, services }
+}
+
+// watchServeControl reports the node's control session on readiness when the
+// node exposes its local API (a tsnet.Server does).
+func watchServeControl(ctx context.Context, node serveNode, ready serve.Readiness, logger *slog.Logger) {
+	n, ok := node.(interface{ LocalClient() (*local.Client, error) })
+	if !ok {
+		return
+	}
+	lc, err := n.LocalClient()
+	if err == nil {
+		var states <-chan string
+		if states, err = serve.NodeStates(ctx, lc); err == nil {
+			go serve.WatchControlSession(ctx, states, ready)
+			return
+		}
+	}
+	logger.Warn("control session not watched; /health/ready will not report its loss", "error", err)
+}
+
+func shutdownHealth(srv *http.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(ctx)
 }
 
 func formatServeReady(node string, services []serve.Service, enrolled bool) string {

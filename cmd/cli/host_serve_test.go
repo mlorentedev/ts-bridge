@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	cmdpkg "ts-bridge/cmd/cli"
 	"ts-bridge/internal/bootstrapssh"
@@ -84,6 +86,129 @@ func runHostServeOn(t *testing.T, node *fakeServeNode, goos string, args []strin
 	run.err = c.ExecuteContext(ctx)
 	run.stdout, run.stderr = out.String(), errOut.String()
 	return run
+}
+
+// syncBuffer is a bytes.Buffer safe to read while serve writes to it.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// liveServe is a host serve run that keeps running until stop.
+type liveServe struct {
+	stdout, stderr *syncBuffer
+	done           chan error
+	stop           context.CancelFunc
+}
+
+// startHostServe runs host serve in the background with a tagged fake node.
+func startHostServe(t *testing.T, args []string) *liveServe {
+	t.Helper()
+	start := func(context.Context, serve.NodeConfig) (cmdpkg.ServeNodeForTest, []string, error) {
+		return &fakeServeNode{}, []string{"tag:lab"}, nil
+	}
+	c := cmdpkg.HostServeCmdForTest(t, serveGOOS(), start, func(string) error { return nil })
+	ls := &liveServe{stdout: &syncBuffer{}, stderr: &syncBuffer{}, done: make(chan error, 1)}
+	c.SetOut(ls.stdout)
+	c.SetErr(ls.stderr)
+	c.SetArgs(args)
+	ctx, cancel := context.WithCancel(context.Background())
+	ls.stop = cancel
+	go func() { ls.done <- c.ExecuteContext(ctx) }()
+	t.Cleanup(func() { cancel(); <-ls.done })
+	waitFor(t, "READY", func() bool { return strings.Contains(ls.stdout.String(), "READY ") })
+	return ls
+}
+
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func freeLoopbackAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	return ln.Addr().String()
+}
+
+// After READY a dead bootstrap is reported once and restarted: serve keeps
+// running and /health/ready reads not ready until the tunnel is back (AC4).
+func TestHostServeCmd_BootstrapRestarts(t *testing.T) {
+	addr := freeLoopbackAddr(t)
+	path, _ := serveFile(t, "    bootstrap_ssh: tsb@jump.example\n    health_addr: "+addr+"\n")
+	tunnels := make(chan *fakeBootstrap, 4)
+	cmdpkg.SetServeBootstrapForTest(t,
+		func(context.Context, bootstrapssh.Config) (cmdpkg.ControlBootstrapForTest, error) {
+			b := &fakeBootstrap{done: make(chan struct{})}
+			tunnels <- b
+			return b, nil
+		},
+		func(context.Context, string, string) error { return nil })
+	ls := startHostServe(t, []string{"--config", path})
+	first := <-tunnels
+	waitFor(t, "ready health", func() bool { code, _ := getReady(addr); return code == 200 })
+
+	_ = first.Close() // the SSH child dies
+	waitFor(t, "ERROR line", func() bool { return strings.Contains(ls.stderr.String(), "ERROR reason=ssh_bootstrap_failed") })
+	select {
+	case err := <-ls.done:
+		t.Fatalf("serve exited on a bootstrap outage: %v", err)
+	default:
+	}
+	select {
+	case <-tunnels:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the bootstrap was not restarted")
+	}
+	waitFor(t, "ready again", func() bool { code, _ := getReady(addr); return code == 200 })
+	if n := strings.Count(ls.stderr.String(), "ERROR reason=ssh_bootstrap_failed"); n != 1 {
+		t.Errorf("%d ERROR lines for one outage, want 1", n)
+	}
+}
+
+// /health/ready on host.mesh.health_addr names the node and what serve
+// publishes, so host check can trust it (AC6).
+func TestHostServeCmd_Health(t *testing.T) {
+	addr := freeLoopbackAddr(t)
+	path, _ := serveFile(t, "    health_addr: "+addr+"\n")
+	startHostServe(t, []string{"--config", path})
+	code, body := getReady(addr)
+	want := `"node":"lab-01","services":[{"kind":"rdp","port":3390,"published":true}]`
+	if code != 200 || !strings.Contains(body, want) {
+		t.Errorf("/health/ready = %d %s, want 200 with %s", code, body, want)
+	}
+}
+
+func getReady(addr string) (int, string) {
+	resp, err := (&http.Client{Timeout: time.Second}).Get("http://" + addr + "/health/ready")
+	if err != nil {
+		return 0, err.Error()
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
 }
 
 // serveGOOS is the OS serve runs as here: this one, or linux on macOS, which

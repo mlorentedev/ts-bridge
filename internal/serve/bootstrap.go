@@ -40,7 +40,7 @@ type Supervisor struct {
 	OnExit    func(error) // once per outage, e.g. to print the ERROR line
 	Base, Max time.Duration
 	Sleep     func(context.Context, time.Duration) error // nil sleeps on a timer
-	Jitter    func(time.Duration) time.Duration         // nil adds up to 20%
+	Jitter    func(time.Duration) time.Duration          // nil adds up to 20%
 }
 
 // Run watches running until ctx ends, restarting it whenever it exits, and
