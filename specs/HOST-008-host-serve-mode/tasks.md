@@ -48,8 +48,8 @@ created: "2026-10-30"
 ### Forwarding (`internal/serve/publish.go`, `internal/serve/publish_test.go`)
 
 - [x] [P] [AC3] Failing test `TestPublish_OnlyDeclaredPorts`: with a fake `Listener` (`Listen(network, addr string) (net.Listener, error)`, the `tsnet.Server` method), `Publish` for `[{rdp 3389} {ssh 22}]` listens on exactly `:3389` and `:22`. Expected: FAIL, package missing.
-- [x] [AC3] Failing test `TestPublish_ForwardsToLoopback`: a connection accepted on the fake `:3389` reaches a local echo server standing in for `127.0.0.1:3389` (dialer injected), and bytes round-trip; closing the context stops every accept loop. Expected: FAIL.
-- [x] [AC3] Implement `Publish(ctx, l Listener, services []host.Service, dial)`: one `proxy.AcceptLoop` per service with a dialer to `127.0.0.1:<port>`. Expected: PASS.
+- [x] [AC3] Failing test `TestPublish_ForwardsToLoopback`: a connection accepted on the fake `:3389` reaches a local echo server standing in for `127.0.0.1:3389` (dialer injected), and bytes round-trip; `Published.Close()` stops every accept loop and the port refuses afterwards. Expected: FAIL.
+- [x] [AC3] Implement `Publish(node, services, dialer, base config.Config, logger) (*Published, error)`: one `proxy.AcceptLoop` per service with a dialer to `127.0.0.1:<port>`; `Published.Close()` is the shutdown (review of #558). Expected: PASS.
 
 ### Enrolment (`internal/serve/node.go`)
 
@@ -73,6 +73,7 @@ created: "2026-10-30"
 
 - [x] [P] [AC4] Failing test `TestSupervisedBootstrap_Retries`: with a fake tunnel starter and a fake sleep, a tunnel that exits after `READY` emits `ERROR reason=ssh_bootstrap_failed` once per outage, marks health not ready with that reason, restarts with backoff from 1 s doubling to 30 s with jitter (`DialBackoffBase`/`DialBackoffMax` defaults), and on a successful restart marks health ready and resets the backoff; a cancelled context stops it. Expected: FAIL.
 - [x] [AC4] Implement the supervisor; `host serve` uses it instead of `monitorBootstrap`'s cancel-on-exit. Expected: PASS.
+- [x] [AC4] Command tests: `TestHostServeCmd_Bootstrap` (PR 2: a tunnel that cannot start emits `ssh_bootstrap_failed`, starts no node, exits 1) and `TestHostServeCmd_BootstrapRestarts` (a tunnel that dies after `READY` gives one `ERROR` line, `/health/ready` 503 with `ssh_bootstrap_failed`, a restart and 200 again, serve still running) (review of #525).
 - [x] [P] [AC4] Failing test `TestServeHealth_ControlSession`: with a fake node-state source (the IPN bus states `tsnet` reports), a state other than `Running` after `READY` marks `/health/ready` not ready with `reason=control_plane_unreachable`, and `Running` again marks it ready; serve itself does not reconnect (tsnet's control client retries). Expected: FAIL, then implement the watcher over `LocalClient.WatchIPNBus`. Expected: PASS.
 
 ### Health (`internal/health`, `internal/serve`)
