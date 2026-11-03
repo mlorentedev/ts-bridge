@@ -35,7 +35,7 @@ func CheckStateDir(path string) error {
 	if err != nil {
 		return fmt.Errorf("state_dir %s: read its permissions: %w", path, err)
 	}
-	return checkWindowsDACL("state_dir", path, sd)
+	return checkWindowsDACL(keyStateDir, path, sd)
 }
 
 // EnsureStateDir creates an absent state directory with stateDirSDDL, then
@@ -155,5 +155,5 @@ func CheckSecretFile(path string) error {
 	if err != nil {
 		return fmt.Errorf("auth_key_file %s: read its permissions: %w", path, err)
 	}
-	return checkWindowsDACL("auth_key_file", path, sd)
+	return checkWindowsDACL(keyAuthKeyFile, path, sd)
 }
