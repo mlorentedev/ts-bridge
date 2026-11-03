@@ -26,7 +26,9 @@ that cannot finish.
 ## What
 
 `ts-bridge host serve --config <path>`: a foreground process, like `connect`, that joins
-the tailnet as a persistent node and publishes the host's declared services.
+the tailnet as a persistent node and publishes the host's declared services. It runs on
+Windows and Linux; on macOS a host file with `host.mesh` is refused citing #459, which
+owns the macOS host.
 
 - Reads the ADR-017 host file (`--config`, HOST-005). It publishes exactly the services
   `host.services` declares (kind and port), each forwarded from the tailnet to

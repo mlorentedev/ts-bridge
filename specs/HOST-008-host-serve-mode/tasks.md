@@ -62,6 +62,7 @@ created: "2026-10-30"
 - [ ] [AC1] [AC2] Failing test `TestHostServeCmd_Ready`: with fake node and bootstrap starters, serve prints `READY node=<hostname> services=rdp:3389,ssh:22 enrolled=true` on stdout (then `enrolled=false` with state present) and publishes the resolved services. Expected: FAIL.
 - [ ] [AC1] [AC2] Implement `host serve --config`: `LoadFile`, `Resolve`, `EnsureStateDir`, the CLI-363 bootstrap when `bootstrap_ssh` is set (SOCKS on `bootstrap_socks_addr`, default `127.0.0.1:1055` as `connect`), `tsnet.Server.Up`, `Publish`, `READY`; init failures emit `ERROR reason=...` as `connect`. Expected: PASS.
 - [ ] [AC7] Failing test `TestHostServeCmd_RefusesUntaggedNode`: when the fake node's status after `Up` has no tags, serve emits `ERROR reason=node_not_tagged`, prints no `READY`, never calls `Publish`, closes the node and exits 1. Expected: FAIL, then implement the check on `status.Self.Tags`. Expected: PASS.
+- [ ] [AC1] Wiring test `TestRootCmd_ReachesHostServe`: `NewRootCmd().Find(["host","serve"])` resolves the serve command under `host`, with its local `--config` (#279 / ADR-013 class; review of #525). Expected: FAIL until registered.
 - [ ] [AC5] Extend `TestHostCmds_NeverReadUserStore` to `host serve` (fake node): no store read under the malformed-store fixture. Expected: PASS.
 
 - [ ] PR 2 close: `go test ./...`, cross-GOOS vet, `smoke.bats` green; CI `test` (`-race`), `test-windows`, `lint`, `security` green.
