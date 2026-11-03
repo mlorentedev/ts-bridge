@@ -169,8 +169,9 @@ jobs:
           # the key. The workflow file IS read from the PR head, so the model travels
           # here and the toml keeps every other setting. Env wins over the file in
           # PR-Agent's settings order; keep the two in step.
-          CONFIG__MODEL: openai/mimo-v2.6-flash
-          CONFIG__FALLBACK_MODELS: '["openai/deepseek-v4-flash"]'
+          # Order and reasons: the comment above `model` in .pr_agent.toml (#542).
+          CONFIG__MODEL: openai/deepseek-v4-flash
+          CONFIG__FALLBACK_MODELS: '["openai/mimo-v2.6-flash"]'
           CONFIG__CUSTOM_MODEL_MAX_TOKENS: "200000"
           # Stream every NaN call (#430). Non-streamed, a request NaN holds open sits
           # silent past `ai_timeout`, which bounds the gap between reads, not the call:

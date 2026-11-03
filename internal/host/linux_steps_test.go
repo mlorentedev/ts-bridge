@@ -103,6 +103,20 @@ const (
 	tsInputNoAccept = "-N ts-input\n-A ts-input -s 100.64.0.5/32 -i lo -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n-A ts-input -p udp -m udp --dport 41641 -j ACCEPT\n"
 )
 
+// A ufw host's `iptables -S INPUT` with tailscaled's jump inserted, verbatim
+// from ufw 0.36.2 and iptables 1.8.10 (nf_tables) in alpine:3.20, ufw enabled
+// with `ufw allow 22/tcp` (specs/BUG-530-ufw-reads-ts-input/verification.md).
+// ufw lists none of it in `ufw show added` (#530). ufwHostCopies adds setup's
+// own rule twice, as on a host set up before #477 that installed ufw later.
+const (
+	ufwHostAdded  = ufwAddedHeader + "ufw allow 22/tcp\n"
+	ufwHostInput  = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -j ufw-before-logging-input\n-A INPUT -j ufw-before-input\n-A INPUT -j ufw-after-input\n-A INPUT -j ufw-after-logging-input\n-A INPUT -j ufw-reject-input\n-A INPUT -j ufw-track-input\n"
+	ufwHostCopies = ufwHostInput + iptSetupRule + iptSetupRule
+)
+
+// ufwIpt is a ufw host: ufw manages the rules, iptables is the binary under it.
+var ufwIpt = map[string]bool{"ufw": true, "iptables": true}
+
 var xrdpReads = []string{"lookpath systemctl", "output " + isEnabled, "output " + isActive}
 
 // TestIptablesCovers feeds verbatim `iptables -S INPUT` lines (iptables 1.8.10,
@@ -196,6 +210,13 @@ func TestIptablesRule(t *testing.T) {
 		{"no exit status", &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, fail: map[string]bool{iptRead: true}}, ruleUnknown, ""},
 		{"no backend", &recordingRunner{elevated: true}, ruleUnknown, ""},
 		{"not root", &recordingRunner{onPath: map[string]bool{"iptables": true}}, ruleUnknown, ""},
+		// #530: ufw does not list tailscaled's rules, so a ufw host reads iptables too.
+		{"ufw host, present inside ts-input", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputDefault}}, rulePresent, ""},
+		{"ufw host, nothing covers", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept}}, ruleAbsent, ""},
+		{"ufw host, iptables unreadable", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded}, exit: map[string]int{iptRead: 4}}, ruleUnknown, iptRead},
+		{"ufw host, a qualified jump", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: iptQualified}}, ruleUnknown, "ts-input"},
+		{"ufw host, a ufw allow decides first", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}, exit: map[string]int{iptRead: 4}}, rulePresent, ""},
+		{"ufw host, a ufw deny decides first", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwAddedHeader + "ufw deny 3389/tcp\n", iptRead: ufwHostInput, iptChain: tsInputDefault}}, ruleBlocked, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -272,6 +293,7 @@ func linuxUp(extra map[string]string) map[string]string {
 func TestSetupForLinux(t *testing.T) {
 	ufw := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true}
 	ipt := map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}
+	ufwHost := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true, "iptables": true}
 	tests := []struct {
 		name     string
 		runner   *recordingRunner
@@ -284,28 +306,54 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "ufw, converged",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
+		},
+		{
+			name:     "ufw, tailscaled's ts-input admits the tailnet: no ufw allow (#530)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
+		},
+		{
+			name:     "ufw, nothing covers in either: ufw allow as before",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run ufw allow 3389/tcp", "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
+			name:     "ufw, iptables unreadable: no write on a guess",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded}), exit: map[string]int{iptRead: 4}},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  iptRead,
+		},
+		{
+			name:     "ufw, a qualified ts-input jump: no write on a guess",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: iptQualified})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  "-A INPUT -i tailscale0 -j ts-input",
 		},
 		{
 			name: "ufw, nothing configured",
 			runner: &recordingRunner{elevated: true, onPath: ufw,
 				output: linuxUp(map[string]string{isEnabled: "disabled\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw route allow in on tailscale0 to any port 3389 proto tcp\n"}),
 				exit:   map[string]int{isEnabled: 1, isActive: 3}},
-			calls: append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwAdded,
+			calls: append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwAdded, "lookpath iptables",
 				"run ufw allow 3389/tcp", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeOK},
 		},
 		{
 			name:     "xrdp enabled, not running",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isActive: 3}},
-			calls:    append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwAdded, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeChanged, OutcomeOK, OutcomeOK},
 		},
 		{
 			name:     "xrdp masked: no enable, fix names unmask",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isEnabled: "masked\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isEnabled: 1, isActive: 3}},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeFailed, OutcomeOK, OutcomeOK},
 		},
 		{
@@ -341,7 +389,7 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "ufw, a deny decides the port first",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw deny 3389\nufw allow 3389/tcp\n"})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
 			blocked:  "ufw deny 3389",
 		},
@@ -412,7 +460,7 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "no systemctl",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(map[string]string{ufwAdded: "ufw allow 3389/tcp"})},
-			calls:    []string{"lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded, "output tailscale ip -4"},
+			calls:    []string{"lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded, "lookpath iptables", "output tailscale ip -4"},
 			outcomes: []Outcome{OutcomeFailed, OutcomeOK, OutcomeOK},
 		},
 	}
@@ -481,6 +529,7 @@ func TestXRDPStepOutcomes(t *testing.T) {
 func TestCheckForLinux(t *testing.T) {
 	yes, no := true, false
 	ufw := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true}
+	ufwHost := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true, "iptables": true}
 	tests := []struct {
 		name     string
 		runner   *recordingRunner
@@ -496,17 +545,54 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "converged",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "ufw host, tailscaled's ts-input admits the tailnet (#530)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputDefault})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "ufw host, two leftover copies in INPUT: delete both (#530)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputDefault})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 2 time",
+		},
+		{
+			name:     "ufw host, one leftover copy beside a ufw allow: still reported (#530)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+			message:  "1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time",
+		},
+		{
+			name:     "ufw host, a qualified ts-input jump: unverified",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: iptQualified})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "-A INPUT -i tailscale0 -j ts-input",
 		},
 		{
 			name: "xrdp disabled, only a longer port allowed",
 			runner: &recordingRunner{elevated: true, onPath: ufw,
 				output: linuxUp(map[string]string{isEnabled: "disabled\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw allow 33890/tcp\n"}),
 				exit:   map[string]int{isEnabled: 1, isActive: 3}},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=changed", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Active: &no}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
@@ -514,7 +600,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "xrdp enabled, not running",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isActive: 3}},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=changed", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &no, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
@@ -530,10 +616,20 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "no systemctl, ufw unreadable",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(nil), fail: map[string]bool{ufwAdded: true}},
-			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded},
+			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded, "lookpath iptables"},
 			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
+		},
+		{
+			name:     "ufw host, ufw unreadable, a leftover copy: still reported (#530)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "it also holds 1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time",
 		},
 		{
 			name:     "iptables, scoped allow",
