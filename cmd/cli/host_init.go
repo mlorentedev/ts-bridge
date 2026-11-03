@@ -168,7 +168,7 @@ func confirmHostOverwrite(reader *bufio.Reader, out io.Writer, path string) bool
 		return false
 	}
 	answer := strings.ToLower(strings.TrimSpace(line))
-	return answer == "y" || answer == "yes"
+	return answer == "y" || answer == answerYes
 }
 
 // promptHostInit asks for the RDP port and, on Windows, the firewall rule and
@@ -198,7 +198,7 @@ func promptHostInit(reader *bufio.Reader, f *hostInitFlags) error {
 		}
 		f.FirewallRule = rule
 	}
-	choice, err := readChoiceInput(reader, "Disable sleep mode? (default: yes)", []string{"yes", "no"})
+	choice, err := readChoiceInput(reader, "Disable sleep mode? (default: yes)", []string{answerYes, "no"})
 	if err != nil {
 		return fmt.Errorf("read sleep setting: %w", err)
 	}
@@ -240,11 +240,13 @@ func writeHostFile(f hostInitFlags, warn io.Writer) error {
 	}
 	content := "# ts-bridge host configuration (ADR-017), written by ts-bridge host init.\n" +
 		"# Read by: ts-bridge host setup | check | serve --config " + f.Config + "\n" + string(body)
+	// #nosec G306 -- the host file holds no secret; host check, unelevated, must read it (ADR-017).
 	if err := os.WriteFile(f.Config, []byte(content), hostFileMode); err != nil {
 		return fmt.Errorf("write host file: %w", err)
 	}
 	if hostGOOS != windowsOS {
 		// WriteFile keeps an existing file's mode and applies the umask.
+		// #nosec G302 -- as above: readable by host check, writable by its owner only.
 		if err := os.Chmod(f.Config, hostFileMode); err != nil {
 			return fmt.Errorf("set host file mode: %w", err)
 		}

@@ -9,6 +9,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// answerYes is the long form of a yes answer to a prompt.
+const answerYes = "yes"
+
 // confirmOverwrite prompts the user to confirm overwriting an existing file.
 // Returns true if the user confirms, false otherwise.
 // Uses cmd.InOrStdin() to respect Cobra's input redirection.
@@ -23,7 +26,7 @@ func confirmOverwrite(path string, cmd *cobra.Command) bool {
 		}
 		answer := strings.TrimSpace(strings.ToLower(line))
 		switch answer {
-		case "y", "yes":
+		case "y", answerYes:
 			return true
 		case "", "n", "no":
 			return false
