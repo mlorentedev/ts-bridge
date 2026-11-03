@@ -40,7 +40,9 @@ func NewNodeConfig(mesh host.FileMesh, controlURL string, checkKey func(string) 
 	_, err := os.Stat(filepath.Join(nc.StateDir, stateFile))
 	switch {
 	case err == nil:
-		return nc, nil
+		// Enrolled: the key is not read, but a key file left behind is still a
+		// live credential, so it must not be readable by others either.
+		return nc, checkLeftoverKey(mesh.AuthKeyFile, checkKey)
 	case !errors.Is(err, fs.ErrNotExist):
 		return NodeConfig{}, fmt.Errorf("host.mesh.state_dir: read node state: %w", err)
 	}
@@ -57,6 +59,18 @@ func NewNodeConfig(mesh host.FileMesh, controlURL string, checkKey func(string) 
 	}
 	nc.AuthKey = key
 	return nc, nil
+}
+
+// checkLeftoverKey runs checkKey on a declared key file that still exists after
+// enrolment; a deleted one, as the runbook asks for, is fine.
+func checkLeftoverKey(path *string, checkKey func(string) error) error {
+	if path == nil {
+		return nil
+	}
+	if _, err := os.Lstat(*path); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return checkKey(*path)
 }
 
 // NodeHostname is the node's name: host.mesh.hostname, else the OS hostname in

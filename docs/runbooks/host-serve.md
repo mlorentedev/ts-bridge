@@ -54,8 +54,10 @@ a bootstrap-enabled `connect` runs on the same host.
 
 ## 2. Protect the state directory and the key
 
-Serve refuses, before it starts, a `state_dir` or `auth_key_file` that another
-account may access:
+Serve refuses, before it starts, a `state_dir` or an existing `auth_key_file` that
+another account may access. The key file is checked before it is read on the first
+enrolment, and on every later start while it still exists, since a leftover key is a
+live credential; once deleted, it is no longer checked:
 
 | | `state_dir` | `auth_key_file` |
 |---|---|---|

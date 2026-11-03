@@ -158,6 +158,7 @@ func TestNodeConfig_Enrolment(t *testing.T) {
 	if err := os.WriteFile(looseKey, []byte("tskey-auth-loose\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	looseMissing := filepath.Join(t.TempDir(), "loose-missing")
 	enrolled := t.TempDir()
 	if err := os.WriteFile(filepath.Join(enrolled, stateFile), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
@@ -175,12 +176,14 @@ func TestNodeConfig_Enrolment(t *testing.T) {
 		{"first enrolment without a key", host.FileMesh{Hostname: str("lab"), StateDir: str(t.TempDir())}, "", false, "host.mesh.auth_key_file"},
 		{"first enrolment with a missing key", host.FileMesh{Hostname: str("lab"), StateDir: str(t.TempDir()), AuthKeyFile: str(filepath.Join(t.TempDir(), "gone"))}, "", false, "gone"},
 		{"no state_dir", host.FileMesh{Hostname: str("lab")}, "", false, "host.mesh.state_dir"},
-		{"a key file others may read", host.FileMesh{Hostname: str("lab"), StateDir: str(t.TempDir()), AuthKeyFile: str(looseKey)}, "", false, "mode 0644"},
+		// The key does not exist, so a read before the check would fail with
+		// "no such file" instead: the refusal must come first.
+		{"a key file others may read", host.FileMesh{Hostname: str("lab"), StateDir: str(t.TempDir()), AuthKeyFile: str(looseMissing)}, "", false, "mode 0644"},
+		{"a leftover key file others may read", host.FileMesh{Hostname: str("lab"), StateDir: str(enrolled), AuthKeyFile: str(looseKey)}, "", false, "mode 0644"},
 	}
-	// Stands in for host.CheckSecretFile, which has its own tests: only the
-	// loose key is refused, and the refusal comes before the key is read.
+	// Stands in for host.CheckSecretFile, which has its own tests.
 	checkKey := func(p string) error {
-		if p == looseKey {
+		if p == looseKey || p == looseMissing {
 			return errors.New("auth_key_file " + p + ": mode 0644, want no group or other bits")
 		}
 		return nil
