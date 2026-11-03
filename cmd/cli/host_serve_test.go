@@ -57,7 +57,7 @@ type serveRun struct {
 }
 
 // runHostServe runs `host serve` as goos with a node starter that reports
-// tags. The context is already cancelled, so a run that gets to READY
+// tags. The context is already canceled, so a run that gets to READY
 // returns right after printing it.
 func runHostServe(t *testing.T, goos string, args []string, tags []string, ensure func(string) error) serveRun {
 	t.Helper()

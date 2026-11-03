@@ -23,7 +23,7 @@ type NodeConfig struct {
 	StateDir   string
 	ControlURL string
 	AuthKey    string // set only when Enrolling
-	Enrolling  bool   // no node state yet: this start enrols with AuthKey
+	Enrolling  bool   // no node state yet: this start enrolls with AuthKey
 	// Logf receives tsnet's logs; nil discards them.
 	Logf func(format string, args ...any)
 }

@@ -153,7 +153,7 @@ func HostServeCmdForTest(
 	return c
 }
 
-// shippedServeKeyCheck is serveCheckKeyFile as the package initialised it,
+// shippedServeKeyCheck is serveCheckKeyFile as the package initialized it,
 // captured before any test stubs it.
 var shippedServeKeyCheck = serveCheckKeyFile
 
