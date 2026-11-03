@@ -11,6 +11,12 @@ import (
 	"ts-bridge/internal/bootstrapssh"
 )
 
+// host.mesh keys named in more than one place.
+const (
+	keyStateDir    = "state_dir"
+	keyAuthKeyFile = "auth_key_file"
+)
+
 // FileMesh is the host.mesh section: what host serve alone needs to join the
 // tailnet as a persistent node (HOST-008). Pointers tell absent from empty.
 type FileMesh struct {
@@ -60,7 +66,7 @@ func validateMesh(m *FileMesh, hasControlURL bool, goos string, capab osCapabili
 func checkMeshEmpty(m *FileMesh) error {
 	for _, f := range []meshField{
 		{"bootstrap_ssh", m.BootstrapSSH}, {"bootstrap_socks_addr", m.BootstrapSOCKSAddr}, {"hostname", m.Hostname},
-		{"state_dir", m.StateDir}, {"auth_key_file", m.AuthKeyFile}, {"health_addr", m.HealthAddr},
+		{keyStateDir, m.StateDir}, {keyAuthKeyFile, m.AuthKeyFile}, {"health_addr", m.HealthAddr},
 	} {
 		if f.value != nil && *f.value == "" {
 			return fmt.Errorf("host.mesh.%s: empty; omit it or give it a value", f.key)
@@ -70,7 +76,7 @@ func checkMeshEmpty(m *FileMesh) error {
 }
 
 func checkMeshPaths(m *FileMesh, goos string) error {
-	for _, p := range []meshField{{"state_dir", m.StateDir}, {"auth_key_file", m.AuthKeyFile}} {
+	for _, p := range []meshField{{keyStateDir, m.StateDir}, {keyAuthKeyFile, m.AuthKeyFile}} {
 		if p.value != nil && !isAbsFor(goos, *p.value) {
 			return fmt.Errorf("host.mesh.%s: must be an absolute path on %s", p.key, goos)
 		}
