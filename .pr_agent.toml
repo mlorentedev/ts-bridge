@@ -23,32 +23,39 @@
 # `openai/` selects LiteLLM's OpenAI-compatible transport; the endpoint is NaN's, set
 # as OPENAI__API_BASE in the workflow. Nothing here talks to OpenAI.
 #
-# mimo-v2.6-flash leads and deepseek-v4-flash follows because the order is the only one that
-# can fail loudly. deepseek's characteristic failure is a 200 with an empty body — it
-# spends the output budget on the reasoning chain and never writes an answer — which
-# raises no exception, so LiteLLM never consults a fallback behind it. kubelab measured
-# that shape on run 32440498259 (#1205): step `success` after 4m15s, no RateLimitError,
-# the second model never attempted. mimo fails by saturation (429), which DOES raise.
-# That 429 shape was measured on mimo-v2.5, retired by NaN on 2026-09-30. Its successor
-# has also been seen to hang under load rather than answer 429, which raises nothing
-# (mlorentedev/dotfiles#1923), so this ordering is the best available, not a guarantee.
+# deepseek-v4-flash leads and mimo-v2.6-flash follows (#542). The order used to be the
+# other way, and for a reason that no longer holds here. Unstreamed, deepseek's
+# characteristic failure was a 200 with an empty body — it spends the output budget on the
+# reasoning chain and never writes an answer — which raises no exception, so LiteLLM never
+# consulted a fallback behind it (kubelab #1205, run 32440498259). Since #537 every NaN call
+# streams, and a stream that ends at the length cap with no content raises
+# EmptyTruncatedResponseError for either model, so the chain moves on (run 41568137675
+# shows it for both). What now decides the order is how long a failure takes, measured on
+# this repo's 73 reviews of 2026-11-02/03 (the streaming runs): mimo answered first in 62.
+# In 9 it hung 581-613 s, to the length cap, before failing; its fallback then had about
+# four minutes of the 14 the step is allowed, and deepseek needs 130-260 s. Three of those
+# nine ended with no review because deepseek failed too, and a fourth was cut off by the
+# step cap while deepseek was still working. deepseek's own length-cap failure takes about
+# 200 s. A slow failure is cheap in the fallback slot and ruinous in the first one.
 #
-# This is not a quality ranking. harness/reviewer-pool.json says of mimo, in its own
-# words, that no ranking against deepseek was established; both are reasoning-class by
-# profile (1M context, mandatory chain) and both are admitted there, which is the line
-# this file draws. The excluded models stay excluded by name: qwen3.6/gemma4 are the
-# latency tier, and a reviewer that PASSes cheaply converts a gate into a green
-# checkmark. tests/pr-agent-config.bats holds that at dotfiles.
-model = "openai/mimo-v2.6-flash"
+# This is a bet on that asymmetry, not a quality ranking. harness/reviewer-pool.json says of
+# mimo, in its own words, that no ranking against deepseek was established; both are
+# reasoning-class by profile (1M context, mandatory chain) and both are admitted there,
+# which is the line this file draws. The excluded models stay excluded by name:
+# qwen3.6/gemma4 are the latency tier, and a reviewer that PASSes cheaply converts a gate
+# into a green checkmark. tests/pr-agent-config.bats holds that at dotfiles. Dotfiles, hive
+# and kubelab still lead with mimo; #474's reviewer pool is the structural fix, and this
+# order is a stopgap until it lands.
+model = "openai/deepseek-v4-flash"
 
-# ONE fallback, and lane separation is why it is deepseek rather than a sibling of the
-# primary. NaN's limit is PER MODEL (kubelab #1107/#1203: 8 concurrent to deepseek
+# ONE fallback. NaN's limit is PER MODEL (kubelab #1107/#1203: 8 concurrent to deepseek
 # gives 5x200 + 3x429 while mimo answers 200 during the same saturation), so the second
-# bucket is a real fallback and not a re-name of the same wall. It does share a bucket
-# with this repo's adversarial-review pool, where deepseek is a member — the trade was
-# made at dotfiles #1149 in the same direction (CI yields to the gate, because the gate
-# blocks and CI review advises), and it is recorded here rather than rediscovered.
-fallback_models = ["openai/deepseek-v4-flash"]
+# bucket is a real fallback and not a re-name of the same wall. The primary now shares a
+# bucket with this repo's adversarial-review pool, where deepseek is a member — the trade
+# dotfiles #1149 made in the same direction (CI yields to the gate, because the gate
+# blocks and CI review advises) now costs CI review its first choice, and it is recorded
+# here rather than rediscovered.
+fallback_models = ["openai/mimo-v2.6-flash"]
 
 # `model_weak` deliberately absent. Upstream defaults it to a flash tier for
 # descriptions and commit summaries; `auto_describe` is off below so it would do
