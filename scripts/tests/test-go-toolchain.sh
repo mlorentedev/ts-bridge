@@ -110,6 +110,23 @@ check_linter() {
     '
 }
 
+# gosec is pinned in three places that must name one version (#528): the
+# ci.yml `security` job installs it, mise.toml pins it for a local run, and
+# security-audit.md tells the reader which one runs. Arguments: ci.yml,
+# mise.toml, security-audit.md. Fails closed on `@latest`, a missing or second
+# install line, or a missing pin, since any of them leaves a version unchecked.
+check_gosec() {
+  local installs ci_version mise_version
+  installs="$(grep -E 'securego/gosec' "$1" | grep -Ev '^[[:space:]]*#' || true)"
+  [ "$(printf '%s\n' "$installs" | grep -c .)" -eq 1 ] || return 1
+  ci_version="$(printf '%s\n' "$installs" |
+    sed -nE 's|.*go install github\.com/securego/gosec/v2/cmd/gosec@v([0-9]+\.[0-9]+\.[0-9]+)([[:space:]].*)?$|\1|p')"
+  [ -n "$ci_version" ] || return 1
+  mise_version="$(awk -F'"' '/^"aqua:securego\/gosec"[[:space:]]*=/ { print $4 }' "$2")"
+  [ "$mise_version" = "$ci_version" ] || return 1
+  grep -Fq "gosec/v2/cmd/gosec@v$ci_version" "$3"
+}
+
 tmp="$(mktemp)"
 tmp_mod="$(mktemp)"
 tmp_ci="$(mktemp)"
@@ -561,6 +578,58 @@ if check_linter "$tmp_mod" "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
   exit 1
 fi
 
+# gosec pin: CI, mise.toml and the audit doc must name one exact version (#528).
+gosec_line='          go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0'
+printf '%s\n' "$gosec_line" > "$tmp_ci"
+printf '[tools]\n"aqua:securego/gosec" = "2.30.0"\n' > "$tmp_mise"
+printf 'installed with go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0\n' > "$tmp_docs"
+if ! check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: rejected the matching gosec pins" >&2
+  exit 1
+fi
+printf '%s\n' "$gosec_line # pinned" > "$tmp_ci"
+if ! check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: rejected a gosec pin followed by a comment" >&2
+  exit 1
+fi
+printf '[tools]\n"aqua:securego/gosec" = "2.29.0"\n' > "$tmp_mise"
+if check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: accepted a local gosec pin that differs from CI" >&2
+  exit 1
+fi
+printf '[tools]\n' > "$tmp_mise"
+if check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: accepted a missing local gosec pin" >&2
+  exit 1
+fi
+printf '[tools]\n"aqua:securego/gosec" = "2.30.0"\n' > "$tmp_mise"
+printf '          go install github.com/securego/gosec/v2/cmd/gosec@latest\n' > "$tmp_ci"
+if check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: accepted an unpinned gosec install (@latest)" >&2
+  exit 1
+fi
+printf '          go install github.com/securego/gosec/v2/cmd/gosec@v2\n' > "$tmp_ci"
+if check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: accepted a partial gosec version (@v2)" >&2
+  exit 1
+fi
+printf '          gosec ./...\n' > "$tmp_ci"
+if check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: accepted a workflow with no gosec install line" >&2
+  exit 1
+fi
+printf '%s\n%s\n' "$gosec_line" '          go install github.com/securego/gosec/v2/cmd/gosec@latest' > "$tmp_ci"
+if check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: accepted a second, unpinned gosec install" >&2
+  exit 1
+fi
+printf '%s\n' "$gosec_line" > "$tmp_ci"
+printf 'installed with go install github.com/securego/gosec/v2/cmd/gosec@latest\n' > "$tmp_docs"
+if check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: accepted an audit doc that does not name the pinned gosec" >&2
+  exit 1
+fi
+
 count=0
 for workflow in "$ROOT"/.github/workflows/*; do
   case "$workflow" in *.yml|*.yaml) ;; *) continue ;; esac
@@ -575,6 +644,10 @@ done
 [ "$count" -gt 0 ] || { echo "test-go-toolchain: no Go workflows found" >&2; exit 1; }
 if ! check_linter "$ROOT/go.mod" "$ROOT/.github/workflows/ci.yml" "$ROOT/mise.toml" "$ROOT/AGENTS.md"; then
   echo "test-go-toolchain: module Go minimum, CI linter, mise.toml pin and operator instructions disagree" >&2
+  exit 1
+fi
+if ! check_gosec "$ROOT/.github/workflows/ci.yml" "$ROOT/mise.toml" "$ROOT/docs/troubleshooting/security-audit.md"; then
+  echo "test-go-toolchain: the gosec pin in ci.yml, mise.toml and security-audit.md disagree or is not exact" >&2
   exit 1
 fi
 echo "test-go-toolchain: OK ($count Go workflows)"

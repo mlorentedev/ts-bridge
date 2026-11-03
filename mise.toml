@@ -3,3 +3,8 @@
 # scripts/tests/test-go-toolchain.sh fails when this pin and ci.yml disagree.
 [tools]
 golangci-lint = "2.14.0"
+# gosec is pinned here and in the ci.yml `security` job (`go install ...@vX.Y.Z`),
+# so a local `gosec ./...` and CI run the same version (#528). The toolchain
+# guard fails when the two disagree. Do not go below 2.30.0 while go.mod is on
+# Go 1.27: 2.29.0 cannot read 1.27 export data and exits 1 on every package.
+"aqua:securego/gosec" = "2.30.0"
