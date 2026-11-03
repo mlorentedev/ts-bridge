@@ -114,7 +114,8 @@ check_linter() {
 # ci.yml `security` job installs it, mise.toml pins it for a local run, and
 # security-audit.md tells the reader which one runs. Arguments: ci.yml,
 # mise.toml, security-audit.md. Fails closed on `@latest`, a missing or second
-# install line, or a missing pin, since any of them leaves a version unchecked.
+# install line, a missing pin, or a second version in the doc, since any of them
+# leaves a version unchecked.
 check_gosec() {
   local installs ci_version mise_version
   installs="$(grep -E 'securego/gosec' "$1" | grep -Ev '^[[:space:]]*#' || true)"
@@ -124,7 +125,8 @@ check_gosec() {
   [ -n "$ci_version" ] || return 1
   mise_version="$(awk -F'"' '/^"aqua:securego\/gosec"[[:space:]]*=/ { print $4 }' "$2")"
   [ "$mise_version" = "$ci_version" ] || return 1
-  grep -Fq "gosec/v2/cmd/gosec@v$ci_version" "$3"
+  # The doc names the pin, and no other version: a stale second mention misleads as much.
+  [ "$(grep -oE 'gosec/v2/cmd/gosec@[^[:space:]`]*' "$3" | sort -u)" = "gosec/v2/cmd/gosec@v$ci_version" ]
 }
 
 tmp="$(mktemp)"
@@ -627,6 +629,12 @@ printf '%s\n' "$gosec_line" > "$tmp_ci"
 printf 'installed with go install github.com/securego/gosec/v2/cmd/gosec@latest\n' > "$tmp_docs"
 if check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
   echo "test-go-toolchain: accepted an audit doc that does not name the pinned gosec" >&2
+  exit 1
+fi
+printf '%s\n%s\n' 'installed with go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0' \
+  'formerly go install github.com/securego/gosec/v2/cmd/gosec@v2.22.0' > "$tmp_docs"
+if check_gosec "$tmp_ci" "$tmp_mise" "$tmp_docs"; then
+  echo "test-go-toolchain: accepted an audit doc that also names a stale gosec" >&2
   exit 1
 fi
 
