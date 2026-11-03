@@ -33,7 +33,8 @@ Interactive mode (no flags): prompts for auth key (masked), target, instance
 name, and config format (YAML or .env).
 
 Non-interactive mode (with --auth-key-file or --auth-key, plus --target):
-writes config silently, useful for automation or CI.
+writes config silently, useful for automation or CI. A key flag without
+--target is refused rather than falling back to the wizard.
 
 Profile mode: --profile NAME --config runtime.yaml --force imports non-secret
 connection settings once, preserving the existing target and managed credential.
@@ -128,6 +129,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	authKeyFlagProvided := cmd.Flags().Changed("auth-key")
+	// A supplied key without a target used to fall into the wizard, which prompted for the
+	// key again and discarded the one given (#401). Refuse instead: the two modes stay two.
+	if (authKeyFlagProvided || cmd.Flags().Changed("auth-key-file")) && f.Target == "" {
+		return fmt.Errorf("a key flag (--auth-key or --auth-key-file) requires --target; omit the key flag to use the interactive wizard")
+	}
 	if f.AuthKeyFile != "" {
 		key, err := readAuthKeyFile(f.AuthKeyFile)
 		if err != nil {
