@@ -9,10 +9,10 @@ import (
 
 // mockDiscoverer implements Discoverer for testing.
 type mockDiscoverer struct {
-	devices []Device
-	err     error
+	devices   []Device
+	err       error
 	callCount int
-	mu      sync.Mutex
+	mu        sync.Mutex
 }
 
 func (m *mockDiscoverer) List(ctx context.Context) ([]Device, error) {
