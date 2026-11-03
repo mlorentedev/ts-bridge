@@ -59,6 +59,12 @@ linters:
           - unparam
         text: 'acceptLoop.*result 0.*is always nil'
 
+# golangci-lint v2 runs formatters only when listed here; `linters` never runs
+# gofmt. Without this block, `golangci-lint run` passes on unformatted code (#466).
+formatters:
+  enable:
+    - gofmt
+
 issues:
   max-issues-per-linter: 50
   max-same-issues: 5

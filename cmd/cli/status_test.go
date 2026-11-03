@@ -32,11 +32,11 @@ func TestStatusCommandJSONDirect(t *testing.T) {
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]int64{
-			"active_connections":  2,
-			"total_connections":   10,
-			"total_bytes_tx":      1024,
-			"total_bytes_rx":      2048,
-			"total_errors":        0,
+			"active_connections":   2,
+			"total_connections":    10,
+			"total_bytes_tx":       1024,
+			"total_bytes_rx":       2048,
+			"total_errors":         0,
 			"rejected_connections": 1,
 		})
 	})
@@ -59,11 +59,11 @@ func TestStatusCommandHumanReadable(t *testing.T) {
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]int64{
-			"active_connections":  3,
-			"total_connections":   42,
-			"total_bytes_tx":      1048576,
-			"total_bytes_rx":      524288,
-			"total_errors":        1,
+			"active_connections":   3,
+			"total_connections":    42,
+			"total_bytes_tx":       1048576,
+			"total_bytes_rx":       524288,
+			"total_errors":         1,
 			"rejected_connections": 0,
 		})
 	})
@@ -180,11 +180,11 @@ func TestStatusWatchMode(t *testing.T) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]int64{
-			"active_connections":  int64(callCount),
-			"total_connections":   10,
-			"total_bytes_tx":      1024,
-			"total_bytes_rx":      2048,
-			"total_errors":        0,
+			"active_connections":   int64(callCount),
+			"total_connections":    10,
+			"total_bytes_tx":       1024,
+			"total_bytes_rx":       2048,
+			"total_errors":         0,
 			"rejected_connections": 0,
 		})
 	})

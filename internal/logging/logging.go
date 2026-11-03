@@ -159,8 +159,6 @@ func (m *multiHandler) WithGroup(name string) slog.Handler {
 	return &multiHandler{handlers: handlers}
 }
 
-
-
 // --- File Rotator: daily rotation with gzip compression ---
 
 // FileRotator manages daily log file rotation.

@@ -85,10 +85,10 @@ func TestDiagnoseTailscaleAPIError(t *testing.T) {
 
 func TestDiagnoseHeadscaleAPIError(t *testing.T) {
 	tests := []struct {
-		name        string
-		err         error
-		wantHint    bool
-		hintSubstr  string
+		name       string
+		err        error
+		wantHint   bool
+		hintSubstr string
 	}{
 		{
 			name:       "timeout",
