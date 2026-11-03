@@ -126,8 +126,10 @@ Boundaries to defend (in order of blast radius):
   checks `test`, `lint`, `security` and `hygiene`; strict up-to-date; no
   force-push, no deletion. `hygiene` is the `Repo hygiene` job
   (`.github/workflows/repo-hygiene.yml`), so its guards block a merge; it also
-  runs `actionlint` with `shellcheck` over every workflow's embedded shell,
-  which is where shellcheck lives (there is no separate `shellcheck` check).
+  runs `actionlint` with `shellcheck` over every workflow's embedded shell, and
+  `scripts/check-shellcheck.sh` runs `shellcheck` over `scripts/*.sh` and
+  `scripts/tests/*.sh` (fixtures and `scripts/tests/helpers/*.bash` are out of
+  scope). There is no separate `shellcheck` check.
   Other CI jobs (`test-windows`, `test-macos`, `smoke`, `build-matrix`) run on
   every PR to `master` (the `ci.yml` trigger) but do not block a merge. The protection is set by hand, not as
   code (#351).
