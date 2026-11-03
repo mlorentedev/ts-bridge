@@ -20,12 +20,12 @@ const (
 // FileMesh is the host.mesh section: what host serve alone needs to join the
 // tailnet as a persistent node (HOST-008). Pointers tell absent from empty.
 type FileMesh struct {
-	BootstrapSSH       *string `yaml:"bootstrap_ssh"`
-	BootstrapSOCKSAddr *string `yaml:"bootstrap_socks_addr"`
-	Hostname           *string `yaml:"hostname"`
-	StateDir           *string `yaml:"state_dir"`
-	AuthKeyFile        *string `yaml:"auth_key_file"`
-	HealthAddr         *string `yaml:"health_addr"`
+	BootstrapSSH       *string `yaml:"bootstrap_ssh,omitempty"`
+	BootstrapSOCKSAddr *string `yaml:"bootstrap_socks_addr,omitempty"`
+	Hostname           *string `yaml:"hostname,omitempty"`
+	StateDir           *string `yaml:"state_dir,omitempty"`
+	AuthKeyFile        *string `yaml:"auth_key_file,omitempty"`
+	HealthAddr         *string `yaml:"health_addr,omitempty"`
 }
 
 // hostnameLabel is one DNS label: what the control plane accepts as a node name.

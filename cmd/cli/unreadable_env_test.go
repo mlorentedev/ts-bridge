@@ -50,21 +50,6 @@ func TestWriteYAMLConfig_UnreadableEnvRefusesBeforeWriting(t *testing.T) {
 	}
 }
 
-func TestWriteHostEnv_UnreadableEnvRefusesToReplace(t *testing.T) {
-	envPath := filepath.Join(t.TempDir(), ".env")
-	const original = "TS_AUTHKEY=old\nTS_TARGET=100.64.0.1:3389\n"
-	writeUnreadable(t, envPath, original)
-
-	err := writeHostEnv(hostInitFlags{Port: 3389, FirewallRule: "Rule", Config: envPath})
-	if err == nil || !strings.Contains(err.Error(), envPath) {
-		t.Fatalf("err = %v, want a read error naming %s", err, envPath)
-	}
-	_ = os.Chmod(envPath, 0600)
-	if got, _ := os.ReadFile(envPath); string(got) != original {
-		t.Errorf(".env replaced despite the refusal:\n%s", got)
-	}
-}
-
 // A directory where the .env should be is the one unreadable case every OS and
 // root produce alike, so these run on the Windows job too.
 func TestWriteYAMLConfig_DirectoryAsEnvRefusesBeforeWriting(t *testing.T) {
@@ -83,16 +68,5 @@ func TestWriteYAMLConfig_DirectoryAsEnvRefusesBeforeWriting(t *testing.T) {
 	}
 	if _, statErr := os.Stat(yamlPath); !os.IsNotExist(statErr) {
 		t.Errorf("YAML written despite the refusal (stat err = %v)", statErr)
-	}
-}
-
-func TestWriteHostEnv_DirectoryAsEnvRefuses(t *testing.T) {
-	envPath := filepath.Join(t.TempDir(), ".env")
-	if err := os.Mkdir(envPath, 0700); err != nil {
-		t.Fatal(err)
-	}
-	err := writeHostEnv(hostInitFlags{Port: 3389, FirewallRule: "Rule", Config: envPath})
-	if err == nil || !strings.Contains(err.Error(), "read existing") {
-		t.Fatalf("err = %v, want a read error, not a write error", err)
 	}
 }

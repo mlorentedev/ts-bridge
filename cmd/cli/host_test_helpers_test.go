@@ -24,12 +24,14 @@ func BuildDescriptorLineForTest(ip string, port int, controlURL string) string {
 
 // ─── Test-only exports ───────────────────────────────────────────
 
-// HostInitFlagsForTest is a test-only alias for hostInitFlags.
-type HostInitFlagsForTest = hostInitFlags
-
-// WriteHostEnvForTest is a test-only wrapper for writeHostEnv.
-func WriteHostEnvForTest(f hostInitFlags) error {
-	return writeHostEnv(f)
+// HostInitCmdForTest returns a host init command as on goos.
+func HostInitCmdForTest(t interface{ Cleanup(func()) }, goos string) *cobra.Command {
+	prev := hostGOOS
+	hostGOOS = goos
+	t.Cleanup(func() { hostGOOS = prev })
+	c := newHostInitCmd()
+	c.SilenceUsage = true
+	return c
 }
 
 // SetupJSONOutputForTest is a test-only alias for setupJSONOutput.

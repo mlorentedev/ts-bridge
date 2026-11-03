@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -240,6 +241,20 @@ func TestHostCmds_NeverReadUserStore(t *testing.T) {
 		}
 		if strings.Contains(got.stdout+got.stderr, "poison") {
 			t.Errorf("output reads the user store: %q", got.stdout+got.stderr)
+		}
+	})
+	t.Run("init", func(t *testing.T) {
+		out := filepath.Join(dir, "init.yaml")
+		stdout, err := runHostInit(t, "linux", strings.NewReader(""), "--config", out, "--port", "3390")
+		if err != nil || strings.Contains(stdout, "poison") {
+			t.Errorf("host init: err %v, stdout %q; want success without reading the user store", err, stdout)
+		}
+		viaRoot := cmdpkg.NewRootCmd()
+		viaRoot.SetArgs([]string{"host", "init", "--config", out + ".root", "--port", "3390"})
+		viaRoot.SetOut(io.Discard)
+		viaRoot.SetErr(io.Discard)
+		if err := viaRoot.Execute(); err != nil {
+			t.Errorf("host init via root: %v (a store read fails on the malformed fixture)", err)
 		}
 	})
 }
