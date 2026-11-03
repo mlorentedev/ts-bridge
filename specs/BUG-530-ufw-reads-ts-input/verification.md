@@ -82,6 +82,7 @@ $ iptables -S INPUT
 Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
 
 - A single copy on a ufw host is reported, not tolerated: setup never writes the iptables rule there, so any copy is a leftover that opens the port on every interface (owner decision, 2026-11-03).
+- Review on #567: a failed `ufw show added` now still counts INPUT copies, and `host check` stays `unverified` with the copies and their delete command appended (`TestCheckForLinux/ufw_host,_ufw_unreadable,_a_leftover_copy:_still_reported_(#530)`, red on `cd8fd10`). Setup gained a ufw-host qualified-jump row. `features.json` f5 is narrowed: no command there re-runs the mutants.
 - `readUFW` was extracted from `readLinuxFirewall` to keep both under the complexity cap.
 
 ## Promotion candidates

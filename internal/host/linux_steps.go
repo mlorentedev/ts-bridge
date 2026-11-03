@@ -181,18 +181,21 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 // opened it on every interface (#530). A ufw allow or deny still decides first;
 // only ufw's "absent" defers to the iptables read, whose unknown answer stands.
 func readUFW(r Runner, port int) firewallRead {
-	out, err := r.Output(backendUFW, "show", "added")
-	if err != nil {
-		return firewallRead{backend: backendUFW, reason: fmt.Sprintf("ufw show added: %v", err)}
+	read := firewallRead{backend: backendUFW}
+	out, ufwErr := r.Output(backendUFW, "show", "added")
+	if ufwErr != nil {
+		read.reason = fmt.Sprintf("ufw show added: %v", ufwErr)
+	} else {
+		read.state, read.blockedBy = ufwDecide(string(out), port)
 	}
-	state, rule := ufwDecide(string(out), port)
-	read := firewallRead{state: state, backend: backendUFW, blockedBy: rule}
 	if _, err := r.LookPath(backendIPT); err != nil {
 		return read
 	}
+	// Copies are counted even when ufw is unreadable: each one admits the
+	// port on every interface whatever ufw would have said.
 	ipt := readIptables(r, port)
 	read.copies = ipt.copies
-	if state == ruleAbsent {
+	if ufwErr == nil && read.state == ruleAbsent {
 		read.state, read.blockedBy, read.reason, read.fix = ipt.state, ipt.blockedBy, ipt.reason, ipt.fix
 	}
 	return read
@@ -600,7 +603,12 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 
 func firewallCheckStep(read firewallRead, port int) SetupStep {
 	if read.state == ruleUnknown {
-		return newStep(linuxFwName, OutcomeUnverified, "Cannot read the firewall: "+read.reason, firewallFix(read, port, "check"))
+		message, fix := "Cannot read the firewall: "+read.reason, firewallFix(read, port, "check")
+		if extraCopies(read) > 0 {
+			message += "; it also holds " + copiesHeld(read, port)
+			fix += "; " + copiesFix(read, port)
+		}
+		return newStep(linuxFwName, OutcomeUnverified, message, fix)
 	}
 	if read.state == ruleBlocked {
 		return firewallBlockedStep(read, port)
@@ -626,18 +634,28 @@ func extraCopies(read firewallRead) int {
 // every run before #477. The port is allowed; setup never deletes rules, so
 // removing the extras is the operator's.
 func firewallCopiesStep(read firewallRead, port int) SetupStep {
-	noun, remains := "copies", "so one copy remains"
+	return newStep(linuxFwName, OutcomeManual,
+		fmt.Sprintf("Firewall allows TCP %d (%s), but holds %s", port, read.backend, copiesHeld(read, port)),
+		copiesFix(read, port))
+}
+
+// copiesHeld names how many copies of setup's iptables rule INPUT holds.
+func copiesHeld(read firewallRead, port int) string {
+	noun := "copies"
 	if read.copies == 1 {
 		noun = "copy"
 	}
+	return fmt.Sprintf("%d %s of %s", read.copies, noun, strings.Join(iptSetupPrinted(port), " "))
+}
+
+// copiesFix is the delete command for the copies extraCopies counts.
+func copiesFix(read firewallRead, port int) string {
+	remains := "so one copy remains"
 	if read.backend == backendUFW {
 		remains = "so none remains: ufw manages this host's rules, and each copy admits the port on every interface"
 	}
-	return newStep(linuxFwName, OutcomeManual,
-		fmt.Sprintf("Firewall allows TCP %d (%s), but holds %d %s of %s", port, read.backend, read.copies, noun,
-			strings.Join(iptSetupPrinted(port), " ")),
-		fmt.Sprintf("run `iptables -D %s` %d time(s), as root, %s; setup does not delete firewall rules",
-			strings.Join(iptablesAppend(port)[1:], " "), extraCopies(read), remains))
+	return fmt.Sprintf("run `iptables -D %s` %d time(s), as root, %s; setup does not delete firewall rules",
+		strings.Join(iptablesAppend(port)[1:], " "), extraCopies(read), remains)
 }
 
 // firewallBlockedStep reports a deny that decides the port before any allow.

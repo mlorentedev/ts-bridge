@@ -329,6 +329,13 @@ func TestSetupForLinux(t *testing.T) {
 			message:  iptRead,
 		},
 		{
+			name:     "ufw, a qualified ts-input jump: no write on a guess",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: iptQualified})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  "-A INPUT -i tailscale0 -j ts-input",
+		},
+		{
 			name: "ufw, nothing configured",
 			runner: &recordingRunner{elevated: true, onPath: ufw,
 				output: linuxUp(map[string]string{isEnabled: "disabled\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw route allow in on tailscale0 to any port 3389 proto tcp\n"}),
@@ -609,10 +616,20 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "no systemctl, ufw unreadable",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(nil), fail: map[string]bool{ufwAdded: true}},
-			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded},
+			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded, "lookpath iptables"},
 			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
+		},
+		{
+			name:     "ufw host, ufw unreadable, a leftover copy: still reported (#530)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "it also holds 1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time",
 		},
 		{
 			name:     "iptables, scoped allow",

@@ -9,7 +9,7 @@
   {
     "id": "BUG-530-ufw-reads-ts-input-f2",
     "behavior": "AC2: on a ufw host, one or more copies of setup's iptables rule are manual and the fix deletes every copy; iptables-only hosts unchanged",
-    "verification": "go test ./internal/host/ -run 'TestCheckForLinux/(ufw_host,_(two|one)_leftover|cop)'",
+    "verification": "go test ./internal/host/ -run 'TestCheckForLinux/(ufw_host,_(two|one)_leftover|ufw_host,_ufw_unreadable|cop)'",
     "state": "pending",
     "evidence": ""
   },
@@ -29,7 +29,7 @@
   },
   {
     "id": "BUG-530-ufw-reads-ts-input-f5",
-    "behavior": "AC5: each new path fails under its mutation (recorded in verification.md)",
+    "behavior": "AC5 (regression half): the new rows pass on the fixed tree; the mutant runs themselves are manual and recorded in verification.md, not checked by this command",
     "verification": "go test -race ./internal/host/",
     "state": "pending",
     "evidence": ""
