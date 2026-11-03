@@ -108,9 +108,15 @@ owns the macOS host.
   `check` reads it when the key is declared. Serve down means every service reads as not
   published; without the key, `check` omits the field. Rejected: a fixed default address
   (port collisions) and moving AC6 to its own ticket.
-- **~300 LOC cap (decided 2026-11-02).** Three PRs: the `host.mesh` schema and the
-  `state_dir` guard, the serve command with forwarding and enrolment, then reconnect,
-  health and `host check`. Docs move to a fourth PR if the third passes the cap.
+  Limit (review of #525): matching the node name proves the responder speaks serve's
+  contract, not that it is serve. A local process that binds `health_addr` while serve is
+  stopped could answer for it. A shared secret does not help, since `check` runs
+  unelevated and anything it can read the squatter can too, so `check`'s `published` is a
+  diagnostic, not a security boundary; the published ports themselves are what the
+  tailnet ACL governs.
+- **~300 LOC cap (decided 2026-11-02).** Four PRs: the `host.mesh` schema and the
+  `state_dir` guard, the serve command with forwarding and enrolment, reconnect and
+  health, then `host check`, the auth key guard and the docs.
 
 ## Acceptance criteria
 
@@ -125,10 +131,11 @@ AC1, AC2 and AC4 need the live control plane, so they gate on mlorentedev/kubela
 - [ ] AC3: a port that `host.services` does not declare refuses connections through the
   tailnet.
 - [ ] AC4: with the control hostname unresolvable locally, enrolment and reconnect
-  succeed through `bootstrap_ssh`; with the SSH endpoint down, serve emits `ERROR
-  reason=ssh_bootstrap_failed`, keeps retrying, and recovers when the endpoint returns;
-  while the control session is down, `/health/ready` reads not ready with
-  `reason=control_plane_unreachable`.
+  succeed through `bootstrap_ssh`. With the SSH endpoint down at start, serve emits `ERROR
+  reason=ssh_bootstrap_failed` and exits 1, so the OS supervisor restarts it (Amendment
+  A); when it goes down after `READY`, serve emits that line once, keeps retrying, and
+  recovers when the endpoint returns. While the control session is down, `/health/ready`
+  reads not ready with `reason=control_plane_unreachable`.
 - [ ] AC5: a `host.mesh` block with an unknown key warns, an empty key errors, and a
   `state_dir` writable by non-administrators is refused on Windows, and one that is not
   `0700` and owned by root is refused on Linux; an `auth_key_file` that others may read is refused

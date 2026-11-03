@@ -22,8 +22,8 @@
   },
   {
     "id": "HOST-008-host-serve-mode-f4",
-    "behavior": "AC4: a bootstrap that dies after READY emits ERROR reason=ssh_bootstrap_failed, retries with 1-30 s backoff and recovers; a dropped control session reads not ready with reason=control_plane_unreachable (live sinkholed run gates on kubelab#2862)",
-    "verification": "go test ./internal/serve -run '^TestSupervisedBootstrap_Retries$' -count=1 -v | grep -q -- '--- PASS: TestSupervisedBootstrap_Retries ' && go test ./internal/serve -run '^TestServeHealth_ControlSession$' -count=1 -v | grep -q -- '--- PASS: TestServeHealth_ControlSession '",
+    "behavior": "AC4: a bootstrap that cannot start emits ERROR reason=ssh_bootstrap_failed and exits 1 for the OS supervisor; one that dies after READY is reported once, retried with 1-30 s backoff and recovers; a dropped control session reads not ready with reason=control_plane_unreachable (live sinkholed run gates on kubelab#2862)",
+    "verification": "go test ./internal/serve -run '^TestSupervisedBootstrap_Retries$' -count=1 -v | grep -q -- '--- PASS: TestSupervisedBootstrap_Retries ' && go test ./internal/serve -run '^TestServeHealth_ControlSession$' -count=1 -v | grep -q -- '--- PASS: TestServeHealth_ControlSession ' && go test ./cmd/cli -run '^TestHostServeCmd_Bootstrap$' -count=1 -v | grep -q -- '--- PASS: TestHostServeCmd_Bootstrap ' && go test ./cmd/cli -run '^TestHostServeCmd_BootstrapRestarts$' -count=1 -v | grep -q -- '--- PASS: TestHostServeCmd_BootstrapRestarts '",
     "state": "pending",
     "evidence": ""
   },
