@@ -222,7 +222,7 @@ On every push/PR:
 | `test` | Build, vet, tests with race detector and coverage |
 | `lint` | golangci-lint static analysis |
 | `security` | gosec security scanner |
-| `shellcheck` | Validate bash scripts |
+| `hygiene` | Repo guards, `actionlint` over the workflows, and `shellcheck` over `scripts/*.sh` and `scripts/tests/*.sh` (`scripts/check-shellcheck.sh`) |
 | `build-matrix` | Cross-compile for linux/windows/darwin × amd64/arm64 |
 
 ## Testing Guidelines
