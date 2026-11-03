@@ -47,25 +47,25 @@ created: "2026-10-30"
 
 ### Forwarding (`internal/serve/publish.go`, `internal/serve/publish_test.go`)
 
-- [ ] [P] [AC3] Failing test `TestPublish_OnlyDeclaredPorts`: with a fake `Listener` (`Listen(network, addr string) (net.Listener, error)`, the `tsnet.Server` method), `Publish` for `[{rdp 3389} {ssh 22}]` listens on exactly `:3389` and `:22`. Expected: FAIL, package missing.
-- [ ] [AC3] Failing test `TestPublish_ForwardsToLoopback`: a connection accepted on the fake `:3389` reaches a local echo server standing in for `127.0.0.1:3389` (dialer injected), and bytes round-trip; closing the context stops every accept loop. Expected: FAIL.
-- [ ] [AC3] Implement `Publish(ctx, l Listener, services []host.Service, dial)`: one `proxy.AcceptLoop` per service with a dialer to `127.0.0.1:<port>`. Expected: PASS.
+- [x] [P] [AC3] Failing test `TestPublish_OnlyDeclaredPorts`: with a fake `Listener` (`Listen(network, addr string) (net.Listener, error)`, the `tsnet.Server` method), `Publish` for `[{rdp 3389} {ssh 22}]` listens on exactly `:3389` and `:22`. Expected: FAIL, package missing.
+- [x] [AC3] Failing test `TestPublish_ForwardsToLoopback`: a connection accepted on the fake `:3389` reaches a local echo server standing in for `127.0.0.1:3389` (dialer injected), and bytes round-trip; closing the context stops every accept loop. Expected: FAIL.
+- [x] [AC3] Implement `Publish(ctx, l Listener, services []host.Service, dial)`: one `proxy.AcceptLoop` per service with a dialer to `127.0.0.1:<port>`. Expected: PASS.
 
 ### Enrolment (`internal/serve/node.go`)
 
-- [ ] [P] [AC2] Failing table test `TestNodeConfig_Enrolment`: with no `tailscaled.state` in `state_dir`, the auth key is read from `auth_key_file` and `enrolled=true`; with state present, the key file is never opened (a missing or `0000` file is fine) and `enrolled=false`; no state and no `auth_key_file` errors naming it. The `tsnet.Server` it builds has `Ephemeral: false`, `Dir: state_dir`, `Hostname` and `ControlURL` from the file. Expected: FAIL.
-- [ ] [AC2] Implement `nodeConfig(mesh, controlURL) (tsnetServerConfig, enrolled bool, err error)`. Expected: PASS.
+- [x] [P] [AC2] Failing table test `TestNodeConfig_Enrolment`: with no `tailscaled.state` in `state_dir`, the auth key is read from `auth_key_file` and `enrolled=true`; with state present, the key file is never opened (a missing or `0000` file is fine) and `enrolled=false`; no state and no `auth_key_file` errors naming it. The `tsnet.Server` it builds has `Ephemeral: false`, `Dir: state_dir`, `Hostname` and `ControlURL` from the file. Expected: FAIL.
+- [x] [AC2] Implement `nodeConfig(mesh, controlURL) (tsnetServerConfig, enrolled bool, err error)`. Expected: PASS.
 
 ### The command (`cmd/cli/host_serve.go`, `cmd/cli/host_serve_test.go`)
 
-- [ ] [AC5] Failing table test `TestHostServeCmd_Requires`: without `--config`, without `host.mesh`, or without `host.control_url`, serve exits 1 naming what is missing and starts nothing; a loose `state_dir` (fake `CheckStateDir` error) exits 1 naming it. Expected: FAIL, command missing.
-- [ ] [AC1] [AC2] Failing test `TestHostServeCmd_Ready`: with fake node and bootstrap starters, serve prints `READY node=<hostname> services=rdp:3389,ssh:22 enrolled=true` on stdout (then `enrolled=false` with state present) and publishes the resolved services. Expected: FAIL.
-- [ ] [AC1] [AC2] Implement `host serve --config`: `LoadFile`, `Resolve`, `EnsureStateDir`, the CLI-363 bootstrap when `bootstrap_ssh` is set (SOCKS on `bootstrap_socks_addr`, default `127.0.0.1:1055` as `connect`), `tsnet.Server.Up`, `Publish`, `READY`; init failures emit `ERROR reason=...` as `connect`. Expected: PASS.
-- [ ] [AC7] Failing test `TestHostServeCmd_RefusesUntaggedNode`: when the fake node's status after `Up` has no tags, serve emits `ERROR reason=node_not_tagged`, prints no `READY`, never calls `Publish`, closes the node and exits 1. Expected: FAIL, then implement the check on `status.Self.Tags`. Expected: PASS.
-- [ ] [AC1] Wiring test `TestRootCmd_ReachesHostServe`: `NewRootCmd().Find(["host","serve"])` resolves the serve command under `host`, with its local `--config` (#279 / ADR-013 class; review of #525). Expected: FAIL until registered.
-- [ ] [AC5] Extend `TestHostCmds_NeverReadUserStore` to `host serve` (fake node): no store read under the malformed-store fixture. Expected: PASS.
+- [x] [AC5] Failing table test `TestHostServeCmd_Requires`: without `--config`, without `host.mesh`, or without `host.control_url`, serve exits 1 naming what is missing and starts nothing; a loose `state_dir` (fake `CheckStateDir` error) exits 1 naming it. Expected: FAIL, command missing.
+- [x] [AC1] [AC2] Failing test `TestHostServeCmd_Ready`: with a fake node starter, serve prints `READY node=<hostname> services=rdp:3390 enrolled=true` on stdout (then `enrolled=false` with state present) and publishes the resolved services; `TestHostServeCmd_Bootstrap` (fake tunnel and control proxy) covers `bootstrap_ssh` on the default and the declared SOCKS address and `ssh_bootstrap_failed` when the tunnel cannot start; `TestHostServeCmd_PublishFailure` covers `publish_failed`; the help defines `enrolled=` (`TestHostServeCmd_HelpDefinesEnrolled`). Expected: FAIL.
+- [x] [AC1] [AC2] Implement `host serve --config`: `LoadFile`, `Resolve`, `EnsureStateDir`, the CLI-363 bootstrap when `bootstrap_ssh` is set (SOCKS on `bootstrap_socks_addr`, default `127.0.0.1:1055` as `connect`), `tsnet.Server.Up`, `Publish`, `READY`; init failures emit `ERROR reason=...` as `connect`. Expected: PASS.
+- [x] [AC7] Failing test `TestHostServeCmd_RefusesUntaggedNode`: when the fake node's status after `Up` has no tags, serve emits `ERROR reason=node_not_tagged`, prints no `READY`, never calls `Publish`, closes the node and exits 1. Expected: FAIL, then implement the check on `status.Self.Tags`. Expected: PASS.
+- [x] [AC1] Wiring test `TestRootCmd_ReachesHostServe`: `NewRootCmd().Find(["host","serve"])` resolves the serve command under `host`, with its local `--config` (#279 / ADR-013 class; review of #525). Expected: FAIL until registered.
+- [x] [AC5] Extend `TestHostCmds_NeverReadUserStore` to `host serve` (fake node): no store read under the malformed-store fixture. Expected: PASS.
 
-- [ ] PR 2 close: `go test ./...`, cross-GOOS vet, `smoke.bats` green; CI `test` (`-race`), `test-windows`, `lint`, `security` green.
+- [x] PR 2 close: `go test ./...`, cross-GOOS vet, `smoke.bats` green; CI `test` (`-race`), `test-windows`, `lint`, `security` green.
 
 ## Implementation — PR 3 (reconnect, health and `host check`)
 
