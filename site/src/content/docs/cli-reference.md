@@ -194,6 +194,7 @@ ts-bridge host [command]
 Available Commands:
   check   Verify host readiness (read-only)
   init    Interactive wizard to configure the host for RDP access
+  serve   Join the tailnet as a persistent node and publish the declared services
   setup   Configure the host for RDP access over Tailscale
 ```
 
@@ -245,6 +246,33 @@ ts-bridge host check --json
 
 Exit status: `0` when every step is `ok`, `2` when the check ran and at least one step
 is not `ok` (each one is printed with its fix), `1` when the check could not run.
+
+With `host.mesh.health_addr` in the `--config` file, `--json` adds `published` to each
+service: whether `host serve` publishes it. Serve not answering, or a responder that does
+not name the file's node, reads as `false`; without `health_addr` the field is absent.
+
+### `ts-bridge host serve`
+
+Join the tailnet as a persistent node and publish exactly the services the host file
+declares, each forwarded to `127.0.0.1:<port>` (Windows and Linux). It runs in the
+foreground; register it with the OS as a Scheduled Task or systemd unit
+([runbook](https://github.com/mlorentedev/ts-bridge/blob/master/docs/runbooks/host-serve.md)).
+
+```bash
+ts-bridge host serve --config /etc/ts-bridge/host.yaml
+```
+
+The file must declare `host.control_url` and `host.mesh` with `state_dir`
+([configuration](configuration.md#host-serve-hostmesh)). Signals:
+
+```text
+READY node=lab-pc-01 services=rdp:3389 enrolled=true    # stdout; true = this start used the auth key
+ERROR reason=node_not_tagged detail="..."                # stderr; also publish_failed,
+                                                         # ssh_bootstrap_failed, control_plane_unreachable
+```
+
+After `READY`, a dead SSH bootstrap is restarted with backoff and a lost control session
+reads not ready on `/health/ready` (`host.mesh.health_addr`); serve keeps running.
 
 ## `ts-bridge version`
 

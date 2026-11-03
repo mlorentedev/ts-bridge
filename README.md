@@ -138,6 +138,12 @@ ts-bridge host check
 
 For automation, use `--json`: `ts-bridge host setup --json` and `ts-bridge host check --json`.
 
+**Host on a network that blocks the control plane:** when native Tailscale cannot enrol
+because the network sinkholes or TLS-inspects a self-hosted control plane, run
+`ts-bridge host serve --config <host file>` instead. It joins as a persistent, tagged node
+(optionally through `bootstrap_ssh`) and publishes only the declared services; the OS
+starts it at boot. See [docs/runbooks/host-serve.md](docs/runbooks/host-serve.md).
+
 > **Note:** The old `scripts/client/` launchers (`run.sh`, `run.ps1`, `bootstrap.{sh,ps1}`) have been removed. Use the CLI binary directly — it reads `.env` automatically.
 
 ## What You Get

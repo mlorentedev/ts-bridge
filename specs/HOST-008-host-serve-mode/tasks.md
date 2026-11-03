@@ -84,25 +84,25 @@ created: "2026-10-30"
 
 ### `host check` (`cmd/cli/host.go`)
 
-- [ ] [AC6] Failing table test `TestHostCheckCmd_Published`: with `health_addr` declared and a fake serve health endpoint, `check --json` reports `published: true|false` per declared service; with the endpoint down, or answered by a responder whose body does not name the file's node, every service is `published: false`; without `health_addr` the field is absent. Expected: FAIL.
-- [ ] [AC6] Implement the probe (loopback GET, 2 s timeout) and `serviceJSON.Published *bool` (`omitempty`). Expected: PASS.
+- [x] [AC6] Failing table test `TestHostCheckCmd_Published`: with `health_addr` declared and a fake serve health endpoint, `check --json` reports `published: true|false` per declared service; with the endpoint down, or answered by a responder whose body does not name the file's node, every service is `published: false`; without `health_addr` the field is absent. Expected: FAIL.
+- [x] [AC6] Implement the probe (loopback GET, 2 s timeout) and `serviceJSON.Published *bool` (`omitempty`). Expected: PASS.
 
 ### The auth key file (`internal/host/statedir*.go`)
 
-- [ ] [P] [AC5] Failing tests `TestCheckUnixSecretFile` (pure: a root-owned regular file `0600`/`0400` is accepted; group or other bits, another owner, a directory or a link are refused) and, on Windows, `TestCheckWindowsSecretDACL` (SDDL: SYSTEM and Administrators only accepted; a read or write grant to another SID refused). Expected: FAIL, then implement `CheckSecretFile`, reusing the DACL walk with a read-and-write mask, and call it in `serve.NewNodeConfig` before reading the key. Expected: PASS.
+- [x] [P] [AC5] Failing tests `TestCheckUnixSecretFile` (pure: a root-owned regular file `0600`/`0400` is accepted; group or other bits, another owner, a directory or a link are refused) and, on Windows, `TestCheckWindowsSecretDACL` (SDDL: SYSTEM and Administrators only accepted; a read or write grant to another SID refused). Expected: FAIL, then implement `CheckSecretFile`, reusing the DACL walk with a read-and-write mask, and call it in `serve.NewNodeConfig` before reading the key. Expected: PASS.
 
 ### Docs
 
-- [ ] `docs/runbooks/host-serve.md`: the Windows Scheduled Task (SYSTEM, at startup, restart on failure) and the Linux systemd unit, the protected `state_dir`, deleting the auth key file after `enrolled=true`. `site/src/content/docs/cli-reference.md` (`host serve`), `configuration.md` (`host.mesh`), README host section, `docs/design/host-client-parity.md`. If PR 3 passes ~300 LOC, the docs move to a PR 4.
+- [x] `docs/runbooks/host-serve.md`: the Windows Scheduled Task (SYSTEM, at startup, restart on failure) and the Linux systemd unit, the protected `state_dir`, deleting the auth key file after `enrolled=true`. `site/src/content/docs/cli-reference.md` (`host serve`), `configuration.md` (`host.mesh`), README host section, `docs/design/host-client-parity.md`. If PR 3 passes ~300 LOC, the docs move to a PR 4.
 
 - [ ] PR 3 close: `go test ./...`, cross-GOOS vet, `smoke.bats`; CI green.
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command (each greps its `--- PASS:` line)
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command (each greps its `--- PASS:` line)
 - [ ] Live acceptance after mlorentedev/kubelab#2862: AC1, AC2 and AC4 on the lab host, evidence in `verification.md`
 - [ ] Lint passes (CI `lint`; golangci-lint is blocked on the maintainer's workstation)
-- [ ] No unrelated changes in the diff (no scope creep)
+- [x] No unrelated changes in the diff (no scope creep)
 - [ ] `verification.md` filled in
-- [ ] PRs reference this spec folder (`Closes #522` on the last one only)
+- [x] PRs reference this spec folder (`Closes #522` on the last one only)
