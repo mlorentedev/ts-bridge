@@ -283,3 +283,15 @@ func TestHostServeCmd_HelpDefinesEnrolled(t *testing.T) {
 		}
 	}
 }
+
+// The production command tree reaches host serve (the #279 / ADR-013 wiring
+// class): tests that build the command directly cannot catch a missing edge.
+func TestRootCmd_ReachesHostServe(t *testing.T) {
+	c, _, err := cmdpkg.NewRootCmd().Find([]string{"host", "serve"})
+	if err != nil || c.Name() != "serve" || c.Parent() == nil || c.Parent().Name() != "host" {
+		t.Fatalf("root.Find(host serve) = %v, %v; want the serve command under host", c, err)
+	}
+	if c.Flags().Lookup("config") == nil {
+		t.Error("host serve has no local --config")
+	}
+}
