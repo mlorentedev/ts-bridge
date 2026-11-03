@@ -110,6 +110,28 @@ func TestHostInit_WritesYAML(t *testing.T) {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("darwin wrote %s", path)
 		}
+		// Like host setup, macOS does not demand a path it will not write.
+		if out, err := runHostInit(t, "darwin", noRead{t}); err != nil || !strings.Contains(out, "not applicable") {
+			t.Errorf("darwin without --config: err %v, stdout %q; want exit 0 and not applicable", err, out)
+		}
+	})
+	// The documented paths (/etc/ts-bridge, C:\ProgramData\ts-bridge) do not exist
+	// on a fresh host (review of #579).
+	t.Run("a missing parent is created", func(t *testing.T) {
+		dir := isolateHostEnv(t)
+		path := filepath.Join(dir, "etc", "ts-bridge", "host.yaml")
+		if _, err := runHostInit(t, "linux", noRead{t}, "--config", path, "--port", "3390"); err != nil {
+			t.Fatalf("host init: %v", err)
+		}
+		if _, err := host.LoadFile(path, "linux", nil); err != nil {
+			t.Errorf("LoadFile = %v", err)
+		}
+		if info, err := os.Stat(filepath.Dir(path)); err == nil && runtime.GOOS != "windows" && info.Mode().Perm() != 0o755 {
+			t.Errorf("parent mode %04o, want 0755 so an unelevated host check can traverse it", info.Mode().Perm())
+		}
+		if entries, _ := os.ReadDir(filepath.Dir(path)); len(entries) != 1 {
+			t.Errorf("parent holds %v, want only host.yaml (no leftover temp file)", entries)
+		}
 	})
 }
 

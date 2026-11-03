@@ -16,7 +16,7 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
 - [x] AC5 (per-OS defaults) -> #554 / test `TestResolve_PerOSDefaults`
 - [x] AC6 (`control_url` in the descriptor) -> #554 / tests `TestCheckFor_ControlURL`, `TestSetupFor_ControlURL`, `TestHostCmds_DescriptorControlURL`, `TestPrintSetupSummary_ControlURL`
 - [x] AC7 (`host init` writes the YAML) -> PR B / tests `TestHostInit_RequiresConfig`, `TestHostInit_WritesYAML`
-- [x] AC8 (`host init` overwrite and unreadable-path refusal) -> PR B / test `TestHostInit_Overwrite` (the unreadable case runs on Unix as non-root: passed in WSL)
+- [x] AC8 (`host init` overwrite and unreadable-path refusal) -> PR B / test `TestHostInit_Overwrite`. Its unreadable-file case cannot run on Windows (no read bit) or as root, so the authoritative run is the CI `test` job (Linux, non-root); it also passed unprivileged in WSL on 2026-11-03
 ## Test status
 
 - Test suite: `go test ./... -count=1` -> all 14 packages ok (Windows, 2026-11-03); `go vet ./...` clean for windows, linux, darwin; `features.json` f1-f8 pass; `TestHostInit_*` pass on Linux in WSL.
@@ -31,6 +31,10 @@ Brief log of non-obvious trade-offs or course corrections taken during the work.
 - `host init` loads the file it wrote before reporting success; that read-back found `key: null` from `yaml.Marshal` and led to `omitempty` on the optional keys.
 - `--firewall-rule`/`--no-sleep` on a non-Windows host are refused rather than written, since the loader would refuse the file they produce.
 - A declared RDP port no step applies (Windows check, Linux xrdp) is deferred to #557.
+- Review round 1 (nan/deepseek-v4-flash, FAIL on `70251c9`): the documented paths failed on a fresh host because the parent did not exist (now created `0755`), and the breaking `host init` change lacked a release marker (PR #579 retitled `feat(host)!` with a `BREAKING CHANGE:` footer). Minors applied in the same push: parent help and setup summary wording, `--no-sleep` help, macOS before `--config`, the resolved values on `host check --verbose`, no path in the file header.
+- `host init` now writes a temporary file in the same directory, loads it back, and renames it over the path, so a file that fails the read-back never replaces a good one (review Q2).
+- Schema drift, recorded rather than re-contracted: `proposal.md` lists five host keys, and `LoadFile` also accepts `host.mesh`, which HOST-008 added and documents (`specs/HOST-008-host-serve-mode/`, `configuration.md`).
+- Accepted risk kept from the proposal: elevated `host setup` still reads `./.env` from the working directory; `host check --verbose` now logs the resolved values, so the winning layer is observable (review Q1).
 
 ## Promotion candidates
 

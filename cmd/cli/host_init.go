@@ -55,7 +55,7 @@ Examples:
 	cmd.Flags().String("config", "", "Host configuration file (YAML) to write (required)")
 	cmd.Flags().Int("port", 0, "RDP port (default: 3389)")
 	cmd.Flags().String("firewall-rule", "", "Firewall rule name, Windows only (default: Tailscale-RDP-Ingress)")
-	cmd.Flags().Bool("no-sleep", false, "Leave sleep settings alone, Windows only")
+	cmd.Flags().Bool("no-sleep", false, "Allow the host to sleep (writes power.prevent_sleep: false), Windows only")
 	cmd.Flags().Bool("force", false, "Replace an existing file without asking")
 	return cmd
 }
@@ -71,13 +71,13 @@ type hostInitFlags struct {
 
 // runHostInit is the entry point for "ts-bridge host init".
 func runHostInit(cmd *cobra.Command, _ []string) error {
-	f, err := parseHostInitFlags(cmd)
-	if err != nil {
-		return err
-	}
 	if hostGOOS == "darwin" {
 		fmt.Fprintln(cmd.OutOrStdout(), "Host init is not applicable on macOS yet (#459); nothing was written.")
 		return nil
+	}
+	f, err := parseHostInitFlags(cmd)
+	if err != nil {
+		return err
 	}
 	interactive := !cmd.Flags().Changed("port") &&
 		!cmd.Flags().Changed("firewall-rule") &&
@@ -231,28 +231,52 @@ func hostFileFor(f hostInitFlags) host.File {
 	return file
 }
 
-// writeHostFile writes the YAML host file and loads it back, so a file host
-// setup would refuse is never left behind as a success.
+// writeHostFile writes the YAML host file through a temporary file in the same
+// directory, loads that back, and only then renames it over the path, so a
+// file host setup would refuse never replaces a good one. A missing parent is
+// created 0755: host check, unelevated, must traverse it.
 func writeHostFile(f hostInitFlags, warn io.Writer) error {
 	body, err := yaml.Marshal(hostFileFor(f))
 	if err != nil {
 		return fmt.Errorf("encode host file: %w", err)
 	}
 	content := "# ts-bridge host configuration (ADR-017), written by ts-bridge host init.\n" +
-		"# Read by: ts-bridge host setup | check | serve --config " + f.Config + "\n" + string(body)
-	// #nosec G306 -- the host file holds no secret; host check, unelevated, must read it (ADR-017).
-	if err := os.WriteFile(f.Config, []byte(content), hostFileMode); err != nil {
+		"# Read by: ts-bridge host setup | check | serve --config <this file>\n" + string(body)
+	dir := filepath.Dir(f.Config)
+	// #nosec G301 -- holds no secret; an unelevated host check must traverse it.
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", dir, err)
+	}
+	tmp, err := os.CreateTemp(dir, ".host-init-*.yaml")
+	if err != nil {
 		return fmt.Errorf("write host file: %w", err)
 	}
-	if hostGOOS != windowsOS {
-		// WriteFile keeps an existing file's mode and applies the umask.
-		// #nosec G302 -- as above: readable by host check, writable by its owner only.
-		if err := os.Chmod(f.Config, hostFileMode); err != nil {
-			return fmt.Errorf("set host file mode: %w", err)
-		}
+	defer func() { _ = os.Remove(tmp.Name()) }() // a no-op once renamed
+	if err := writeAndClose(tmp, content); err != nil {
+		return err
 	}
-	if _, err := host.LoadFile(f.Config, hostGOOS, warn); err != nil {
-		return fmt.Errorf("host init wrote a file it cannot read back: %w", err)
+	if _, err := host.LoadFile(tmp.Name(), hostGOOS, warn); err != nil {
+		return fmt.Errorf("host init built a file it cannot read back: %w", err)
+	}
+	if err := os.Rename(tmp.Name(), f.Config); err != nil {
+		return fmt.Errorf("write host file: %w", err)
+	}
+	return nil
+}
+
+// writeAndClose writes content to the temporary host file and gives it
+// hostFileMode (CreateTemp makes it 0600).
+func writeAndClose(tmp *os.File, content string) error {
+	_, err := tmp.WriteString(content)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return fmt.Errorf("write host file: %w", err)
+	}
+	// #nosec G302 -- the host file holds no secret; host check, unelevated, must read it (ADR-017).
+	if err := os.Chmod(tmp.Name(), hostFileMode); err != nil {
+		return fmt.Errorf("set host file mode: %w", err)
 	}
 	return nil
 }
