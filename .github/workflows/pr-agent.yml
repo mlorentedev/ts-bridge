@@ -110,6 +110,14 @@ jobs:
       # Reading the guard from the base ref closes that without losing coverage -- the
       # guard's logic is generic marker-matching, never specific to the PR under review,
       # and the exact same trust reasoning already governs BASE_REF below.
+      #
+      # What this decides, per input of a `pull_request` run: the workflow file and the
+      # model settings in its `env` come from the PR head (same-repository PRs only, the
+      # `fork == false` condition above), so write access to the repository is the
+      # boundary for those. `scripts/check-review-published.sh`, the reviewer registry
+      # and `.pr_agent.toml` come from the default branch. A PR that edits the guard
+      # script is therefore judged by the guard on the default branch; its edit takes
+      # effect once it merges.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -213,9 +221,13 @@ jobs:
       #
       # `fallback_models` names deepseek-v4-flash for CONCURRENCY (per-model limit,
       # measured), never to soften the quality bar. The marker comes from the
-      # registry, over the API (never from this job's own checkout, which is the
-      # PR head) at the BASE ref
-      # since a PR supplying it could redefine it. Two more bindings, both
+      # registry at the BASE ref (the repository's default branch), read over the API.
+      # This job's checkout is the default branch too (see the checkout step), so the
+      # script and the marker it matches both come from the base, never from the PR
+      # head: a PR supplying either could redefine what counts as a review. The head
+      # copy of the registry is consulted only to detect the PR that introduces the
+      # entry, and then only to confirm it exists (scripts/check-review-published.sh).
+      # Two more bindings, both
       # measured as gaps by CodeRabbit on the yt-metrics-cli and svqtriana ports
       # (2026-09-06): the comment must be AUTHORED by github-actions[bot] (on a
       # public repo anyone can paste the marker text), and it must have been
