@@ -20,7 +20,7 @@ GUARD="$ROOT/scripts/check-features-shape.sh"
 [ -f "$GUARD" ] || { echo "test-features-shape: guard not found at $GUARD" >&2; exit 2; }
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+trap 'chmod -R u+rwx "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
 
 OBJ='{"id":"X-f1","behavior":"b","verification":"true","state":"pending","evidence":""}'
 
@@ -66,6 +66,12 @@ build() {
       put "$1" archive/two/features.json '[]'
       put "$1" three/features.json '[{"id":"3"}]'
       ;;
+    # find cannot read the subtree, so a clean report would cover files it never saw.
+    unreadable-dir)
+      put "$1" A/features.json "[$OBJ]"
+      mkdir "$WORK/$1/specs/locked"
+      chmod 000 "$WORK/$1/specs/locked"
+      ;;
     not-a-dir)
       rmdir "$WORK/$1/specs"
       : >"$WORK/$1/specs"
@@ -98,6 +104,9 @@ archived-bad:1:archive/A/features.json
 only-bad-named:1:bad/features.json
 every-bad-named:1:3 of 3 features.json
 not-a-dir:2:not a directory'
+# Permissions do not bind root, so the unreadable-directory case cannot fail there.
+if [ "$(id -u)" -ne 0 ]; then SPECS="$SPECS
+unreadable-dir:2:find failed"; fi
 
 # name:substring that must NOT appear in the output
 ABSENT='only-bad-named:good/features.json'

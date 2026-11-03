@@ -20,7 +20,7 @@ The review tooling reads `features.json` as a JSON array of objects (`id`, `beha
 
 ## What
 
-`scripts/check-features-shape.sh [specs-dir]` walks every `features.json` under `specs/` (archive included, read-only), prints one line per deviation and exits 1 when any file differs from the scaffold. A fixture suite runs each case under bash and zsh, and the hygiene job runs the check on the real tree.
+`scripts/check-features-shape.sh [specs-dir]` walks every `features.json` under `specs/` (archive included, read-only), prints one line per deviation and exits 1 when any file differs from the scaffold. `scripts/tests/test-features-shape.sh` runs a fixture suite under bash and zsh. Neither runs in CI yet: wiring them into the hygiene job is an owner follow-up (see Risks).
 
 ## Out of scope
 
@@ -33,7 +33,7 @@ Things this PR explicitly does NOT include. Forces a sharp boundary and prevents
 
 Failure modes, dependencies, and unknowns to clarify before implementation. If any item here is unresolved, do not move to `tasks.md` yet.
 
-- The hygiene workflow is `.github/**`, owner-only: wiring both steps is a follow-up named in the PR.
+- The hygiene workflow is `.github/**`, owner-only: wiring both steps is a follow-up named in the PR, and the real-tree step stays red on `CI-345-hygiene-guard-fixes` until the owner exempts or normalises it.
 
 ## Acceptance criteria
 

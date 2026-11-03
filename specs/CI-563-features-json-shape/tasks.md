@@ -23,7 +23,7 @@ created: "2026-11-02"
 > The `[P]` / `[AC<n>]` markers are optional — see the legend above. Behaviors 1 and 2 below are independent, so their *first* test task carries `[P]`.
 
 - [x] [AC1] [AC3] Write `scripts/tests/test-features-shape.sh` with a stub check that always passes: 47 FAIL lines (RED)
-- [x] [AC1] [AC2] [AC4] Implement `scripts/check-features-shape.sh` to make it pass (48 cases, bash and zsh)
+- [x] [AC1] [AC2] [AC4] Implement `scripts/check-features-shape.sh` to make it pass (50 cases, bash and zsh)
 - [x] [AC3] Mutants: findings disabled, validity check disabled, exit status flipped, string-type check disabled each fail the suite
 - [x] [AC2] Run the check on the real tree and list what it reports in the PR
 

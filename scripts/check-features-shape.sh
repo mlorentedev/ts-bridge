@@ -54,6 +54,13 @@ findings() {
   jq -r "$FILTER" "$1"
 }
 
+# The list goes to a file, not a process substitution: that would discard find's exit status,
+# and a subtree find could not read would then be reported as a clean tree.
+list="$(mktemp)"
+trap 'rm -f "$list"' EXIT
+find "$SPECS_DIR" -type f -name features.json -print0 >"$list" ||
+  { echo "check-features-shape: find failed under $SPECS_DIR, the report would be incomplete" >&2; exit 2; }
+
 total=0
 bad=0
 while IFS= read -r -d '' f; do
@@ -62,7 +69,7 @@ while IFS= read -r -d '' f; do
   [ -n "$out" ] || continue
   bad=$((bad + 1))
   printf '%s\n' "$out" | while IFS= read -r line; do printf '  %s: %s\n' "$f" "$line"; done
-done < <(find "$SPECS_DIR" -type f -name features.json -print0)
+done <"$list"
 
 if [ "$bad" -eq 0 ]; then
   echo "check-features-shape: OK ($total features.json files)"
