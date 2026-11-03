@@ -203,7 +203,8 @@ jobs:
           go-version-file: go.mod
 
       - name: Run gosec
+        # Pinned to the version in mise.toml; scripts/tests/test-go-toolchain.sh fails when they differ (#528).
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
           gosec ./...
 

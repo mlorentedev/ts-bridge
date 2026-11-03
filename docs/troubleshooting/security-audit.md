@@ -134,8 +134,9 @@ Boundaries to defend (in order of blast radius):
   every PR to `master` (the `ci.yml` trigger) but do not block a merge. The protection is set by hand, not as
   code (#351).
 - `gosec` runs in the `security` job of `.github/workflows/ci.yml` on every
-  PR to `master`, installed with `go install github.com/securego/gosec/v2/cmd/gosec@latest`
-  (unpinned, #528). Findings fail the build (see ARCH-004 PR #24 retry for an
+  PR to `master`, installed with `go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0`
+  (the same version `mise.toml` pins for a local run, enforced by
+  `scripts/tests/test-go-toolchain.sh`, #528). Findings fail the build (see ARCH-004 PR #24 retry for an
   example).
 - `GitGuardian` scans every commit for leaked secrets.
 
