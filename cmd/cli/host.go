@@ -297,6 +297,7 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 		logger.Error("host check failed", "error", err)
 		return fmt.Errorf("host check failed: %w", err)
 	}
+	result.Published = probeServePublished(file, cfg.Services)
 
 	return reportCheck(cmd.OutOrStdout(), result, jsonOut)
 }
@@ -494,6 +495,8 @@ type serviceJSON struct {
 	Enabled    bool   `json:"enabled"`
 	Active     *bool  `json:"active"`
 	FirewallOK bool   `json:"firewall_ok"`
+	// Published is whether host serve publishes it; absent without health_addr.
+	Published *bool `json:"published,omitempty"`
 }
 
 func stepsJSON(steps []host.SetupStep) []setupStepJSON {
@@ -578,7 +581,12 @@ func checkJSON(r host.CheckResult) ([]byte, error) {
 		Steps:       stepsJSON(r.Steps),
 	}
 	for _, svc := range r.Services {
-		out.Services = append(out.Services, serviceJSON(svc))
+		sj := serviceJSON{Kind: svc.Kind, Port: svc.Port, Enabled: svc.Enabled, Active: svc.Active, FirewallOK: svc.FirewallOK}
+		if r.Published != nil {
+			p := r.Published[serviceKey(svc.Kind, svc.Port)]
+			sj.Published = &p
+		}
+		out.Services = append(out.Services, sj)
 	}
 	return json.MarshalIndent(out, "", "  ")
 }

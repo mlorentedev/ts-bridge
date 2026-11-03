@@ -44,6 +44,9 @@ type CheckResult struct {
 	FirewallOK  bool
 	TailscaleUp bool
 	ControlURL  string // the declared control plane, for the descriptor
+	// Published maps "kind:port" to whether host serve publishes that service;
+	// nil when no host.mesh.health_addr was probed.
+	Published map[string]bool
 	Services    []Service
 	Steps       []SetupStep
 }

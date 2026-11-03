@@ -35,12 +35,7 @@ func NewNodeConfig(mesh host.FileMesh, controlURL string) (NodeConfig, error) {
 	if mesh.StateDir == nil {
 		return NodeConfig{}, errors.New("host.mesh.state_dir: required; serve keeps the node identity there")
 	}
-	nc := NodeConfig{StateDir: *mesh.StateDir, ControlURL: controlURL}
-	if mesh.Hostname != nil {
-		nc.Hostname = *mesh.Hostname
-	} else if name, err := os.Hostname(); err == nil {
-		nc.Hostname = strings.ToLower(name)
-	}
+	nc := NodeConfig{StateDir: *mesh.StateDir, ControlURL: controlURL, Hostname: NodeHostname(mesh)}
 	_, err := os.Stat(filepath.Join(nc.StateDir, stateFile))
 	switch {
 	case err == nil:
@@ -58,6 +53,16 @@ func NewNodeConfig(mesh host.FileMesh, controlURL string) (NodeConfig, error) {
 	}
 	nc.AuthKey = key
 	return nc, nil
+}
+
+// NodeHostname is the node's name: host.mesh.hostname, else the OS hostname in
+// lower case. host check compares serve's health answer against it.
+func NodeHostname(mesh host.FileMesh) string {
+	if mesh.Hostname != nil {
+		return *mesh.Hostname
+	}
+	name, _ := os.Hostname()
+	return strings.ToLower(name)
 }
 
 func readAuthKey(path string) (string, error) {
