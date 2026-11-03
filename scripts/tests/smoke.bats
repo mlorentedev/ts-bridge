@@ -234,9 +234,10 @@ TARGET="100.64.0.1:3389"
 }
 
 @test "init: missing a required flag with no TTY fails fast (does not hang)" {
-  # Only --auth-key → falls back to the interactive wizard. With stdin closed
-  # (as in CI) the wizard must error out, never block the run.
-  run "${BIN}" init --auth-key "${AUTH_KEY}" </dev/null
+  # Only --target → falls back to the interactive wizard. With stdin closed
+  # (as in CI) the wizard must error out, never block the run. A key flag alone
+  # is refused before the wizard (#401), so it would not exercise this path.
+  run "${BIN}" init --target 100.64.0.1:3389 </dev/null
   assert_failure
 }
 

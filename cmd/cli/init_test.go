@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -423,6 +424,46 @@ func TestInitAuthKeyFile(t *testing.T) {
 			}
 			if got := strings.Contains(stderr, "--auth-key is visible in the process list"); got != tt.wantWarning {
 				t.Errorf("process-table warning printed = %v, want %v:\n%s", got, tt.wantWarning, stderr)
+			}
+		})
+	}
+}
+
+// A key flag without --target used to fall into the wizard, which prompted for the key
+// again and silently discarded the one supplied (#401). Both key flags now refuse instead.
+func TestInitKeyFlagRequiresTarget(t *testing.T) {
+	tests := []struct {
+		name    string
+		keyArgs func(keyPath string) []string
+		target  []string
+	}{
+		{"auth-key-file without target", func(p string) []string { return []string{"--auth-key-file", p} }, nil},
+		{"auth-key without target", func(string) []string { return []string{"--auth-key", "tskey-auth-KEYID-SECRET"} }, nil},
+		{"auth-key-file with empty target", func(p string) []string { return []string{"--auth-key-file", p} }, []string{"--target", ""}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			keyPath := filepath.Join(tmpDir, "authkey")
+			if err := os.WriteFile(keyPath, []byte("tskey-auth-KEYID-SECRET"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg := filepath.Join(tmpDir, ".env")
+			args := append(tt.keyArgs(keyPath), tt.target...)
+			args = append(args, "--config", cfg)
+
+			cmd := newInitCmd()
+			cmd.SetArgs(args)
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+			var runErr error
+			captureInitOutput(t, func() { runErr = cmd.Execute() })
+
+			if runErr == nil || !strings.Contains(runErr.Error(), "requires --target") {
+				t.Fatalf("error = %v, want a refusal naming --target", runErr)
+			}
+			if _, err := os.Stat(cfg); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("config written despite the refusal (stat err = %v)", err)
 			}
 		})
 	}
