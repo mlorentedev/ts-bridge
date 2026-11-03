@@ -204,8 +204,6 @@ func TestNew_FileReceivesAllLevels(t *testing.T) {
 	}
 }
 
-
-
 func TestFileRotator_Open(t *testing.T) {
 	dir := t.TempDir()
 	rot := NewFileRotator(dir)
