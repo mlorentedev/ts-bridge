@@ -73,9 +73,10 @@ func readAuthKey(path string) (string, error) {
 	return key, nil
 }
 
-// Server returns the persistent tsnet node for this config. logf nil discards
-// tsnet's logs.
-func (nc NodeConfig) Server(logf func(string, ...any)) *tsnet.Server {
+// Server returns the persistent tsnet node for this config, logging through
+// nc.Logf (nil discards tsnet's logs).
+func (nc NodeConfig) Server() *tsnet.Server {
+	logf := nc.Logf
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}

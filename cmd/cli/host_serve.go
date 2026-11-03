@@ -213,7 +213,7 @@ func formatServeReady(node string, services []serve.Service, enrolled bool) stri
 
 // startServeNode brings the persistent tsnet node up and returns its tags.
 func startServeNode(ctx context.Context, nc serve.NodeConfig) (serveNode, []string, error) {
-	s := nc.Server(nc.Logf)
+	s := nc.Server()
 	upCtx, cancel := context.WithTimeout(ctx, config.Defaults().ConnectTimeout)
 	defer cancel()
 	status, err := s.Up(upCtx)

@@ -3,6 +3,7 @@ package serve
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -186,11 +187,25 @@ func TestNodeConfig_Enrolment(t *testing.T) {
 			if nc.AuthKey != tc.wantKey || nc.Enrolling != tc.wantEnrolling {
 				t.Errorf("AuthKey %q, Enrolling %v; want %q, %v", nc.AuthKey, nc.Enrolling, tc.wantKey, tc.wantEnrolling)
 			}
-			s := nc.Server(nil)
+			s := nc.Server()
 			if s.Ephemeral || s.Dir != *tc.mesh.StateDir || s.Hostname != "lab" || s.ControlURL != "https://hs.example" || s.AuthKey != tc.wantKey {
 				t.Errorf("tsnet.Server = {Ephemeral %v Dir %q Hostname %q ControlURL %q}, want a persistent node from the file",
 					s.Ephemeral, s.Dir, s.Hostname, s.ControlURL)
 			}
 		})
 	}
+}
+
+// The tsnet node logs through NodeConfig.Logf, the path host serve uses to
+// show tsnet's lines under --verbose.
+func TestNodeConfig_ServerLogs(t *testing.T) {
+	var got []string
+	nc := NodeConfig{Hostname: "lab", StateDir: t.TempDir(), Logf: func(format string, args ...any) {
+		got = append(got, fmt.Sprintf(format, args...))
+	}}
+	nc.Server().Logf("control: %s", "refused")
+	if len(got) != 1 || got[0] != "control: refused" {
+		t.Errorf("tsnet log lines = %q, want them passed to NodeConfig.Logf", got)
+	}
+	NodeConfig{Hostname: "lab"}.Server().Logf("discarded") // nil Logf must not panic
 }
