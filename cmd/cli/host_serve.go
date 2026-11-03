@@ -127,7 +127,13 @@ func loadServePlan(cmd *cobra.Command) (servePlan, error) {
 		return servePlan{}, err
 	}
 	cfg := host.Resolve(hostGOOS, file, host.Flags{Verbose: mustBool(cmd, "verbose"), VerboseSet: cmd.Flags().Changed("verbose")})
-	return servePlan{node: node, mesh: mesh, services: serveServices(cfg), logger: newHostLogger(cfg, cmd.ErrOrStderr())}, nil
+	logger := newHostLogger(cfg, cmd.ErrOrStderr())
+	// tsnet's own logs go to the serve logger at debug, so --verbose shows why a
+	// node failed to join.
+	node.Logf = func(format string, args ...any) {
+		logger.Debug(fmt.Sprintf(format, args...), "component", "tsnet")
+	}
+	return servePlan{node: node, mesh: mesh, services: serveServices(cfg), logger: logger}, nil
 }
 
 func serveServices(cfg host.Config) []serve.Service {
@@ -207,7 +213,7 @@ func formatServeReady(node string, services []serve.Service, enrolled bool) stri
 
 // startServeNode brings the persistent tsnet node up and returns its tags.
 func startServeNode(ctx context.Context, nc serve.NodeConfig) (serveNode, []string, error) {
-	s := nc.Server(nil)
+	s := nc.Server(nc.Logf)
 	upCtx, cancel := context.WithTimeout(ctx, config.Defaults().ConnectTimeout)
 	defer cancel()
 	status, err := s.Up(upCtx)

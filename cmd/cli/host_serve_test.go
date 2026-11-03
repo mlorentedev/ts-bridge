@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -293,5 +294,38 @@ func TestRootCmd_ReachesHostServe(t *testing.T) {
 	}
 	if c.Flags().Lookup("config") == nil {
 		t.Error("host serve has no local --config")
+	}
+}
+
+// --verbose shows tsnet's own log lines, which explain a failed join; without
+// it they stay out of the operator's output (review of #558).
+func TestHostServeCmd_VerboseShowsNodeLogs(t *testing.T) {
+	for _, verbose := range []bool{false, true} {
+		path, _ := serveFile(t, "")
+		args := []string{"--config", path}
+		if verbose {
+			args = append(args, "--verbose")
+		}
+		node := &fakeServeNode{}
+		var errOut bytes.Buffer
+		start := func(_ context.Context, nc serve.NodeConfig) (cmdpkg.ServeNodeForTest, []string, error) {
+			if nc.Logf == nil {
+				t.Fatal("NodeConfig.Logf is nil: tsnet's logs are discarded")
+			}
+			nc.Logf("control: %s", "map response refused")
+			return node, []string{"tag:lab"}, nil
+		}
+		c := cmdpkg.HostServeCmdForTest(t, serveGOOS(), start, func(string) error { return nil })
+		c.SetOut(io.Discard)
+		c.SetErr(&errOut)
+		c.SetArgs(args)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if err := c.ExecuteContext(ctx); err != nil {
+			t.Fatalf("verbose=%v: %v", verbose, err)
+		}
+		if got := strings.Contains(errOut.String(), "map response refused"); got != verbose {
+			t.Errorf("verbose=%v: node log shown %v, stderr %q", verbose, got, errOut.String())
+		}
 	}
 }

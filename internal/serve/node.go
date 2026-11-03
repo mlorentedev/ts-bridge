@@ -24,6 +24,8 @@ type NodeConfig struct {
 	ControlURL string
 	AuthKey    string // set only when Enrolling
 	Enrolling  bool   // no node state yet: this start enrols with AuthKey
+	// Logf receives tsnet's logs; nil discards them.
+	Logf func(format string, args ...any)
 }
 
 // NewNodeConfig builds the node's settings from host.mesh. The auth key file
