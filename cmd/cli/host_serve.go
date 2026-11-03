@@ -53,8 +53,13 @@ Scheduled Task as SYSTEM, a systemd unit on Linux); ts-bridge installs nothing.
 
 Signals:
   READY node=<hostname> services=<kind:port,...> enrolled=<true|false>  (stdout)
+    enrolled=true   this start enrolled the node with auth_key_file (first start;
+                    the provisioning may now delete the key file)
+    enrolled=false  this start reused the node identity already in state_dir
   ERROR reason=<token> detail="..."                                      (stderr)
-  A node without tags is refused: reason=node_not_tagged.
+    reason=node_not_tagged  the node came up without tags; nothing is published
+    reason=publish_failed   a declared service could not listen on the node
+    reason=ssh_bootstrap_failed, control_plane_unreachable, bad_authkey as connect
 
 Examples:
   ts-bridge host serve --config /etc/ts-bridge/host.yaml
@@ -180,6 +185,7 @@ func runServeNode(ctx context.Context, stdout, stderr io.Writer, plan servePlan)
 	}
 	published, err := serve.Publish(node, plan.services, serve.LoopbackDialer{}, config.Defaults(), plan.logger)
 	if err != nil {
+		emitError(stderr, reasonPublishFailed, err.Error())
 		return err
 	}
 	defer func() { _ = published.Close() }()

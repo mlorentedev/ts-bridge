@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ts-bridge/internal/bootstrapssh"
 	"ts-bridge/internal/host"
 	"ts-bridge/internal/serve"
 )
@@ -117,6 +118,21 @@ func PrintCheckTextForTest(w io.Writer, r host.CheckResult) {
 
 // ServeNodeForTest is the node a fake serve starter returns.
 type ServeNodeForTest = serveNode
+
+// ControlBootstrapForTest is the SSH bootstrap a fake tunnel starter returns.
+type ControlBootstrapForTest = controlBootstrap
+
+// SetServeBootstrapForTest replaces the SSH tunnel starter and the control
+// proxy configurer for the test.
+func SetServeBootstrapForTest(
+	t interface{ Cleanup(func()) },
+	start func(context.Context, bootstrapssh.Config) (ControlBootstrapForTest, error),
+	configure func(context.Context, string, string) error,
+) {
+	prevStart, prevConfigure := sshTunnelStarter, controlProxyConfigurer
+	sshTunnelStarter, controlProxyConfigurer = start, configure
+	t.Cleanup(func() { sshTunnelStarter, controlProxyConfigurer = prevStart, prevConfigure })
+}
 
 // HostServeCmdForTest returns a host serve command, as on goos, that starts
 // its node with start and checks the state directory with ensure.

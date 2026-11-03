@@ -8,26 +8,32 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
 	cmdpkg "ts-bridge/cmd/cli"
+	"ts-bridge/internal/bootstrapssh"
 	"ts-bridge/internal/serve"
 )
 
 // fakeServeNode stands in for the tsnet node: Listen opens a loopback
 // listener and records the address serve asked for.
 type fakeServeNode struct {
-	mu     sync.Mutex
-	addrs  []string
-	closed bool
+	mu        sync.Mutex
+	addrs     []string
+	closed    bool
+	listenErr error
 }
 
 func (n *fakeServeNode) Listen(network, addr string) (net.Listener, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.addrs = append(n.addrs, addr)
+	if n.listenErr != nil {
+		return nil, n.listenErr
+	}
 	return net.Listen(network, "127.0.0.1:0")
 }
 
@@ -52,7 +58,13 @@ type serveRun struct {
 // returns right after printing it.
 func runHostServe(t *testing.T, goos string, args []string, tags []string, ensure func(string) error) serveRun {
 	t.Helper()
-	run := serveRun{node: &fakeServeNode{}}
+	return runHostServeOn(t, &fakeServeNode{}, goos, args, tags, ensure)
+}
+
+// runHostServeOn is runHostServe on a given fake node.
+func runHostServeOn(t *testing.T, node *fakeServeNode, goos string, args []string, tags []string, ensure func(string) error) serveRun {
+	t.Helper()
+	run := serveRun{node: node}
 	start := func(_ context.Context, nc serve.NodeConfig) (cmdpkg.ServeNodeForTest, []string, error) {
 		run.starts++
 		run.nc = nc
@@ -177,5 +189,97 @@ func TestHostServeCmd_RefusesUntaggedNode(t *testing.T) {
 	}
 	if len(run.node.addrs) != 0 || !run.node.closed {
 		t.Errorf("node listened on %v (closed %v), want nothing published and the node closed", run.node.addrs, run.node.closed)
+	}
+}
+
+// fakeBootstrap is an SSH bootstrap that runs until closed.
+type fakeBootstrap struct {
+	done   chan struct{}
+	closed bool
+}
+
+func (b *fakeBootstrap) Done() <-chan struct{} { return b.done }
+func (b *fakeBootstrap) Err() error            { return nil }
+func (b *fakeBootstrap) Close() error {
+	if !b.closed {
+		b.closed = true
+		close(b.done)
+	}
+	return nil
+}
+
+// TestHostServeCmd_Bootstrap: host.mesh.bootstrap_ssh starts the CLI-363
+// tunnel on the declared (or default) SOCKS address and routes the file's
+// control plane through it before the node starts; a tunnel that cannot
+// start emits ssh_bootstrap_failed and starts no node.
+func TestHostServeCmd_Bootstrap(t *testing.T) {
+	tests := []struct {
+		name, extra, wantSOCKS string
+		startErr               error
+	}{
+		{"default SOCKS address", "    bootstrap_ssh: tsb@jump.example\n", "127.0.0.1:1055", nil},
+		{"declared SOCKS address", "    bootstrap_ssh: tsb@jump.example\n    bootstrap_socks_addr: 127.0.0.1:1056\n", "127.0.0.1:1056", nil},
+		{"tunnel fails", "    bootstrap_ssh: tsb@jump.example\n", "127.0.0.1:1055", errors.New("ssh: connection refused")},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path, _ := serveFile(t, tc.extra)
+			var got bootstrapssh.Config
+			var proxied []string
+			tunnel := &fakeBootstrap{done: make(chan struct{})}
+			cmdpkg.SetServeBootstrapForTest(t,
+				func(_ context.Context, cfg bootstrapssh.Config) (cmdpkg.ControlBootstrapForTest, error) {
+					got = cfg
+					if tc.startErr != nil {
+						return nil, tc.startErr
+					}
+					return tunnel, nil
+				},
+				func(_ context.Context, controlURL, socks string) error {
+					proxied = []string{controlURL, socks}
+					return nil
+				})
+			run := runHostServe(t, serveGOOS(), []string{"--config", path}, []string{"tag:lab"}, nil)
+			if got.Endpoint != "tsb@jump.example" || got.SOCKSAddr != tc.wantSOCKS {
+				t.Errorf("tunnel config %+v, want endpoint tsb@jump.example on %s", got, tc.wantSOCKS)
+			}
+			if tc.startErr != nil {
+				if run.starts != 0 || cmdpkg.ExitCode(run.err) != 1 || !strings.Contains(run.stderr, "ERROR reason=ssh_bootstrap_failed") {
+					t.Errorf("starts %d, exit %d, stderr %q; want no node, exit 1 and ssh_bootstrap_failed", run.starts, cmdpkg.ExitCode(run.err), run.stderr)
+				}
+				return
+			}
+			if want := []string{"https://hs.example", tc.wantSOCKS}; !slices.Equal(proxied, want) {
+				t.Errorf("control proxy %v, want %v", proxied, want)
+			}
+			if run.err != nil || !strings.Contains(run.stdout, "READY node=lab-01") || !tunnel.closed {
+				t.Errorf("err %v, stdout %q, tunnel closed %v; want READY and the tunnel closed on exit", run.err, run.stdout, tunnel.closed)
+			}
+		})
+	}
+}
+
+// A listener that cannot open on the node is a classified failure, not a bare
+// error: serve prints ERROR reason=publish_failed and no READY.
+func TestHostServeCmd_PublishFailure(t *testing.T) {
+	path, _ := serveFile(t, "")
+	node := &fakeServeNode{listenErr: errors.New("address already in use")}
+	run := runHostServeOn(t, node, serveGOOS(), []string{"--config", path}, []string{"tag:lab"}, nil)
+	if cmdpkg.ExitCode(run.err) != 1 || !strings.Contains(run.stderr, "ERROR reason=publish_failed") || strings.Contains(run.stdout, "READY") {
+		t.Errorf("exit %d, stdout %q, stderr %q; want exit 1, ERROR reason=publish_failed and no READY", cmdpkg.ExitCode(run.err), run.stdout, run.stderr)
+	}
+	if !node.closed {
+		t.Error("the node stayed up after publishing failed")
+	}
+}
+
+// The READY line's enrolled field is defined in the help, since it is a
+// machine-readable contract: true means this start enrolled with the key.
+func TestHostServeCmd_HelpDefinesEnrolled(t *testing.T) {
+	c := cmdpkg.HostServeCmdForTest(t, serveGOOS(), nil, nil)
+	for _, want := range []string{"enrolled=true", "enrolled=false", "reason=publish_failed"} {
+		if !strings.Contains(c.Long, want) {
+			t.Errorf("host serve help does not define %s", want)
+		}
 	}
 }
