@@ -66,7 +66,9 @@ These variables are used by the `ts-bridge host` commands. They are typically wr
 ### Host serve (`host.mesh`)
 
 `ts-bridge host serve` reads the `host.mesh` block of the host file (`--config`); no
-environment variable sets it. Unknown keys warn and are ignored; a key given with no or an
+environment variable sets it. Serve also ignores the `TS_*` variables and the YAML that tune
+`connect`: its dial, idle and drain timeouts, connection limit and bootstrap backoff are the
+built-in defaults. Unknown keys warn and are ignored; a key given with no or an
 empty value is an error.
 
 | Key | Required | Description |

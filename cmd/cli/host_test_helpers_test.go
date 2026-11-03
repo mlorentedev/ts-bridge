@@ -164,3 +164,15 @@ func UseProductionServeKeyCheckForTest(t interface{ Cleanup(func()) }) {
 	serveCheckKeyFile = shippedServeKeyCheck
 	t.Cleanup(func() { serveCheckKeyFile = prev })
 }
+
+// shippedServeEnsureStateDir is serveEnsureStateDir as the package initialized
+// it, captured before any test stubs it.
+var shippedServeEnsureStateDir = serveEnsureStateDir
+
+// UseProductionServeStateDirCheckForTest undoes HostServeCmdForTest's
+// state_dir stub, so the test runs the guard serve ships with.
+func UseProductionServeStateDirCheckForTest(t interface{ Cleanup(func()) }) {
+	prev := serveEnsureStateDir
+	serveEnsureStateDir = shippedServeEnsureStateDir
+	t.Cleanup(func() { serveEnsureStateDir = prev })
+}

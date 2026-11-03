@@ -240,8 +240,9 @@ func validateIdleTimeout(cfg Config) error {
 }
 
 // Defaults returns the built-in defaults without reading any file or the
-// environment. host serve takes its proxy timeouts and limits from here, so
-// it forwards exactly as connect does.
+// environment. host serve takes its proxy timeouts, limits and backoff from
+// here: it reads only the host file (ADR-017 C9), so the TS_* variables and
+// the YAML that tune connect do not apply to it.
 func Defaults() Config {
 	return defaults()
 }

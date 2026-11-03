@@ -490,3 +490,26 @@ func TestHostServeCmd_RefusesExposedKeyFile(t *testing.T) {
 		t.Errorf("started %d, err %v (exit %d); want no node and exit 1 naming auth_key_file", started, err, cmdpkg.ExitCode(err))
 	}
 }
+
+// The shipped state_dir guard runs on the real command path: a directory the
+// test user owns (not root, not SYSTEM or Administrators) is refused before
+// the node starts (AC5, review of #560).
+func TestHostServeCmd_RefusesExposedStateDir(t *testing.T) {
+	path, _ := serveFile(t, "")
+	started := 0
+	start := func(context.Context, serve.NodeConfig) (cmdpkg.ServeNodeForTest, []string, error) {
+		started++
+		return &fakeServeNode{}, []string{"tag:lab"}, nil
+	}
+	c := cmdpkg.HostServeCmdForTest(t, serveGOOS(), start, nil)
+	cmdpkg.UseProductionServeStateDirCheckForTest(t)
+	c.SetOut(io.Discard)
+	c.SetErr(io.Discard)
+	c.SetArgs([]string{"--config", path})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := c.ExecuteContext(ctx)
+	if started != 0 || cmdpkg.ExitCode(err) != 1 || err == nil || !strings.Contains(err.Error(), "state_dir") {
+		t.Errorf("started %d, err %v (exit %d); want no node and exit 1 naming state_dir", started, err, cmdpkg.ExitCode(err))
+	}
+}
