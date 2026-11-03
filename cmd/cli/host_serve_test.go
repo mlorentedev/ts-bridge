@@ -172,6 +172,10 @@ func TestHostServeCmd_BootstrapRestarts(t *testing.T) {
 
 	_ = first.Close() // the SSH child dies
 	waitFor(t, "ERROR line", func() bool { return strings.Contains(ls.stderr.String(), "ERROR reason=ssh_bootstrap_failed") })
+	waitFor(t, "not ready during the outage", func() bool {
+		code, body := getReady(addr)
+		return code == http.StatusServiceUnavailable && strings.Contains(body, `"reason":"ssh_bootstrap_failed"`)
+	})
 	select {
 	case err := <-ls.done:
 		t.Fatalf("serve exited on a bootstrap outage: %v", err)

@@ -98,6 +98,9 @@ func TestSupervisedBootstrap_Retries(t *testing.T) {
 	}
 	cancel()
 	<-done
+	if !first.closed || !recovered.closed {
+		t.Errorf("dead tunnels closed: first %v, recovered %v; want both closed before a restart", first.closed, recovered.closed)
+	}
 	if !last.closed {
 		t.Error("Run returned without closing the running tunnel")
 	}

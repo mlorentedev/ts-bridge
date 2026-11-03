@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"tailscale.com/client/local"
+	"tailscale.com/tsnet"
 
 	"ts-bridge/internal/bootstrapssh"
 	"ts-bridge/internal/config"
@@ -235,10 +236,18 @@ func serveReport(plan servePlan) health.Report {
 	return func() (string, []health.ServiceState) { return plan.node.Hostname, services }
 }
 
+// localAPINode is a node that exposes its local API; the production node,
+// *tsnet.Server, must stay one or the control session goes unwatched.
+type localAPINode interface {
+	LocalClient() (*local.Client, error)
+}
+
+var _ localAPINode = (*tsnet.Server)(nil)
+
 // watchServeControl reports the node's control session on readiness when the
 // node exposes its local API (a tsnet.Server does).
 func watchServeControl(ctx context.Context, node serveNode, ready serve.Readiness, logger *slog.Logger) {
-	n, ok := node.(interface{ LocalClient() (*local.Client, error) })
+	n, ok := node.(localAPINode)
 	if !ok {
 		return
 	}

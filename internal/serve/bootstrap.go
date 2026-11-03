@@ -58,6 +58,8 @@ func (s *Supervisor) Run(ctx context.Context, running Tunnel) {
 		}
 		s.OnExit(fmt.Errorf("SSH bootstrap exited: %v", running.Err()))
 		s.Readiness.Down(bootstrapSource, ReasonSSHBootstrapFailed)
+		// Release the dead tunnel (its SOCKS listener, its child) before the next.
+		_ = running.Close()
 		if running = s.restart(ctx); running == nil {
 			return
 		}
