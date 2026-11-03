@@ -11,7 +11,7 @@ type HeadscaleDevice struct {
 	User string `json:"user"`
 
 	ipRaw any // raw "ip" field, unmarshaled by custom UnmarshalJSON
-	IPs      []string
+	IPs   []string
 
 	LastSeen string `json:"lastSeen"`
 	Expires  string `json:"expires"`
