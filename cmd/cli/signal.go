@@ -20,6 +20,8 @@ const (
 	reasonBadAuthKey              = "bad_authkey"
 	reasonControlPlaneUnreachable = "control_plane_unreachable"
 	reasonSSHBootstrapFailed      = "ssh_bootstrap_failed"
+	reasonNodeNotTagged           = "node_not_tagged"
+	reasonPublishFailed           = "publish_failed"
 	reasonUnknown                 = "unknown"
 )
 
