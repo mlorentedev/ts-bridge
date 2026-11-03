@@ -21,7 +21,7 @@ On a ufw host, the firewall read keeps `ufw show added` as its first source and 
 - ufw reports the port allowed or blocked → that answer stands, as today.
 - ufw reports it absent → the iptables read decides. If it reports the port present (tailscaled's `-i tailscale0` ACCEPT, or an earlier ACCEPT in INPUT), the step is `ok` and setup writes nothing. If it reports it absent, setup runs `ufw allow <port>/tcp` exactly as today.
 - The iptables read fails, or reaches a qualified jump into `ts-input` that it cannot evaluate → the state is unknown: `host check` reports `unverified` and `host setup` writes nothing (the #532 rule: never open on a guess).
-- Copies of setup's own iptables rule are counted on ufw hosts too, and more than one is reported with the existing BUG-480 copies step.
+- Copies of setup's own iptables rule are counted on ufw hosts too, and **one or more** is reported as `manual`. On a ufw host setup never writes that rule, so every copy is a leftover from an iptables-era run that opens the port on every interface. The fix text therefore asks for all of them to be deleted, not all but one as the iptables-only BUG-480 step does. (Decided by the owner on 2026-11-03, when the debt was folded in.)
 
 The ufw chains (`-j ufw-before-input`, ...) are jumps, which the walk already treats as deciding nothing. The captured output (verification.md) shows tailscaled's jump at the top of INPUT ahead of them, whether ufw started first or reloaded after tailscaled.
 
@@ -33,14 +33,14 @@ The ufw chains (`-j ufw-before-input`, ...) are jumps, which the walk already tr
 
 ## Risks / open questions
 
-- **A single pre-#477 copy on a ufw host** reads as `ok`, because the port is allowed. On an iptables-only host one copy is setup's intended rule. On a ufw host, though, it is a leftover that opens the port on every interface. Reporting it would need a new step, and it belongs with the option-1 decision because both are about scope, not reachability. Open for the owner; not blocking.
+- Decided: a single pre-#477 copy on a ufw host is reported (`manual`, delete every copy) instead of reading as `ok`. See `## What`.
 - Fixture provenance: the output comes from ufw 0.36.2 and iptables v1.8.10 (nf_tables) in an Alpine 3.20 container, with tailscaled's `ts-input` replayed from BUG-492's recorded chain. The Ubuntu 24.04 image could not install packages on this host (mirror signature failure), but the ufw and iptables versions match the existing Ubuntu fixtures.
 - Two reads instead of one on ufw hosts. Both already need root, and the iptables binary is a dependency of ufw.
 
 ## Acceptance criteria
 
 - [ ] AC1: On a ufw host whose `ts-input` accepts `tailscale0` and whose `ufw show added` does not list the port, `host check` reports the firewall `ok` and `host setup` runs no `ufw allow`. A table test drives the verbatim ufw and iptables output.
-- [ ] AC2: On a ufw host with two copies of setup's iptables rule in INPUT, `host check` reports the copies (`manual`, the BUG-480 step), using the verbatim INPUT from the capture.
+- [ ] AC2: On a ufw host with one or two copies of setup's iptables rule in INPUT, `host check` reports them as `manual`, and the fix deletes every copy. The test uses the verbatim INPUT from the capture. On an iptables-only host, one copy stays `ok` and two stay the BUG-480 step (regression).
 - [ ] AC3: On a ufw host whose iptables read fails, or which reaches a qualified jump into `ts-input` with nothing decided, `host check` is `unverified` and `host setup` writes nothing.
 - [ ] AC4: On a ufw host where neither source covers the port, behaviour is unchanged: `host setup` runs `ufw allow <port>/tcp`, and a ufw allow or deny still decides first.
 - [ ] AC5: Each new path fails under its mutation: skipping the iptables read fails AC1, and treating the read error as absent fails AC3.

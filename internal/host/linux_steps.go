@@ -156,7 +156,7 @@ type firewallRead struct {
 	reason    string
 	blockedBy string // the deny rule, when state is ruleBlocked
 	fix       string // the fix for an unknown read, when the generic one does not apply
-	copies    int    // copies of the rule setup appends (iptables only, #480)
+	copies    int    // copies of the rule setup appends to INPUT (#480), counted on ufw hosts too (#530)
 }
 
 // readLinuxFirewall reads with ufw when it is installed, otherwise iptables.
@@ -167,17 +167,35 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 		return firewallRead{reason: "reading the firewall rules needs root"}
 	}
 	if _, err := r.LookPath(backendUFW); err == nil {
-		out, err := r.Output(backendUFW, "show", "added")
-		if err != nil {
-			return firewallRead{backend: backendUFW, reason: fmt.Sprintf("ufw show added: %v", err)}
-		}
-		state, rule := ufwDecide(string(out), port)
-		return firewallRead{state: state, backend: backendUFW, blockedBy: rule}
+		return readUFW(r, port)
 	}
 	if _, err := r.LookPath(backendIPT); err != nil {
 		return firewallRead{noBackend: true, reason: "neither ufw nor iptables is installed"}
 	}
 	return readIptables(r, port)
+}
+
+// readUFW reads `ufw show added`, then iptables. tailscaled's ts-input, and any
+// rule appended before ufw was installed, live in INPUT and never in ufw's
+// list, so ufw alone reported a tailnet-admitted port as absent and setup
+// opened it on every interface (#530). A ufw allow or deny still decides first;
+// only ufw's "absent" defers to the iptables read, whose unknown answer stands.
+func readUFW(r Runner, port int) firewallRead {
+	out, err := r.Output(backendUFW, "show", "added")
+	if err != nil {
+		return firewallRead{backend: backendUFW, reason: fmt.Sprintf("ufw show added: %v", err)}
+	}
+	state, rule := ufwDecide(string(out), port)
+	read := firewallRead{state: state, backend: backendUFW, blockedBy: rule}
+	if _, err := r.LookPath(backendIPT); err != nil {
+		return read
+	}
+	ipt := readIptables(r, port)
+	read.copies = ipt.copies
+	if state == ruleAbsent {
+		read.state, read.blockedBy, read.reason, read.fix = ipt.state, ipt.blockedBy, ipt.reason, ipt.fix
+	}
+	return read
 }
 
 // tsInputChain is the chain tailscaled fills with `-i tailscale0 -j ACCEPT`;
@@ -587,21 +605,39 @@ func firewallCheckStep(read firewallRead, port int) SetupStep {
 	if read.state == ruleBlocked {
 		return firewallBlockedStep(read, port)
 	}
-	if read.copies > 1 {
+	if extraCopies(read) > 0 {
 		return firewallCopiesStep(read, port)
 	}
 	return firewallReadStep(linuxFwName, read.state == rulePresent, port)
+}
+
+// extraCopies is how many copies of setup's iptables rule the operator should
+// delete: all but one on an iptables host, where one is setup's own rule, and
+// every one on a ufw host, where setup writes through ufw and each copy is a
+// leftover that admits the port on every interface (#530).
+func extraCopies(read firewallRead) int {
+	if read.backend == backendUFW {
+		return read.copies
+	}
+	return max(read.copies-1, 0)
 }
 
 // firewallCopiesStep reports the copies of its own rule that setup appended on
 // every run before #477. The port is allowed; setup never deletes rules, so
 // removing the extras is the operator's.
 func firewallCopiesStep(read firewallRead, port int) SetupStep {
+	noun, remains := "copies", "so one copy remains"
+	if read.copies == 1 {
+		noun = "copy"
+	}
+	if read.backend == backendUFW {
+		remains = "so none remains: ufw manages this host's rules, and each copy admits the port on every interface"
+	}
 	return newStep(linuxFwName, OutcomeManual,
-		fmt.Sprintf("Firewall allows TCP %d (%s), but holds %d copies of %s", port, read.backend, read.copies,
+		fmt.Sprintf("Firewall allows TCP %d (%s), but holds %d %s of %s", port, read.backend, read.copies, noun,
 			strings.Join(iptSetupPrinted(port), " ")),
-		fmt.Sprintf("run `iptables -D %s` %d time(s), as root, so one copy remains; setup does not delete firewall rules",
-			strings.Join(iptablesAppend(port)[1:], " "), read.copies-1))
+		fmt.Sprintf("run `iptables -D %s` %d time(s), as root, %s; setup does not delete firewall rules",
+			strings.Join(iptablesAppend(port)[1:], " "), extraCopies(read), remains))
 }
 
 // firewallBlockedStep reports a deny that decides the port before any allow.
