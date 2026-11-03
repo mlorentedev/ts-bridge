@@ -1,8 +1,36 @@
 [
   {
     "id": "BUG-530-ufw-reads-ts-input-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
+    "behavior": "AC1: on a ufw host whose ts-input accepts tailscale0, check is ok and setup runs no ufw allow",
+    "verification": "go test ./internal/host/ -run 'TestIptablesRule/ufw_host|TestSetupForLinux/ufw|TestCheckForLinux/ufw_host'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-530-ufw-reads-ts-input-f2",
+    "behavior": "AC2: on a ufw host, one or more copies of setup's iptables rule are manual and the fix deletes every copy; iptables-only hosts unchanged",
+    "verification": "go test ./internal/host/ -run 'TestCheckForLinux/(ufw_host,_(two|one)_leftover|cop)'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-530-ufw-reads-ts-input-f3",
+    "behavior": "AC3: on a ufw host whose iptables read fails or meets a qualified ts-input jump, check is unverified and setup writes nothing",
+    "verification": "go test ./internal/host/ -run 'TestIptablesRule/ufw_host,_(iptables_unreadable|a_qualified_jump)|TestSetupForLinux/ufw,_iptables_unreadable|TestCheckForLinux/ufw_host,_a_qualified'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-530-ufw-reads-ts-input-f4",
+    "behavior": "AC4: ufw allow/deny still decides first; with neither source covering the port, setup runs ufw allow <port>/tcp",
+    "verification": "go test ./internal/host/ -run 'TestIptablesRule|TestSetupForLinux|TestCheckForLinux'",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-530-ufw-reads-ts-input-f5",
+    "behavior": "AC5: each new path fails under its mutation (recorded in verification.md)",
+    "verification": "go test -race ./internal/host/",
     "state": "pending",
     "evidence": ""
   }
