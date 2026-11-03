@@ -1,0 +1,37 @@
+[
+  {
+    "id": "CI-563-features-json-shape-f1",
+    "behavior": "A check names every features.json whose shape differs from the scaffold: a top-level non-array, an empty array, a non-object element, a missing, extra or renamed key, a non-string value, invalid JSON.",
+    "verification": "bash scripts/tests/test-features-shape.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-563-features-json-shape-f2",
+    "behavior": "The check reports every differing file and no conforming one, and a conforming tree (any key order, CRLF, a passing state with evidence) exits 0.",
+    "verification": "bash scripts/tests/test-features-shape.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-563-features-json-shape-f3",
+    "behavior": "Fixtures with a non-template object make the check fail under both bash and zsh, and a disabled check fails them.",
+    "verification": "bash scripts/tests/test-features-shape.sh && zsh scripts/tests/test-features-shape.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-563-features-json-shape-f4",
+    "behavior": "The check never rewrites a reported file, archived specs included, and fails closed (exit 2) without jq or on a missing directory.",
+    "verification": "bash scripts/tests/test-features-shape.sh",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "CI-563-features-json-shape-f5",
+    "behavior": "The real tree either passes or every reported spec is listed in the PR.",
+    "verification": "bash scripts/check-features-shape.sh; test $? -le 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
