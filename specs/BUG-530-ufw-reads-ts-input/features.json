@@ -1,0 +1,9 @@
+[
+  {
+    "id": "BUG-530-ufw-reads-ts-input-f1",
+    "behavior": "Outcome 1",
+    "verification": "echo 'not implemented' && exit 1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
