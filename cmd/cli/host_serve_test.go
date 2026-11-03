@@ -188,6 +188,13 @@ func TestHostServeCmd_RefusesUntaggedNode(t *testing.T) {
 	if !strings.Contains(run.stderr, "ERROR reason=node_not_tagged") || strings.Contains(run.stdout, "READY") {
 		t.Errorf("stdout %q, stderr %q; want ERROR reason=node_not_tagged and no READY", run.stdout, run.stderr)
 	}
+	// The key is never read again once state_dir holds the node, so the advice
+	// must name the steps that get a tagged key read (review of #558).
+	for _, want := range []string{"remove the node", "empty state_dir", "tagged"} {
+		if !strings.Contains(run.stderr, want) {
+			t.Errorf("stderr %q does not name %q", run.stderr, want)
+		}
+	}
 	if len(run.node.addrs) != 0 || !run.node.closed {
 		t.Errorf("node listened on %v (closed %v), want nothing published and the node closed", run.node.addrs, run.node.closed)
 	}

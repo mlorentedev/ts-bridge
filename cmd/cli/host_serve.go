@@ -185,7 +185,7 @@ func runServeNode(ctx context.Context, stdout, stderr io.Writer, plan servePlan)
 	}
 	defer func() { _ = node.Close() }()
 	if len(tags) == 0 {
-		err := fmt.Errorf("node %s has no tags: enrol it with a tagged auth key, so the host is not a user's node", plan.node.Hostname)
+		err := fmt.Errorf("node %s has no tags, so the host would be a user's node: remove the node from the control plane, empty state_dir %s, put a tagged auth key in auth_key_file and start again (the key is read only while state_dir is empty)", plan.node.Hostname, plan.node.StateDir)
 		emitError(stderr, reasonNodeNotTagged, err.Error())
 		return err
 	}
