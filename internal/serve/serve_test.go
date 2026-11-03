@@ -154,6 +154,10 @@ func TestNodeConfig_Enrolment(t *testing.T) {
 		t.Fatal(err)
 	}
 	str := func(s string) *string { return &s }
+	looseKey := filepath.Join(t.TempDir(), "loose-authkey")
+	if err := os.WriteFile(looseKey, []byte("tskey-auth-loose\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	enrolled := t.TempDir()
 	if err := os.WriteFile(filepath.Join(enrolled, stateFile), []byte("{}"), 0o600); err != nil {
 		t.Fatal(err)
@@ -171,10 +175,19 @@ func TestNodeConfig_Enrolment(t *testing.T) {
 		{"first enrolment without a key", host.FileMesh{Hostname: str("lab"), StateDir: str(t.TempDir())}, "", false, "host.mesh.auth_key_file"},
 		{"first enrolment with a missing key", host.FileMesh{Hostname: str("lab"), StateDir: str(t.TempDir()), AuthKeyFile: str(filepath.Join(t.TempDir(), "gone"))}, "", false, "gone"},
 		{"no state_dir", host.FileMesh{Hostname: str("lab")}, "", false, "host.mesh.state_dir"},
+		{"a key file others may read", host.FileMesh{Hostname: str("lab"), StateDir: str(t.TempDir()), AuthKeyFile: str(looseKey)}, "", false, "mode 0644"},
+	}
+	// Stands in for host.CheckSecretFile, which has its own tests: only the
+	// loose key is refused, and the refusal comes before the key is read.
+	checkKey := func(p string) error {
+		if p == looseKey {
+			return errors.New("auth_key_file " + p + ": mode 0644, want no group or other bits")
+		}
+		return nil
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			nc, err := NewNodeConfig(tc.mesh, "https://hs.example")
+			nc, err := NewNodeConfig(tc.mesh, "https://hs.example", checkKey)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("NewNodeConfig() error = %v, want it to contain %q", err, tc.wantErr)

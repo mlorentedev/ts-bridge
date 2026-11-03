@@ -142,9 +142,12 @@ func HostServeCmdForTest(
 	start func(context.Context, serve.NodeConfig) (ServeNodeForTest, []string, error),
 	ensure func(string) error,
 ) *cobra.Command {
-	prevStart, prevEnsure, prevGOOS := serveNodeStarter, serveEnsureStateDir, hostGOOS
-	serveNodeStarter, serveEnsureStateDir, hostGOOS = start, ensure, goos
-	t.Cleanup(func() { serveNodeStarter, serveEnsureStateDir, hostGOOS = prevStart, prevEnsure, prevGOOS })
+	prevStart, prevEnsure, prevGOOS, prevKey := serveNodeStarter, serveEnsureStateDir, hostGOOS, serveCheckKeyFile
+	// Test key files live in the user's temp dir; the guard has its own tests.
+	serveNodeStarter, serveEnsureStateDir, hostGOOS, serveCheckKeyFile = start, ensure, goos, func(string) error { return nil }
+	t.Cleanup(func() {
+		serveNodeStarter, serveEnsureStateDir, hostGOOS, serveCheckKeyFile = prevStart, prevEnsure, prevGOOS, prevKey
+	})
 	c := newHostServeCmd()
 	c.SilenceUsage = true
 	return c

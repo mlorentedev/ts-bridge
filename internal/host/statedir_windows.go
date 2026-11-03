@@ -35,7 +35,7 @@ func CheckStateDir(path string) error {
 	if err != nil {
 		return fmt.Errorf("state_dir %s: read its permissions: %w", path, err)
 	}
-	return checkWindowsDACL(path, sd)
+	return checkWindowsDACL("state_dir", path, sd)
 }
 
 // EnsureStateDir creates an absent state directory with stateDirSDDL, then
@@ -74,24 +74,24 @@ func protectStateDir(path string) error {
 		owner, nil, dacl, nil)
 }
 
-func checkWindowsDACL(path string, sd *windows.SECURITY_DESCRIPTOR) error {
+func checkWindowsDACL(what, path string, sd *windows.SECURITY_DESCRIPTOR) error {
 	owner, _, err := sd.Owner()
 	if err != nil {
-		return fmt.Errorf("state_dir %s: read its owner: %w", path, err)
+		return fmt.Errorf("%s %s: read its owner: %w", what, path, err)
 	}
 	if !trustedSID(owner) {
-		return fmt.Errorf("state_dir %s: owned by %s, want SYSTEM or Administrators", path, owner)
+		return fmt.Errorf("%s %s: owned by %s, want SYSTEM or Administrators", what, path, owner)
 	}
 	dacl, _, err := sd.DACL()
 	if err != nil || dacl == nil {
-		return fmt.Errorf("state_dir %s: no DACL, so everyone has full access", path)
+		return fmt.Errorf("%s %s: no DACL, so everyone has full access", what, path)
 	}
 	for i := uint32(0); i < uint32(dacl.AceCount); i++ {
 		var ace *windows.ACCESS_ALLOWED_ACE
 		if err := windows.GetAce(dacl, i, &ace); err != nil {
-			return fmt.Errorf("state_dir %s: read ACE %d: %w", path, i, err)
+			return fmt.Errorf("%s %s: read ACE %d: %w", what, path, i, err)
 		}
-		if err := checkACE(path, ace); err != nil {
+		if err := checkACE(what, path, ace); err != nil {
 			return err
 		}
 	}
@@ -102,12 +102,12 @@ func checkWindowsDACL(path string, sd *windows.SECURITY_DESCRIPTOR) error {
 // the directory or, through inheritance, to the node key inside it. CREATOR
 // OWNER on an inherit-only ACE resolves to whoever creates the child (serve),
 // so it passes; so do deny ACEs. Any other ACE type is refused, not guessed at.
-func checkACE(path string, ace *windows.ACCESS_ALLOWED_ACE) error {
+func checkACE(what, path string, ace *windows.ACCESS_ALLOWED_ACE) error {
 	if ace.Header.AceType == windows.ACCESS_DENIED_ACE_TYPE {
 		return nil
 	}
 	if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE {
-		return fmt.Errorf("state_dir %s: ACE type %d is not supported; grant SYSTEM and Administrators only", path, ace.Header.AceType)
+		return fmt.Errorf("%s %s: ACE type %d is not supported; grant SYSTEM and Administrators only", what, path, ace.Header.AceType)
 	}
 	// #nosec G103 -- the SID starts at SidStart inside the ACE that GetAce returned.
 	sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
@@ -115,7 +115,7 @@ func checkACE(path string, ace *windows.ACCESS_ALLOWED_ACE) error {
 	if ace.Mask == 0 || trustedSID(sid) || (inheritOnly && sid.IsWellKnown(windows.WinCreatorOwnerSid)) {
 		return nil
 	}
-	return fmt.Errorf("state_dir %s: %s can access it or what it holds; only SYSTEM and Administrators may", path, sid)
+	return fmt.Errorf("%s %s: %s can access it or what it holds; only SYSTEM and Administrators may", what, path, sid)
 }
 
 func trustedSID(sid *windows.SID) bool {
@@ -138,4 +138,22 @@ func checkNoReparse(path string) error {
 			return nil
 		}
 	}
+}
+
+// CheckSecretFile refuses an auth key file that SYSTEM or Administrators do
+// not own, that another SID may access, or that is reached through a link.
+func CheckSecretFile(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("auth_key_file %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("auth_key_file %s: not a regular file", path)
+	}
+	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT,
+		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		return fmt.Errorf("auth_key_file %s: read its permissions: %w", path, err)
+	}
+	return checkWindowsDACL("auth_key_file", path, sd)
 }

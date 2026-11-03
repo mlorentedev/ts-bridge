@@ -55,3 +55,17 @@ func createStateDir(path string) error {
 	// Mkdir applies the umask; the mode must be exactly 0700.
 	return dir.Chmod(0o700)
 }
+
+// CheckSecretFile refuses an auth key file that is not a root-owned regular
+// file, or that group or others may read. A symlink is refused, not followed.
+func CheckSecretFile(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("auth_key_file %s: %w", path, err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("auth_key_file %s: cannot read its owner", path)
+	}
+	return checkUnixSecretFile(path, info, st.Uid)
+}

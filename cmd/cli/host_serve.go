@@ -38,6 +38,7 @@ type serveNode interface {
 var (
 	serveNodeStarter    = startServeNode
 	serveEnsureStateDir = host.EnsureStateDir
+	serveCheckKeyFile   = host.CheckSecretFile
 )
 
 func newHostServeCmd() *cobra.Command {
@@ -126,7 +127,7 @@ func loadServePlan(cmd *cobra.Command) (servePlan, error) {
 	if err := serveEnsureStateDir(*mesh.StateDir); err != nil {
 		return servePlan{}, err
 	}
-	node, err := serve.NewNodeConfig(mesh, *file.Host.ControlURL)
+	node, err := serve.NewNodeConfig(mesh, *file.Host.ControlURL, serveCheckKeyFile)
 	if err != nil {
 		return servePlan{}, err
 	}

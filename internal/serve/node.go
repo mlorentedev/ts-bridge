@@ -30,8 +30,9 @@ type NodeConfig struct {
 
 // NewNodeConfig builds the node's settings from host.mesh. The auth key file
 // is read only when state_dir holds no node state, so after the first
-// enrolment it may be deleted (AC2).
-func NewNodeConfig(mesh host.FileMesh, controlURL string) (NodeConfig, error) {
+// enrolment it may be deleted (AC2). checkKey refuses a key file others may
+// read before it is opened (host.CheckSecretFile in production, AC5).
+func NewNodeConfig(mesh host.FileMesh, controlURL string, checkKey func(string) error) (NodeConfig, error) {
 	if mesh.StateDir == nil {
 		return NodeConfig{}, errors.New("host.mesh.state_dir: required; serve keeps the node identity there")
 	}
@@ -46,6 +47,9 @@ func NewNodeConfig(mesh host.FileMesh, controlURL string) (NodeConfig, error) {
 	nc.Enrolling = true
 	if mesh.AuthKeyFile == nil {
 		return NodeConfig{}, fmt.Errorf("host.mesh.auth_key_file: required for the first enrolment (no node state in %s)", nc.StateDir)
+	}
+	if err := checkKey(*mesh.AuthKeyFile); err != nil {
+		return NodeConfig{}, err
 	}
 	key, err := readAuthKey(*mesh.AuthKeyFile)
 	if err != nil {

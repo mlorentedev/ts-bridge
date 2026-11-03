@@ -47,8 +47,8 @@ type CheckResult struct {
 	// Published maps "kind:port" to whether host serve publishes that service;
 	// nil when no host.mesh.health_addr was probed.
 	Published map[string]bool
-	Services    []Service
-	Steps       []SetupStep
+	Services  []Service
+	Steps     []SetupStep
 }
 
 // ServiceRDP is the remote-desktop service kind (xrdp on Linux, RDP on Windows).

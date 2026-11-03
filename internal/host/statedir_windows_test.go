@@ -38,7 +38,7 @@ func TestCheckWindowsDACL(t *testing.T) {
 			if err != nil {
 				t.Fatalf("SDDL %q: %v", tc.sddl, err)
 			}
-			err = checkWindowsDACL(`C:\ProgramData\ts-bridge`, sd)
+			err = checkWindowsDACL("state_dir", `C:\ProgramData\ts-bridge`, sd)
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("checkWindowsDACL() = %v, want nil", err)
