@@ -32,7 +32,7 @@ scan() {
     # Column of the key on a line, past any list dash: the parent a block scalar is nested under.
     function keycol(s) { if (match(s, /[^ \t-]/)) return RSTART - 1; return 999 }
     function report_wa() { wa++; printf "  write-all  %-28s line %-4d ambient write scope declared\n", FILENAME, FNR }
-    function begin_step(col) { instep = 1; sindent = col; ck = 0; persist = ""; optout = "" }
+    function begin_step(col, k) { instep = 1; sindent = col; skey = k; withcol = -1; ck = 0; persist = ""; optout = "" }
     # A step is judged once it has ended, from everything it contained: the checkout and its
     # persist-credentials may appear in either order.
     function flush() {
@@ -65,10 +65,10 @@ scan() {
     # checkout was reported as persisting credentials (CI-322 adversarial review, Blocker).
     function scan_step(line, code, n) {
       if (instep && n <= sindent) flush()
-      if (!instep && code ~ /^[ \t]*-([ \t]|$)/) begin_step(n)
+      if (!instep && code ~ /^[ \t]*-([ \t]|$)/) begin_step(n, keycol(code))
       # A checkout outside any list item is not valid Actions YAML, but it is still counted:
       # a guard that reports 0 checkouts for a file that has one is announcing a blind spot.
-      if (!instep && match(code, R_CK)) begin_step(n - 1)
+      if (!instep && match(code, R_CK)) begin_step(n - 1, keycol(code))
       if (!instep) return
       if (match(code, R_CK)) {
         ck = 1; plineno = FNR
@@ -77,11 +77,39 @@ scan() {
           sub(/^.*persist-credentials-ok:[ \t]*/, "", optout)
         }
       }
-      if (match(code, R_PC)) {
-        persist = substr(code, RSTART, RLENGTH)
-        sub("persist-credentials:[ \\t]*", "", persist)
-        gsub(("^" QC "+|" QC "+$"), "", persist)        # `"false"` and false are the same input
+      scan_with(code, n)
+    }
+    # persist-credentials is an input of the action, so it counts only as a direct child of the
+    # `with:` of the step itself, block or flow. Matched anywhere in the step, the key parked under
+    # `env:` (a variable checkout never reads) passed while the token persisted (#427).
+    function scan_with(code, n,   k, flow) {
+      if (withcol >= 0 && n <= withcol) withcol = -1
+      if (withcol >= 0) {
+        if (withchild < 0) withchild = n
+        if (n == withchild && code ~ ("^[ \t]*" R_PC)) take_persist(code)
+        return
       }
+      k = keycol(code)
+      if (skey == 999) skey = k                          # a bare `-` line: the keys start below
+      if (k != skey) return
+      if (code ~ /(^|[ \t{,-])with:[ \t]*$/) { withcol = k; withchild = -1; return }
+      # Flat flow mappings only: a nested `{...}` is the value of another input, never a
+      # direct child, so it is left unmatched and the step fails closed.
+      # The `with:` must also belong to the step: at brace depth 1 on a `- {...}` step line,
+      # depth 0 on a block key line. `env: {with: {...}}` is a variable, not the input.
+      if (match(code, /(^|[ \t{,-])with:[ \t]*\{[^{}]*\}/)) {
+        flow = substr(code, RSTART, RLENGTH)
+        if (braces(substr(code, 1, RSTART)) == (substr(code, k + 1, 1) == "{") && flow ~ ("[{,][ \t]*" R_PC))
+          take_persist(flow)
+      }
+    }
+    # Open braces minus closed ones in s: how deep a flow mapping the end of s sits.
+    function braces(s,   t) { t = s; return gsub(/\{/, "", t) - gsub(/\}/, "", s) }
+    function take_persist(s) {
+      if (!match(s, R_PC)) return
+      persist = substr(s, RSTART, RLENGTH)
+      sub("persist-credentials:[ \\t]*", "", persist)
+      gsub(("^" QC "+|" QC "+$"), "", persist)        # `"false"` and false are the same input
     }
     BEGIN {
       instep = 0; permblk = -1; blk = -1
