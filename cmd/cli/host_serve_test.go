@@ -198,7 +198,9 @@ func TestHostServeCmd_Health(t *testing.T) {
 	addr := freeLoopbackAddr(t)
 	path, _ := serveFile(t, "    health_addr: "+addr+"\n")
 	startHostServe(t, []string{"--config", path})
-	code, body := getReady(addr)
+	var code int
+	var body string
+	waitFor(t, "the health server", func() bool { code, body = getReady(addr); return code != 0 })
 	want := `"node":"lab-01","services":[{"kind":"rdp","port":3390,"published":true}]`
 	if code != 200 || !strings.Contains(body, want) {
 		t.Errorf("/health/ready = %d %s, want 200 with %s", code, body, want)

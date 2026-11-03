@@ -18,9 +18,19 @@ func TestServeHealth_ControlSession(t *testing.T) {
 	}
 	close(states)
 	<-done
-	want := []string{"up control", "down control control_plane_unreachable", "up control"}
+	// The bus ending while serve still runs reads as down, not a frozen "up".
+	want := []string{"up control", "down control control_plane_unreachable", "up control", "down control control_plane_unreachable"}
 	if !slices.Equal(ready.events, want) {
 		t.Errorf("readiness = %v, want %v (one report per change)", ready.events, want)
+	}
+
+	// Ending because serve stops reports nothing more.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	quiet := &fakeReadiness{}
+	WatchControlSession(ctx, make(chan string), quiet)
+	if len(quiet.events) != 0 {
+		t.Errorf("readiness after shutdown = %v, want none", quiet.events)
 	}
 }
 

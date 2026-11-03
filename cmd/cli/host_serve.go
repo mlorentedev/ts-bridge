@@ -255,7 +255,12 @@ func watchServeControl(ctx context.Context, node serveNode, ready serve.Readines
 	if err == nil {
 		var states <-chan string
 		if states, err = serve.NodeStates(ctx, lc); err == nil {
-			go serve.WatchControlSession(ctx, states, ready)
+			go func() {
+				serve.WatchControlSession(ctx, states, ready)
+				if ctx.Err() == nil {
+					logger.Warn("control session watch ended; /health/ready reads control_plane_unreachable")
+				}
+			}()
 			return
 		}
 	}

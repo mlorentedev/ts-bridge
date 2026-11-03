@@ -25,6 +25,11 @@ func WatchControlSession(ctx context.Context, states <-chan string, r Readiness)
 			return
 		case s, ok := <-states:
 			if !ok {
+				// The bus ended while serve runs: the session can no longer be
+				// seen, so health must not keep reading ready.
+				if ctx.Err() == nil {
+					r.Down(controlSource, ReasonControlPlaneUnreachable)
+				}
 				return
 			}
 			up := s == ipn.Running.String()
