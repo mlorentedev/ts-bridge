@@ -314,6 +314,7 @@ func TestSetupForLinux(t *testing.T) {
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputDefault})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
+			message:  "Firewall allows TCP 3389 (iptables)",
 		},
 		{
 			name:     "ufw, nothing covers in either: ufw allow as before",
@@ -549,6 +550,25 @@ func TestCheckForLinux(t *testing.T) {
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "ufw host, iptables unreadable: unverified (#530 review)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded}), exit: map[string]int{iptRead: 4}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  iptRead,
+		},
+		{
+			name:     "ufw host, an iptables DROP decides: credited to iptables (#530 review)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput + "-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
+			message:  "before any allow (iptables)",
 		},
 		{
 			name:     "ufw host, tailscaled's ts-input admits the tailnet (#530)",
