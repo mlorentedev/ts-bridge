@@ -42,6 +42,7 @@ the host *command*, not about running ts-bridge on the host.
 | G7 | Logging to console plus a rotating JSON file (`internal/logging`, `LogDirForPlatform`) | stderr only; a command that mutates firewall and registry keeps no persistent record | #457 |
 | G8 | Global `-v/--verbose`, consistent `--log-format`, `--json` | Each host subcommand redeclares `--verbose` (no `-v`) and `--log-format`; `host init` has neither `--json` nor `--log-format` | #457 |
 | G9 | Every OS branch covered by Go tests and native CI on Windows and macOS (#447) | Per-OS logic reads `runtime.GOOS` / build tags; darwin branch was a stub never exercised | #457 |
+| G10 | `connect --bootstrap-ssh` reaches a sinkholed or TLS-inspected control plane (CLI-363) | Native Tailscale only, so a host on such a network cannot enrol | **#522**: `host serve` (persistent tagged node, declared services only, Windows and Linux) |
 
 ## Per-OS host state (2026-10-20)
 

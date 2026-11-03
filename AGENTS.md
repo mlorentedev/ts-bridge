@@ -16,13 +16,14 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | Path | Purpose |
 |------|---------|
 | `cmd/ts-bridge/main.go` | Thin entry point — wires flags/logger/signals and delegates to `cmd/cli` (ADR-010). No business logic. |
-| `cmd/cli/` | Cobra command tree (`root`, `auth`, `browser`, `connect`, `init`, `status`, `host`, `discover`, `import`, `version`) + `args`/`run`/`signal` helpers, with per-command `*_test.go`. |
+| `cmd/cli/` | Cobra command tree (`root`, `auth`, `browser`, `connect`, `init`, `status`, `host` with `setup`/`check`/`init`/`serve`, `discover`, `import`, `version`) + `args`/`run`/`signal` helpers, with per-command `*_test.go`. |
 | `internal/config/` | Env-var parsing + `Config` struct + validation |
 | `internal/proxy/` | `Dialer` interface, `AcceptLoop`, `handleConn`, `proxyConnections`, `idleConn`, `ReconnectDialer` |
 | `internal/health/` | `/health/live`, `/health/ready`, `/metrics` HTTP server |
 | `internal/telemetry/` | Atomic counters + read accessors |
 | `internal/discover/` | Tailnet device discovery via Tailscale and Headscale APIs |
-| `internal/host/` | Platform-specific host setup/check (firewall, RDP/xrdp; no service install, see #307) — `*_linux.go` / `*_windows.go` / `*_darwin.go` |
+| `internal/host/` | Platform-specific host setup/check (firewall, RDP/xrdp; no service install, see #307) — `*_linux.go` / `*_windows.go` / `*_darwin.go`; also the host file (`file.go`, `mesh.go`) and the serve `state_dir`/auth key guards (`statedir*.go`) |
+| `internal/serve/` | `host serve` (HOST-008): persistent tsnet node config, `Publish` of the declared services to `127.0.0.1:<port>`, bootstrap `Supervisor`, control-session watch, readiness folding |
 | `internal/logging/` | Structured slog logging: text to console + JSON to a rotating log file |
 | `internal/profile/` | Shareable connection descriptor (`tsb://`) + profile store behind `connect --profile` (ADR-011/012) |
 | `internal/browser/` | Loopback PAC generation/server plus isolated Edge discovery and launch arguments for allow-listed private origins. |
@@ -74,7 +75,7 @@ gosec ./...
 Project-bound knowledge lives in this repo under [`docs/`](docs/) (docs-as-code):
 
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records (the *why* behind decisions)
-- [`docs/runbooks/`](docs/runbooks/) — operational procedures (deploy, RDP host setup, multi-device ops)
+- [`docs/runbooks/`](docs/runbooks/) — operational procedures (deploy, RDP host setup, `host serve` boot registration, multi-device ops)
 - [`docs/troubleshooting/`](docs/troubleshooting/) — known errors, security audit, release issues
 - [`docs/lessons.md`](docs/lessons.md) — accumulated gotchas and post-mortems
 

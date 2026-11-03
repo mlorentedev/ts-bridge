@@ -6,11 +6,15 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
+	"context"
 	"io"
 	"log/slog"
 
+	"github.com/spf13/cobra"
+
+	"ts-bridge/internal/bootstrapssh"
 	"ts-bridge/internal/host"
+	"ts-bridge/internal/serve"
 )
 
 // BuildDescriptorLineForTest is a test-only wrapper for buildDescriptorLine.
@@ -110,4 +114,65 @@ func HostSetupCmdForTest(t interface{ Cleanup(func()) }, goos string, elevated b
 // PrintCheckTextForTest is a test-only wrapper for printCheckText.
 func PrintCheckTextForTest(w io.Writer, r host.CheckResult) {
 	printCheckText(w, r)
+}
+
+// ServeNodeForTest is the node a fake serve starter returns.
+type ServeNodeForTest = serveNode
+
+// ControlBootstrapForTest is the SSH bootstrap a fake tunnel starter returns.
+type ControlBootstrapForTest = controlBootstrap
+
+// SetServeBootstrapForTest replaces the SSH tunnel starter and the control
+// proxy configurer for the test.
+func SetServeBootstrapForTest(
+	t interface{ Cleanup(func()) },
+	start func(context.Context, bootstrapssh.Config) (ControlBootstrapForTest, error),
+	configure func(context.Context, string, string) error,
+) {
+	prevStart, prevConfigure := sshTunnelStarter, controlProxyConfigurer
+	sshTunnelStarter, controlProxyConfigurer = start, configure
+	t.Cleanup(func() { sshTunnelStarter, controlProxyConfigurer = prevStart, prevConfigure })
+}
+
+// HostServeCmdForTest returns a host serve command, as on goos, that starts
+// its node with start and checks the state directory with ensure.
+func HostServeCmdForTest(
+	t interface{ Cleanup(func()) },
+	goos string,
+	start func(context.Context, serve.NodeConfig) (ServeNodeForTest, []string, error),
+	ensure func(string) error,
+) *cobra.Command {
+	prevStart, prevEnsure, prevGOOS, prevKey := serveNodeStarter, serveEnsureStateDir, hostGOOS, serveCheckKeyFile
+	// Test key files live in the user's temp dir; the guard has its own tests.
+	serveNodeStarter, serveEnsureStateDir, hostGOOS, serveCheckKeyFile = start, ensure, goos, func(string) error { return nil }
+	t.Cleanup(func() {
+		serveNodeStarter, serveEnsureStateDir, hostGOOS, serveCheckKeyFile = prevStart, prevEnsure, prevGOOS, prevKey
+	})
+	c := newHostServeCmd()
+	c.SilenceUsage = true
+	return c
+}
+
+// shippedServeKeyCheck is serveCheckKeyFile as the package initialized it,
+// captured before any test stubs it.
+var shippedServeKeyCheck = serveCheckKeyFile
+
+// UseProductionServeKeyCheckForTest undoes HostServeCmdForTest's key-check
+// stub, so the test runs the guard serve ships with.
+func UseProductionServeKeyCheckForTest(t interface{ Cleanup(func()) }) {
+	prev := serveCheckKeyFile
+	serveCheckKeyFile = shippedServeKeyCheck
+	t.Cleanup(func() { serveCheckKeyFile = prev })
+}
+
+// shippedServeEnsureStateDir is serveEnsureStateDir as the package initialized
+// it, captured before any test stubs it.
+var shippedServeEnsureStateDir = serveEnsureStateDir
+
+// UseProductionServeStateDirCheckForTest undoes HostServeCmdForTest's
+// state_dir stub, so the test runs the guard serve ships with.
+func UseProductionServeStateDirCheckForTest(t interface{ Cleanup(func()) }) {
+	prev := serveEnsureStateDir
+	serveEnsureStateDir = shippedServeEnsureStateDir
+	t.Cleanup(func() { serveEnsureStateDir = prev })
 }

@@ -63,6 +63,26 @@ These variables are used by the `ts-bridge host` commands. They are typically wr
 | `TS_HOST_FIREWALL_RULE` | `Tailscale-RDP-Ingress` | Name of the firewall rule. |
 | `TS_HOST_NO_SLEEP` | `false` | Disable sleep mode on the host (Windows). |
 
+### Host serve (`host.mesh`)
+
+`ts-bridge host serve` reads the `host.mesh` block of the host file (`--config`); no
+environment variable sets it. Serve also ignores the `TS_*` variables and the YAML that tune
+`connect`: its dial, idle and drain timeouts, connection limit and bootstrap backoff are the
+built-in defaults. Unknown keys warn and are ignored; a key given with no or an
+empty value is an error.
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `state_dir` | yes | Absolute path holding the node identity. Windows: owned by SYSTEM or Administrators, no other SID in its DACL, no link or junction on the path. Linux: `0700`, owned by root. Created protected when absent. |
+| `auth_key_file` | first start | Absolute path to a tagged auth key, read only while `state_dir` holds no node. Must not be readable by other accounts. |
+| `hostname` | no | Node name; defaults to the OS hostname in lower case. |
+| `bootstrap_ssh` | no | `user@host[:port]` to reach `host.control_url` through OpenSSH, as `connect --bootstrap-ssh`. Needs `host.control_url`. |
+| `bootstrap_socks_addr` | no | Loopback SOCKS address for that bootstrap; default `127.0.0.1:1055`. |
+| `health_addr` | no | Loopback address for `/health/ready`, which `host check --json` reads for `published`. |
+
+`host.control_url` is required by serve. Setup and recipes: the
+[host serve runbook](https://github.com/mlorentedev/ts-bridge/blob/master/docs/runbooks/host-serve.md).
+
 ### Boolean parsing
 
 `TS_VERBOSE`, `TS_AUTO_INSTANCE`, `TS_MANUAL_MODE` accept: `1`, `true`, `yes`, `on` (case-insensitive). All other values are treated as `false`.
