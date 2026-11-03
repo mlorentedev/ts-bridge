@@ -35,41 +35,27 @@ func (s *TunnelStatus) Load() (ready bool, reason string) {
 // MarkReady sets the status to ready with no reason (startup complete).
 func (s *TunnelStatus) MarkReady() { s.Store(true, "") }
 
+// ServiceState is one service host serve publishes, as /health/ready reports it.
+type ServiceState struct {
+	Kind      string `json:"kind"`
+	Port      int    `json:"port"`
+	Published bool   `json:"published"`
+}
+
+// Report returns the node name and its services, added to /health/ready's
+// body so host check can tell what serve publishes (HOST-008 AC6).
+type Report func() (node string, services []ServiceState)
+
 // StartServer initializes and runs the health and metrics HTTP server.
 func StartServer(addr string, status *TunnelStatus, logger *slog.Logger) *http.Server {
-	mux := http.NewServeMux()
+	return StartServerWithReport(addr, status, nil, logger)
+}
 
-	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{statusField: "ok"})
-	})
-
-	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		ready, reason := status.Load()
-		if !ready {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			body := map[string]string{statusField: "not_ready"}
-			if reason != "" {
-				body["reason"] = reason
-			}
-			_ = json.NewEncoder(w).Encode(body)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{statusField: "ok"})
-	})
-
-	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		snapshot := telemetry.GetMetrics()
-		_ = json.NewEncoder(w).Encode(snapshot)
-	})
-
+// StartServerWithReport is StartServer with a Report on /health/ready.
+func StartServerWithReport(addr string, status *TunnelStatus, report Report, logger *slog.Logger) *http.Server {
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           Handler(status, report),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -81,4 +67,43 @@ func StartServer(addr string, status *TunnelStatus, logger *slog.Logger) *http.S
 	}()
 
 	return server
+}
+
+// Handler serves /health/live, /health/ready and /metrics. A nil report keeps
+// connect's /health/ready body unchanged.
+func Handler(status *TunnelStatus, report Report) http.Handler {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{statusField: "ok"})
+	})
+
+	mux.HandleFunc("/health/ready", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		ready, reason := status.Load()
+		body := map[string]any{statusField: "ok"}
+		code := http.StatusOK
+		if !ready {
+			code = http.StatusServiceUnavailable
+			body[statusField] = "not_ready"
+			if reason != "" {
+				body["reason"] = reason
+			}
+		}
+		if report != nil {
+			body["node"], body["services"] = report()
+		}
+		w.WriteHeader(code)
+		_ = json.NewEncoder(w).Encode(body)
+	})
+
+	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		snapshot := telemetry.GetMetrics()
+		_ = json.NewEncoder(w).Encode(snapshot)
+	})
+
+	return mux
 }

@@ -176,6 +176,13 @@ func buildSSHArgs(endpoint, socksAddr string) ([]string, error) {
 	return append(args, host), nil
 }
 
+// ValidateEndpoint reports whether endpoint is a usable SSH bootstrap
+// endpoint (user@host[:port]), by the rules connect --bootstrap-ssh applies.
+func ValidateEndpoint(endpoint string) error {
+	_, _, _, err := parseEndpoint(endpoint)
+	return err
+}
+
 func parseEndpoint(endpoint string) (user, host, port string, err error) {
 	endpoint = strings.TrimSpace(endpoint)
 	if endpoint == "" {
