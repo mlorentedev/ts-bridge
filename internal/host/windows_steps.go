@@ -184,7 +184,7 @@ const (
 	psNetworkProfilePrivate = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
 	psReadRDPPort           = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
 	psReadRDPDeny           = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; Write-Output "policy=$p"; Write-Output "local=$l"`
-	psReadFirewallRule      = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
+	psReadFirewallRule      = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; Write-Output "remote=$(($x | Get-NetFirewallAddressFilter).RemoteAddress)"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
 	psEnableRDP             = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; ` + psReadRDPPort
 )
 
@@ -222,20 +222,24 @@ func startService(r Runner, name string) error {
 	return nil
 }
 
-const windowsFirewallFix = "allow TCP %d inbound in Windows Defender Firewall"
+const (
+	windowsFirewallFix     = "allow TCP %d inbound in Windows Defender Firewall"
+	windowsFirewallNameFix = "set host.firewall.rule (or --firewall-rule) to a name of A-Z, a-z, 0-9, - and _"
+)
 
 // windowsFirewallRuleOK reads the named rule (W3, #455). It holds only when
-// exactly one rule by that name exists, enabled, allowing inbound TCP on every
-// profile on port, as the recreate sets it; port 0 (unknown) skips the port
-// comparison.
-func windowsFirewallRuleOK(r Runner, rule string, port int) (bool, error) {
+// exactly one rule by that name exists, enabled, allowing inbound TCP from any
+// address on every profile on port, as the recreate sets it; port 0 (unknown)
+// skips the port comparison. found reports whether any rule has the name.
+func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found bool, err error) {
 	out, err := outputPS(r, fmt.Sprintf(psReadFirewallRule, rule))
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	f := parseKeyValues(out)
-	return f["count"] == "1" && f["enabled"] == "True" && f["action"] == "Allow" &&
-		f["direction"] == "Inbound" && f["protocol"] == "TCP" && f["profile"] == "Any" && (port == 0 || f["port"] == strconv.Itoa(port)), nil
+	ok = f["count"] == "1" && f["enabled"] == "True" && f["action"] == "Allow" && f["direction"] == "Inbound" &&
+		f["protocol"] == "TCP" && f["profile"] == "Any" && f["remote"] == "Any" && (port == 0 || f["port"] == strconv.Itoa(port))
+	return ok, f["count"] != "0", nil
 }
 
 // windowsFirewallSetupStep recreates the rule only when the read does not
@@ -246,9 +250,9 @@ func windowsFirewallSetupStep(r Runner, ruleName string, port int) SetupStep {
 	fix := fmt.Sprintf(windowsFirewallFix, port)
 	rule, err := sanitizeFirewallRule(ruleName)
 	if err != nil {
-		return newStep(name, OutcomeFailed, fmt.Sprintf("Failed to configure firewall: validate firewall rule: %v", err), fix)
+		return newStep(name, OutcomeFailed, fmt.Sprintf("Failed to configure firewall: validate firewall rule: %v", err), windowsFirewallNameFix)
 	}
-	if ok, err := windowsFirewallRuleOK(r, rule, port); err == nil && ok {
+	if ok, _, err := windowsFirewallRuleOK(r, rule, port); err == nil && ok {
 		return newStep(name, OutcomeOK, fmt.Sprintf("Rule '%s' already active (port %d)", rule, port), "")
 	}
 	err = runPS(r, fmt.Sprintf(`Remove-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName %q -Direction Inbound -Action Allow -Protocol TCP -LocalPort %d -Profile Any -Enabled True | Out-Null; Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue`, rule, rule, port))
@@ -261,12 +265,16 @@ func windowsFirewallCheckStep(r Runner, ruleName string, port int) (SetupStep, b
 	const name = "Firewall rule"
 	rule, err := sanitizeFirewallRule(ruleName)
 	if err != nil {
-		return newStep(name, OutcomeFailed, fmt.Sprintf("Invalid firewall rule name: %v", err), "set host.firewall.rule (or --firewall-rule) to a name of A-Z, a-z, 0-9, - and _"), false
+		return newStep(name, OutcomeFailed, fmt.Sprintf("Invalid firewall rule name: %v", err), windowsFirewallNameFix), false
 	}
-	ok, err := windowsFirewallRuleOK(r, rule, port)
+	ok, found, err := windowsFirewallRuleOK(r, rule, port)
 	if err != nil {
 		return newStep(name, OutcomeFailed, fmt.Sprintf("Could not read firewall rule '%s'", rule),
 			fmt.Sprintf("run Get-NetFirewallRule -DisplayName %q to see why the read fails", rule)), false
+	}
+	if !ok && found {
+		return newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' differs from what setup creates (inbound TCP %d, any address, every profile, enabled, one rule)", rule, port),
+			"run ts-bridge host setup as an administrator"), false
 	}
 	return firewallReadStep(name, ok, port), ok
 }
