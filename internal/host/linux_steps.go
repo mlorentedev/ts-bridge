@@ -601,7 +601,8 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 	case ruleBlocked:
 		return firewallBlockedStep(read, port)
 	case ruleUnknown:
-		return newStep(linuxFwName, OutcomeFailed, "Cannot read the firewall: "+read.reason, firewallFix(read, port, "setup"))
+		message, fix := firewallUnreadable(read, port, "setup")
+		return newStep(linuxFwName, OutcomeFailed, message, fix)
 	}
 	var err error
 	if read.backend == backendUFW {
@@ -616,13 +617,21 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 	return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Firewall rule added: TCP %d (%s)", port, read.backend), "")
 }
 
+// firewallUnreadable is the message and fix for a firewall that could not be
+// read, naming any copies of setup's rule it still counted. Setup and check
+// share it so the two report the same state the same way (#576).
+func firewallUnreadable(read firewallRead, port int, command string) (message, fix string) {
+	message, fix = "Cannot read the firewall: "+read.reason, firewallFix(read, port, command)
+	if extraCopies(read) > 0 {
+		message += "; it also holds " + copiesHeld(read, port)
+		fix += "; " + copiesFix(read, port)
+	}
+	return message, fix
+}
+
 func firewallCheckStep(read firewallRead, port int) SetupStep {
 	if read.state == ruleUnknown {
-		message, fix := "Cannot read the firewall: "+read.reason, firewallFix(read, port, "check")
-		if extraCopies(read) > 0 {
-			message += "; it also holds " + copiesHeld(read, port)
-			fix += "; " + copiesFix(read, port)
-		}
+		message, fix := firewallUnreadable(read, port, "check")
 		return newStep(linuxFwName, OutcomeUnverified, message, fix)
 	}
 	if read.state == ruleBlocked {
