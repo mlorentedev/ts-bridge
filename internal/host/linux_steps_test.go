@@ -1212,3 +1212,26 @@ func TestReadIptablesCopiesAdmit(t *testing.T) {
 		})
 	}
 }
+
+// TestReadUFWCopiesAdmit pins that the guard holds when ufw itself cannot be
+// read: nothing then proves a ufw allow exists, so iptables' answer stands,
+// and a ufw allow of its own makes the copies redundant (#576).
+func TestReadUFWCopiesAdmit(t *testing.T) {
+	ufwIpt := map[string]bool{"ufw": true, "iptables": true}
+	cases := []struct {
+		name   string
+		runner *recordingRunner
+		want   bool
+	}{
+		{"ufw unreadable, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{iptRead: ufwHostCopies, iptChain: tsInputNoAccept}, fail: map[string]bool{ufwAdded: true}}, true},
+		{"ufw absent, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, true},
+		{"ufw allows the port itself", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := readUFW(tc.runner, 3389).copiesAdmit; got != tc.want {
+				t.Errorf("copiesAdmit = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

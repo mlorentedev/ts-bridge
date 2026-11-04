@@ -207,9 +207,11 @@ func readUFW(r Runner, port int) firewallRead {
 	// port on every interface whatever ufw would have said.
 	ipt := readIptables(r, port)
 	read.copies = ipt.copies
+	// Only a ufw allow of its own makes the copies redundant; an unreadable ufw proves none (#576).
+	read.copiesAdmit = ipt.copiesAdmit && read.state != rulePresent
 	if read.state == ruleAbsent {
 		read.state, read.blockedBy, read.reason, read.fix = ipt.state, ipt.blockedBy, ipt.reason, ipt.fix
-		read.decidedBy, read.copiesAdmit = backendIPT, ipt.copiesAdmit
+		read.decidedBy = backendIPT
 	}
 	return read
 }
