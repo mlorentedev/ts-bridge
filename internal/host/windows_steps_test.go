@@ -80,7 +80,13 @@ func TestWindowsRDPDenyState(t *testing.T) {
 
 // fwRule renders the firewall read's output for one rule.
 func fwRule(enabled, action, direction, port string) string {
-	return "enabled=" + enabled + "\r\naction=" + action + "\r\ndirection=" + direction + "\r\nport=" + port + "\r\n"
+	return fwRuleScoped(enabled, action, direction, "TCP", "Any", port)
+}
+
+// fwRuleScoped is fwRule with the protocol and profile the recreate sets.
+func fwRuleScoped(enabled, action, direction, protocol, profile, port string) string {
+	return "enabled=" + enabled + "\r\naction=" + action + "\r\ndirection=" + direction +
+		"\r\nprofile=" + profile + "\r\nprotocol=" + protocol + "\r\nport=" + port + "\r\n"
 }
 
 // TestWindowsFirewallRule pins W3 (#455): setup reads the named rule and
@@ -103,6 +109,8 @@ func TestWindowsFirewallRule(t *testing.T) {
 		{name: "disabled", read: "count=1\r\n" + fwRule("False", "Allow", "Inbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		{name: "blocks", read: "count=1\r\n" + fwRule("True", "Block", "Inbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		{name: "outbound", read: "count=1\r\n" + fwRule("True", "Allow", "Outbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "udp", read: "count=1\r\n" + fwRuleScoped("True", "Allow", "Inbound", "UDP", "Any", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "public profile only", read: "count=1\r\n" + fwRuleScoped("True", "Allow", "Inbound", "TCP", "Public", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		{name: "duplicated", read: "count=2\r\n" + good + good, setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		// The recreate is idempotent, so setup acts on an unreadable rule;
 		// check cannot say what setup would do, so it fails with the read.
