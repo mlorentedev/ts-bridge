@@ -12,9 +12,13 @@ import (
 )
 
 // CheckStateDir refuses a state directory that is not a 0700 directory owned
-// by root. A symlink is refused rather than followed.
+// by root, or that sits under an ancestor someone else controls (#561). A
+// symlink is refused rather than followed.
 func CheckStateDir(path string) error {
 	path = filepath.Clean(path) // a trailing slash would make Lstat follow a final link
+	if err := stateDirAncestors(path); err != nil {
+		return err
+	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return fmt.Errorf("state_dir %s: %w", path, err)
@@ -31,11 +35,53 @@ func CheckStateDir(path string) error {
 func EnsureStateDir(path string) error {
 	path = filepath.Clean(path)
 	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		// Refuse a hostile ancestor before creating anything under it.
+		if err := stateDirAncestors(path); err != nil {
+			return err
+		}
 		if err := createStateDir(path); err != nil {
 			return fmt.Errorf("create state_dir %s: %w", path, err)
 		}
 	}
 	return CheckStateDir(path)
+}
+
+// stateDirAncestors is the ancestor walk with the real filesystem; tests that
+// exercise the leaf checks on a t.TempDir stub it.
+var stateDirAncestors = func(path string) error { return walkStateDirAncestors(path, lstatOwner) }
+
+// lstatOwner is os.Lstat plus the owner's uid.
+func lstatOwner(path string) (fs.FileInfo, uint32, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, 0, err
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return nil, 0, errors.New("cannot read its owner")
+	}
+	return info, st.Uid, nil
+}
+
+// walkStateDirAncestors checks every existing ancestor of path, nearest first,
+// without following links: a root-owned link is root's choice, so its target
+// is not walked. An absent ancestor is skipped; createStateDir makes it 0700.
+func walkStateDirAncestors(path string, lstat func(string) (fs.FileInfo, uint32, error)) error {
+	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
+		info, uid, err := lstat(dir)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+		case err != nil:
+			return fmt.Errorf("state_dir %s: ancestor %s: %w", path, dir, err)
+		default:
+			if err := checkUnixAncestor(path, dir, info, uid); err != nil {
+				return err
+			}
+		}
+		if parent := filepath.Dir(dir); parent == dir {
+			return nil
+		}
+	}
 }
 
 // createStateDir makes the last element itself, so a link planted there in the
