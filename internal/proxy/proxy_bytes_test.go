@@ -1,10 +1,14 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,8 +37,9 @@ func waitForBytes(t *testing.T, wantTx, wantRx int64, phase string) {
 
 // exchangeLive sends one payload each way through an open tunnel and checks
 // that the global counters advance before either side closes, then that the
-// totals stay exact once the tunnel is torn down (#415).
-func exchangeLive(t *testing.T, client, remotePeer net.Conn, done <-chan struct{}) {
+// totals stay exact once the tunnel is torn down (#415). It returns the
+// expected totals, tx (target to client) and rx (client to target).
+func exchangeLive(t *testing.T, client, remotePeer net.Conn, done <-chan struct{}) (tx, rx int64) {
 	t.Helper()
 	request := []byte("client to target, while the tunnel is open")
 	reply := []byte("target to client")
@@ -55,6 +60,7 @@ func exchangeLive(t *testing.T, client, remotePeer net.Conn, done <-chan struct{
 		t.Fatal("handler did not finish after both sides closed")
 	}
 	waitForBytes(t, int64(len(reply)), int64(len(request)), "after close")
+	return int64(len(reply)), int64(len(request))
 }
 
 func TestHandleConn_PublishesBytesWhileOpen(t *testing.T) {
@@ -66,13 +72,21 @@ func TestHandleConn_PublishesBytesWhileOpen(t *testing.T) {
 	}}
 	cfg := config.Config{Target: "100.64.0.1:3389", ConnectTimeout: time.Second, DialTimeout: time.Second}
 
+	var logs bytes.Buffer
 	done := make(chan struct{})
 	go func() {
-		handleConn(server, dialer, cfg, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		handleConn(server, dialer, cfg, nil, slog.New(slog.NewTextHandler(&logs, nil)))
 		close(done)
 	}()
 
-	exchangeLive(t, client, remotePeer, done)
+	tx, rx := exchangeLive(t, client, remotePeer, done)
+	// The per-connection totals still reach the close log, read after the
+	// handler returned.
+	for _, want := range []string{fmt.Sprintf("bytes_tx=%d", tx), fmt.Sprintf("bytes_rx=%d", rx)} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("close log lacks %s: %s", want, logs.String())
+		}
+	}
 }
 
 func TestHandleSOCKS5Conn_PublishesBytesWhileOpen(t *testing.T) {
@@ -97,5 +111,27 @@ func TestHandleSOCKS5Conn_PublishesBytesWhileOpen(t *testing.T) {
 	assertBytes(t, client, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
 	// The handshake is not tunnel traffic: the counters start at the CONNECT reply.
-	exchangeLive(t, client, remotePeer, done)
+	_, _ = exchangeLive(t, client, remotePeer, done)
+}
+
+// shortWriter accepts only the first n bytes of each write and reports err.
+type shortWriter struct {
+	n   int
+	err error
+}
+
+func (w shortWriter) Write([]byte) (int, error) { return w.n, w.err }
+
+// A write that moves some bytes and then fails still moved them: the counter
+// must reflect the bytes the peer received, not only fully successful writes.
+func TestMeteredWriter_PublishesPartialWrite(t *testing.T) {
+	var published int64
+	w := meteredWriter{w: shortWriter{n: 3, err: io.ErrShortWrite}, add: func(n int64) { published += n }}
+	n, err := w.Write([]byte("abcdef"))
+	if n != 3 || !errors.Is(err, io.ErrShortWrite) {
+		t.Fatalf("Write() = %d, %v, want 3, io.ErrShortWrite", n, err)
+	}
+	if published != 3 {
+		t.Fatalf("published = %d, want 3", published)
+	}
 }

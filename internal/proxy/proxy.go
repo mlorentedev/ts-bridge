@@ -242,9 +242,12 @@ func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger)
 	return tx, rx
 }
 
-// meteredWriter publishes each successful write to a global byte counter, so
-// /metrics reflects a long-lived tunnel before it closes. The cost is one
-// atomic add per write, i.e. per buffer of at most bufferSize bytes.
+// meteredWriter publishes each write to a global byte counter, so /metrics
+// reflects a long-lived tunnel before it closes. The cost is one atomic add
+// per write, i.e. per buffer of at most bufferSize bytes. Wrapping dst hides
+// a *net.TCPConn's ReadFrom from io.CopyBuffer; its zero-copy paths (splice,
+// sendfile) need an OS socket or file on the read side too, and the remote
+// end here is always a tsnet conn, so no fast path is given up.
 type meteredWriter struct {
 	w   io.Writer
 	add func(int64)
