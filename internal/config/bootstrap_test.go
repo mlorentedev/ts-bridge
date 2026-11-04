@@ -161,6 +161,14 @@ func TestMergeRejectsInvalidBootstrapConfig(t *testing.T) {
 }
 
 func TestMergeRejectsBootstrapListenerCollision(t *testing.T) {
+	// Pin the auto-derived port to the start of the range. The real selector
+	// skips a port the host has bound, and Merge drops a derivation error, so
+	// a busy 1055 left LocalAddr empty and the collision case passed as nil
+	// (#573). The collision check must not depend on the host's free ports.
+	original := selectAvailablePort
+	t.Cleanup(func() { selectAvailablePort = original })
+	selectAvailablePort = func(_ string, start, _ int) (int, error) { return start, nil }
+
 	tests := []struct {
 		name    string
 		flags   FlagSet
