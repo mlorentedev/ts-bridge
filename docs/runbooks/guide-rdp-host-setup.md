@@ -32,7 +32,7 @@ ts-bridge host check
 ```
 
 The `setup` subcommand handles:
-1. Tailscale unattended mode (`tailscale up --unattended`)
+1. Tailscale unattended mode (`tailscale set --unattended`, skipped when already on)
 2. Tailscale service auto-start
 3. UPnP services (SSDP, UPnP Device Host)
 4. Network profile set to Private
@@ -82,7 +82,7 @@ Restricting to `100.64.0.0/10` ensures RDP is only accessible via Tailscale, not
 ### 4. Tailscale Configuration
 
 ```powershell
-tailscale up --unattended    # Stay connected without user logged in
+tailscale set --unattended   # Stay connected without user logged in; keeps a Headscale login server
 tailscale ip -4              # Note IP for client .env
 ```
 

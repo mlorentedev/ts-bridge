@@ -85,7 +85,7 @@ func serviceCalls(name string, running bool) []string {
 }
 
 func windowsSetupCalls(noSleep bool) []string {
-	calls := []string{"run tailscale up --unattended"}
+	calls := []string{"output tailscale debug prefs", "run tailscale set --unattended"}
 	calls = append(calls, serviceCalls("Tailscale", true)...)
 	calls = append(calls, serviceCalls("SSDPSRV", false)...)
 	calls = append(calls, serviceCalls("upnphost", false)...)
