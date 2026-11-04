@@ -52,8 +52,9 @@ func TestCheckUnixStateDir(t *testing.T) {
 }
 
 // TestCheckUnixAncestor pins the per-ancestor rule of #561: a directory above
-// state_dir is root-owned and writable by root alone, a symlink is root-owned
-// (its target is root's choice), and nothing else qualifies.
+// state_dir is root-owned and writable by root alone, a symlink is root-owned,
+// and nothing else qualifies. This is only the ownership half for a link: the
+// walk then checks its target the same way (TestWalkStateDirAncestors).
 func TestCheckUnixAncestor(t *testing.T) {
 	tests := []struct {
 		name    string
