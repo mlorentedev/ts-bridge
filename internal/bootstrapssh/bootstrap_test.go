@@ -478,6 +478,8 @@ func TestSSHHelperProcess(t *testing.T) {
 	case "wait":
 		time.Sleep(30 * time.Second)
 		os.Exit(0)
+	case "contain-parent":
+		runContainParent()
 	default:
 		os.Exit(8)
 	}
