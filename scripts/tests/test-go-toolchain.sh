@@ -16,13 +16,24 @@ set -euo pipefail
 
 # Run the whole suite under bash and zsh, as the repo requires of scripts/*.sh
 # (#500). The outer run re-executes this file once per shell and fails when
-# either is missing; TGT_SHELL marks the inner run. TGT_SHELLS narrows the set.
+# either is missing; TGT_SHELL marks the inner run. TGT_SHELLS narrows the set,
+# to bash or zsh only, so no other command can stand in for a shell.
+tgt_running=""
+if [ -n "${ZSH_VERSION:-}" ]; then tgt_running=zsh; elif [ -n "${BASH_VERSION:-}" ]; then tgt_running=bash; fi
 if [ -z "${TGT_SHELL:-}" ]; then
   tgt_failed=0
   # Command substitution splits on IFS in both shells; a bare expansion does
   # not in zsh.
   # shellcheck disable=SC2046
   for tgt_sh in $(printf '%s' "${TGT_SHELLS:-bash zsh}"); do
+    case "$tgt_sh" in
+      bash | zsh) ;;
+      *)
+        echo "test-go-toolchain: TGT_SHELLS names $tgt_sh: only bash and zsh are accepted" >&2
+        tgt_failed=1
+        continue
+        ;;
+    esac
     if ! command -v "$tgt_sh" >/dev/null 2>&1; then
       echo "test-go-toolchain: [$tgt_sh] not installed: both shells are required" >&2
       tgt_failed=1
@@ -31,6 +42,12 @@ if [ -z "${TGT_SHELL:-}" ]; then
     TGT_SHELL="$tgt_sh" "$tgt_sh" "$0" "$@" || { echo "test-go-toolchain: failed under $tgt_sh" >&2; tgt_failed=1; }
   done
   exit "$tgt_failed"
+fi
+# An inherited TGT_SHELL must not skip the loop: the inner run is valid only
+# under the shell it names.
+if [ "$TGT_SHELL" != "$tgt_running" ]; then
+  echo "test-go-toolchain: TGT_SHELL=$TGT_SHELL but running under ${tgt_running:-an unknown shell}" >&2
+  exit 1
 fi
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
