@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -29,7 +30,11 @@ type dependencies struct {
 	lookPath       func(string) (string, error)
 	commandContext func(context.Context, string, ...string) *exec.Cmd
 	dialContext    func(context.Context, string, string) (net.Conn, error)
-	pollInterval   time.Duration
+	// prepare and contain apply the OS containment (#376) before and after
+	// the start; nil means none.
+	prepare      func(*exec.Cmd)
+	contain      func(*exec.Cmd) (io.Closer, error)
+	pollInterval time.Duration
 }
 
 type Tunnel struct {
@@ -43,6 +48,8 @@ func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 		lookPath:       exec.LookPath,
 		commandContext: exec.CommandContext,
 		dialContext:    new(net.Dialer).DialContext,
+		prepare:        prepareContainment,
+		contain:        containProcess,
 		pollInterval:   defaultPollInterval,
 	})
 }
@@ -70,14 +77,19 @@ func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if deps.prepare != nil {
+		deps.prepare(cmd)
+	}
 	if err := cmd.Start(); err != nil {
 		cancel()
 		return nil, startupError(sshPath, fmt.Errorf("start OpenSSH bootstrap: %w", err))
 	}
+	job := containStarted(cmd, deps.contain)
 
 	tunnel := &Tunnel{cancel: cancel, done: make(chan struct{})}
 	go func() {
 		tunnel.err = cmd.Wait()
+		_ = job.Close() // after Wait, so the graceful path is unchanged
 		close(tunnel.done)
 	}()
 
@@ -86,6 +98,19 @@ func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) 
 		return nil, startupError(sshPath, err)
 	}
 	return tunnel, nil
+}
+
+// containStarted applies contain to the started ssh. A refusal is dropped:
+// containment is best effort and never stops the bootstrap.
+func containStarted(cmd *exec.Cmd, contain func(*exec.Cmd) (io.Closer, error)) io.Closer {
+	if contain == nil {
+		return nopCloser{}
+	}
+	job, err := contain(cmd)
+	if err != nil || job == nil {
+		return nopCloser{}
+	}
+	return job
 }
 
 func startupError(client string, err error) error {
