@@ -135,3 +135,21 @@ func TestMeteredWriter_PublishesPartialWrite(t *testing.T) {
 		t.Fatalf("published = %d, want 3", published)
 	}
 }
+
+// A tunnel's traffic spans many buffers: every write is published and the
+// counts add up, the way copyDirection drives meteredWriter.
+func TestMeteredWriter_AccumulatesAcrossBuffers(t *testing.T) {
+	var published int64
+	var calls int
+	w := meteredWriter{w: io.Discard, add: func(n int64) { published += n; calls++ }}
+	payload := bytes.Repeat([]byte("x"), 2*bufferSize+1)
+	// Hide bytes.Reader's WriteTo so CopyBuffer goes through the buffer.
+	src := struct{ io.Reader }{bytes.NewReader(payload)}
+	n, err := io.CopyBuffer(w, src, make([]byte, bufferSize))
+	if err != nil || n != int64(len(payload)) {
+		t.Fatalf("CopyBuffer() = %d, %v, want %d, nil", n, err, len(payload))
+	}
+	if published != n || calls != 3 {
+		t.Fatalf("published %d bytes in %d writes, want %d in 3", published, calls, n)
+	}
+}
