@@ -182,9 +182,6 @@ func handleConn(client net.Conn, dialer Dialer, cfg config.Config, cancel contex
 
 	bytesTx, bytesRx := proxyConnections(client, remote, addr, logger)
 
-	telemetry.AddBytesTx(bytesTx)
-	telemetry.AddBytesRx(bytesRx)
-
 	duration := time.Since(connStart)
 	logger.Info("connection closed",
 		"client", addr,
@@ -221,17 +218,19 @@ func halfCloseWrite(c net.Conn) bool {
 // in its own goroutine; when one direction's source EOFs, the destination's
 // write half is closed so the peer sees end-of-stream without tearing down
 // the opposite (still-active) direction. Both ends are fully closed only
-// after both directions complete.
+// after both directions complete. The global byte counters advance on every
+// write while the tunnel is open (#415); the returned totals are the
+// per-connection figures for the close log and are not published again.
 func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger) (tx, rx int64) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		copyDirection(remote, client, "rx", &rx, addr, logger)
+		copyDirection(remote, client, "rx", &rx, telemetry.AddBytesRx, addr, logger)
 	}()
 	go func() {
 		defer wg.Done()
-		copyDirection(client, remote, "tx", &tx, addr, logger)
+		copyDirection(client, remote, "tx", &tx, telemetry.AddBytesTx, addr, logger)
 	}()
 	wg.Wait()
 
@@ -243,9 +242,29 @@ func proxyConnections(client, remote net.Conn, addr string, logger *slog.Logger)
 	return tx, rx
 }
 
+// meteredWriter publishes each write to a global byte counter, so /metrics
+// reflects a long-lived tunnel before it closes. The cost is one atomic add
+// per write, i.e. per buffer of at most bufferSize bytes. Wrapping dst hides
+// a *net.TCPConn's ReadFrom from io.CopyBuffer; its zero-copy paths (splice,
+// sendfile) need an OS socket or file on the read side too, and the remote
+// end here is always a tsnet conn, so no fast path is given up.
+type meteredWriter struct {
+	w   io.Writer
+	add func(int64)
+}
+
+func (m meteredWriter) Write(p []byte) (int, error) {
+	n, err := m.w.Write(p)
+	if n > 0 {
+		m.add(int64(n))
+	}
+	return n, err
+}
+
 // copyDirection copies data from src to dst in one direction, managing the
-// buffer pool, error classification, and connection cleanup.
-func copyDirection(dst, src net.Conn, direction string, counter *int64, addr string, logger *slog.Logger) {
+// buffer pool, live byte accounting, error classification, and connection
+// cleanup.
+func copyDirection(dst, src net.Conn, direction string, counter *int64, publish func(int64), addr string, logger *slog.Logger) {
 	bufPtrRaw := bufferPool.Get()
 	bufPtr, ok := bufPtrRaw.(*[]byte)
 	if !ok {
@@ -256,7 +275,7 @@ func copyDirection(dst, src net.Conn, direction string, counter *int64, addr str
 	}
 	defer bufferPool.Put(bufPtr)
 
-	n, err := io.CopyBuffer(dst, src, *bufPtr)
+	n, err := io.CopyBuffer(meteredWriter{w: dst, add: publish}, src, *bufPtr)
 	*counter = n
 
 	if err == nil || IsExpectedCloseError(err) {
