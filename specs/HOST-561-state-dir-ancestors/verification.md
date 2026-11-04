@@ -37,6 +37,11 @@ owner: manu
 
 ## Decisions made during implementation
 
+- A root-owned link is followed, not trusted (review on #596). macOS `/tmp` is a root-owned link to
+  a 1777 `/private/tmp`, so trusting the link let a `state_dir` under `/tmp` pass. The walk now
+  checks the target and its ancestors, with at most 40 hops. Mutant: without the follow,
+  `TestWalkStateDirAncestors` fails 3 cases (macOS `/tmp`, a link into a user's dir, a loop).
+
 - The walk is lexical. A root-owned symlink is accepted and its target is not walked: root made the
   link, so root chose the tree, and walking the target would refuse nothing AC2 wants refused.
 - `CheckStateDir` walks too (AC3), not only `EnsureStateDir`. Otherwise an existing directory under

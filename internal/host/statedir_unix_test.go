@@ -96,26 +96,39 @@ type fakeNode struct {
 // refusal names its ancestor, and the leaf is never consulted.
 func TestWalkStateDirAncestors(t *testing.T) {
 	rootDir := fakeNode{fs.ModeDir | 0o755, 0}
+	link := fakeNode{fs.ModeSymlink | 0o777, 0}
 	tests := []struct {
 		name    string
 		path    string
 		tree    map[string]fakeNode
-		wantErr string // "" accepts
+		links   map[string]string // link -> target, as readlink returns it
+		wantErr string            // "" accepts
 	}{
 		{"default layout", "/var/lib/ts-bridge/serve",
-			map[string]fakeNode{"/": rootDir, "/var": rootDir, "/var/lib": rootDir, "/var/lib/ts-bridge": rootDir}, ""},
+			map[string]fakeNode{"/": rootDir, "/var": rootDir, "/var/lib": rootDir, "/var/lib/ts-bridge": rootDir}, nil, ""},
 		{"absent ancestors are created later", "/var/lib/ts-bridge/serve",
-			map[string]fakeNode{"/": rootDir, "/var": rootDir, "/var/lib": rootDir}, ""},
+			map[string]fakeNode{"/": rootDir, "/var": rootDir, "/var/lib": rootDir}, nil, ""},
 		{"macOS /var is a root-owned link", "/var/lib/ts-bridge/serve",
-			map[string]fakeNode{"/": rootDir, "/var": {fs.ModeSymlink | 0o755, 0}, "/var/lib": rootDir}, ""},
+			map[string]fakeNode{"/": rootDir, "/var": link, "/private": rootDir, "/private/var": rootDir, "/var/lib": rootDir},
+			map[string]string{"/var": "private/var"}, ""},
 		{"root-owned /var/run link", "/var/run/ts-bridge/serve",
-			map[string]fakeNode{"/": rootDir, "/var": rootDir, "/var/run": {fs.ModeSymlink | 0o777, 0}}, ""},
+			map[string]fakeNode{"/": rootDir, "/var": rootDir, "/var/run": link, "/run": rootDir},
+			map[string]string{"/var/run": "/run"}, ""},
+		{"macOS /tmp links to a world-writable dir", "/tmp/ts-bridge/serve",
+			map[string]fakeNode{"/": rootDir, "/tmp": link, "/private": rootDir, "/private/tmp": {fs.ModeDir | fs.ModeSticky | 0o777, 0}},
+			map[string]string{"/tmp": "private/tmp"}, "ancestor /private/tmp: mode 0777"},
+		{"a root-owned link under a user's dir", "/srv/link/serve",
+			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/link": link, "/home/u": {fs.ModeDir | 0o755, 1000}, "/home": rootDir},
+			map[string]string{"/srv/link": "/home/u"}, "ancestor /home/u: owned by uid 1000"},
+		{"a link loop", "/a/serve",
+			map[string]fakeNode{"/": rootDir, "/a": link, "/b": link},
+			map[string]string{"/a": "/b", "/b": "/a"}, "too many links"},
 		{"under /tmp", "/tmp/x/serve",
-			map[string]fakeNode{"/": rootDir, "/tmp": {fs.ModeDir | fs.ModeSticky | 0o777, 0}}, "ancestor /tmp: mode 0777"},
+			map[string]fakeNode{"/": rootDir, "/tmp": {fs.ModeDir | fs.ModeSticky | 0o777, 0}}, nil, "ancestor /tmp: mode 0777"},
 		{"a user's link", "/srv/link/serve",
-			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/link": {fs.ModeSymlink | 0o777, 1000}}, "ancestor /srv/link is a symlink owned by uid 1000"},
+			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/link": {fs.ModeSymlink | 0o777, 1000}}, nil, "ancestor /srv/link is a symlink owned by uid 1000"},
 		{"a user's dir deep down", "/srv/home/serve",
-			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/home": {fs.ModeDir | 0o700, 1000}}, "ancestor /srv/home: owned by uid 1000"},
+			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/home": {fs.ModeDir | 0o700, 1000}}, nil, "ancestor /srv/home: owned by uid 1000"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -128,7 +141,13 @@ func TestWalkStateDirAncestors(t *testing.T) {
 				}
 				return fakeInfo{n.mode}, n.uid, nil
 			}
-			err := walkStateDirAncestors(tc.path, lstat)
+			readlink := func(p string) (string, error) {
+				if target, ok := tc.links[p]; ok {
+					return target, nil
+				}
+				return "", fs.ErrInvalid
+			}
+			err := walkStateDirAncestors(tc.path, ancestorFS{lstat, readlink})
 			for _, p := range read {
 				if p == tc.path {
 					t.Errorf("the walk read the leaf %s; CheckStateDir owns it", p)

@@ -48,7 +48,19 @@ func EnsureStateDir(path string) error {
 
 // stateDirAncestors is the ancestor walk with the real filesystem; tests that
 // exercise the leaf checks on a t.TempDir stub it.
-var stateDirAncestors = func(path string) error { return walkStateDirAncestors(path, lstatOwner) }
+var stateDirAncestors = func(path string) error {
+	return walkStateDirAncestors(path, ancestorFS{lstatOwner, os.Readlink})
+}
+
+// maxLinkHops bounds how many links one walk follows, as the kernel does.
+const maxLinkHops = 40
+
+// ancestorFS is the filesystem the walk reads: lstat plus the owner's uid, and
+// readlink.
+type ancestorFS struct {
+	lstat    func(string) (fs.FileInfo, uint32, error)
+	readlink func(string) (string, error)
+}
 
 // lstatOwner is os.Lstat plus the owner's uid.
 func lstatOwner(path string) (fs.FileInfo, uint32, error) {
@@ -63,25 +75,53 @@ func lstatOwner(path string) (fs.FileInfo, uint32, error) {
 	return info, st.Uid, nil
 }
 
-// walkStateDirAncestors checks every existing ancestor of path, nearest first,
-// without following links: a root-owned link is root's choice, so its target
-// is not walked. An absent ancestor is skipped; createStateDir makes it 0700.
-func walkStateDirAncestors(path string, lstat func(string) (fs.FileInfo, uint32, error)) error {
-	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
-		info, uid, err := lstat(dir)
-		switch {
-		case errors.Is(err, fs.ErrNotExist):
-		case err != nil:
-			return fmt.Errorf("state_dir %s: ancestor %s: %w", path, dir, err)
-		default:
-			if err := checkUnixAncestor(path, dir, info, uid); err != nil {
-				return err
-			}
+// walkStateDirAncestors checks every existing ancestor of path, nearest first.
+// An absent ancestor is skipped; createStateDir makes it 0700.
+func walkStateDirAncestors(path string, afs ancestorFS) error {
+	return walkAncestorsFrom(path, filepath.Dir(path), afs, 0)
+}
+
+// walkAncestorsFrom checks dir and every ancestor of it.
+func walkAncestorsFrom(path, dir string, afs ancestorFS, hops int) error {
+	for ; ; dir = filepath.Dir(dir) {
+		if err := checkAncestorAt(path, dir, afs, hops); err != nil {
+			return err
 		}
-		if parent := filepath.Dir(dir); parent == dir {
+		if filepath.Dir(dir) == dir {
 			return nil
 		}
 	}
+}
+
+// checkAncestorAt checks one ancestor. A root-owned link is followed: root
+// owning the link says nothing about who can write where it points (macOS
+// /tmp -> /private/tmp is 1777), so its target and the target's ancestors are
+// walked too.
+func checkAncestorAt(path, dir string, afs ancestorFS, hops int) error {
+	info, uid, err := afs.lstat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil
+	case err != nil:
+		return fmt.Errorf("state_dir %s: ancestor %s: %w", path, dir, err)
+	}
+	if err := checkUnixAncestor(path, dir, info, uid); err != nil {
+		return err
+	}
+	if info.Mode()&fs.ModeSymlink == 0 {
+		return nil
+	}
+	if hops >= maxLinkHops {
+		return fmt.Errorf("state_dir %s: ancestor %s: too many links", path, dir)
+	}
+	target, err := afs.readlink(dir)
+	if err != nil {
+		return fmt.Errorf("state_dir %s: ancestor %s: %w", path, dir, err)
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(dir), target)
+	}
+	return walkAncestorsFrom(path, filepath.Clean(target), afs, hops+1)
 }
 
 // createStateDir makes the last element itself, so a link planted there in the
