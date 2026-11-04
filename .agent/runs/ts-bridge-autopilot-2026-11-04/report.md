@@ -68,7 +68,7 @@ Armed 2026-11-04T15:45Z, expires 23:45Z. One ledger line per item.
 ## Budget and host
 
 - Items: 7 of 7 attempted (max_items 7). No item hit the 3-round fix breaker; the churn was reviewer rounds after each master merge, not failing fixes.
-- test-macos reruns: at most 1 per PR, under the 3 limit.
+- test-macos reruns: at most 2 per PR (#591), under the 3 limit; #600's review job was re-run twice for the same reason class (NaN).
 - Host: `caffeinate` held PreventUserIdleSystemSleep for the whole window (checked at 22:05Z), so the window was covered.
 
 ## Next action
