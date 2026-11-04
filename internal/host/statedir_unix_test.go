@@ -129,6 +129,10 @@ func TestWalkStateDirAncestors(t *testing.T) {
 			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/link": {fs.ModeSymlink | 0o777, 1000}}, nil, "ancestor /srv/link is a symlink owned by uid 1000"},
 		{"a user's dir deep down", "/srv/home/serve",
 			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/home": {fs.ModeDir | 0o700, 1000}}, nil, "ancestor /srv/home: owned by uid 1000"},
+		// The components after a link are walked under its target.
+		{"a user's dir after a link", "/srv/link/x/serve",
+			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/link": link, "/safe": rootDir, "/safe/x": {fs.ModeDir | 0o755, 1000}},
+			map[string]string{"/srv/link": "/safe"}, "ancestor /safe/x: owned by uid 1000"},
 		// The kernel takes .. from where /srv/alias points, /tmp/nested, not
 		// from /srv: the walk must reach /tmp/store, not stop at /srv/store.
 		{"a link target's .. follows the link", "/srv/link/serve",
