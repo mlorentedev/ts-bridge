@@ -158,6 +158,8 @@ type firewallRead struct {
 	fix       string // the fix for an unknown read, when the generic one does not apply
 	copies    int    // copies of the rule setup appends to INPUT (#480), counted on ufw hosts too (#530)
 	decidedBy string // the tool whose rules decided state, when not backend: iptables on a ufw host (#530)
+	// copiesAdmit means the copies are the only allow: without them the port is closed (#576).
+	copiesAdmit bool
 }
 
 // source names the tool whose rules decided the read, for messages; backend
@@ -207,7 +209,7 @@ func readUFW(r Runner, port int) firewallRead {
 	read.copies = ipt.copies
 	if read.state == ruleAbsent {
 		read.state, read.blockedBy, read.reason, read.fix = ipt.state, ipt.blockedBy, ipt.reason, ipt.fix
-		read.decidedBy = backendIPT
+		read.decidedBy, read.copiesAdmit = backendIPT, ipt.copiesAdmit
 	}
 	return read
 }
@@ -241,7 +243,21 @@ func readIptables(r Runner, port int) firewallRead {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("INPUT reaches %s through %q, which ts-bridge cannot evaluate", tsInputChain, jump),
 			fix: fmt.Sprintf("allow TCP %d inbound on the Tailscale interface ahead of %q, or confirm by hand that the jump admits it", port, jump)}
 	}
-	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: iptSetupCopies(input, port)}
+	read := firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: iptSetupCopies(input, port)}
+	if state == rulePresent && read.copies > 0 {
+		without, _ := iptablesDecide(iptWithoutSetup(rules, port), port)
+		read.copiesAdmit = without != rulePresent
+	}
+	return read
+}
+
+// iptWithoutSetup is rules with every copy of setup's rule removed.
+func iptWithoutSetup(rules string, port int) string {
+	printed := iptSetupPrinted(port)
+	kept := slices.DeleteFunc(strings.Split(rules, "\n"), func(line string) bool {
+		return slices.Equal(strings.Fields(line), printed)
+	})
+	return strings.Join(kept, "\n")
 }
 
 // iptInlineChain puts the ts-input chain's rules in place of each unqualified
@@ -674,12 +690,16 @@ func copiesHeld(read firewallRead, port int) string {
 
 // copiesFix is the delete command for the copies extraCopies counts.
 func copiesFix(read firewallRead, port int) string {
-	remains := "so one copy remains"
+	remains, first := "so one copy remains", ""
 	if read.backend == backendUFW {
 		remains = "so none remains: ufw manages this host's rules, and under its default deny policy each copy admits the port on every interface"
+		if read.copiesAdmit {
+			// Deleting every copy would close the port the step reports as allowed.
+			first = fmt.Sprintf("run `ufw allow %d/tcp` first, as root, since the copies are what admits the port now; then ", port)
+		}
 	}
-	return fmt.Sprintf("run `iptables -D %s` %d time(s), as root, %s; setup does not delete firewall rules",
-		strings.Join(iptablesAppend(port)[1:], " "), extraCopies(read), remains)
+	return fmt.Sprintf("%srun `iptables -D %s` %d time(s), as root, %s; setup does not delete firewall rules",
+		first, strings.Join(iptablesAppend(port)[1:], " "), extraCopies(read), remains)
 }
 
 // firewallBlockedStep reports a deny that decides the port before any allow.
