@@ -78,6 +78,65 @@ func TestWindowsRDPDenyState(t *testing.T) {
 	}
 }
 
+// fwRule renders the firewall read's output for one rule.
+func fwRule(enabled, action, direction, port string) string {
+	return "enabled=" + enabled + "\r\naction=" + action + "\r\ndirection=" + direction + "\r\nport=" + port + "\r\n"
+}
+
+// TestWindowsFirewallRule pins W3 (#455): setup reads the named rule and
+// recreates it only when it is absent, duplicated, or differs in state,
+// action, direction or port; check uses the same read.
+func TestWindowsFirewallRule(t *testing.T) {
+	good := fwRule("True", "Allow", "Inbound", "3390")
+	tests := []struct {
+		name      string
+		read      string
+		readFails bool
+		setup     Outcome
+		recreated bool
+		check     Outcome
+		ok        bool
+	}{
+		{name: "converged", read: "count=1\r\n" + good, setup: OutcomeOK, check: OutcomeOK, ok: true},
+		{name: "absent", read: "count=0\r\n", setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "other port", read: "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3389"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "disabled", read: "count=1\r\n" + fwRule("False", "Allow", "Inbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "blocks", read: "count=1\r\n" + fwRule("True", "Block", "Inbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "outbound", read: "count=1\r\n" + fwRule("True", "Allow", "Outbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "duplicated", read: "count=2\r\n" + good + good, setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		// The recreate is idempotent, so setup acts on an unreadable rule;
+		// check cannot say what setup would do, so it fails with the read.
+		{name: "read fails", readFails: true, setup: OutcomeChanged, recreated: true, check: OutcomeFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{
+					output: map[string]string{psPrefix + psFwCheck: tt.read},
+					fail:   map[string]bool{psPrefix + psFwCheck: tt.readFails},
+				}
+			}
+			r := newRunner()
+			step := windowsFirewallSetupStep(r, "Rule", 3390)
+			recreated := false
+			for _, c := range r.calls {
+				recreated = recreated || c == "run "+psPrefix+psFw
+			}
+			if step.Outcome != tt.setup || recreated != tt.recreated {
+				t.Errorf("setup: outcome %q recreated %v, want %q recreated %v (%s)", step.Outcome, recreated, tt.setup, tt.recreated, step.Message)
+			}
+
+			step, ok := windowsFirewallCheckStep(newRunner(), "Rule", 3390)
+			if step.Outcome != tt.check || ok != tt.ok {
+				t.Errorf("check: outcome %q ok %v, want %q ok %v", step.Outcome, ok, tt.check, tt.ok)
+			}
+			if step.Outcome != OutcomeOK && step.Fix == "" {
+				t.Errorf("check: %s with no fix", step.Outcome)
+			}
+		})
+	}
+}
+
 // TestWindowsUnattendedStep pins W1 (#455): the step reads ForceDaemon, the
 // pref --unattended sets, and changes only that pref. It never runs
 // `tailscale up`, which refuses on a Headscale node whose login server it was
