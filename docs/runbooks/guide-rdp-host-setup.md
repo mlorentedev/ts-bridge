@@ -58,6 +58,12 @@ Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' 
     -Name "fDenyTSConnections" -Value 0
 ```
 
+A Group Policy value under
+`HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services` overrides the local one, and
+the next policy refresh reverts a local write. `host check` reports that case as `manual` and names
+the key. Enable RDP in the policy instead: "Allow users to connect remotely by using Remote
+Desktop Services".
+
 ### 2. Verify RDP Port
 
 ```powershell
