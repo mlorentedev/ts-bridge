@@ -57,6 +57,10 @@ build() {
     invalid-json) put "$1" A/features.json '[{"id":' ;;
     empty-file) put "$1" A/features.json '' ;;
     archived-bad) put "$1" archive/A/features.json '{"feature_id":"A"}' ;;
+    # The one named exemption (#574): reported as exempt, not as a difference.
+    exempt-ci-345) put "$1" archive/CI-345-hygiene-guard-fixes/features.json '{"feature_id":"CI-345"}' ;;
+    # The exemption is a path, not a spec name: the same file outside archive/ still fails.
+    exempt-name-elsewhere) put "$1" CI-345-hygiene-guard-fixes/features.json '{"feature_id":"CI-345"}' ;;
     only-bad-named)
       put "$1" good/features.json "[$OBJ]"
       put "$1" bad/features.json '{"feature_id":"B"}'
@@ -101,6 +105,8 @@ second-object-bad:1:feature 1 is missing key behavior
 invalid-json:1:not valid JSON
 empty-file:1:not valid JSON
 archived-bad:1:archive/A/features.json
+exempt-ci-345:0:exempt
+exempt-name-elsewhere:1:top level is object
 only-bad-named:1:bad/features.json
 every-bad-named:1:3 of 3 features.json
 not-a-dir:2:not a directory'

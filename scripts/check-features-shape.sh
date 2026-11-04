@@ -61,12 +61,26 @@ trap 'rm -f "$list"' EXIT
 find "$SPECS_DIR" -type f -name features.json -print0 >"$list" ||
   { echo "check-features-shape: find failed under $SPECS_DIR, the report would be incomplete" >&2; exit 2; }
 
+# Exempt, by path under the specs dir, with the reason printed beside it (#574). CI-345 was
+# archived in a top-level-object shape before this check existed, and an archive is never
+# rewritten (#563). A path, not a spec name: the same file anywhere else is still checked.
+exempt_reason() {
+  case "${1#"$SPECS_DIR"/}" in
+    archive/CI-345-hygiene-guard-fixes/features.json) echo "archived before the scaffold shape was checked; archives are not rewritten (#563)" ;;
+  esac
+}
+
 total=0
 bad=0
 while IFS= read -r -d '' f; do
   total=$((total + 1))
   out="$(findings "$f")"
   [ -n "$out" ] || continue
+  reason="$(exempt_reason "$f")"
+  if [ -n "$reason" ]; then
+    printf '  %s: exempt, %s\n' "$f" "$reason"
+    continue
+  fi
   bad=$((bad + 1))
   printf '%s\n' "$out" | while IFS= read -r line; do printf '  %s: %s\n' "$f" "$line"; done
 done <"$list"

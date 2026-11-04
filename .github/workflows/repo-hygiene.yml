@@ -69,6 +69,11 @@ jobs:
         run: bash scripts/check-shellcheck.sh
       - name: That gate fails on a violation and on an empty scope
         run: bash scripts/tests/test-shellcheck.sh
+      # Its fixture suite runs under bash and zsh, so it sits after the zsh install (#574).
+      - name: Spec features.json files keep the scaffold shape
+        run: bash scripts/check-features-shape.sh
+      - name: That check names every file that differs, and only those
+        run: bash scripts/tests/test-features-shape.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
