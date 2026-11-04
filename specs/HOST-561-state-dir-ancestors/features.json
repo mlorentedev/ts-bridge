@@ -1,0 +1,23 @@
+[
+  {
+    "id": "HOST-561-state-dir-ancestors-f1",
+    "behavior": "A state_dir under a world-writable or non-root ancestor, or a non-root symlink, is refused naming the ancestor before anything is created",
+    "verification": "go test ./internal/host -run 'TestCheckUnixAncestor|TestWalkStateDirAncestors|TestEnsureStateDir_RefusedAncestorCreatesNothing' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-561-state-dir-ancestors-f2",
+    "behavior": "/var/lib/ts-bridge/serve and root-owned symlinked ancestors are still accepted",
+    "verification": "go test ./internal/host -run 'TestWalkStateDirAncestors' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-561-state-dir-ancestors-f3",
+    "behavior": "CheckStateDir applies the same ancestor walk as EnsureStateDir",
+    "verification": "go test ./internal/host -run 'TestCheckStateDir_WalksAncestors' -count=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
