@@ -317,6 +317,36 @@ func TestSetupForLinux(t *testing.T) {
 			message:  "Firewall allows TCP 3389 (iptables)",
 		},
 		{
+			name:     "ufw, a leftover setup copy: the same manual step as check, no write (#576)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+		},
+		{
+			name:     "ufw, one leftover copy beside a ufw allow: still manual (#576)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+		},
+		{
+			name:     "ufw unreadable, a leftover copy: setup names it as check does, no write (#576)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  "it also holds 1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time",
+		},
+		{
+			name:     "ufw, only the leftover copies admit the port: add a ufw allow before deleting them (#576)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+			fix:      "run `ufw allow 3389/tcp` first",
+		},
+		{
 			name:     "ufw, nothing covers in either: ufw allow as before",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run ufw allow 3389/tcp", "output tailscale ip -4"),
@@ -421,10 +451,11 @@ func TestSetupForLinux(t *testing.T) {
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 		},
 		{
-			name:     "iptables, two copies of the setup rule",
+			name:     "iptables, two copies of the setup rule: the same manual step as check (#576)",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptTwoCopies, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
-			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "but holds 2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
 		},
 		{
 			name:     "iptables, no ts-input jump: one read",
@@ -1133,6 +1164,73 @@ func TestReadIptablesMultilineComment(t *testing.T) {
 			r := &recordingRunner{output: map[string]string{iptRead: tt.input, iptChain: tt.chain}}
 			if got := readIptables(r, 3389); got.reason != "" || got.state != ruleAbsent {
 				t.Fatalf("got state %v reason %q, want absent with no reason", got.state, got.reason)
+			}
+		})
+	}
+}
+
+// TestCopiesFixKeepsThePortOpen pins that the delete advice never closes the
+// port it reports as allowed: on a ufw host where the copies are what admits
+// it, the operator adds a ufw allow first, and only then (#576).
+func TestCopiesFixKeepsThePortOpen(t *testing.T) {
+	cases := []struct {
+		name string
+		read firewallRead
+		want bool
+	}{
+		{"ufw, the copies alone admit the port", firewallRead{backend: backendUFW, copies: 2, copiesAdmit: true}, true},
+		{"ufw, ts-input admits the port too", firewallRead{backend: backendUFW, copies: 2}, false},
+		{"iptables, one copy is kept", firewallRead{backend: backendIPT, copies: 2, copiesAdmit: true}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := strings.Contains(copiesFix(tc.read, 3389), "run `ufw allow 3389/tcp` first")
+			if got != tc.want {
+				t.Errorf("copiesFix = %q, asks for a ufw allow first: %v, want %v", copiesFix(tc.read, 3389), got, tc.want)
+			}
+		})
+	}
+}
+
+// TestReadIptablesCopiesAdmit pins when the copies are the only allow: the
+// walk with them removed no longer finds the port allowed (#576).
+func TestReadIptablesCopiesAdmit(t *testing.T) {
+	cases := []struct {
+		name  string
+		chain string
+		want  bool
+	}{
+		{"ts-input accepts the tailnet", tsInputDefault, false},
+		{"ts-input accepts nothing", tsInputNoAccept, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &recordingRunner{elevated: true, output: map[string]string{iptRead: ufwHostCopies, iptChain: tc.chain}}
+			if got := readIptables(r, 3389).copiesAdmit; got != tc.want {
+				t.Errorf("copiesAdmit = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestReadUFWCopiesAdmit pins that the guard holds when ufw itself cannot be
+// read: nothing then proves a ufw allow exists, so iptables' answer stands,
+// and a ufw allow of its own makes the copies redundant (#576).
+func TestReadUFWCopiesAdmit(t *testing.T) {
+	ufwIpt := map[string]bool{"ufw": true, "iptables": true}
+	cases := []struct {
+		name   string
+		runner *recordingRunner
+		want   bool
+	}{
+		{"ufw unreadable, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{iptRead: ufwHostCopies, iptChain: tsInputNoAccept}, fail: map[string]bool{ufwAdded: true}}, true},
+		{"ufw absent, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, true},
+		{"ufw allows the port itself", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := readUFW(tc.runner, 3389).copiesAdmit; got != tc.want {
+				t.Errorf("copiesAdmit = %v, want %v", got, tc.want)
 			}
 		})
 	}
