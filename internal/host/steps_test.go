@@ -72,7 +72,7 @@ const (
 	psEnable  = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; $RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
 	psPort    = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
 	psFw      = `Remove-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName "Rule" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3390 -Profile Any -Enabled True | Out-Null; Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue`
-	psFwCheck = `Get-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue`
+	psFwCheck = `$r = @(Get-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; Write-Output "remote=$(($x | Get-NetFirewallAddressFilter).RemoteAddress)"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
 	powercfg  = "run powercfg /change standby-timeout-ac 0 /change hibernate-timeout-ac 0 /change monitor-timeout-ac 0"
 )
 
@@ -89,7 +89,7 @@ func windowsSetupCalls(noSleep bool) []string {
 	calls = append(calls, serviceCalls("Tailscale", true)...)
 	calls = append(calls, serviceCalls("SSDPSRV", false)...)
 	calls = append(calls, serviceCalls("upnphost", false)...)
-	calls = append(calls, "run "+psPrefix+psProfile, "output "+psPrefix+psDeny, "output "+psPrefix+psEnable, "run "+psPrefix+psFw)
+	calls = append(calls, "run "+psPrefix+psProfile, "output "+psPrefix+psDeny, "output "+psPrefix+psEnable, "output "+psPrefix+psFwCheck, "run "+psPrefix+psFw)
 	if !noSleep {
 		calls = append(calls, powercfg)
 	}
@@ -177,7 +177,7 @@ func TestCheckFor(t *testing.T) {
 	}{
 		{
 			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule"},
-			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psDeny: "policy=\r\nlocal=0", psPrefix + psFwCheck: "Name: Rule"}},
+			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psDeny: "policy=\r\nlocal=0", psPrefix + psFwCheck: "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck},
 			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=ok"},
 			services: []Service{{Kind: "rdp", Port: 3390, Enabled: true, Active: active, FirewallOK: true}},

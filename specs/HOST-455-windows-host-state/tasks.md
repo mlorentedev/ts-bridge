@@ -41,15 +41,15 @@ owner: manu
 
 ## PR 3 — W3 firewall rule
 
-- [ ] [AC3] Failing table test, for setup and check:
+- [x] [AC3] Failing table test, for setup and check:
   - rule absent;
   - present, same port, enabled → ok, no Remove/New;
   - on another port;
   - disabled;
   - duplicated;
   - read error.
-- [ ] [AC3] Implement `readWindowsFirewallRule` and act only on drift
-- [ ] [AC3] Mutation check: a wrong-port read must make setup act
+- [x] [AC3] Implement `readWindowsFirewallRule` and act only on drift
+- [x] [AC3] Mutation check: a wrong-port read must make setup act
 
 ## Closing
 

@@ -78,6 +78,86 @@ func TestWindowsRDPDenyState(t *testing.T) {
 	}
 }
 
+// fwRule renders the firewall read's output for one rule.
+func fwRule(enabled, action, direction, port string) string {
+	return fwRuleScoped(enabled, action, direction, "TCP", "Any", port)
+}
+
+// fwRuleScoped is fwRule with the protocol and profile the recreate sets.
+func fwRuleScoped(enabled, action, direction, protocol, profile, port string) string {
+	return "enabled=" + enabled + "\r\naction=" + action + "\r\ndirection=" + direction +
+		"\r\nprofile=" + profile + "\r\nremote=Any\r\nprotocol=" + protocol + "\r\nport=" + port + "\r\n"
+}
+
+// TestWindowsFirewallRule pins W3 (#455): setup reads the named rule and
+// recreates it only when it is absent, duplicated, or differs in state,
+// action, direction or port; check uses the same read.
+func TestWindowsFirewallRule(t *testing.T) {
+	good := fwRule("True", "Allow", "Inbound", "3390")
+	tests := []struct {
+		name      string
+		read      string
+		readFails bool
+		setup     Outcome
+		recreated bool
+		check     Outcome
+		ok        bool
+	}{
+		{name: "converged", read: "count=1\r\n" + good, setup: OutcomeOK, check: OutcomeOK, ok: true},
+		{name: "absent", read: "count=0\r\n", setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "other port", read: "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3389"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "disabled", read: "count=1\r\n" + fwRule("False", "Allow", "Inbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "blocks", read: "count=1\r\n" + fwRule("True", "Block", "Inbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "outbound", read: "count=1\r\n" + fwRule("True", "Allow", "Outbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "udp", read: "count=1\r\n" + fwRuleScoped("True", "Allow", "Inbound", "UDP", "Any", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "public profile only", read: "count=1\r\n" + fwRuleScoped("True", "Allow", "Inbound", "TCP", "Public", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "restricted remote address", read: "count=1\r\n" + strings.Replace(good, "remote=Any", "remote=10.0.0.0/255.0.0.0", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "duplicated", read: "count=2\r\n" + good + good, setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		// The recreate is idempotent, so setup acts on an unreadable rule;
+		// check cannot say what setup would do, so it fails with the read.
+		{name: "read fails", readFails: true, setup: OutcomeChanged, recreated: true, check: OutcomeFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{
+					output: map[string]string{psPrefix + psFwCheck: tt.read},
+					fail:   map[string]bool{psPrefix + psFwCheck: tt.readFails},
+				}
+			}
+			r := newRunner()
+			step := windowsFirewallSetupStep(r, "Rule", 3390)
+			recreated := false
+			for _, c := range r.calls {
+				recreated = recreated || c == "run "+psPrefix+psFw
+				if strings.HasPrefix(c, "run ") && c != "run "+psPrefix+psFw {
+					t.Errorf("setup ran %q; only the recreate may change the host", c)
+				}
+			}
+			if step.Outcome != tt.setup || recreated != tt.recreated {
+				t.Errorf("setup: outcome %q recreated %v, want %q recreated %v (%s)", step.Outcome, recreated, tt.setup, tt.recreated, step.Message)
+			}
+
+			step, ok := windowsFirewallCheckStep(newRunner(), "Rule", 3390)
+			if step.Outcome != tt.check || ok != tt.ok {
+				t.Errorf("check: outcome %q ok %v, want %q ok %v", step.Outcome, ok, tt.check, tt.ok)
+			}
+			if step.Outcome != OutcomeOK && step.Fix == "" {
+				t.Errorf("check: %s with no fix", step.Outcome)
+			}
+			if step.Outcome == OutcomeChanged {
+				want := "differs from what setup creates"
+				if tt.name == "absent" {
+					want = "No firewall rule found"
+				}
+				if !strings.Contains(step.Message, want) {
+					t.Errorf("check message %q, want it to say %q", step.Message, want)
+				}
+			}
+		})
+	}
+}
+
 // TestWindowsUnattendedStep pins W1 (#455): the step reads ForceDaemon, the
 // pref --unattended sets, and changes only that pref. It never runs
 // `tailscale up`, which refuses on a Headscale node whose login server it was
@@ -144,5 +224,17 @@ func TestWindowsUnattendedStep(t *testing.T) {
 				t.Error("failed step carries no fix")
 			}
 		})
+	}
+}
+
+// An invalid rule name is a config error in setup as in check: both point at
+// the key, not at opening the port by hand.
+func TestWindowsFirewallInvalidName(t *testing.T) {
+	setup := windowsFirewallSetupStep(&recordingRunner{}, "bad rule", 3390)
+	check, _ := windowsFirewallCheckStep(&recordingRunner{}, "bad rule", 3390)
+	for name, step := range map[string]SetupStep{"setup": setup, "check": check} {
+		if step.Outcome != OutcomeFailed || !strings.Contains(step.Fix, "host.firewall.rule") {
+			t.Errorf("%s: %s, fix %q, want failed naming host.firewall.rule", name, step.Outcome, step.Fix)
+		}
 	}
 }

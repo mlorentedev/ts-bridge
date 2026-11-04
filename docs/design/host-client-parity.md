@@ -82,6 +82,8 @@ All four are fixed by #454 (`specs/archive/BUG-034-linux-host-idempotent/` once 
   denied; a policy denial is `manual` with the key named, and setup writes nothing.
 - **W3:** the firewall step deletes and recreates its rule, so it always changes the
   system and can never report "already configured".
+  Fixed: setup and check read the rule first, and setup recreates it only when it is
+  absent, duplicated, disabled, not an inbound allow, or on another port.
 
 ### macOS facts that bound the design
 

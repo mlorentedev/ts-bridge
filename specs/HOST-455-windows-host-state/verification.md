@@ -28,7 +28,13 @@ owner: manu
   local allow, policy allows over a local deny, and a failed read. The test asserts the outcome,
   whether setup wrote, `services[].enabled`, and that a `manual` fix names the policy key.
   Mutants: ignoring the policy value fails 2 subtests; treating an absent value as allowed fails 1.
-- [ ] AC3 → PR 3 (pending)
+- [ ] AC3 → PR 3, test `TestWindowsFirewallRule`. Eleven cases, run through both setup and check:
+  converged, absent, other port, disabled, a Block rule, an Outbound rule, a UDP rule, a rule on the
+  Public profile only, a rule restricted to some remote addresses, a duplicated rule, and a failed
+  read. Setup may run no command but the recreate; check names a present but drifted rule as such. Setup recreates only when the rule is not converged; check reports `firewall_ok`
+  false in every non-converged case. Mutants: dropping the port comparison fails 1 subtest;
+  dropping the `count == 1` test fails 1; dropping the protocol, profile or remote-address comparison
+  fails 1 each.
 - [ ] AC4 → every test above drives the `Runner` seam (`recordingRunner`) with no build tag, so it
   runs on Linux, macOS and in `test-windows`. `GOOS=windows go vet ./...` is clean.
 
@@ -46,6 +52,16 @@ owner: manu
 - W1 reads `tailscale debug prefs` (a debug subcommand) and fails open toward the `set`: only a
   positive parse of `ForceDaemon: true` skips the write. Format drift then costs one redundant
   idempotent command, never a skipped step (lesson-053).
+- W3 also checks the rule's action (`Allow`), direction (`Inbound`), protocol (`TCP`), profile
+  (`Any`) and remote address (`Any`), beyond the AC's port and state: these are what the recreate sets, so a same-named Block,
+  UDP, Public-only or address-restricted rule would otherwise read as converged (review on #600).
+- W3 on an unreadable rule: setup recreates it, because the recreate is idempotent. Check reports
+  `failed`, because it cannot say what setup would do.
+- `Enable-NetFirewallRule -DisplayGroup "Remote Desktop"` now runs only when the named rule is
+  recreated. The named rule opens the declared port, which is all the step promises; on a converged
+  host the built-in group is left as the user set it.
+- A port read of 0 (unknown) skips the firewall port comparison in check, as before, rather than
+  reporting every rule as drifted.
 - `host check` still does not report unattended mode; see Out of scope in `proposal.md`.
 - `site/src/content/docs/getting-started.md` still says `tailscale up --unattended`. `site/**` is
   outside this change's paths, so a follow-up issue tracks it.
