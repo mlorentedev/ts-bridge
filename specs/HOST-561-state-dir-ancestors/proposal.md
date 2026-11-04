@@ -27,8 +27,10 @@ using `Lstat`:
 
 - a directory must be owned by root and must not be writable by group or others. This includes a
   sticky world-writable directory such as `/tmp`;
-- a symlink must be owned by root, and its target and the target's ancestors are then walked by
-  the same rules, with at most 40 hops. Root owning a link says nothing about who can write where it
+- a symlink must be owned by root, and its target is then walked by the same rules, as the kernel
+  resolves it: top-down, a `..` in a target taken from where the link points, at most 40 links over
+  the whole walk. A `..` in the declared `state_dir` is refused, because `Clean` would drop it
+  lexically. Root owning a link says nothing about who can write where it
   points: macOS's `/tmp` → `/private/tmp` is 1777. AC2's `/var/run` → `/run` and macOS's `/var` →
   `/private/var` still pass, because their targets are root-owned directories;
 - anything else (a file, a device) is refused.

@@ -129,6 +129,12 @@ func TestWalkStateDirAncestors(t *testing.T) {
 			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/link": {fs.ModeSymlink | 0o777, 1000}}, nil, "ancestor /srv/link is a symlink owned by uid 1000"},
 		{"a user's dir deep down", "/srv/home/serve",
 			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/home": {fs.ModeDir | 0o700, 1000}}, nil, "ancestor /srv/home: owned by uid 1000"},
+		// The kernel takes .. from where /srv/alias points, /tmp/nested, not
+		// from /srv: the walk must reach /tmp/store, not stop at /srv/store.
+		{"a link target's .. follows the link", "/srv/link/serve",
+			map[string]fakeNode{"/": rootDir, "/srv": rootDir, "/srv/link": link, "/srv/alias": link,
+				"/tmp": rootDir, "/tmp/nested": rootDir, "/tmp/store": {fs.ModeDir | 0o755, 1000}},
+			map[string]string{"/srv/link": "/srv/alias/../store", "/srv/alias": "/tmp/nested"}, "ancestor /tmp/store: owned by uid 1000"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -201,5 +207,40 @@ func TestCheckStateDir_WalksAncestors(t *testing.T) {
 	}
 	if err := CheckStateDir(dir); err == nil || !strings.Contains(err.Error(), "ancestor") {
 		t.Errorf("CheckStateDir(%s) = %v, want it refused for an ancestor", dir, err)
+	}
+}
+
+// Links whose targets are links again cost the walk one visit per link, not
+// a re-walk per level (#596 review): ten nested /srv/l -> . links stay linear.
+func TestWalkStateDirAncestors_LinearInLinks(t *testing.T) {
+	const depth = 10
+	visits := 0
+	lstat := func(p string) (fs.FileInfo, uint32, error) {
+		visits++
+		switch {
+		case p == "/" || p == "/srv":
+			return fakeInfo{fs.ModeDir | 0o755}, 0, nil
+		case strings.ReplaceAll(strings.TrimPrefix(p, "/srv"), "/l", "") == "":
+			return fakeInfo{fs.ModeSymlink | 0o777}, 0, nil // /srv/l, /srv/l/l, ...
+		}
+		return nil, 0, fs.ErrNotExist
+	}
+	readlink := func(string) (string, error) { return ".", nil }
+	path := "/srv" + strings.Repeat("/l", depth) + "/serve"
+	if err := walkStateDirAncestors(path, ancestorFS{lstat, readlink}); err != nil {
+		t.Fatalf("walk(%s) = %v, want nil", path, err)
+	}
+	if visits > 4*depth {
+		t.Errorf("walk(%s) made %d lstat calls, want at most %d", path, visits, 4*depth)
+	}
+}
+
+// A .. in the declared path is refused: Clean would drop it lexically while
+// the kernel resolves it after any link before it.
+func TestCheckStateDir_RefusesDotDot(t *testing.T) {
+	for name, fn := range map[string]func(string) error{"CheckStateDir": CheckStateDir, "EnsureStateDir": EnsureStateDir} {
+		if err := fn("/srv/link/../serve"); err == nil || !strings.Contains(err.Error(), "..") {
+			t.Errorf("%s(/srv/link/../serve) = %v, want it refused for its ..", name, err)
+		}
 	}
 }

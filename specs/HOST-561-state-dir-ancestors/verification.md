@@ -40,7 +40,18 @@ owner: manu
 - A root-owned link is followed, not trusted (review on #596). macOS `/tmp` is a root-owned link to
   a 1777 `/private/tmp`, so trusting the link let a `state_dir` under `/tmp` pass. The walk now
   checks the target and its ancestors, with at most 40 hops. Mutant: without the follow,
-  `TestWalkStateDirAncestors` fails 3 cases (macOS `/tmp`, a link into a user's dir, a loop).
+  `TestWalkStateDirAncestors` fails 4 cases (macOS `/tmp`, a link into a user's dir, a loop, a
+  target's `..`).
+- The walk resolves link targets as the kernel does (second review on #596). Before, a target was
+  `Clean`ed lexically and each link re-walked its target's whole parent chain:
+  - `/srv/link -> /srv/alias/../store` with `/srv/alias -> /tmp/nested` was checked at
+    `/srv/store`, which the kernel never visits. On the old walk the new case
+    `a link target's .. follows the link` returns nil; the new walk refuses `/tmp/store`.
+  - Ten nested `/srv/l -> .` links cost the old walk 3071 `lstat` calls;
+    `TestWalkStateDirAncestors_LinearInLinks` caps them at 40. One link budget now covers the whole
+    walk, so only layouts the kernel itself refuses (ELOOP) are refused for links.
+  - A `..` in `state_dir` is refused (`TestCheckStateDir_RefusesDotDot`); before, `/srv/link/../serve`
+    was cleaned to `/srv/serve` and the link never walked.
 
 - `CheckStateDir` walks too (AC3), not only `EnsureStateDir`. Otherwise an existing directory under
   `/tmp` would pass every later start.

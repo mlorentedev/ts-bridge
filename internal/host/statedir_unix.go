@@ -8,13 +8,18 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
 // CheckStateDir refuses a state directory that is not a 0700 directory owned
 // by root, or that sits under an ancestor someone else controls (#561). A
-// symlink is refused rather than followed.
+// symlink at state_dir itself is refused rather than followed; a root-owned
+// link among its ancestors is followed and its target checked too.
 func CheckStateDir(path string) error {
+	if err := refuseDotDot(path); err != nil {
+		return err
+	}
 	path = filepath.Clean(path) // a trailing slash would make Lstat follow a final link
 	if err := stateDirAncestors(path); err != nil {
 		return err
@@ -33,6 +38,9 @@ func CheckStateDir(path string) error {
 // EnsureStateDir creates an absent state directory with mode 0700, then checks
 // it. An existing directory is checked, never repaired.
 func EnsureStateDir(path string) error {
+	if err := refuseDotDot(path); err != nil {
+		return err
+	}
 	path = filepath.Clean(path)
 	if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
 		// Refuse a hostile ancestor before creating anything under it.
@@ -52,7 +60,7 @@ var stateDirAncestors = func(path string) error {
 	return walkStateDirAncestors(path, ancestorFS{lstatOwner, os.Readlink})
 }
 
-// maxLinkHops bounds how many links one walk follows, as the kernel does.
+// maxLinkHops bounds how many links one walk follows in all, as the kernel does.
 const maxLinkHops = 40
 
 // ancestorFS is the filesystem the walk reads: lstat plus the owner's uid, and
@@ -75,53 +83,82 @@ func lstatOwner(path string) (fs.FileInfo, uint32, error) {
 	return info, st.Uid, nil
 }
 
-// walkStateDirAncestors checks every existing ancestor of path, nearest first.
-// An absent ancestor is skipped; createStateDir makes it 0700.
+// walkStateDirAncestors checks every directory the kernel passes through to
+// reach path's parent, top-down as path_resolution(7) resolves it: each
+// component on entry, and a link's target in place of the link, so a .. in a
+// target is taken from where the link points. A root-owned link is followed:
+// root owning the link says nothing about who can write where it points (macOS
+// /tmp -> /private/tmp is 1777). One link budget covers the whole walk, as in
+// the kernel. An absent component ends it; createStateDir makes the rest 0700.
 func walkStateDirAncestors(path string, afs ancestorFS) error {
-	return walkAncestorsFrom(path, filepath.Dir(path), afs, 0)
-}
-
-// walkAncestorsFrom checks dir and every ancestor of it.
-func walkAncestorsFrom(path, dir string, afs ancestorFS, hops int) error {
-	for ; ; dir = filepath.Dir(dir) {
-		if err := checkAncestorAt(path, dir, afs, hops); err != nil {
+	if _, err := ancestorAt(path, "/", afs); err != nil {
+		return err
+	}
+	rest, cur, links := components(filepath.Dir(path)), "/", 0
+	for len(rest) > 0 {
+		c := rest[0]
+		rest = rest[1:]
+		if c == ".." {
+			cur = filepath.Dir(cur)
+			continue
+		}
+		next := filepath.Join(cur, c)
+		info, err := ancestorAt(path, next, afs)
+		if err != nil || info == nil {
 			return err
 		}
-		if filepath.Dir(dir) == dir {
-			return nil
+		if info.Mode()&fs.ModeSymlink == 0 {
+			cur = next
+			continue
 		}
+		if links++; links > maxLinkHops {
+			return fmt.Errorf("state_dir %s: ancestor %s: too many links", path, next)
+		}
+		target, err := afs.readlink(next)
+		if err != nil {
+			return fmt.Errorf("state_dir %s: ancestor %s: %w", path, next, err)
+		}
+		if filepath.IsAbs(target) {
+			cur = "/"
+		}
+		rest = append(components(target), rest...)
 	}
+	return nil
 }
 
-// checkAncestorAt checks one ancestor. A root-owned link is followed: root
-// owning the link says nothing about who can write where it points (macOS
-// /tmp -> /private/tmp is 1777), so its target and the target's ancestors are
-// walked too.
-func checkAncestorAt(path, dir string, afs ancestorFS, hops int) error {
+// components splits a slash path into its names, dropping empty and "."
+// ones; ".." is kept for the walk to resolve.
+func components(p string) []string {
+	var out []string
+	for _, c := range strings.Split(p, "/") {
+		if c != "" && c != "." {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// ancestorAt reads and checks one ancestor. A nil FileInfo means it is absent.
+func ancestorAt(path, dir string, afs ancestorFS) (fs.FileInfo, error) {
 	info, uid, err := afs.lstat(dir)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return nil
+		return nil, nil
 	case err != nil:
-		return fmt.Errorf("state_dir %s: ancestor %s: %w", path, dir, err)
+		return nil, fmt.Errorf("state_dir %s: ancestor %s: %w", path, dir, err)
 	}
-	if err := checkUnixAncestor(path, dir, info, uid); err != nil {
-		return err
+	return info, checkUnixAncestor(path, dir, info, uid)
+}
+
+// refuseDotDot refuses a .. in the declared path: Clean drops it lexically,
+// while the kernel resolves it after any link before it.
+func refuseDotDot(path string) error {
+	for _, c := range strings.Split(path, "/") {
+		if c == ".." {
+			return fmt.Errorf("state_dir %s: has a .. component; give the path without it", path)
+		}
 	}
-	if info.Mode()&fs.ModeSymlink == 0 {
-		return nil
-	}
-	if hops >= maxLinkHops {
-		return fmt.Errorf("state_dir %s: ancestor %s: too many links", path, dir)
-	}
-	target, err := afs.readlink(dir)
-	if err != nil {
-		return fmt.Errorf("state_dir %s: ancestor %s: %w", path, dir, err)
-	}
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(filepath.Dir(dir), target)
-	}
-	return walkAncestorsFrom(path, filepath.Clean(target), afs, hops+1)
+	return nil
 }
 
 // createStateDir makes the last element itself, so a link planted there in the
