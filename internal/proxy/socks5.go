@@ -181,9 +181,7 @@ func handleSOCKS5Conn(
 
 	client = withIdleTimeout(client, cfg.IdleTimeout)
 	remote = withIdleTimeout(remote, cfg.IdleTimeout)
-	bytesTx, bytesRx := proxyConnections(client, remote, client.RemoteAddr().String(), logger)
-	telemetry.AddBytesTx(bytesTx)
-	telemetry.AddBytesRx(bytesRx)
+	_, _ = proxyConnections(client, remote, client.RemoteAddr().String(), logger)
 	return nil
 }
 
