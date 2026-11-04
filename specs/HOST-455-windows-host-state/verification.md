@@ -22,7 +22,11 @@ owner: manu
   (`windowsSetupCalls`) now starts with `output tailscale debug prefs`, then
   `run tailscale set --unattended`. Mutant check: dropping `&& prefs.ForceDaemon` fails three
   subtests.
-- [ ] AC2 → PR 2 (pending)
+- [ ] AC2 → PR 2, test `TestWindowsRDPDenyState`. Six (policy, local) cases, run through both
+  `rdpSetupStep` and `checkWindows`: local allows, local denies, nothing set, policy denies over a
+  local allow, policy allows over a local deny, and a failed read. The test asserts the outcome,
+  whether setup wrote, `services[].enabled`, and that a `manual` fix names the policy key.
+  Mutants: ignoring the policy value fails 2 subtests; treating an absent value as allowed fails 1.
 - [ ] AC3 → PR 3 (pending)
 - [ ] AC4 → every test above drives the `Runner` seam (`recordingRunner`) with no build tag, so it
   runs on Linux, macOS and in `test-windows`. `GOOS=windows go vet ./...` is clean.
