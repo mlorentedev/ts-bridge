@@ -208,7 +208,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 	if jsonOut {
-		if err := printSetupJSON(cmd.OutOrStdout(), result); err != nil {
+		if err := printSetupJSON(cmd.OutOrStdout(), host.TailscaleIP(), result); err != nil {
 			return err
 		}
 		return setupConvergence(result.Steps)
@@ -485,6 +485,8 @@ type setupJSONOutput struct {
 	RDPPort  int             `json:"rdp_port"`
 	Warnings []string        `json:"warnings"`
 	Errors   []string        `json:"errors"`
+	// Descriptor is the tsb:// line of the text summary; absent without an IP.
+	Descriptor string `json:"descriptor,omitempty"`
 }
 
 type setupStepJSON struct {
@@ -515,12 +517,13 @@ func stepsJSON(steps []host.SetupStep) []setupStepJSON {
 	return out
 }
 
-func setupJSON(result host.SetupResult) ([]byte, error) {
+func setupJSON(tsIP string, result host.SetupResult) ([]byte, error) {
 	output := setupJSONOutput{
-		RDPPort:  result.RDPPort,
-		Steps:    stepsJSON(result.Steps),
-		Warnings: []string{},
-		Errors:   []string{},
+		RDPPort:    result.RDPPort,
+		Steps:      stepsJSON(result.Steps),
+		Warnings:   []string{},
+		Errors:     []string{},
+		Descriptor: buildDescriptorLine(tsIP, result.RDPPort, result.ControlURL),
 	}
 	for _, step := range result.Steps {
 		if !step.Success {
@@ -530,8 +533,8 @@ func setupJSON(result host.SetupResult) ([]byte, error) {
 	return json.MarshalIndent(output, "", "  ")
 }
 
-func printSetupJSON(w io.Writer, result host.SetupResult) error {
-	data, err := setupJSON(result)
+func printSetupJSON(w io.Writer, tsIP string, result host.SetupResult) error {
+	data, err := setupJSON(tsIP, result)
 	if err != nil {
 		return fmt.Errorf("marshal setup result: %w", err)
 	}
