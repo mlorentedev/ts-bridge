@@ -1,0 +1,30 @@
+[
+  {
+    "id": "HOST-455-windows-host-state-f1",
+    "behavior": "Setup sets unattended mode with tailscale set, never tailscale up, and reports ok when ForceDaemon is already true",
+    "verification": "go test ./internal/host -run 'TestWindowsUnattendedStep' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-455-windows-host-state-f2",
+    "behavior": "RDP enabled state and the setup outcome follow the effective fDenyTSConnections, policy first",
+    "verification": "go test ./internal/host -run 'TestWindowsRDPDenyState' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-455-windows-host-state-f3",
+    "behavior": "The firewall step reads the rule and acts only when absent, disabled, on another port or duplicated",
+    "verification": "go test ./internal/host -run 'TestWindowsFirewallRule' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "HOST-455-windows-host-state-f4",
+    "behavior": "The Windows step logic is table-tested through the Runner seam on any OS",
+    "verification": "GOOS=windows go vet ./internal/host && go test ./internal/host -count=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]

@@ -1,18 +1,19 @@
 package host
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 )
 
-// Every Windows step acts on each run, so success is "changed"; #455 adds the
-// reads that let a converged host report "ok" (W1-W3).
+// Most Windows steps act on each run, so success is "changed". #455 adds the
+// reads that let a converged host report "ok": unattended mode (W1) reads
+// first; the RDP and firewall reads (W2, W3) follow.
 
 func setupWindows(cfg Config, r Runner) SetupResult {
 	steps := []SetupStep{
-		actStep("Tailscale unattended mode", r.Run("tailscale", "up", "--unattended"),
-			"Unattended mode enabled", "Could not enable via CLI — check Tailscale GUI", "enable unattended mode in the Tailscale GUI"),
+		unattendedStep(r),
 		actStep("Tailscale service", startService(r, "Tailscale"),
 			"Service running", "Tailscale service not found — is Tailscale installed?", "install Tailscale"),
 	}
@@ -40,6 +41,23 @@ func setupWindows(cfg Config, r Runner) SetupResult {
 		steps = append(steps, actStep("Power settings", err, "Sleep disabled (AC power)", "Could not modify power settings", "disable sleep on AC power"))
 	}
 	return SetupResult{RDPPort: rdpPort, Steps: steps}
+}
+
+// unattendedStep sets unattended mode only when the node lacks it (W1, #455).
+// `tailscale set` changes that one pref; `tailscale up` would refuse on a
+// node whose other prefs (a Headscale login server) it is not given again.
+// The read is a debug subcommand, so any output that does not parse to
+// ForceDaemon true falls through to the idempotent set rather than skipping it.
+func unattendedStep(r Runner) SetupStep {
+	const name = "Tailscale unattended mode"
+	if out, err := r.Output("tailscale", "debug", "prefs"); err == nil {
+		var prefs struct{ ForceDaemon bool }
+		if json.Unmarshal(out, &prefs) == nil && prefs.ForceDaemon {
+			return newStep(name, OutcomeOK, "Unattended mode already enabled", "")
+		}
+	}
+	return actStep(name, r.Run("tailscale", "set", "--unattended"),
+		"Unattended mode enabled", "Could not enable via CLI — check Tailscale GUI", "enable unattended mode in the Tailscale GUI")
 }
 
 // actStep maps an action's error to "changed" or "failed".
