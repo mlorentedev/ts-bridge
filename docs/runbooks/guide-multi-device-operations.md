@@ -100,9 +100,10 @@ The `office` profile connected this Windows workstation to
 | Final state | `active_connections: 0`; readiness remained `ok` |
 
 The interactive session averaged 0.133 Mbps across active and idle periods.
-Byte totals became visible only after disconnect because live sessions are not
-yet reflected in `total_bytes_tx` / `total_bytes_rx`; #415 tracks that
-observability defect.
+Byte totals became visible only after disconnect: at the time of this run,
+`total_bytes_tx` / `total_bytes_rx` were published when a tunnel closed. Since
+#415 they advance on every write, so a throughput sample can be read from
+`/metrics` while the session is still open.
 
 Neither resource window (33.47 s under load, 487 s interactive) shows growth, but both are too
 short to rule out a slow leak; a multi-hour soak is still needed before "no memory leaks" holds.
