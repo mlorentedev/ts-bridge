@@ -61,6 +61,11 @@ build() {
     exempt-ci-345) put "$1" archive/CI-345-hygiene-guard-fixes/features.json '{"feature_id":"CI-345"}' ;;
     # The exemption is a path, not a spec name: the same file outside archive/ still fails.
     exempt-name-elsewhere) put "$1" CI-345-hygiene-guard-fixes/features.json '{"feature_id":"CI-345"}' ;;
+    # An exemption skips its own file only: a difference elsewhere in the same tree still fails.
+    exempt-beside-bad)
+      put "$1" archive/CI-345-hygiene-guard-fixes/features.json '{"feature_id":"CI-345"}'
+      put "$1" zz-after/features.json '[]'
+      ;;
     only-bad-named)
       put "$1" good/features.json "[$OBJ]"
       put "$1" bad/features.json '{"feature_id":"B"}'
@@ -107,6 +112,7 @@ empty-file:1:not valid JSON
 archived-bad:1:archive/A/features.json
 exempt-ci-345:0:exempt, archived before the scaffold shape was checked
 exempt-name-elsewhere:1:top level is object
+exempt-beside-bad:1:zz-after/features.json: empty array
 only-bad-named:1:bad/features.json
 every-bad-named:1:3 of 3 features.json
 not-a-dir:2:not a directory'

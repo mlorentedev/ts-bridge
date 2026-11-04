@@ -60,6 +60,8 @@ list="$(mktemp)"
 trap 'rm -f "$list"' EXIT
 find "$SPECS_DIR" -type f -name features.json -print0 >"$list" ||
   { echo "check-features-shape: find failed under $SPECS_DIR, the report would be incomplete" >&2; exit 2; }
+# Sorted, so the report reads the same on every filesystem (find's order is the directory's).
+LC_ALL=C sort -z -o "$list" "$list"
 
 # Exempt, by path under the specs dir, with the reason printed beside it (#574). CI-345 was
 # archived in a top-level-object shape before this check existed, and an archive is never
