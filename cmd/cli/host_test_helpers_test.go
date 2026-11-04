@@ -118,6 +118,13 @@ func HostSetupCmdForTest(t interface{ Cleanup(func()) }, goos string, elevated b
 	return c
 }
 
+// SetHostTailscaleIPForTest makes setup's descriptor name ip for the test.
+func SetHostTailscaleIPForTest(t interface{ Cleanup(func()) }, ip string) {
+	prev := hostTailscaleIP
+	hostTailscaleIP = func() string { return ip }
+	t.Cleanup(func() { hostTailscaleIP = prev })
+}
+
 // PrintCheckTextForTest is a test-only wrapper for printCheckText.
 func PrintCheckTextForTest(w io.Writer, r host.CheckResult) {
 	printCheckText(w, r)

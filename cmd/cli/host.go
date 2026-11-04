@@ -208,7 +208,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 	if jsonOut {
-		if err := printSetupJSON(cmd.OutOrStdout(), host.TailscaleIP(), result); err != nil {
+		if err := printSetupJSON(cmd.OutOrStdout(), hostTailscaleIP(), result); err != nil {
 			return err
 		}
 		return setupConvergence(result.Steps)
@@ -226,7 +226,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 
 	// Report the port that was actually configured (result.RDPPort), which on
 	// Windows comes from the registry and may differ from the requested --port.
-	printSetupSummary(cmd.OutOrStdout(), host.TailscaleIP(), result)
+	printSetupSummary(cmd.OutOrStdout(), hostTailscaleIP(), result)
 	return setupConvergence(result.Steps)
 }
 
@@ -323,7 +323,7 @@ func reportCheck(w io.Writer, result host.CheckResult, jsonOut bool) error {
 	return checkConvergence(result.Steps)
 }
 
-// hostCheck, hostSetup, hostIsElevated and hostGOOS are what the host commands
+// hostCheck, hostSetup, hostIsElevated, hostTailscaleIP and hostGOOS are what the host commands
 // run on; tests replace them to drive the commands end to end without the
 // machine's real state. hostGOOS steers only the command layer: host.Setup and
 // host.Check read runtime.GOOS themselves, so a test that changes hostGOOS
@@ -333,6 +333,8 @@ var (
 	hostCheck      = host.Check
 	hostSetup      = host.Setup
 	hostIsElevated = host.IsElevated
+	// hostTailscaleIP is the IP setup's descriptor names, in text and JSON.
+	hostTailscaleIP = host.TailscaleIP
 )
 
 // exitNotConverged is the exit status of a host command that ran but did not

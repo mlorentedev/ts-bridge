@@ -283,3 +283,28 @@ func TestPrintSetupSummary_ControlURL(t *testing.T) {
 		t.Errorf("summary = %q, want the declared control plane", out.String())
 	}
 }
+
+// TestHostSetupCmd_DescriptorControlURL: a declared control_url reaches the
+// descriptor of the real setup command, in its text summary and in --json,
+// through the IP the command looks up itself (AC6).
+func TestHostSetupCmd_DescriptorControlURL(t *testing.T) {
+	dir := isolateHostEnv(t)
+	path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  control_url: https://hs.example\n")
+	cmdpkg.SetHostTailscaleIPForTest(t, "100.64.0.1")
+	const want = "cp=https%3A%2F%2Fhs.example"
+	for _, args := range [][]string{{"--config", path}, {"--json", "--config", path}} {
+		c := cmdpkg.HostSetupCmdForTest(t, "linux", true, func(cfg host.Config, _ *slog.Logger) (host.SetupResult, error) {
+			return host.SetupResult{RDPPort: cfg.Port, ControlURL: cfg.ControlURL}, nil
+		})
+		var out bytes.Buffer
+		c.SetOut(&out)
+		c.SetErr(io.Discard)
+		c.SetArgs(args)
+		if err := c.Execute(); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if !strings.Contains(out.String(), "tsb://") || !strings.Contains(out.String(), want) {
+			t.Errorf("%v: stdout = %q, want a descriptor with %s", args, out.String(), want)
+		}
+	}
+}
