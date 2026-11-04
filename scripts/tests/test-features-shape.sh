@@ -105,7 +105,7 @@ second-object-bad:1:feature 1 is missing key behavior
 invalid-json:1:not valid JSON
 empty-file:1:not valid JSON
 archived-bad:1:archive/A/features.json
-exempt-ci-345:0:exempt
+exempt-ci-345:0:exempt, archived before the scaffold shape was checked
 exempt-name-elsewhere:1:top level is object
 only-bad-named:1:bad/features.json
 every-bad-named:1:3 of 3 features.json
