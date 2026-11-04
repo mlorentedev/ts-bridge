@@ -1,0 +1,45 @@
+# Arming envelope for the daytime unattended run. Committed on the run branch,
+# never merged; the run reads the committed copy and halts if the working tree differs.
+version: 1
+run_id: "ts-bridge-autopilot-2026-11-04"
+armed_by: manu
+armed_at: 2026-11-04T15:45:00Z
+expires_at: 2026-11-04T23:45:00Z
+objective: "Work the audited no-decision ts-bridge backlog below to merged PRs, one item at a time, leaving every PR triaged and every park answerable."
+scope:
+  write_paths:
+    - "cmd/**"
+    - "internal/**"
+    - "scripts/**"
+    - "docs/**"
+    - "specs/**"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - ".agent/**"
+    - "**/AGENTS.md"
+    - "site/**"
+    - "go.mod"
+    - "go.sum"
+    - "mise.toml"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, go, golangci-lint, gosec, bats, shellcheck, bash, zsh, make, mise, jq]
+queue:
+  source: bitacora
+  # From the 2026-11-03 open-issue audit: OPEN-ACTIONABLE, no owner path, no owner decision.
+  filter: "spec HOST-005 archive, then issues #415 #573 #500 #455 #561 #376"
+  order: ["HOST-005-archive", 415, 573, 500, 455, 561, 376]
+  exclude_note: "Not mine to touch: #523 release, #583 (OPS-002, .github), #584 (dependabot go.mod). #561 is Unix-first; the Windows ACL half parks if it needs a decision. #455 is verified by test-windows only."
+  max_items: 7
+budget:
+  max_iterations: 8
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant          # .github/merge-grant.yml on master; excludes .github/, harness/, .agent/, release-please
+  push: true
+  open_pr: true
+  advisor_tier: top
+host:
+  wake_lock: "caffeinate -dimsu while the run is armed"
