@@ -42,28 +42,28 @@ type File struct {
 
 // FileHost is the host section of the configuration file.
 type FileHost struct {
-	Services   []FileService `yaml:"services"`
-	Firewall   *FileFirewall `yaml:"firewall"`
-	Power      *FilePower    `yaml:"power"`
-	ControlURL *string       `yaml:"control_url"`
-	Mesh       *FileMesh     `yaml:"mesh"`
+	Services   []FileService `yaml:"services,omitempty"`
+	Firewall   *FileFirewall `yaml:"firewall,omitempty"`
+	Power      *FilePower    `yaml:"power,omitempty"`
+	ControlURL *string       `yaml:"control_url,omitempty"`
+	Mesh       *FileMesh     `yaml:"mesh,omitempty"`
 }
 
 // FileService is one declared remote-access service. A nil Port is the
 // kind's default port.
 type FileService struct {
 	Kind string `yaml:"kind"`
-	Port *int   `yaml:"port"`
+	Port *int   `yaml:"port,omitempty"`
 }
 
 // FileFirewall is the firewall section of the configuration file.
 type FileFirewall struct {
-	Rule *string `yaml:"rule"`
+	Rule *string `yaml:"rule,omitempty"`
 }
 
 // FilePower is the power section of the configuration file.
 type FilePower struct {
-	PreventSleep *bool `yaml:"prevent_sleep"`
+	PreventSleep *bool `yaml:"prevent_sleep,omitempty"`
 }
 
 // osCapability is what one OS's steps can converge in this version. Each

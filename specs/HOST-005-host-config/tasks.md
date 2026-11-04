@@ -59,20 +59,20 @@ created: "2026-10-30"
 
 ## Implementation — PR B (`host init` writes the file)
 
-- [ ] [AC7] Failing tests `TestHostInit_RequiresConfig`: without `--config`, interactive and non-interactive both fail before prompting, naming `--config`. Expected: FAIL (writes `./.env`).
-- [ ] [AC7] Failing table test `TestHostInit_WritesYAML`: per goos (`windows`, `linux`), non-interactive flags and interactive answers produce a YAML file that `host.LoadFile(path, goos, &warn)` loads with `warn` empty and `Resolve` maps back to the same port, rule and sleep; no `.env` is created; `power` and `firewall` appear on windows only; file mode `0644` on Unix. `darwin` prints "not applicable" and writes nothing. Expected: FAIL.
-- [ ] [AC7] Rewrite `host_init.go` to build a `host.File` from the answers and marshal it; remove `writeHostEnv`, `stripHostSection`, `hasNonBlank` and their test export. Expected: PASS.
-- [ ] [AC8] Failing table test `TestHostInit_Overwrite`: existing file + non-interactive without `--force` refuses ("already exists (use --force to overwrite)"); interactive "n" aborts; interactive "y" and `--force` overwrite; a directory at the path and (Unix) a `0000` file are refused even with `--force`, and the existing content is untouched. Expected: FAIL.
-- [ ] [AC8] Reuse `ensureWritable` after a readability probe (`os.Open` + close; a non-`ErrNotExist` stat/open error refuses). Expected: PASS.
-- [ ] [AC3] Extend `TestHostCmds_NeverReadUserStore` to `host init --config`. Expected: PASS.
-- [ ] Docs: `site/src/content/docs/cli-reference.md` (host init/setup/check `--config`), `site/src/content/docs/configuration.md` (host file schema + precedence), `README.md` host section, G3/G5 rows in `docs/design/host-client-parity.md`. Recommend a path whose parent directories an unelevated user can traverse (`/etc/ts-bridge/host.yaml`, `C:\ProgramData\ts-bridge\host.yaml`), since `host check` runs unelevated (review of #519).
-- [ ] `go test ./...`, cross-GOOS vet, `smoke.bats` green locally; `test` (`-race`), `lint` and `security` CI jobs green.
+- [x] [AC7] Failing tests `TestHostInit_RequiresConfig`: without `--config`, interactive and non-interactive both fail before prompting, naming `--config`. Expected: FAIL (writes `./.env`).
+- [x] [AC7] Failing table test `TestHostInit_WritesYAML`: per goos (`windows`, `linux`), non-interactive flags and interactive answers produce a YAML file that `host.LoadFile(path, goos, &warn)` loads with `warn` empty and `Resolve` maps back to the same port, rule and sleep; no `.env` is created; `power` and `firewall` appear on windows only; file mode `0644` on Unix. `darwin` prints "not applicable" and writes nothing. Expected: FAIL.
+- [x] [AC7] Rewrite `host_init.go` to build a `host.File` from the answers and marshal it; remove `writeHostEnv`, `stripHostSection`, `hasNonBlank` and their test export. Expected: PASS.
+- [x] [AC8] Failing table test `TestHostInit_Overwrite`: existing file + non-interactive without `--force` refuses ("already exists (use --force to overwrite)"); interactive "n" aborts; interactive "y" and `--force` overwrite; a directory at the path and (Unix) a `0000` file are refused even with `--force`, and the existing content is untouched. Expected: FAIL.
+- [x] [AC8] Reuse `ensureWritable` after a readability probe (`os.Open` + close; a non-`ErrNotExist` stat/open error refuses). Expected: PASS.
+- [x] [AC3] Extend `TestHostCmds_NeverReadUserStore` to `host init --config`. Expected: PASS.
+- [x] Docs: `site/src/content/docs/cli-reference.md` (host init/setup/check `--config`), `site/src/content/docs/configuration.md` (host file schema + precedence), `README.md` host section, G3/G5 rows in `docs/design/host-client-parity.md`. Recommend a path whose parent directories an unelevated user can traverse (`/etc/ts-bridge/host.yaml`, `C:\ProgramData\ts-bridge\host.yaml`), since `host check` runs unelevated (review of #519).
+- [x] `go test ./...`, cross-GOOS vet, `smoke.bats` green locally; `test` (`-race`), `lint` and `security` CI jobs green.
 
 ## Closing
 
-- [ ] Every acceptance criterion from `proposal.md` is covered by at least one test
-- [ ] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command (each names its test and greps its `--- PASS:` line, so a missing test fails instead of exiting 0 on "no tests to run")
+- [x] Every acceptance criterion from `proposal.md` is covered by at least one test
+- [x] Every acceptance criterion has a matching entry in `features.json` with a non-vacuous verification command (each names its test and greps its `--- PASS:` line, so a missing test fails instead of exiting 0 on "no tests to run")
 - [ ] Lint passes
-- [ ] No unrelated changes in the diff (no scope creep)
-- [ ] `verification.md` filled in
+- [x] No unrelated changes in the diff (no scope creep)
+- [x] `verification.md` filled in
 - [ ] PRs opened referencing this spec folder (`Closes #458` on PR B only)

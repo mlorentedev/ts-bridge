@@ -33,11 +33,11 @@ the host *command*, not about running ts-bridge on the host.
 
 | # | Client has | Host has | Owner |
 |---|---|---|---|
-| G1 | Named profiles and YAML `--config`, merged `flags > env > YAML > defaults` (`config.Merge`); a `--profile` takes the YAML file's place (ADR-012) | `.env` + `TS_HOST_*` env only; `--config` on `host setup` is "reserved for future use" | #458 (explicit host config file, proposed in ADR-017, #460) |
+| G1 | Named profiles and YAML `--config`, merged `flags > env > YAML > defaults` (`config.Merge`); a `--profile` takes the YAML file's place (ADR-012) | Closed: `host init`, `setup`, `check` and `serve` take `--config`, the ADR-017 host file, resolved `flags > env > file > per-OS defaults` | #458 (#519, #554, this PR) |
 | G2 | `--profile` on `connect`, `init`, `browser` | No `--profile` | Proposed for rejection in ADR-017 (#460): per-user stores resolve to root/Administrator under elevation; replaced by `--config` (#458). Stays open on #450 until #460 merges |
-| G3 | `init` writes profiles or YAML; `.env` is the compatibility path being retired (#399) | `host init` writes only `.env`, the path #399 deprecates | #458 |
+| G3 | `init` writes profiles or YAML; `.env` is the compatibility path being retired (#399) | Closed: `host init --config` writes the ADR-017 YAML host file, never `.env` | #458 |
 | G4 | Control-plane awareness: `--control-url`, `config.ValidateControlPlane` (#406) | Descriptor always `cp=saas`, even on a Headscale host | **#453** |
-| G5 | `init` refuses to overwrite without confirmation or `--force` (BUG-019) | `host init` rewrites `.env` with no confirmation and no `--force` | #458 |
+| G5 | `init` refuses to overwrite without confirmation or `--force` (BUG-019) | Closed: `host init` asks before replacing, takes `--force`, and refuses a directory or an unreadable file even with `--force` | #458 |
 | G6 | Unreadable `.env` handling is a known defect (#408) | Same defect: an unreadable `.env` is treated as empty and overwritten, dropping every other variable | **#408** (second site) |
 | G7 | Logging to console plus a rotating JSON file (`internal/logging`, `LogDirForPlatform`) | stderr only; a command that mutates firewall and registry keeps no persistent record | #457 |
 | G8 | Global `-v/--verbose`, consistent `--log-format`, `--json` | Each host subcommand redeclares `--verbose` (no `-v`) and `--log-format`; `host init` has neither `--json` nor `--log-format` | #457 |

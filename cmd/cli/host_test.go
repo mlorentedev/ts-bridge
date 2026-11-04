@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -21,7 +19,7 @@ import (
 
 // TestHostInitFlags_ValidPort verifies that valid ports are accepted.
 func TestHostInitFlags_ValidPort(t *testing.T) {
-	c := newTestHostInitCommand()
+	c := newTestHostInitCommand(t)
 	c.SetArgs([]string{"--port", "3390"})
 	var buf bytes.Buffer
 	c.SetOut(&buf)
@@ -45,7 +43,7 @@ func TestHostInitFlags_ValidPort(t *testing.T) {
 
 // TestHostInitFlags_InvalidPort verifies that invalid ports are rejected.
 func TestHostInitFlags_InvalidPort(t *testing.T) {
-	c := newTestHostInitCommand()
+	c := newTestHostInitCommand(t)
 	c.SetArgs([]string{"--port", "99999"})
 	var buf bytes.Buffer
 	c.SetOut(&buf)
@@ -62,7 +60,7 @@ func TestHostInitFlags_InvalidPort(t *testing.T) {
 
 // TestHostInitFlags_InvalidFirewallRule verifies that invalid firewall rules are rejected.
 func TestHostInitFlags_InvalidFirewallRule(t *testing.T) {
-	c := newTestHostInitCommand()
+	c := newTestHostInitCommand(t)
 	c.SetArgs([]string{"--firewall-rule", "rule with spaces"})
 	var buf bytes.Buffer
 	c.SetOut(&buf)
@@ -79,7 +77,7 @@ func TestHostInitFlags_InvalidFirewallRule(t *testing.T) {
 
 // TestHostInitFlags_NoSleepFlag verifies that --no-sleep is parsed correctly.
 func TestHostInitFlags_NoSleepFlag(t *testing.T) {
-	c := newTestHostInitCommand()
+	c := newTestHostInitCommand(t)
 	c.SetArgs([]string{"--port", "3389", "--no-sleep"})
 	var buf bytes.Buffer
 	c.SetOut(&buf)
@@ -90,232 +88,6 @@ func TestHostInitFlags_NoSleepFlag(t *testing.T) {
 	if err != nil && !strings.Contains(err.Error(), "write .env") &&
 		!strings.Contains(err.Error(), "no such file") {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestHostInitFlags_DefaultValues verifies defaults are applied when
-// no flags are provided (non-interactive path with explicit defaults).
-func TestHostInitFlags_DefaultValues(t *testing.T) {
-	tmpDir := t.TempDir()
-	envPath := filepath.Join(tmpDir, ".env")
-
-	// Simulate non-interactive mode with defaults.
-	f := cmdpkg.HostInitFlagsForTest{
-		Port:         host.DefaultRDPPort(),
-		FirewallRule: host.DefaultFirewallRule(),
-		NoSleep:      false,
-		Config:       envPath,
-	}
-
-	err := cmdpkg.WriteHostEnvForTest(f)
-	if err != nil {
-		t.Fatalf("writeHostEnv error: %v", err)
-	}
-
-	data, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatalf("read .env: %v", err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, "TS_HOST_RDP_PORT=3389") {
-		t.Errorf("expected default port 3389, got:\n%s", content)
-	}
-	if !strings.Contains(content, "TS_HOST_FIREWALL_RULE=Tailscale-RDP-Ingress") {
-		t.Errorf("expected default firewall rule, got:\n%s", content)
-	}
-}
-
-// ─── writeHostEnv tests ──────────────────────────────────────────
-
-// TestWriteHostEnv_NewFile verifies that writeHostEnv creates a new .env file.
-func TestWriteHostEnv_NewFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	envPath := filepath.Join(tmpDir, ".env")
-
-	f := cmdpkg.HostInitFlagsForTest{
-		Port:         3390,
-		FirewallRule: "MyRule",
-		NoSleep:      true,
-		Config:       envPath,
-	}
-
-	err := cmdpkg.WriteHostEnvForTest(f)
-	if err != nil {
-		t.Fatalf("writeHostEnv error: %v", err)
-	}
-
-	data, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatalf("read .env: %v", err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, "TS_HOST_RDP_PORT=3390") {
-		t.Errorf("expected TS_HOST_RDP_PORT=3390 in output, got:\n%s", content)
-	}
-	if !strings.Contains(content, "TS_HOST_FIREWALL_RULE=MyRule") {
-		t.Errorf("expected TS_HOST_FIREWALL_RULE=MyRule in output, got:\n%s", content)
-	}
-	if !strings.Contains(content, "TS_HOST_NO_SLEEP=true") {
-		t.Errorf("expected TS_HOST_NO_SLEEP=true in output, got:\n%s", content)
-	}
-}
-
-// TestWriteHostEnv_PreservesExistingVars verifies that existing non-host vars are preserved.
-func TestWriteHostEnv_PreservesExistingVars(t *testing.T) {
-	tmpDir := t.TempDir()
-	envPath := filepath.Join(tmpDir, ".env")
-
-	// Pre-write existing client config.
-	existing := "TS_AUTHKEY=tskey-auth-test-secret\nTS_TARGET=100.64.0.1:3389\n"
-	if err := os.WriteFile(envPath, []byte(existing), 0600); err != nil {
-		t.Fatalf("write initial .env: %v", err)
-	}
-
-	f := cmdpkg.HostInitFlagsForTest{
-		Port:         3391,
-		FirewallRule: "UpdatedRule",
-		NoSleep:      false,
-		Config:       envPath,
-	}
-
-	err := cmdpkg.WriteHostEnvForTest(f)
-	if err != nil {
-		t.Fatalf("writeHostEnv error: %v", err)
-	}
-
-	data, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatalf("read .env: %v", err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, "TS_AUTHKEY=tskey-auth-test-secret") {
-		t.Error("expected TS_AUTHKEY to be preserved")
-	}
-	if !strings.Contains(content, "TS_TARGET=100.64.0.1:3389") {
-		t.Error("expected TS_TARGET to be preserved")
-	}
-	if !strings.Contains(content, "TS_HOST_RDP_PORT=3391") {
-		t.Error("expected TS_HOST_RDP_PORT=3391")
-	}
-	if !strings.Contains(content, "TS_HOST_FIREWALL_RULE=UpdatedRule") {
-		t.Error("expected TS_HOST_FIREWALL_RULE=UpdatedRule")
-	}
-}
-
-// TestWriteHostEnv_NoDuplicateSection verifies that re-running doesn't duplicate the host section.
-func TestWriteHostEnv_NoDuplicateSection(t *testing.T) {
-	tmpDir := t.TempDir()
-	envPath := filepath.Join(tmpDir, ".env")
-
-	// First write.
-	f1 := cmdpkg.HostInitFlagsForTest{
-		Port:         3390,
-		FirewallRule: "Rule1",
-		NoSleep:      true,
-		Config:       envPath,
-	}
-	if err := cmdpkg.WriteHostEnvForTest(f1); err != nil {
-		t.Fatalf("first write: %v", err)
-	}
-
-	// Second write.
-	f2 := cmdpkg.HostInitFlagsForTest{
-		Port:         3391,
-		FirewallRule: "Rule2",
-		NoSleep:      false,
-		Config:       envPath,
-	}
-	if err := cmdpkg.WriteHostEnvForTest(f2); err != nil {
-		t.Fatalf("second write: %v", err)
-	}
-
-	data, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatalf("read .env: %v", err)
-	}
-
-	content := string(data)
-	// Count occurrences of the host section header.
-	count := strings.Count(content, "Host configuration (ts-bridge host init)")
-	if count != 1 {
-		t.Errorf("expected 1 host section header, got %d in:\n%s", count, content)
-	}
-	// Should have the second write's values.
-	if !strings.Contains(content, "TS_HOST_RDP_PORT=3391") {
-		t.Error("expected TS_HOST_RDP_PORT=3391 (second write)")
-	}
-	if !strings.Contains(content, "TS_HOST_FIREWALL_RULE=Rule2") {
-		t.Error("expected TS_HOST_FIREWALL_RULE=Rule2 (second write)")
-	}
-}
-
-// TestWriteHostEnv_DefaultValues verifies defaults are applied when
-// port=0 and firewall-rule="" (these mean "not set" and should use defaults).
-func TestWriteHostEnv_DefaultValues(t *testing.T) {
-	tmpDir := t.TempDir()
-	envPath := filepath.Join(tmpDir, ".env")
-
-	// Apply defaults the same way runHostInitNonInteractive does.
-	f := cmdpkg.HostInitFlagsForTest{
-		Port:         host.DefaultRDPPort(), // apply defaults before calling writeHostEnv
-		FirewallRule: host.DefaultFirewallRule(),
-		NoSleep:      false,
-		Config:       envPath,
-	}
-
-	err := cmdpkg.WriteHostEnvForTest(f)
-	if err != nil {
-		t.Fatalf("writeHostEnv error: %v", err)
-	}
-
-	data, err := os.ReadFile(envPath)
-	if err != nil {
-		t.Fatalf("read .env: %v", err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, "TS_HOST_RDP_PORT=3389") {
-		t.Errorf("expected default port 3389, got:\n%s", content)
-	}
-	if !strings.Contains(content, "TS_HOST_FIREWALL_RULE=Tailscale-RDP-Ingress") {
-		t.Errorf("expected default firewall rule, got:\n%s", content)
-	}
-}
-
-// TestWriteHostEnv_FilePermissions verifies the file is written with 0600.
-// Skipped only on Windows, where the Unix permission model does not apply;
-// on Linux/macOS (including CI) it runs and verifies the 0600 write.
-func TestWriteHostEnv_FilePermissions(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file permissions test not applicable on Windows (perm model differs)")
-	}
-
-	tmpDir := t.TempDir()
-	envPath := filepath.Join(tmpDir, ".env")
-
-	f := cmdpkg.HostInitFlagsForTest{
-		Port:         3389,
-		FirewallRule: "TestRule",
-		NoSleep:      false,
-		Config:       envPath,
-	}
-
-	err := cmdpkg.WriteHostEnvForTest(f)
-	if err != nil {
-		t.Fatalf("writeHostEnv error: %v", err)
-	}
-
-	info, err := os.Stat(envPath)
-	if err != nil {
-		t.Fatalf("stat .env: %v", err)
-	}
-
-	perm := info.Mode().Perm()
-	if perm&0077 != 0 {
-		t.Errorf("expected secure permissions (no group/other), got %04o", perm)
 	}
 }
 
@@ -669,7 +441,7 @@ func TestHostInitFlags_BoundaryPorts(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("port-%d", tt.port), func(t *testing.T) {
-			c := newTestHostInitCommand()
+			c := newTestHostInitCommand(t)
 			c.SetArgs([]string{"--port", fmt.Sprintf("%d", tt.port)})
 			var buf bytes.Buffer
 			c.SetOut(&buf)
@@ -702,7 +474,7 @@ func TestHostInitFlags_ValidFirewallRules(t *testing.T) {
 	}
 	for _, rule := range validRules {
 		t.Run(rule, func(t *testing.T) {
-			c := newTestHostInitCommand()
+			c := newTestHostInitCommand(t)
 			c.SetArgs([]string{"--port", "3389", "--firewall-rule", rule})
 			var buf bytes.Buffer
 			c.SetOut(&buf)
@@ -729,7 +501,7 @@ func TestHostInitFlags_InvalidFirewallRules(t *testing.T) {
 	}
 	for _, rule := range invalidRules {
 		t.Run(rule, func(t *testing.T) {
-			c := newTestHostInitCommand()
+			c := newTestHostInitCommand(t)
 			c.SetArgs([]string{"--port", "3389", "--firewall-rule", rule})
 			var buf bytes.Buffer
 			c.SetOut(&buf)
@@ -748,61 +520,12 @@ func TestHostInitFlags_InvalidFirewallRules(t *testing.T) {
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-// newTestHostInitCommand creates an isolated host init command for testing.
-func newTestHostInitCommand() *cobra.Command {
-	c := &cobra.Command{
-		Use: "init",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Mirror parseHostInitFlags logic.
-			port, _ := cmd.Flags().GetInt("port")
-			firewallRule, _ := cmd.Flags().GetString("firewall-rule")
-			noSleep, _ := cmd.Flags().GetBool("no-sleep")
-			config, _ := cmd.Flags().GetString("config")
-
-			// Validate port (mirror parseHostInitFlags: non-zero out-of-range is invalid).
-			if port != 0 && (port < 1 || port > 65535) {
-				return fmt.Errorf("port must be between 1 and 65535, got %d", port)
-			}
-
-			// Validate firewall rule.
-			if firewallRule != "" {
-				if _, err := host.SanitizeFirewallRule(firewallRule); err != nil {
-					return fmt.Errorf("firewall rule: %w", err)
-				}
-			}
-
-			// Apply defaults.
-			if port == 0 {
-				port = host.DefaultRDPPort()
-			}
-			if firewallRule == "" {
-				firewallRule = host.DefaultFirewallRule()
-			}
-			if config == "" {
-				config = ".env"
-			}
-
-			// Write .env to a temp path to avoid polluting the repo.
-			tmpDir, err := os.MkdirTemp("", "host-init-test")
-			if err != nil {
-				return err
-			}
-			defer os.RemoveAll(tmpDir)
-			config = filepath.Join(tmpDir, filepath.Base(config))
-
-			f := cmdpkg.HostInitFlagsForTest{
-				Port:         port,
-				FirewallRule: firewallRule,
-				NoSleep:      noSleep,
-				Config:       config,
-			}
-			return cmdpkg.WriteHostEnvForTest(f)
-		},
-	}
-	c.Flags().Int("port", 0, "RDP port")
-	c.Flags().String("firewall-rule", "", "Firewall rule name")
-	c.Flags().Bool("no-sleep", false, "Disable sleep mode")
-	c.Flags().String("config", "", "Output .env file path")
+// newTestHostInitCommand returns the real host init command, as on Windows,
+// writing to a file in a fresh temp dir unless the test passes --config.
+func newTestHostInitCommand(t *testing.T) *cobra.Command {
+	t.Helper()
+	c := cmdpkg.HostInitCmdForTest(t, "windows")
+	_ = c.Flags().Lookup("config").Value.Set(filepath.Join(t.TempDir(), "host.yaml"))
 	return c
 }
 

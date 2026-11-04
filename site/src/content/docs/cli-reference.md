@@ -193,30 +193,38 @@ ts-bridge host [command]
 
 Available Commands:
   check   Verify host readiness (read-only)
-  init    Interactive wizard to configure the host for RDP access
+  init    Write the host configuration file that host setup and check read
   serve   Join the tailnet as a persistent node and publish the declared services
   setup   Configure the host for RDP access over Tailscale
 ```
 
 ### `ts-bridge host init`
 
-Interactive wizard to configure the host for RDP access. Writes `TS_HOST_*` settings to `.env`.
+Write the host's declared state (ADR-017) to the YAML file named by `--config`, which
+`host setup`, `host check` and `host serve` then read with the same `--config`. `--config`
+is required; no `.env` is written. `--firewall-rule` and `--no-sleep` apply to Windows
+only. On macOS it writes nothing yet (#459).
 
 ```bash
 # Interactive wizard
-ts-bridge host init
+ts-bridge host init --config /etc/ts-bridge/host.yaml
 
-# Non-interactive
-ts-bridge host init --port 3389 --firewall-rule "MyRule" --no-sleep
+# Non-interactive (Windows)
+ts-bridge host init --config C:\ProgramData\ts-bridge\host.yaml --port 3389 --firewall-rule "MyRule" --no-sleep
 ```
+
+An existing file is replaced only after confirmation, or with `--force`; a directory or an
+unreadable file at the path is refused even with `--force`. The file is written `0644`:
+choose a path whose parent directories an unelevated user can traverse, since `host check`
+runs unelevated.
 
 ### `ts-bridge host setup`
 
 Configure the host machine for RDP access. Requires admin privileges on Windows.
 
 ```bash
-# Configure host for RDP
-ts-bridge host setup
+# Configure host for RDP from the host file
+ts-bridge host setup --config /etc/ts-bridge/host.yaml
 
 # Skip sleep mode
 ts-bridge host setup --no-sleep

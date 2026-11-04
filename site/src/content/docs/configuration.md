@@ -55,7 +55,26 @@ precedence source; otherwise the managed profile credential is used and
 
 ### Host Configuration
 
-These variables are used by the `ts-bridge host` commands. They are typically written to `.env` by `ts-bridge host init`.
+The `ts-bridge host` commands resolve their settings as flags > environment (`TS_HOST_*`,
+including `./.env`) > host file (`--config`) > per-OS defaults. `ts-bridge host init --config <path>`
+writes the host file; the variables below override it per run.
+
+```yaml
+# /etc/ts-bridge/host.yaml or C:\ProgramData\ts-bridge\host.yaml
+version: 1
+host:
+  services:
+    - kind: rdp          # rdp on Windows and Linux; ssh/vnc as their OS steps land
+      port: 3389
+  firewall:              # Windows only
+    rule: Tailscale-RDP-Ingress
+  power:                 # Windows only
+    prevent_sleep: true
+  control_url: https://headscale.example.com   # optional: the descriptor's control plane
+```
+
+Unknown keys warn and are ignored; an empty key, or an entry the OS has no step for, is an
+error before any step runs. `host.control_url` is read from the file only.
 
 | Variable | Default | Description |
 |----------|---------|-------------|

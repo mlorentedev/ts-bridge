@@ -126,17 +126,18 @@ for SSH diagnostics, listener isolation and a TLS-valid destination probe.
 Ensure Tailscale is running on the target machine and RDP is enabled. Configure the host in three steps:
 
 ```powershell
-# 1. Interactive setup wizard (creates .env)
-ts-bridge host init
+# 1. Write the host file (interactive wizard)
+ts-bridge host init --config C:\ProgramData\ts-bridge\host.yaml
 
 # 2. Configure host for RDP (Windows, requires admin)
-ts-bridge host setup
+ts-bridge host setup --config C:\ProgramData\ts-bridge\host.yaml
 
 # 3. Verify host readiness (read-only)
-ts-bridge host check
+ts-bridge host check --config C:\ProgramData\ts-bridge\host.yaml
 ```
 
 For automation, use `--json`: `ts-bridge host setup --json` and `ts-bridge host check --json`.
+On Linux, use `/etc/ts-bridge/host.yaml`.
 
 **Host on a network that blocks the control plane:** when native Tailscale cannot enrol
 because the network sinkholes or TLS-inspects a self-hosted control plane, run

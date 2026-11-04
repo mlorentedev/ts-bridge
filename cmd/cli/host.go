@@ -24,12 +24,14 @@ func newHostCmd() *cobra.Command {
 		Short: "Host setup and verification commands",
 		Long: `Manage host machine configuration for RDP access over Tailscale.
 
+The host commands read the ADR-017 host file named by --config, which host init
+writes.
+
 Examples:
-  ts-bridge host init
-  ts-bridge host setup
-  ts-bridge host setup --no-sleep
-  ts-bridge host check
-  ts-bridge host check --json
+  ts-bridge host init --config /etc/ts-bridge/host.yaml
+  ts-bridge host setup --config /etc/ts-bridge/host.yaml
+  ts-bridge host check --config /etc/ts-bridge/host.yaml --json
+  ts-bridge host serve --config /etc/ts-bridge/host.yaml
 `,
 	}
 	cmd.AddCommand(newHostSetupCmd(), newHostCheckCmd(), newHostInitCmd(), newHostServeCmd())
@@ -289,6 +291,9 @@ func runHostCheck(cmd *cobra.Command, args []string) error {
 		LogFormat:  mustString(cmd, "log-format"),
 	})
 	logger := hostInitLogger(cfg)
+	logger.Debug("resolved host config (flags > env > file > defaults)",
+		"rdp_port", cfg.Port, "firewall_rule", cfg.FirewallRule, "no_sleep", cfg.NoSleep,
+		"control_url", cfg.ControlURL, "services", cfg.Services)
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 
@@ -452,7 +457,7 @@ func printSetupSummary(w io.Writer, tsIP string, result host.SetupResult) {
 	}
 	fmt.Fprintf(w, "  RDP Port:     %d\n", rdpPort)
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "  Client .env config:")
+	fmt.Fprintln(w, "  For a client (ts-bridge connect, .env):")
 	fmt.Fprintf(w, "  TS_TARGET=%s:%d\n", tsIP, rdpPort)
 	if desc := buildDescriptorLine(tsIP, rdpPort, result.ControlURL); desc != "" {
 		fmt.Fprintln(w)
