@@ -166,23 +166,23 @@ func TestWalkStateDirAncestors(t *testing.T) {
 	}
 }
 
-// requireRefusedTempRoot skips unless the real walk refuses t.TempDir's
-// ancestors. A default TMPDIR (/tmp, 1777, or a user-owned macOS tree) is
-// refused; a TMPDIR that only root can write would let the walk pass.
-func requireRefusedTempRoot(t *testing.T, dir string) {
+// requireRefusedAncestors skips unless the real walk refuses the ancestors of
+// path, the exact path the test passes to the function under test. A default
+// TMPDIR (/tmp, 1777, or a user-owned tree) is refused; a TMPDIR whose every
+// ancestor only root can write would let the walk pass.
+func requireRefusedAncestors(t *testing.T, path string) {
 	t.Helper()
-	if walkStateDirAncestors(filepath.Join(dir, "probe"), ancestorFS{lstatOwner, os.Readlink}) == nil {
-		t.Skipf("TMPDIR %s has only root-controlled ancestors; this test needs a writable one", dir)
+	if walkStateDirAncestors(path, ancestorFS{lstatOwner, os.Readlink}) == nil {
+		t.Skipf("the ancestors of %s are all root-controlled; this test needs a writable one", path)
 	}
 }
 
 // Through the real filesystem: EnsureStateDir refuses a hostile ancestor and
 // creates nothing.
 func TestEnsureStateDir_RefusedAncestorCreatesNothing(t *testing.T) {
-	tmp := t.TempDir()
-	requireRefusedTempRoot(t, tmp)
-	parent := filepath.Join(tmp, "a")
+	parent := filepath.Join(t.TempDir(), "a")
 	dir := filepath.Join(parent, "serve")
+	requireRefusedAncestors(t, dir)
 	if err := EnsureStateDir(dir); err == nil || !strings.Contains(err.Error(), "ancestor") {
 		t.Fatalf("EnsureStateDir(%s) = %v, want it refused for an ancestor", dir, err)
 	}
@@ -195,7 +195,7 @@ func TestEnsureStateDir_RefusedAncestorCreatesNothing(t *testing.T) {
 // writable tree is refused, not only a new one.
 func TestCheckStateDir_WalksAncestors(t *testing.T) {
 	dir := t.TempDir()
-	requireRefusedTempRoot(t, dir)
+	requireRefusedAncestors(t, dir)
 	if err := os.Chmod(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}

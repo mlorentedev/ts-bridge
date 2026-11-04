@@ -30,7 +30,8 @@ func checkUnixStateDir(path string, info fs.FileInfo, uid uint32) error {
 // checkUnixAncestor accepts an ancestor dir of state_dir path that only root
 // can change: a root-owned directory no group or other may write (a sticky
 // world-writable /tmp included), or a root-owned symlink, whose target the
-// walk then checks the same way (#561).
+// walk then checks the same way (#561). Only st_mode is read: a POSIX ACL
+// granting write on an ancestor is not seen.
 func checkUnixAncestor(path, dir string, info fs.FileInfo, uid uint32) error {
 	switch {
 	case info.Mode()&fs.ModeSymlink != 0:

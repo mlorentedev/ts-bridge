@@ -62,7 +62,7 @@ live credential; once deleted, it is no longer checked:
 | | `state_dir` | `auth_key_file` |
 |---|---|---|
 | Windows | Owned by SYSTEM or Administrators; no other SID in the DACL (inherit-only ACEs included); no link or junction on the path | Owned by SYSTEM or Administrators; no other SID in the DACL |
-| Linux | Directory, mode `0700`, owned by root; every existing ancestor a root-owned directory no group or other may write, or a root-owned symlink whose target passes the same check | Regular file owned by root, no group or other bits (`0600` or `0400`) |
+| Linux | Directory, mode `0700`, owned by root; every existing ancestor a root-owned directory no group or other may write, or a root-owned symlink whose target passes the same check. Mode bits only: an ACL that grants write on an ancestor is not detected | Regular file owned by root, no group or other bits (`0600` or `0400`) |
 
 So a Linux `state_dir` under `/tmp` or `/var/tmp` is refused: the sticky world-writable
 ancestor would let another user rename the key store away. The refusal names the
