@@ -30,7 +30,8 @@ administrator privileges are required.
 - An abrupt exit is handled per OS: a panic, `kill -9`, or Task Manager's End task.
   - Linux: the kernel sends `SIGKILL` to `ssh` when ts-bridge dies.
   - Windows: `ssh` runs in a kill-on-close Job Object, and the job dies with ts-bridge.
-    A process `ssh` spawns before it joins the job (a `ProxyCommand`) is not covered.
+    `ssh` joins the job just after it starts. If ts-bridge is killed inside that window,
+    or `ssh` spawns a process before joining (a `ProxyCommand`), that process is not covered.
     If ts-bridge itself runs inside a job that forbids nesting, containment is skipped.
   - macOS: there is no equivalent. A leftover `ssh` keeps the SOCKS port bound until you
     stop it (`lsof -iTCP:<port> -sTCP:LISTEN` names it).

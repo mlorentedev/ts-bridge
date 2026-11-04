@@ -31,6 +31,12 @@ func TestContainment_KillsChildWhenParentDies(t *testing.T) {
 		_ = parent.Process.Kill()
 		t.Fatalf("read the child pid: %v", err)
 	}
+	if cause, refused := strings.CutPrefix(strings.TrimSpace(line), "contain-error="); refused {
+		_ = parent.Wait()
+		// Not a skip: the runners this suite targets allow containment, so a refusal
+		// here is a regression until a runner proves otherwise.
+		t.Fatalf("this host refused containment: %s", cause)
+	}
 	pid, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "child=")))
 	if err != nil {
 		_ = parent.Process.Kill()
@@ -63,6 +69,8 @@ func runContainParent() {
 	}
 	job, err := containProcess(child)
 	if err != nil {
+		_ = child.Process.Kill() // do not orphan the 30s helper
+		_, _ = os.Stdout.WriteString("contain-error=" + err.Error() + "\n")
 		os.Exit(10)
 	}
 	_, _ = os.Stdout.WriteString("child=" + strconv.Itoa(child.Process.Pid) + "\n")
