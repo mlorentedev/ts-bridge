@@ -3,6 +3,7 @@ package cmd_test
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	cmdpkg "ts-bridge/cmd/cli"
@@ -74,5 +75,35 @@ func TestSetupJSON_StepsCarryOutcomeAndFix(t *testing.T) {
 	}
 	if _, ok := m["rdp_port"]; !ok {
 		t.Error("rdp_port dropped")
+	}
+}
+
+// TestSetupJSON_DescriptorControlURL: setup --json carries the same tsb://
+// descriptor as setup's text summary and check --json, with a declared
+// control_url as its cp= (HOST-005 AC6), and omits it when no Tailscale IP
+// is known, as the text summary does.
+func TestSetupJSON_DescriptorControlURL(t *testing.T) {
+	tests := []struct {
+		name, ip, controlURL, want string
+	}{
+		{name: "declared control plane", ip: "100.64.0.1", controlURL: "https://hs.example", want: "cp=https%3A%2F%2Fhs.example"},
+		{name: "no control plane is saas", ip: "100.64.0.1", want: "cp=saas"},
+		{name: "no tailscale ip", controlURL: "https://hs.example"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := cmdpkg.SetupJSONOnForTest(tt.ip, host.SetupResult{RDPPort: 3389, ControlURL: tt.controlURL})
+			m := decode(t, data, err)
+			desc, ok := m["descriptor"].(string)
+			if tt.want == "" {
+				if ok {
+					t.Errorf("descriptor = %q, want the key omitted", desc)
+				}
+				return
+			}
+			if !strings.HasPrefix(desc, "tsb://") || !strings.Contains(desc, tt.want) {
+				t.Errorf("descriptor = %q, want a tsb:// descriptor with %s", desc, tt.want)
+			}
+		})
 	}
 }
