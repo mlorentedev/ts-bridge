@@ -324,6 +324,13 @@ func TestSetupForLinux(t *testing.T) {
 			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
 		},
 		{
+			name:     "ufw, one leftover copy beside a ufw allow: still manual (#576)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+		},
+		{
 			name:     "ufw, nothing covers in either: ufw allow as before",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run ufw allow 3389/tcp", "output tailscale ip -4"),
