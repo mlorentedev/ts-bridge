@@ -23,12 +23,14 @@ across restarts. The default `/var/lib/ts-bridge/serve` is not exposed. A `state
 ## What
 
 Both functions now walk every existing ancestor of the cleaned `state_dir` before anything else,
-using `Lstat` and never following links:
+using `Lstat`:
 
 - a directory must be owned by root and must not be writable by group or others. This includes a
   sticky world-writable directory such as `/tmp`;
-- a symlink must be owned by root. Its target is not walked: a root-owned link is root's choice
-  (AC2's `/var/run`, and macOS's `/var` → `/private/var`);
+- a symlink must be owned by root, and its target and the target's ancestors are then walked by
+  the same rules, with at most 40 hops. Root owning a link says nothing about who can write where it
+  points: macOS's `/tmp` → `/private/tmp` is 1777. AC2's `/var/run` → `/run` and macOS's `/var` →
+  `/private/var` still pass, because their targets are root-owned directories;
 - anything else (a file, a device) is refused.
 
 An ancestor that does not exist yet is skipped: `EnsureStateDir` creates it with mode `0700`. The
@@ -37,19 +39,17 @@ first failing ancestor is named in the error, which keeps the `state_dir <path>:
 
 ## Out of scope
 
-- Walking a root-owned symlink's target. That is the lexical reading of AC2; see Risks.
 - The Windows half, which already walks its ancestors.
 - `auth_key_file`'s ancestors (`CheckSecretFile`). The same question applies there, but it is a
   separate contract; a follow-up issue tracks it.
 
 ## Risks / open questions
 
-- Lexical-only means a root-owned link into a writable tree is accepted. Root made that link, so
-  root also chose the tree; refusing it would refuse `/var/run`-style layouts that AC2 keeps.
-  Decided.
+- A root-owned link is followed rather than trusted. The draft trusted it, and review on #596
+  showed that this let macOS `/tmp` pass. Following it refuses nothing AC2 keeps. Decided.
 - A real-filesystem test cannot run the walk as non-root: every `t.TempDir()` sits under `/tmp`
   (Linux) or a user-owned `/var/folders/…` (macOS). Mitigation: the per-ancestor rule is a pure
-  function over `fs.FileInfo` and a uid, and the walk takes an injected `lstat`. Existing
+  function over `fs.FileInfo` and a uid, and the walk takes an injected `lstat` and `readlink`. Existing
   real-filesystem tests stub the walk through a package seam.
 
 ## Acceptance criteria

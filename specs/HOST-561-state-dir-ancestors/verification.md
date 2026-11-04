@@ -42,8 +42,6 @@ owner: manu
   checks the target and its ancestors, with at most 40 hops. Mutant: without the follow,
   `TestWalkStateDirAncestors` fails 3 cases (macOS `/tmp`, a link into a user's dir, a loop).
 
-- The walk is lexical. A root-owned symlink is accepted and its target is not walked: root made the
-  link, so root chose the tree, and walking the target would refuse nothing AC2 wants refused.
 - `CheckStateDir` walks too (AC3), not only `EnsureStateDir`. Otherwise an existing directory under
   `/tmp` would pass every later start.
 - The ancestors are checked before the leaf. That makes the walk testable as non-root through the
