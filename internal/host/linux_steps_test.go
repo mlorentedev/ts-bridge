@@ -317,6 +317,13 @@ func TestSetupForLinux(t *testing.T) {
 			message:  "Firewall allows TCP 3389 (iptables)",
 		},
 		{
+			name:     "ufw, a leftover setup copy: the same manual step as check, no write (#576)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+		},
+		{
 			name:     "ufw, nothing covers in either: ufw allow as before",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run ufw allow 3389/tcp", "output tailscale ip -4"),
@@ -421,10 +428,11 @@ func TestSetupForLinux(t *testing.T) {
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 		},
 		{
-			name:     "iptables, two copies of the setup rule",
+			name:     "iptables, two copies of the setup rule: the same manual step as check (#576)",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptTwoCopies, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
-			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "but holds 2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
 		},
 		{
 			name:     "iptables, no ts-input jump: one read",

@@ -593,6 +593,10 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 	read := readLinuxFirewall(r, port)
 	switch read.state {
 	case rulePresent:
+		// Setup read the same copies check reports, so it reports them the same way (#576).
+		if extraCopies(read) > 0 {
+			return firewallCopiesStep(read, port)
+		}
 		return newStep(linuxFwName, OutcomeOK, fmt.Sprintf("Firewall allows TCP %d (%s)", port, read.source()), "")
 	case ruleBlocked:
 		return firewallBlockedStep(read, port)
