@@ -78,6 +78,8 @@ All four are fixed by #454 (`specs/archive/BUG-034-linux-host-idempotent/` once 
   `tailscale debug prefs` and runs `tailscale set --unattended` only when it is off.
 - **W2:** `host check` sets `RDPEnabled = rdpPort > 0` and never reads
   `fDenyTSConnections` or its Group Policy copy, so it reports RDP enabled when it is off.
+  Fixed: setup and check read both values, the policy value first and an absent value as
+  denied; a policy denial is `manual` with the key named, and setup writes nothing.
 - **W3:** the firewall step deletes and recreates its rule, so it always changes the
   system and can never report "already configured".
 

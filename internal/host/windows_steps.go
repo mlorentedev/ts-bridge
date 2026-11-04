@@ -8,8 +8,8 @@ import (
 )
 
 // Most Windows steps act on each run, so success is "changed". #455 adds the
-// reads that let a converged host report "ok": unattended mode (W1) reads
-// first; the RDP and firewall reads (W2, W3) follow.
+// reads that let a converged host report "ok": unattended mode (W1) and the
+// RDP denial (W2) read first; the firewall read (W3) follows.
 
 func setupWindows(cfg Config, r Runner) SetupResult {
 	steps := []SetupStep{
@@ -25,14 +25,10 @@ func setupWindows(cfg Config, r Runner) SetupResult {
 		"Set to Private", "Could not set network profile to Private", "set the Tailscale network profile to Private"))
 
 	// The RDP port lives in the registry; the firewall must open that exact port.
-	rdpPort, err := readPortPS(r, psEnableRDP)
-	if err != nil {
-		rdpPort = defaultRDPPort
-	}
-	steps = append(steps, actStep("RDP configuration", err, fmt.Sprintf("RDP enabled on port %d", rdpPort),
-		"Could not verify RDP settings, assuming port 3389", "enable Remote Desktop in Settings > System > Remote Desktop"))
+	rdpStep, rdpPort := rdpSetupStep(r)
+	steps = append(steps, rdpStep)
 
-	err = configureWindowsFirewall(r, cfg.FirewallRule, rdpPort)
+	err := configureWindowsFirewall(r, cfg.FirewallRule, rdpPort)
 	steps = append(steps, actStep("Firewall rule", err, fmt.Sprintf("Rule '%s' active (port %d)", cfg.FirewallRule, rdpPort),
 		fmt.Sprintf("Failed to configure firewall: %v", err), fmt.Sprintf("allow TCP %d inbound in Windows Defender Firewall", rdpPort)))
 
@@ -68,14 +64,106 @@ func actStep(name string, err error, okMsg, failMsg, fix string) SetupStep {
 	return newStep(name, OutcomeChanged, okMsg, "")
 }
 
+const (
+	rdpEnableFix = "enable Remote Desktop in Settings > System > Remote Desktop"
+	rdpPolicyFix = `Group Policy denies Remote Desktop: set HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services\fDenyTSConnections to 0 ` +
+		`(Computer Configuration > Administrative Templates > Windows Components > Remote Desktop Services > Remote Desktop Session Host > Connections)`
+)
+
+// rdpDeny holds the two fDenyTSConnections values; "" means the value is absent.
+type rdpDeny struct{ policy, local string }
+
+// effective reports whether RDP is denied and whether Group Policy decides it.
+// The policy value wins when present; with neither set Windows denies.
+func (d rdpDeny) effective() (denied, byPolicy bool) {
+	if d.policy != "" {
+		return d.policy != "0", true
+	}
+	return d.local != "0", false
+}
+
+func readRDPDeny(r Runner) (rdpDeny, error) {
+	out, err := outputPS(r, psReadRDPDeny)
+	if err != nil {
+		return rdpDeny{}, err
+	}
+	var d rdpDeny
+	for _, line := range strings.Split(string(out), "\n") {
+		key, value, _ := strings.Cut(strings.TrimSpace(line), "=")
+		switch key {
+		case "policy":
+			d.policy = value
+		case "local":
+			d.local = value
+		}
+	}
+	return d, nil
+}
+
+// portOrDefault reads the RDP port, falling back to 3389 when unreadable.
+func portOrDefault(r Runner) int {
+	port, err := readPortPS(r, psReadRDPPort)
+	if err != nil {
+		return defaultRDPPort
+	}
+	return port
+}
+
+// rdpSetupStep enables RDP only when the local value is what denies it (W2,
+// #455). A policy denial is left to the user: a local write would be reverted
+// on the next policy refresh.
+func rdpSetupStep(r Runner) (SetupStep, int) {
+	const name = "RDP configuration"
+	deny, err := readRDPDeny(r)
+	denied, byPolicy := deny.effective()
+	switch {
+	case err != nil:
+		port := portOrDefault(r)
+		return newStep(name, OutcomeFailed, fmt.Sprintf("Could not read fDenyTSConnections, assuming port %d", port), rdpEnableFix), port
+	case denied && byPolicy:
+		return newStep(name, OutcomeManual, "Remote Desktop is denied by Group Policy", rdpPolicyFix), portOrDefault(r)
+	case !denied:
+		port, err := readPortPS(r, psReadRDPPort)
+		if err != nil {
+			port = defaultRDPPort
+		}
+		return actRead(name, err, fmt.Sprintf("RDP already enabled on port %d", port),
+			"Could not read the RDP port, assuming port 3389", rdpEnableFix), port
+	}
+	port, err := readPortPS(r, psEnableRDP)
+	if err != nil {
+		port = defaultRDPPort
+	}
+	return actStep(name, err, fmt.Sprintf("RDP enabled on port %d", port),
+		"Could not verify RDP settings, assuming port 3389", rdpEnableFix), port
+}
+
+// rdpCheckStep is the read half of rdpSetupStep: "changed" means setup would
+// enable RDP, "manual" that Group Policy keeps it off.
+func rdpCheckStep(r Runner, port int) (SetupStep, bool) {
+	const name = "RDP configuration"
+	deny, err := readRDPDeny(r)
+	denied, byPolicy := deny.effective()
+	switch {
+	case err != nil:
+		return newStep(name, OutcomeFailed, "Could not read fDenyTSConnections from the registry", rdpEnableFix), false
+	case denied && byPolicy:
+		return newStep(name, OutcomeManual, "Remote Desktop is denied by Group Policy", rdpPolicyFix), false
+	case denied:
+		return newStep(name, OutcomeChanged, "Remote Desktop is disabled (fDenyTSConnections)", "run ts-bridge host setup as an administrator"), false
+	}
+	return newStep(name, OutcomeOK, fmt.Sprintf("RDP enabled on port %d", port), ""), true
+}
+
 func checkWindows(cfg Config, r Runner, result *CheckResult) {
 	svc := Service{Kind: ServiceRDP}
 	port, err := readPortPS(r, psReadRDPPort)
+	step := actRead("RDP configuration", err, "", "Could not read the RDP port from the registry", rdpEnableFix)
 	if err == nil {
-		svc.Port, svc.Enabled = port, true // W2 (#455): fDenyTSConnections is never read
+		svc.Port = port
+		step, svc.Enabled = rdpCheckStep(r, port)
 	}
-	result.Steps = append(result.Steps, actRead("RDP configuration", err, fmt.Sprintf("RDP port %d", port),
-		"Could not read the RDP port from the registry", "enable Remote Desktop in Settings > System > Remote Desktop"))
+	result.Steps = append(result.Steps, step)
 	svc.FirewallOK = windowsFirewallRuleExists(r, cfg.FirewallRule)
 	result.Steps = append(result.Steps, firewallReadStep("Firewall rule", svc.FirewallOK, svc.Port))
 	result.Services = []Service{svc}
@@ -92,6 +180,7 @@ func actRead(name string, err error, okMsg, failMsg, fix string) SetupStep {
 const (
 	psNetworkProfilePrivate = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
 	psReadRDPPort           = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
+	psReadRDPDeny           = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; Write-Output "policy=$p"; Write-Output "local=$l"`
 	psEnableRDP             = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; ` + psReadRDPPort
 )
 

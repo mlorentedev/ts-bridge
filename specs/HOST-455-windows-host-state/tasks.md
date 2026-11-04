@@ -29,15 +29,15 @@ owner: manu
 
 ## PR 2 — W2 effective RDP state
 
-- [ ] [AC2] Failing table test over (policy, local), for setup and check:
+- [x] [AC2] Failing table test over (policy, local), for setup and check:
   - (absent, 0) → ok;
   - (absent, 1) → changed, with a write;
   - (absent, absent) → changed, with a write;
   - (1, 0) → manual, no write;
   - (0, 1) → ok;
   - read error → failed.
-- [ ] [AC2] Implement the deny read, `effectiveDeny`, and the setup/check mapping
-- [ ] [AC2] Mutation check: force `effectiveDeny` to ignore the policy value → a test fails
+- [x] [AC2] Implement the deny read, `effectiveDeny`, and the setup/check mapping
+- [x] [AC2] Mutation check: force `effectiveDeny` to ignore the policy value → a test fails
 
 ## PR 3 — W3 firewall rule
 
