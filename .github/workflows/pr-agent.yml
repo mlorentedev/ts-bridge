@@ -228,6 +228,8 @@ jobs:
       # head: a PR supplying either could redefine what counts as a review. The head
       # copy of the registry is consulted only to detect the PR that introduces the
       # entry, and then only to confirm it exists (scripts/check-review-published.sh).
+      # On that bootstrap run the marker is the fixed heading `PR Reviewer Guide`,
+      # PR-Agent's own, set in that script: never text the PR head supplies.
       # Two more bindings, both
       # measured as gaps by CodeRabbit on the yt-metrics-cli and svqtriana ports
       # (2026-09-06): the comment must be AUTHORED by github-actions[bot] (on a
