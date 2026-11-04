@@ -50,3 +50,41 @@ func TestCheckUnixStateDir(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckUnixAncestor pins the per-ancestor rule of #561: a directory above
+// state_dir is root-owned and writable by root alone, a symlink is root-owned,
+// and nothing else qualifies. This is only the ownership half for a link: the
+// walk then checks its target the same way (TestWalkStateDirAncestors).
+func TestCheckUnixAncestor(t *testing.T) {
+	tests := []struct {
+		name    string
+		mode    fs.FileMode
+		uid     uint32
+		wantErr string // "" accepts
+	}{
+		{"root 0755 dir", fs.ModeDir | 0o755, 0, ""},
+		{"root 0700 dir", fs.ModeDir | 0o700, 0, ""},
+		{"sticky world-writable", fs.ModeDir | fs.ModeSticky | 0o777, 0, "mode 0777"},
+		{"group-writable", fs.ModeDir | 0o775, 0, "mode 0775"},
+		{"others-writable", fs.ModeDir | 0o757, 0, "mode 0757"},
+		{"user-owned dir", fs.ModeDir | 0o755, 1000, "uid 1000"},
+		{"root-owned link", fs.ModeSymlink | 0o777, 0, ""},
+		{"user-owned link", fs.ModeSymlink | 0o777, 1000, "symlink owned by uid 1000"},
+		{"a regular file", 0o644, 0, "not a directory"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkUnixAncestor("/srv/a/serve", "/srv/a", fakeInfo{tc.mode}, tc.uid)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("checkUnixAncestor() = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) ||
+				!strings.Contains(err.Error(), "state_dir /srv/a/serve") || !strings.Contains(err.Error(), "ancestor /srv/a") {
+				t.Errorf("checkUnixAncestor() = %v, want an error naming state_dir, the ancestor and %q", err, tc.wantErr)
+			}
+		})
+	}
+}
