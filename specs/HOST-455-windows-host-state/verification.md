@@ -20,8 +20,9 @@ owner: manu
 
   The test asserts that no call starts with `run tailscale up`. The golden Windows setup sequence
   (`windowsSetupCalls`) now starts with `output tailscale debug prefs`, then
-  `run tailscale set --unattended`. Mutant check: dropping `&& prefs.ForceDaemon` fails three
-  subtests.
+  `run tailscale set --unattended`. Mutant checks: dropping `&& prefs.ForceDaemon` fails two
+  subtests (`headscale node, not unattended`, `set fails`). Trusting a failed read's stdout
+  (`out, _ :=`) fails `prefs unreadable`, whose runner exits 1 while printing ForceDaemon true.
 - [ ] AC2 → PR 2 (pending)
 - [ ] AC3 → PR 3 (pending)
 - [ ] AC4 → every test above drives the `Runner` seam (`recordingRunner`) with no build tag, so it
