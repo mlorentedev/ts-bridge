@@ -22,6 +22,7 @@ tgt_running=""
 if [ -n "${ZSH_VERSION:-}" ]; then tgt_running=zsh; elif [ -n "${BASH_VERSION:-}" ]; then tgt_running=bash; fi
 if [ -z "${TGT_SHELL:-}" ]; then
   tgt_failed=0
+  tgt_ran=0
   # Command substitution splits on IFS in both shells; a bare expansion does
   # not in zsh.
   # shellcheck disable=SC2046
@@ -39,8 +40,14 @@ if [ -z "${TGT_SHELL:-}" ]; then
       tgt_failed=1
       continue
     fi
+    tgt_ran=$((tgt_ran + 1))
     TGT_SHELL="$tgt_sh" "$tgt_sh" "$0" "$@" || { echo "test-go-toolchain: failed under $tgt_sh" >&2; tgt_failed=1; }
   done
+  # A blank TGT_SHELLS splits into no words: a run of no shell proves nothing.
+  if [ "$tgt_ran" -eq 0 ]; then
+    echo "test-go-toolchain: TGT_SHELLS names no shell: nothing ran" >&2
+    tgt_failed=1
+  fi
   exit "$tgt_failed"
 fi
 # An inherited TGT_SHELL must not skip the loop: the inner run is valid only
