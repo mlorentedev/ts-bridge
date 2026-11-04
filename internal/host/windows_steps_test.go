@@ -168,8 +168,10 @@ func TestWindowsUnattendedStep(t *testing.T) {
 			outcome: OutcomeChanged,
 		},
 		{
-			name:    "prefs unreadable",
-			runner:  &recordingRunner{fail: map[string]bool{prefsRead: true}},
+			// A failed read is not trusted even when its stdout says true.
+			name: "prefs unreadable",
+			runner: &recordingRunner{exit: map[string]int{prefsRead: 1},
+				output: map[string]string{prefsRead: `{"ForceDaemon": true}`}},
 			calls:   []string{"output " + prefsRead, "run " + setUnattend},
 			outcome: OutcomeChanged,
 		},

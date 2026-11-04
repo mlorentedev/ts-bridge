@@ -42,7 +42,7 @@ type SetupStepJSONForTest = setupStepJSON
 
 // PrintSetupJSONForTest is a test-only wrapper for printSetupJSON.
 func PrintSetupJSONForTest(w io.Writer, result host.SetupResult) error {
-	return printSetupJSON(w, result)
+	return printSetupJSON(w, "", result)
 }
 
 // PrintCheckJSONForTest is a test-only wrapper for printCheckJSON.
@@ -68,7 +68,12 @@ func CheckJSONForTest(r host.CheckResult) ([]byte, error) {
 
 // SetupJSONForTest is a test-only wrapper for setupJSON.
 func SetupJSONForTest(result host.SetupResult) ([]byte, error) {
-	return setupJSON(result)
+	return setupJSON("", result)
+}
+
+// SetupJSONOnForTest is setupJSON for a host with the given Tailscale IP.
+func SetupJSONOnForTest(tsIP string, result host.SetupResult) ([]byte, error) {
+	return setupJSON(tsIP, result)
 }
 
 // CheckConvergenceForTest is a test-only wrapper for checkConvergence.
@@ -111,6 +116,13 @@ func HostSetupCmdForTest(t interface{ Cleanup(func()) }, goos string, elevated b
 	c := newHostSetupCmd()
 	c.SilenceUsage = true // as the root command sets it (#210)
 	return c
+}
+
+// SetHostTailscaleIPForTest makes setup's descriptor name ip for the test.
+func SetHostTailscaleIPForTest(t interface{ Cleanup(func()) }, ip string) {
+	prev := hostTailscaleIP
+	hostTailscaleIP = func() string { return ip }
+	t.Cleanup(func() { hostTailscaleIP = prev })
 }
 
 // PrintCheckTextForTest is a test-only wrapper for printCheckText.

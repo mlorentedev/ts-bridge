@@ -27,6 +27,16 @@ administrator privileges are required.
 - Ctrl+C, parent-context cancellation and failed startup close the adapter's
   listener and active tunnels. The SSH child remains under the normal bootstrap
   lifecycle; do not kill or reuse an unrelated process.
+- An abrupt exit is handled per OS: a panic, `kill -9`, or Task Manager's End task.
+  - Linux: the kernel sends `SIGKILL` to `ssh` when ts-bridge dies.
+  - Windows: `ssh` runs in a kill-on-close Job Object, and the job dies with ts-bridge.
+    `ssh` joins the job just after it starts. If ts-bridge is killed inside that window,
+    or `ssh` spawns a process before joining (a `ProxyCommand`), that process is not covered.
+    If ts-bridge itself runs inside a job that forbids nesting, containment is skipped.
+  - macOS: there is no equivalent. A leftover `ssh` keeps the SOCKS port bound until you
+    stop it (`lsof -iTCP:<port> -sTCP:LISTEN` names it).
+
+  Containment is best effort: if the OS refuses it, the bootstrap starts as before.
 
 The local SOCKS and HTTP listeners are unauthenticated. Loopback binding prevents
 remote access, not access by other local users/processes. Use a trusted client host;

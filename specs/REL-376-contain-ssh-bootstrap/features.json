@@ -1,0 +1,23 @@
+[
+  {
+    "id": "REL-376-contain-ssh-bootstrap-f1",
+    "behavior": "Killing the parent outright also ends a contained child within 5s on Linux and Windows",
+    "verification": "go test ./internal/bootstrapssh -run 'TestContainment_KillsChildWhenParentDies|TestPrepareContainment_SetsPdeathsig' -count=1 -v",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "REL-376-contain-ssh-bootstrap-f2",
+    "behavior": "A failing containment does not fail Start and the tunnel closes normally",
+    "verification": "go test ./internal/bootstrapssh -run 'TestStartSurvivesContainmentFailure' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "REL-376-contain-ssh-bootstrap-f3",
+    "behavior": "Containment applies to the started process and is released only after it is waited for",
+    "verification": "go test ./internal/bootstrapssh -run 'TestStartContainsTheStartedProcessAndReleasesAfterWait' -count=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]
