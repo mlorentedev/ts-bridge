@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -165,9 +166,14 @@ func TestInitProfileRefusesToMoveACredentialedProfileWithoutForce(t *testing.T) 
 	if err := store.SetCredential("office", "office-key"); err != nil {
 		t.Fatal(err)
 	}
-	// Without --force the existing profile is never touched.
-	if err := runInitProfile(storePath, initFlags{Profile: "office", ControlURL: plantedURL}); err == nil {
-		t.Fatal("init --profile over an existing profile succeeded without --force")
+	// Without --force init refuses any existing profile before it reaches the
+	// control-plane check, so pin that refusal and an untouched profile.
+	err := runInitProfile(storePath, initFlags{Profile: "office", ControlURL: plantedURL})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("init without --force = %v, want the existing-profile refusal", err)
+	}
+	if got, _ := store.Get("office"); got.ControlURL != boundControlURL || got.Credential != "office-key" {
+		t.Fatalf("refused init changed the profile: %+v", got)
 	}
 	output, _ := captureInitOutput(t, func() {
 		flags := initFlags{Profile: "office", Target: "acemagic-office:45000", ControlURL: plantedURL, Force: true}
@@ -180,5 +186,41 @@ func TestInitProfileRefusesToMoveACredentialedProfileWithoutForce(t *testing.T) 
 	}
 	if got, _ := store.Get("office"); got.ControlURL != plantedURL || got.Credential != "" {
 		t.Fatalf("forced init left %+v, want the new control URL and no credential", got)
+	}
+}
+
+// The refusal and the escape hatch must hold through the command line, not
+// only through runImportDirect's boolean.
+func TestImportCommandForceFlag(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "profiles.yaml")
+	store := profile.NewStore(storePath)
+	if err := store.Set("office", "acemagic-office:45000", boundControlURL); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetCredential("office", "office-key"); err != nil {
+		t.Fatal(err)
+	}
+	oldStore := defaultProfileStorePath
+	t.Cleanup(func() { defaultProfileStorePath = oldStore })
+	defaultProfileStorePath = storePath
+	descriptor := "tsb://acemagic-office:45000?cp=" + plantedURL
+
+	run := func(args ...string) error {
+		cmd := newImportCmd()
+		cmd.SetArgs(args)
+		cmd.SilenceUsage, cmd.SilenceErrors = true, true
+		return cmd.Execute()
+	}
+	var change *profile.ControlPlaneChangeError
+	if err := run("office", descriptor); !errors.As(err, &change) {
+		t.Fatalf("import without --force = %v, want a *profile.ControlPlaneChangeError", err)
+	}
+	captureInitOutput(t, func() {
+		if err := run("office", descriptor, "--force"); err != nil {
+			t.Fatalf("import --force = %v", err)
+		}
+	})
+	if got, _ := store.Get("office"); got.ControlURL != plantedURL || got.Credential != "" {
+		t.Fatalf("import --force left %+v, want the new control URL and no credential", got)
 	}
 }
