@@ -19,11 +19,11 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 fails=0
 
-check() { # check <case> <want: pass|fail> <log lines...>
+check() { # [RC=<scenario exit>] check <case> <want: pass|fail> <log lines...>
   local name="$1" want="$2" got=pass
   shift 2
   printf '%s\n' "$@" >"$WORK/$name.log"
-  report "$WORK/$name.log" >/dev/null || got=fail
+  report "$WORK/$name.log" "${RC:-0}" >/dev/null 2>&1 || got=fail
   if [ "$got" = "$want" ]; then echo "ok   $name"; else echo "FAIL $name: want $want, got $got"; fails=$((fails + 1)); fi
 }
 
@@ -31,7 +31,11 @@ check clean       pass 'PASS a' 'PASS b'
 check xfail-only  pass 'PASS a' 'XFAIL #1 b'
 check one-fail    fail 'PASS a' 'FAIL b'
 check one-xpass   fail 'PASS a' 'XPASS #1 b'
-check noise-only  pass 'some guest output' 'FAILED to resolve' 'PASSWORD prompt'
+check noise-only  pass 'PASS a' 'some guest output' 'FAILED to resolve' 'PASSWORD prompt'
+# A scenario that died before its first case, or partway, must not read as green.
+check empty       fail
+check no-result   fail 'some guest output' 'FAILED to resolve'
+RC=1 check aborted fail 'PASS a'
 check fail-word-mid pass 'PASS a mentions FAIL inside'
 
 [ "$fails" -eq 0 ] || { echo "test-e2e-report: $fails case(s) failed"; exit 1; }

@@ -35,7 +35,7 @@ code() { [ "$(cat "$W/code")" = "$1" ]; }
 
 ok "version prints" -- '"$B" version' 
 run "$B" host init </dev/null
-ok "init: --config required" -- 'code 1 && has -- "--config is required"'
+ok "init: --config required" -- 'code 1 && has "--config is required"'
 run "$B" host init --config "$C" --port 3389 --force </dev/null
 ok "init: writes the YAML" -- "code 0 && grep -q 'kind: rdp' $C && grep -q 'port: 3389' $C"
 ok "init: file is 0644 root" -- '[ "$(stat -c "%a %U" "$C")" = "644 root" ]' 

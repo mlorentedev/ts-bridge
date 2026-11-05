@@ -70,12 +70,18 @@ run_windows() {
   dotf vm windows exec --session "$SESSION" --elevated --timeout 30m --script "$HERE/windows.ps1" < /dev/null
 }
 
-# report counts the result lines and fails on FAIL or XPASS (AC1, AC5).
+# report LOG [RC] counts the result lines and fails on FAIL or XPASS (AC1, AC5).
+# It also fails when the scenario exited non-zero (RC) or printed no result:
+# a guest script that died early must not read as a green run.
 report() {
-  local log="$1" fail xpass
+  local log="$1" rc="${2:-0}" pass fail xfail xpass
+  pass=$(grep -c '^PASS ' "$log" || true)
   fail=$(grep -c '^FAIL ' "$log" || true)
+  xfail=$(grep -c '^XFAIL ' "$log" || true)
   xpass=$(grep -c '^XPASS ' "$log" || true)
-  echo "e2e $OS: $(grep -c '^PASS ' "$log" || true) pass, $fail fail, $(grep -c '^XFAIL ' "$log" || true) xfail, $xpass xpass (log: $log)"
+  echo "e2e $OS: $pass pass, $fail fail, $xfail xfail, $xpass xpass (log: $log)"
+  [ "$rc" -eq 0 ] || { echo "e2e $OS: the scenario exited $rc before it finished" >&2; return 1; }
+  [ $((pass + xfail)) -gt 0 ] || { echo "e2e $OS: no case ran" >&2; return 1; }
   [ "$fail" -eq 0 ] && [ "$xpass" -eq 0 ]
 }
 
@@ -99,8 +105,10 @@ main() {
   fi
   dotf vm "$OS" up --session "$SESSION" >/dev/null
   echo "e2e $OS: candidate $(cd "$ROOT" && git rev-parse --short HEAD), previous $(cat "$dir/prev-tag")"
-  "run_$OS" "$dir" 2>&1 | tee "$log" | grep -E '^(PASS|FAIL|XFAIL|XPASS) ' || true
-  report "$log"
+  # The exit status goes through a file: the pipeline would hide it.
+  { "run_$OS" "$dir" 2>&1 && echo 0 >"$dir/rc" || echo $? >"$dir/rc"; } |
+    tee "$log" | grep -E '^(PASS|FAIL|XFAIL|XPASS) ' || true
+  report "$log" "$(cat "$dir/rc")"
 }
 
 # Sourced (scripts/tests/test-e2e-report.sh), only the functions are defined.
