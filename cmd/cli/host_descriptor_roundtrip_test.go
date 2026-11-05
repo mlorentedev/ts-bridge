@@ -40,7 +40,7 @@ func TestHostDescriptor_RoundTrip(t *testing.T) {
 					t.Errorf("%s: descriptor %q lacks %q", name, out.Descriptor, tt.token)
 				}
 				store := filepath.Join(t.TempDir(), "profiles.yaml")
-				if err := runImportDirect("host", out.Descriptor, store); err != nil {
+				if err := runImportDirect("host", out.Descriptor, store, false); err != nil {
 					t.Fatalf("%s: import %q: %v", name, out.Descriptor, err)
 				}
 				cfg := config.Config{}

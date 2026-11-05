@@ -157,7 +157,10 @@ func TestImportRefusesToMoveACredentialedProfile(t *testing.T) {
 	}
 }
 
-func TestInitProfileRefusesToMoveACredentialedProfileWithoutForce(t *testing.T) {
+// init cannot return ControlPlaneChangeError: without --force it refuses any
+// existing profile first (pinned here), and with --force it clears the
+// reference. The refusal itself is covered by the store table and by import.
+func TestInitProfileForceClearsCredentialOnControlURLChange(t *testing.T) {
 	storePath := filepath.Join(t.TempDir(), "profiles.yaml")
 	store := profile.NewStore(storePath)
 	if err := store.Set("office", "acemagic-office:45000", boundControlURL); err != nil {
