@@ -582,6 +582,14 @@ func TestPrintCheckText_Service(t *testing.T) {
 			notWant: "needs root/administrator",
 		},
 		{
+			name: "unread under elevation is not claimed off",
+			result: host.CheckResult{Elevated: true, Services: []host.Service{
+				{Kind: host.ServiceRDP, Port: 3389, Unread: true},
+			}},
+			want:    "unread (rdp, port 3389): see the steps below",
+			notWant: "NOT OK",
+		},
+		{
 			name:    "declared with the port unread",
 			result:  host.CheckResult{Services: []host.Service{{Kind: host.ServiceRDP}}},
 			want:    "rdp, port unknown",

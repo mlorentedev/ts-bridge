@@ -188,7 +188,7 @@ func TestCheckFor(t *testing.T) {
 			runner:   &recordingRunner{fail: map[string]bool{"tailscale ip -4": true, psPrefix + psPort: true}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
 			steps:    []string{"Tailscale IP=failed", "RDP configuration=failed", "Firewall rule=changed"},
-			services: []Service{{Kind: "rdp", Active: active}},
+			services: []Service{{Kind: "rdp", Active: active, Unread: true}},
 			legacy:   CheckResult{},
 		},
 		{

@@ -158,8 +158,8 @@ func rdpCheckStep(r Runner, port int) (SetupStep, bool) {
 }
 
 func checkWindows(cfg Config, r Runner, result *CheckResult) {
-	svc := Service{Kind: ServiceRDP}
 	port, err := readPortPS(r, psReadRDPPort)
+	svc := Service{Kind: ServiceRDP, Unread: err != nil}
 	step := actRead("RDP configuration", err, "", "Could not read the RDP port from the registry", rdpEnableFix)
 	if err == nil {
 		svc.Port = port

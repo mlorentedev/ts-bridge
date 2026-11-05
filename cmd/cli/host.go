@@ -590,7 +590,8 @@ func printCheckText(w io.Writer, r host.CheckResult) {
 // rdpLine is the RDP line of the check. The legacy RDPPort is set only by an
 // enabled service, so a declared service that is off or unread is named from
 // Services rather than reported as undeclared. It claims "unread" only when a
-// step said so: a service the check read and found off is NOT OK.
+// step said so, and blames elevation only when the process lacks it: a service
+// the check read and found off is NOT OK.
 func rdpLine(r host.CheckResult) string {
 	if r.RDPPort > 0 {
 		return fmt.Sprintf("%s (port %d)", statusStr(r.RDPEnabled), r.RDPPort)
@@ -603,8 +604,11 @@ func rdpLine(r host.CheckResult) string {
 	if p := r.Services[i].Port; p > 0 {
 		port = strconv.Itoa(p)
 	}
-	if svc := r.Services[i]; svc.Unread && !r.Elevated {
-		return fmt.Sprintf("unread (rdp, port %s): its state needs root/administrator to read", port)
+	if svc := r.Services[i]; svc.Unread {
+		if !r.Elevated {
+			return fmt.Sprintf("unread (rdp, port %s): its state needs root/administrator to read", port)
+		}
+		return fmt.Sprintf("unread (rdp, port %s): see the steps below", port)
 	}
 	return fmt.Sprintf("%s (rdp, port %s)", statusStr(false), port)
 }
