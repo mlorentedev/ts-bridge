@@ -130,10 +130,15 @@ Set-Location $W
 function Mesh($state) { "version: 1`nhost:`n  control_url: https://hs.invalid`n  mesh:`n    hostname: e2e`n    state_dir: $state`n    auth_key_file: C:\ProgramData\ts-bridge\authkey`n  services:`n    - kind: rdp`n      port: 3389" }
 Yaml "$W\nomesh.yaml" "version: 1`nhost:`n  control_url: https://hs.invalid`n  services:`n    - kind: rdp`n      port: 3389"
 Case 'serve: no host.mesh refused' { Tsb host serve --config "$W\nomesh.yaml"; $Code -eq 1 -and $Out -match 'host\.mesh' }
+# An absent state_dir is created protected, so the loose one must exist first.
+New-Item -ItemType Directory -Force "$W\state" | Out-Null; icacls "$W\state" /grant 'Users:(OI)(CI)F' | Out-Null
 Yaml "$W\loose.yaml" (Mesh "$W\state")
-Case 'serve: state_dir other users can reach refused' { Tsb host serve --config "$W\loose.yaml"; $Code -eq 1 -and $Out -match 'state' }
+Case 'serve: state_dir other users can reach refused' { Tsb host serve --config "$W\loose.yaml"; $Code -eq 1 -and $Out -match 'state_dir' }
 
 Case 'client: import a tsb:// descriptor' { Tsb import e2e 'tsb://host-e2e:3389?cp=saas'; $Code -eq 0 }
 Case 'client: malformed descriptor refused' { Tsb import bad 'http://nope'; $Code -ne 0 }
-Case 'client: status with no bridge fails clearly' { Tsb status --json --addr 127.0.0.1:1; $Code -ne 0 }
+Case 'client: status with no bridge says so on stderr, stdout empty' {
+    $o = (& $B status --json --addr 127.0.0.1:1 2>"$W\err" | Out-String); $c = $LASTEXITCODE
+    $c -eq 0 -and $o.Trim() -eq '' -and (Get-Content "$W\err" -Raw) -match 'not running'
+}
 exit 0
