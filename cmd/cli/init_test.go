@@ -948,3 +948,49 @@ func TestAuthKeyFlags_WarnProcessList(t *testing.T) {
 		t.Fatalf("found --auth-key on %d commands, want at least connect, init and discover", n)
 	}
 }
+
+// `init --target X` without a terminal (CI, a pipe) used to enter the wizard,
+// print the masked prompt and die with a raw ioctl error. It must refuse before
+// prompting, name the flags that work without a terminal, and write nothing.
+func TestInitWithoutTTYIsActionable(t *testing.T) {
+	t.Chdir(t.TempDir())
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	t.Cleanup(func() { _ = r.Close() })
+
+	root := NewRootCmd()
+	root.SetIn(r)
+	root.SetArgs([]string{"init", "--target", "100.64.0.1:3389"})
+	var runErr error
+	stdout, stderr := captureInitOutput(t, func() { runErr = root.Execute() })
+
+	if runErr == nil {
+		t.Fatal("init without a TTY and without a key flag succeeded")
+	}
+	for _, want := range []string{"stdin is not a terminal", "--auth-key-file", "--target"} {
+		if !strings.Contains(runErr.Error(), want) {
+			t.Errorf("error = %q; want it to contain %q", runErr, want)
+		}
+	}
+	// The hint names flags by text; make the test fail if init stops defining them.
+	// Look them up on the init the root above executes, not on a fresh newInitCmd().
+	initCmd, _, err := root.Find([]string{"init"})
+	if err != nil || initCmd.Name() != "init" {
+		t.Fatalf("root has no init command: %v", err)
+	}
+	for _, name := range []string{"auth-key-file", "target"} {
+		if initCmd.Flags().Lookup(name) == nil {
+			t.Errorf("the refusal tells users to pass --%s but init does not define it", name)
+		}
+	}
+	if strings.Contains(stdout+stderr, "Auth key") {
+		t.Errorf("output = %q; the wizard prompted before refusing", stdout+stderr)
+	}
+	// Whatever the output format, a refused init writes nothing.
+	if entries, err := os.ReadDir("."); err != nil || len(entries) != 0 {
+		t.Errorf("working directory after a refused init: %v (err %v), want it empty", entries, err)
+	}
+}

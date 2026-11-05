@@ -279,3 +279,80 @@ func bindOfficeCredential(t *testing.T, storePath, controlURL string) {
 		t.Fatal(err)
 	}
 }
+
+// A profile's managed credential that cannot be read (deleted, or corrupted on
+// disk) is fixed by storing it again, so the error names auth set. A malformed
+// key from TS_AUTHKEY is not: auth set cannot outrank the env var, so the hint
+// would send the user round in a loop.
+func TestConnectProfileCredentialLoadErrorPointsToAuthSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		envKey   string
+		damage   func(t *testing.T, keyFile string)
+		wantHint bool
+	}{
+		{name: "deleted", damage: func(t *testing.T, f string) {
+			if err := os.Remove(f); err != nil {
+				t.Fatal(err)
+			}
+		}, wantHint: true},
+		{name: "corrupted", damage: func(t *testing.T, f string) {
+			if err := os.WriteFile(f, []byte("not-a-key\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}, wantHint: true},
+		{name: "malformed env key", envKey: "not-a-key", damage: func(*testing.T, string) {}, wantHint: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, credentialDir := setupProfileCredentialTest(t)
+			tt.damage(t, filepath.Join(credentialDir, "office-key.key"))
+			t.Setenv("TS_AUTHKEY", tt.envKey)
+			t.Setenv("TS_TARGET", "")
+			t.Setenv("TS_CONTROL_URL", "")
+			oldRunner, oldLogger := Runner, LoggerInit
+			t.Cleanup(func() { Runner, LoggerInit = oldRunner, oldLogger })
+			LoggerInit = nil
+			Runner = func(config.Config) error { return nil }
+
+			command := newConnectCmd()
+			command.SetArgs([]string{"--profile", "office"})
+			command.SilenceUsage, command.SilenceErrors = true, true
+			err := command.Execute()
+			if err == nil {
+				t.Fatal("connect succeeded with an unusable credential")
+			}
+			if got := strings.Contains(err.Error(), "auth set --profile office"); got != tt.wantHint {
+				t.Fatalf("error = %q; names auth set = %v, want %v", err, got, tt.wantHint)
+			}
+			if !tt.wantHint && !strings.Contains(err.Error(), "auth key invalid format") {
+				t.Fatalf("error = %q; want the env key's format error, or this case tests another path", err)
+			}
+		})
+	}
+}
+
+// browser is a profile command too: a profile with no credential yet must name
+// the step that stores one.
+func TestBrowserProfileWithoutCredentialPointsToAuthSet(t *testing.T) {
+	profilePath, _ := setupProfileCredentialTest(t)
+	if err := profile.NewStore(profilePath).Set("bare", "acemagic-office:45000", ""); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_CONTROL_URL", "")
+	oldRunner, oldLogger := BrowserRunner, LoggerInit
+	t.Cleanup(func() { BrowserRunner, LoggerInit = oldRunner, oldLogger })
+	LoggerInit = nil
+	BrowserRunner = func(config.Config, BrowserOptions) error { return nil }
+
+	command := newBrowserCmd()
+	command.SetArgs([]string{"--profile", "bare", "--url", "https://forge.example.internal/",
+		"--route", "forge.example.internal:443=apps:443"})
+	command.SilenceUsage, command.SilenceErrors = true, true
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "auth set --profile bare") {
+		t.Fatalf("browser --profile bare = %v; want it to name `ts-bridge auth set --profile bare`", err)
+	}
+}

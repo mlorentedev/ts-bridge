@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -11,6 +12,11 @@ import (
 
 	"ts-bridge/internal/credential"
 )
+
+// ErrNotFound marks a lookup of a profile that is not in the store. It reads as
+// the tail of "profile %q not found in %s", so callers can match it with
+// errors.Is without the message changing.
+var ErrNotFound = errors.New("not found")
 
 // profileEntry is one named profile in the YAML store.
 // Follows the #185-shaped schema so CFG-002 and the future full profiles
@@ -195,7 +201,7 @@ func (s *Store) Get(name string) (Profile, error) {
 	}
 	e, ok := data.Profiles[name]
 	if !ok {
-		return Profile{}, fmt.Errorf("profile %q not found in %s", name, s.path)
+		return Profile{}, fmt.Errorf("profile %q %w in %s", name, ErrNotFound, s.path)
 	}
 	return profileFromEntry(e), nil
 }
@@ -246,7 +252,7 @@ func (s *Store) updateCredential(profileName, credentialName string) error {
 	}
 	entry, ok := data.Profiles[profileName]
 	if !ok {
-		return fmt.Errorf("profile %q not found in %s", profileName, s.path)
+		return fmt.Errorf("profile %q %w in %s", profileName, ErrNotFound, s.path)
 	}
 	entry.Credential = credentialName
 	data.Profiles[profileName] = entry

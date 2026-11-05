@@ -73,6 +73,7 @@ func runImportDirect(name, rawDescriptor, storePath string, force bool) error {
 	}
 
 	fmt.Printf("Profile %q imported (%s)\n", name, d.String())
+	fmt.Printf("Next: ts-bridge auth set --profile %s\n      ts-bridge connect --profile %s\n", name, name)
 	return nil
 }
 

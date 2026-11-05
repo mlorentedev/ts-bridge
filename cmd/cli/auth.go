@@ -88,7 +88,7 @@ func runAuthSet(command *cobra.Command, args []string) error {
 	profileStore := profile.NewStore(defaultProfileStorePath)
 	selectedProfile, err := profileStore.Get(profileName)
 	if err != nil {
-		return fmt.Errorf("load profile %q: %w", profileName, err)
+		return profileLoadError(profileName, err)
 	}
 	credentialName := profileName
 	if len(args) == 1 {
@@ -116,6 +116,9 @@ func readAuthInput(command *cobra.Command) (string, error) {
 	fromStdin, _ := command.Flags().GetBool("stdin")
 	if !fromStdin {
 		key, err := authSecretReader("Auth key (masked): ")
+		if errors.Is(err, errStdinNotTerminal) {
+			return "", fmt.Errorf("read credential: %w; pipe it in with --stdin", err)
+		}
 		if err != nil {
 			return "", fmt.Errorf("read credential: %w", err)
 		}

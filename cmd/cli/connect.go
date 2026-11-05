@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -142,7 +143,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	// Merge: flags > env > yaml > profile > defaults.
 	cfg, err := config.Merge(yamlCfg, flags)
 	if err != nil {
-		return err
+		return withAuthSetHint(err, profileName)
 	}
 
 	// --quiet is a console-output concern (like --profile, resolved
@@ -168,6 +169,15 @@ func runConnect(cmd *cobra.Command, args []string) error {
 		return Runner(cfg)
 	}
 	return fmt.Errorf("bridge runner not initialized (call main.go first)")
+}
+
+// withAuthSetHint points a missing-credential error at the managed path when a
+// profile is selected, since the profile is what auth set attaches a key to.
+func withAuthSetHint(err error, profileName string) error {
+	if profileName == "" || !errors.Is(err, config.ErrAuthKeyRequired) {
+		return err
+	}
+	return fmt.Errorf("%w\nstore one for the profile: ts-bridge auth set --profile %s", err, profileName)
 }
 
 func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, profileName string) (string, error) {
