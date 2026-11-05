@@ -2,6 +2,7 @@ package host
 
 import (
 	"errors"
+	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ type recordingRunner struct {
 	output map[string]string // joined command -> Output stdout
 	onPath map[string]bool   // LookPath hits
 	exit   map[string]int    // joined command -> Run/Output fails with this exit status
+	stderr map[string]string // joined command -> stderr an exit failure carries, as *exec.ExitError does
 	// elevated is what Elevated reports; it records no call.
 	elevated bool
 }
@@ -50,6 +52,9 @@ func (r *recordingRunner) Run(name string, args ...string) error {
 func (r *recordingRunner) Output(name string, args ...string) ([]byte, error) {
 	cmd := r.record("output", name, args)
 	if code, ok := r.exit[cmd]; ok {
+		if msg, ok := r.stderr[cmd]; ok {
+			return []byte(r.output[cmd]), &exec.ExitError{Stderr: []byte(msg)}
+		}
 		return []byte(r.output[cmd]), exitError(code) // stdout survives a non-zero exit, as with exec
 	}
 	if r.fail[cmd] {

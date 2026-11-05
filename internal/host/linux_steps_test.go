@@ -459,7 +459,7 @@ func TestSetupForLinux(t *testing.T) {
 		},
 		{
 			name:     "iptables, no ts-input jump and no chain: appended",
-			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"})},
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "lookpath nft", "run "+iptAppend, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
@@ -734,7 +734,7 @@ func TestCheckForLinux(t *testing.T) {
 		},
 		{
 			name:     "iptables, no ts-input jump and no chain",
-			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"})},
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "lookpath nft"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
@@ -1247,6 +1247,15 @@ const (
 	iptNoJump      = "-P INPUT ACCEPT\n"
 )
 
+// What iptables and nft print for a chain that does not exist. Exit status 1 is
+// their only failure code, so these words, not the status, tell a missing chain
+// from a refused read (iptables: xtables "No chain/target/match by that name";
+// nft: the kernel's ENOENT).
+var (
+	noIptChain = map[string]string{iptChain: "iptables: No chain/target/match by that name.\n"}
+	noChains   = map[string]string{iptChain: noIptChain[iptChain], nftTSInputRead: "Error: No such file or directory\nlist chain ip filter ts-input\n                      ^^^^^^^^^\n"}
+)
+
 // TestReadIptablesTailscaledModes pins the two tailscaled rule sets the
 // iptables read cannot see (#526). nodivert (iptables_runner.go AddHooks is
 // skipped) leaves ts-input without a jump, and nftables mode keeps it where
@@ -1263,11 +1272,14 @@ func TestReadIptablesTailscaledModes(t *testing.T) {
 		{"nodivert: ts-input exists, INPUT does not reach it", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump, iptChain: tsInputDefault}}, ruleUnknown, "ts-input exists but INPUT does not jump to it"},
 		{"nodivert: an allow in INPUT still decides", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", iptChain: tsInputDefault}}, rulePresent, ""},
 		{"nodivert: a deny in INPUT still decides", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump + "-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n", iptChain: tsInputDefault}}, ruleBlocked, ""},
-		{"no ts-input chain, nft not installed: absent", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1}}, ruleAbsent, ""},
+		{"no ts-input chain, nft not installed: absent", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1}, stderr: noIptChain}, ruleAbsent, ""},
 		{"ts-input unreadable for another reason", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 4}}, ruleUnknown, iptChain},
-		{"nftables mode: ts-input only in nft", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump, nftTSInputRead: nftTSInput}, exit: map[string]int{iptChain: 1}}, ruleUnknown, "nftables"},
-		{"nft installed, no ts-input in it: absent", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 1}}, ruleAbsent, ""},
-		{"nft unreadable for another reason", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 4}}, ruleUnknown, nftTSInputRead},
+		{"nftables mode: ts-input only in nft", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump, nftTSInputRead: nftTSInput}, exit: map[string]int{iptChain: 1}, stderr: noIptChain}, ruleUnknown, "nftables"},
+		{"nft installed, no ts-input in it: absent", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 1}, stderr: noChains}, ruleAbsent, ""},
+		{"nft unreadable for another reason", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 4}, stderr: noIptChain}, ruleUnknown, nftTSInputRead},
+		{"iptables exit 1 without the missing-chain text", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1}, stderr: map[string]string{iptChain: "iptables: Permission denied (you must be root).\n"}}, ruleUnknown, iptChain},
+		{"nft exit 1 for a refused read", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 1}, stderr: map[string]string{iptChain: noIptChain[iptChain], nftTSInputRead: "Error: Operation not permitted\n"}}, ruleUnknown, nftTSInputRead},
+		{"nft exit 1 with no message", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 1}, stderr: map[string]string{iptChain: noIptChain[iptChain], nftTSInputRead: ""}}, ruleUnknown, nftTSInputRead},
 		{"no iptables, nft holds ts-input", &recordingRunner{elevated: true, onPath: map[string]bool{"nft": true}, output: map[string]string{nftTSInputRead: nftTSInput}}, ruleUnknown, "nftables"},
 		{"ufw host, nodivert", &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true}, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: iptNoJump, iptChain: tsInputDefault}}, ruleUnknown, "ts-input exists but INPUT does not jump to it"},
 	}
@@ -1288,7 +1300,7 @@ func TestReadIptablesTailscaledModes(t *testing.T) {
 // it cannot read (#526): setup fails and check is unverified, both naming the mode.
 func TestFirewallStepsTailscaledModes(t *testing.T) {
 	newRunner := func(out map[string]string, exit map[string]int) *recordingRunner {
-		return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "nft": true}, output: out, exit: exit}
+		return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "nft": true}, output: out, exit: exit, stderr: noIptChain}
 	}
 	tests := []struct {
 		name   string
@@ -1319,5 +1331,19 @@ func TestFirewallStepsTailscaledModes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestNoBackendKeepsTheNFTFix pins that the fix for tailscaled's nftables mode
+// survives a host with neither ufw nor iptables (#526): the generic "install
+// ufw" advice would not tell the operator where the ts-input chain is.
+func TestNoBackendKeepsTheNFTFix(t *testing.T) {
+	r := &recordingRunner{elevated: true, onPath: map[string]bool{"nft": true}, output: map[string]string{nftTSInputRead: nftTSInput}}
+	read := readLinuxFirewall(r, 3389)
+	if !read.noBackend || !strings.Contains(read.reason, "nftables") {
+		t.Fatalf("read = %+v, want noBackend naming nftables", read)
+	}
+	if fix := firewallFix(read, 3389, "setup"); !strings.Contains(fix, nftTSInputRead) {
+		t.Errorf("fix = %q, want the nft read hint", fix)
 	}
 }
