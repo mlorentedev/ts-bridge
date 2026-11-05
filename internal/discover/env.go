@@ -2,10 +2,13 @@ package discover
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"ts-bridge/internal/secretfile"
 )
 
 // UpdateEnv adds or updates TS_TARGET in the .env file at the given path.
@@ -21,7 +24,10 @@ func UpdateEnv(path, target string, port int) error {
 		}
 	}
 
-	existingVars, otherLines := readEnvFile(path)
+	existingVars, otherLines, err := readEnvFile(path)
+	if err != nil {
+		return err
+	}
 
 	// Update TS_TARGET.
 	existingVars["TS_TARGET"] = fmt.Sprintf("%s:%d", target, port)
@@ -33,16 +39,21 @@ func UpdateEnv(path, target string, port int) error {
 	return nil
 }
 
-// readEnvFile parses a .env file into variables and comment/blank lines.
-func readEnvFile(path string) (map[string]string, []string) {
+// readEnvFile parses a .env file into variables and comment/blank lines. A
+// missing file is empty; one that exists but cannot be read is an error, so
+// UpdateEnv never replaces a file whose variables it did not see.
+func readEnvFile(path string) (map[string]string, []string, error) {
 	existingVars := make(map[string]string)
 	var otherLines []string
 
 	// #nosec G304 -- path is the .env file in the user's working directory,
 	// not an external path. The user controls their own working directory.
 	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return existingVars, otherLines, nil
+	}
 	if err != nil {
-		return existingVars, otherLines
+		return nil, nil, fmt.Errorf("read .env: %w", err)
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))
@@ -58,7 +69,7 @@ func readEnvFile(path string) (map[string]string, []string) {
 		}
 	}
 
-	return existingVars, otherLines
+	return existingVars, otherLines, nil
 }
 
 // parseEnvLine parses a KEY=VALUE line, returning (key, value) or ("","") for
@@ -119,7 +130,7 @@ func writeEnvFile(path string, vars map[string]string, comments []string) error 
 		}
 	}
 
-	if err := os.WriteFile(path, []byte(sb.String()), 0600); err != nil {
+	if err := secretfile.WriteFile(path, []byte(sb.String())); err != nil {
 		return fmt.Errorf("write .env: %w", err)
 	}
 
