@@ -195,8 +195,13 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 	if flags.AuthKey != "" || flags.AuthKeyFile != "" || os.Getenv("TS_AUTHKEY") != "" {
 		return selectedProfile.Target, nil
 	}
-	flags.ProfileAuthKey, err = loadManagedProfileCredential(selectedProfile)
-	return selectedProfile.Target, err
+	key, err := loadManagedProfileCredential(selectedProfile)
+	if err != nil {
+		// A deleted or corrupted managed key is fixed by storing it again.
+		return "", fmt.Errorf("%w\nstore it again: ts-bridge auth set --profile %s", err, profileName)
+	}
+	flags.ProfileAuthKey = key
+	return selectedProfile.Target, nil
 }
 
 // sameConnectTarget reports whether two targets name one destination: host names

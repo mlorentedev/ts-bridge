@@ -263,3 +263,52 @@ func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 		t.Fatalf("stderr = %q, did not expect ignored-environment warning with --auth-key-file", stderr.String())
 	}
 }
+
+// A profile's managed credential that cannot be read (deleted, or corrupted on
+// disk) is fixed by storing it again, so the error names auth set. A malformed
+// key from TS_AUTHKEY is not: auth set cannot outrank the env var, so the hint
+// would send the user round in a loop.
+func TestConnectProfileCredentialLoadErrorPointsToAuthSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		envKey   string
+		damage   func(t *testing.T, keyFile string)
+		wantHint bool
+	}{
+		{name: "deleted", damage: func(t *testing.T, f string) {
+			if err := os.Remove(f); err != nil {
+				t.Fatal(err)
+			}
+		}, wantHint: true},
+		{name: "corrupted", damage: func(t *testing.T, f string) {
+			if err := os.WriteFile(f, []byte("not-a-key\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}, wantHint: true},
+		{name: "malformed env key", envKey: "not-a-key", damage: func(*testing.T, string) {}, wantHint: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, credentialDir := setupProfileCredentialTest(t)
+			tt.damage(t, filepath.Join(credentialDir, "office-key.key"))
+			t.Setenv("TS_AUTHKEY", tt.envKey)
+			t.Setenv("TS_TARGET", "")
+			t.Setenv("TS_CONTROL_URL", "")
+			oldRunner, oldLogger := Runner, LoggerInit
+			t.Cleanup(func() { Runner, LoggerInit = oldRunner, oldLogger })
+			LoggerInit = nil
+			Runner = func(config.Config) error { return nil }
+
+			command := newConnectCmd()
+			command.SetArgs([]string{"--profile", "office"})
+			command.SilenceUsage, command.SilenceErrors = true, true
+			err := command.Execute()
+			if err == nil {
+				t.Fatal("connect succeeded with an unusable credential")
+			}
+			if got := strings.Contains(err.Error(), "auth set --profile office"); got != tt.wantHint {
+				t.Fatalf("error = %q; names auth set = %v, want %v", err, got, tt.wantHint)
+			}
+		})
+	}
+}
