@@ -171,10 +171,10 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("bridge runner not initialized (call main.go first)")
 }
 
-// withAuthSetHint points a missing-credential error at the managed path when a
-// profile is selected, since the profile is what auth set attaches a key to.
+// withAuthSetHint points a missing or malformed credential at the managed path
+// when a profile is selected, since the profile is what auth set attaches a key to.
 func withAuthSetHint(err error, profileName string) error {
-	if profileName == "" || !errors.Is(err, config.ErrAuthKeyRequired) {
+	if profileName == "" || !(errors.Is(err, config.ErrAuthKeyRequired) || errors.Is(err, config.ErrAuthKeyInvalid)) {
 		return err
 	}
 	return fmt.Errorf("%w\nstore one for the profile: ts-bridge auth set --profile %s", err, profileName)
