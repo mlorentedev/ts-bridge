@@ -22,7 +22,7 @@ const windowsOS = "windows"
 func newConnectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "connect [flags]",
-		Short: "Start the TCP bridge (replaces run.sh / run.ps1)",
+		Short: "Start the TCP bridge",
 		Long: `Start the TCP bridge that forwards local connections to a remote
 target over the Tailscale mesh network.
 

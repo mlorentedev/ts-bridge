@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -203,5 +204,40 @@ func TestRunImport_PrintsNextSteps(t *testing.T) {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("stdout = %q; want it to contain %q", stdout, want)
 		}
+	}
+}
+
+// A malformed descriptor reported its prefix twice: the parser's own
+// "invalid descriptor ..." wrapped again by the command.
+func TestImportErrorIsNotDoublePrefixed(t *testing.T) {
+	setupAuthCommandTest(t)
+	cmd := newImportCmd()
+	cmd.SetArgs([]string{"home", "tsb://bad"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SilenceUsage, cmd.SilenceErrors = true, true
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("import of tsb://bad succeeded")
+	}
+	if n := strings.Count(err.Error(), "invalid descriptor"); n != 1 {
+		t.Fatalf("error = %q; 'invalid descriptor' appears %d times, want 1", err, n)
+	}
+}
+
+// Cobra's arity error alone ("accepts 2 arg(s), received 0") does not say what
+// the two arguments are; the usage line does.
+func TestImportWithoutArgsPrintsUsageLine(t *testing.T) {
+	cmd := newImportCmd()
+	cmd.SetArgs([]string{})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SilenceUsage, cmd.SilenceErrors = true, true
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("import with no arguments succeeded")
+	}
+	if !strings.Contains(err.Error(), "import <name> <descriptor>") {
+		t.Fatalf("error = %q; want the usage line `import <name> <descriptor>`", err)
 	}
 }

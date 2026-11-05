@@ -230,3 +230,20 @@ func TestAuthSetUnknownProfileNamesHowToCreateIt(t *testing.T) {
 		t.Errorf("hint %q contains shell redirection characters", hint)
 	}
 }
+
+// An empty store used to print nothing, which reads as a hang or a bug. The
+// hint goes to stderr: stdout carries name<TAB>references rows, and a script
+// reading it must still see zero rows.
+func TestAuthListEmptyTellsHowToCreateOne(t *testing.T) {
+	setupAuthCommandTest(t)
+	stdout, stderr, err := executeAuthCommand(t, "list")
+	if err != nil {
+		t.Fatalf("auth list error = %v", err)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q; want no rows for an empty store", stdout)
+	}
+	if !strings.Contains(stderr, "No managed credentials") || !strings.Contains(stderr, "ts-bridge auth set --profile") {
+		t.Errorf("stderr = %q; want it to say the store is empty and name auth set", stderr)
+	}
+}
