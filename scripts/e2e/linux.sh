@@ -100,7 +100,7 @@ run "$B" host check --config "$W/v2.yaml"
 ok "unsupported version refused" -- '! code 0 && ! code 2 && has "version"'
 printf 'version: 1\nhost:\n  services:\n    - kind: rdp\n      port: 3390\n' >"$W/p.yaml"
 # The command itself must work, unmarked, so a crash is a FAIL and not #557.
-ok "declared port 3390: setup prints its steps as JSON" -- "outcomes setup $W/p.yaml | json '\"steps\" in j'"
+ok "declared port 3390: setup prints its steps as JSON" -- "outcomes setup $W/p.yaml | json 'len(j[\"steps\"])>0'"
 ok "declared port no step applies is not converged" 557 -- "outcomes setup $W/p.yaml | json '[s for s in j[\"steps\"] if s[\"outcome\"] in (\"failed\",\"manual\") and \"3390\" in s[\"message\"]]'"
 
 # Upgrade: the previous release's .env still applies from its directory.
