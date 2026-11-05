@@ -13,7 +13,7 @@ type SetupFlags = Flags
 // SetupResult holds the result of a host setup operation.
 type SetupResult struct {
 	RDPPort    int
-	ControlURL string // the declared control plane, for the descriptor
+	ControlURL string // the control plane for the descriptor: a URL, ControlPlaneSaaS, or "" when unknown
 	Steps      []SetupStep
 }
 
@@ -30,7 +30,7 @@ type SetupStep struct {
 // Setup performs platform-specific host setup.
 // The logger may be nil — callers that don't need structured output can pass nil.
 func Setup(cfg Config, logger *slog.Logger) (SetupResult, error) {
-	result := setupFor(runtime.GOOS, cfg, execRunner{})
+	result := setupOn(runtime.GOOS, cfg, execRunner{})
 	logSetupSteps(logger, result.Steps)
 	return result, nil
 }
@@ -43,7 +43,7 @@ type CheckResult struct {
 	RDPEnabled  bool
 	FirewallOK  bool
 	TailscaleUp bool
-	ControlURL  string // the declared control plane, for the descriptor
+	ControlURL  string // as SetupResult.ControlURL
 	// Published maps "kind:port" to whether host serve publishes that service;
 	// nil when no host.mesh.health_addr was probed.
 	Published map[string]bool
@@ -70,7 +70,7 @@ type Service struct {
 // host's actual setup instead of assuming defaults.
 // The logger may be nil — callers that don't need structured output can pass nil.
 func Check(cfg Config, logger *slog.Logger) (CheckResult, error) {
-	result := checkFor(runtime.GOOS, cfg, execRunner{})
+	result := checkOn(runtime.GOOS, cfg, execRunner{})
 	if logger != nil {
 		logger.Info("host check",
 			"tailscale_up", result.TailscaleUp,
