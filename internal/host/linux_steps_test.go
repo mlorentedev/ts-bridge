@@ -458,9 +458,9 @@ func TestSetupForLinux(t *testing.T) {
 			message:  "but holds 2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
 		},
 		{
-			name:     "iptables, no ts-input jump: one read",
+			name:     "iptables, no ts-input jump and no chain: appended",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "run "+iptAppend, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "lookpath nft", "run "+iptAppend, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
@@ -486,7 +486,7 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "xrdp missing, no systemctl, no backend, Tailscale down",
 			runner:   &recordingRunner{elevated: true, fail: map[string]bool{"tailscale ip -4": true}},
-			calls:    []string{"lookpath systemctl", "lookpath xrdp", "lookpath ufw", "lookpath iptables", "output tailscale ip -4"},
+			calls:    []string{"lookpath systemctl", "lookpath xrdp", "lookpath ufw", "lookpath iptables", "lookpath nft", "output tailscale ip -4"},
 			outcomes: []Outcome{OutcomeFailed, OutcomeFailed, OutcomeFailed},
 		},
 		{
@@ -733,9 +733,9 @@ func TestCheckForLinux(t *testing.T) {
 			message:  iptChain,
 		},
 		{
-			name:     "iptables, no ts-input jump: one read",
+			name:     "iptables, no ts-input jump and no chain",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "lookpath nft"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
@@ -1231,6 +1231,92 @@ func TestReadUFWCopiesAdmit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := readUFW(tc.runner, 3389).copiesAdmit; got != tc.want {
 				t.Errorf("copiesAdmit = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// nftTSInputRead is the command that finds tailscaled's ts-input in the nftables
+// table it shares with iptables-nft; nftTSInput is what it prints, rendered
+// from the rule tailscale.com v1.104.4 builds (util/linuxfw/nftables_runner.go,
+// AddChains and createAcceptIncomingPacketRule). Not captured from a live host:
+// #526 keeps the capture open.
+const (
+	nftTSInputRead = "nft list chain ip filter ts-input"
+	nftTSInput     = "table ip filter {\n\tchain ts-input {\n\t\tiifname \"tailscale0\" counter packets 0 bytes 0 accept\n\t}\n}\n"
+	iptNoJump      = "-P INPUT ACCEPT\n"
+)
+
+// TestReadIptablesTailscaledModes pins the two tailscaled rule sets the
+// iptables read cannot see (#526). nodivert (iptables_runner.go AddHooks is
+// skipped) leaves ts-input without a jump, and nftables mode keeps it where
+// `iptables -S INPUT` never prints it. Either is an unknown read, never an
+// absent one, so setup does not append a rule that opens every interface.
+func TestReadIptablesTailscaledModes(t *testing.T) {
+	ipt, nft := map[string]bool{"iptables": true}, map[string]bool{"iptables": true, "nft": true}
+	tests := []struct {
+		name   string
+		runner *recordingRunner
+		want   ruleState
+		reason string
+	}{
+		{"nodivert: ts-input exists, INPUT does not reach it", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump, iptChain: tsInputDefault}}, ruleUnknown, "ts-input exists but INPUT does not jump to it"},
+		{"nodivert: an allow in INPUT still decides", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", iptChain: tsInputDefault}}, rulePresent, ""},
+		{"nodivert: a deny in INPUT still decides", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump + "-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n", iptChain: tsInputDefault}}, ruleBlocked, ""},
+		{"no ts-input chain, nft not installed: absent", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1}}, ruleAbsent, ""},
+		{"ts-input unreadable for another reason", &recordingRunner{elevated: true, onPath: ipt, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 4}}, ruleUnknown, iptChain},
+		{"nftables mode: ts-input only in nft", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump, nftTSInputRead: nftTSInput}, exit: map[string]int{iptChain: 1}}, ruleUnknown, "nftables"},
+		{"nft installed, no ts-input in it: absent", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 1}}, ruleAbsent, ""},
+		{"nft unreadable for another reason", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 4}}, ruleUnknown, nftTSInputRead},
+		{"no iptables, nft holds ts-input", &recordingRunner{elevated: true, onPath: map[string]bool{"nft": true}, output: map[string]string{nftTSInputRead: nftTSInput}}, ruleUnknown, "nftables"},
+		{"ufw host, nodivert", &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true}, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: iptNoJump, iptChain: tsInputDefault}}, ruleUnknown, "ts-input exists but INPUT does not jump to it"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := readLinuxFirewall(tt.runner, 3389)
+			if got.state != tt.want {
+				t.Errorf("state = %v, want %v (reason %q)", got.state, tt.want, got.reason)
+			}
+			if !strings.Contains(got.reason, tt.reason) {
+				t.Errorf("reason %q does not name %q", got.reason, tt.reason)
+			}
+		})
+	}
+}
+
+// TestFirewallStepsTailscaledModes pins that neither step writes on a rule set
+// it cannot read (#526): setup fails and check is unverified, both naming the mode.
+func TestFirewallStepsTailscaledModes(t *testing.T) {
+	newRunner := func(out map[string]string, exit map[string]int) *recordingRunner {
+		return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "nft": true}, output: out, exit: exit}
+	}
+	tests := []struct {
+		name   string
+		runner func() *recordingRunner
+		mode   string
+	}{
+		{"nodivert", func() *recordingRunner {
+			return newRunner(map[string]string{iptRead: iptNoJump, iptChain: tsInputDefault}, nil)
+		}, "ts-input exists but INPUT does not jump to it"},
+		{"nftables", func() *recordingRunner {
+			return newRunner(map[string]string{iptRead: iptNoJump, nftTSInputRead: nftTSInput}, map[string]int{iptChain: 1})
+		}, "nftables mode"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := tt.runner()
+			setup := firewallSetupStep(r, 3389)
+			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") }) {
+				t.Errorf("setup wrote on an unreadable rule set: %v", r.calls)
+			}
+			check := firewallCheckStep(readLinuxFirewall(tt.runner(), 3389), 3389)
+			if setup.Outcome != OutcomeFailed || check.Outcome != OutcomeUnverified {
+				t.Errorf("outcomes = %v, %v, want failed, unverified", setup.Outcome, check.Outcome)
+			}
+			for _, step := range []SetupStep{setup, check} {
+				if !strings.Contains(step.Message, tt.mode) || !strings.Contains(step.Fix, "3389") {
+					t.Errorf("step %q / fix %q does not name %q and the port", step.Message, step.Fix, tt.mode)
+				}
 			}
 		})
 	}
