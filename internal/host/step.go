@@ -57,6 +57,21 @@ func newStep(name string, outcome Outcome, message, fix string) SetupStep {
 	return SetupStep{Name: name, Outcome: outcome, Success: outcome.Succeeded(), Message: message, Fix: fix}
 }
 
+// setupOn is setupFor plus the control plane the descriptor carries. It sits
+// outside setupFor so the step command sequences stay exactly the steps.
+func setupOn(goos string, cfg Config, r Runner) SetupResult {
+	result := setupFor(goos, cfg, r)
+	result.ControlURL = resolveControlPlane(cfg.ControlURL, r)
+	return result
+}
+
+// checkOn is checkFor plus the control plane the descriptor carries.
+func checkOn(goos string, cfg Config, r Runner) CheckResult {
+	result := checkFor(goos, cfg, r)
+	result.ControlURL = resolveControlPlane(cfg.ControlURL, r)
+	return result
+}
+
 // setupFor builds and runs the setup steps of goos. darwin has none until #459.
 func setupFor(goos string, cfg Config, r Runner) SetupResult {
 	var result SetupResult
