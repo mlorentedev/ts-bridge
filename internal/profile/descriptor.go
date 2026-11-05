@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"ts-bridge/internal/controlurl"
 )
 
 const (
@@ -26,6 +28,8 @@ type Descriptor struct {
 }
 
 // ParseError is returned by Parse when the input is not a valid descriptor.
+// Input is the descriptor with any user info masked: a shared descriptor can
+// carry credentials, and this error is printed and logged.
 type ParseError struct {
 	Input  string
 	Reason string
@@ -61,7 +65,7 @@ func (d Descriptor) String() string {
 // silently ignored (tolerant reader). Returns *ParseError on any malformation.
 func Parse(raw string) (Descriptor, error) {
 	wrap := func(reason string) (Descriptor, error) {
-		return Descriptor{}, &ParseError{Input: raw, Reason: reason}
+		return Descriptor{}, &ParseError{Input: redactDescriptor(raw), Reason: reason}
 	}
 
 	if raw == "" {
@@ -70,10 +74,12 @@ func Parse(raw string) (Descriptor, error) {
 
 	u, err := url.Parse(raw)
 	if err != nil {
-		return wrap(fmt.Sprintf("malformed URL: %v", err))
+		// err is a *url.Error quoting the whole input, so it is not echoed.
+		return wrap("malformed URL")
 	}
 	if u.Scheme != scheme {
-		return wrap(fmt.Sprintf("expected scheme %q, got %q", scheme, u.Scheme))
+		// The scheme found is not echoed: for "user:secret@host" it is the user.
+		return wrap(fmt.Sprintf("expected scheme %q", scheme))
 	}
 
 	host := u.Hostname()
@@ -95,18 +101,14 @@ func Parse(raw string) (Descriptor, error) {
 	if !ok || len(cp) == 0 {
 		return wrap("missing required query param cp")
 	}
-	controlURL := cp[0]
-	if strings.EqualFold(controlURL, cpSaas) {
-		controlURL = ""
+	controlURL, reason := controlURLFromParam(cp[0])
+	if reason != "" {
+		return wrap(reason)
 	}
 
-	version := 1
-	if vs := q.Get("v"); vs != "" {
-		v, err := strconv.Atoi(vs)
-		if err != nil || v < 1 {
-			return wrap(fmt.Sprintf("invalid version %q", vs))
-		}
-		version = v
+	version, reason := versionFromParam(q.Get("v"))
+	if reason != "" {
+		return wrap(reason)
 	}
 
 	return Descriptor{
@@ -115,4 +117,48 @@ func Parse(raw string) (Descriptor, error) {
 		ControlURL: controlURL,
 		Version:    version,
 	}, nil
+}
+
+// controlURLFromParam turns the cp value into the descriptor's control URL
+// ("" for Tailscale SaaS) or, when connect and the host file would refuse it,
+// the reason it is refused.
+func controlURLFromParam(cp string) (controlURL, reason string) {
+	if strings.EqualFold(cp, cpSaas) {
+		return "", ""
+	}
+	if err := controlurl.Validate(cp); err != nil {
+		return "", fmt.Sprintf("query param cp: %v", err)
+	}
+	return cp, ""
+}
+
+// versionFromParam reads the v param, defaulting to 1 when it is absent.
+func versionFromParam(vs string) (version int, reason string) {
+	if vs == "" {
+		return 1, ""
+	}
+	v, err := strconv.Atoi(vs)
+	if err != nil || v < 1 {
+		return 0, fmt.Sprintf("invalid version %q", vs)
+	}
+	return v, ""
+}
+
+// redactDescriptor masks the user info of the descriptor and of its cp control
+// URL. A value url.Parse cannot read is replaced rather than echoed, because
+// what it could not split may still hold a credential.
+func redactDescriptor(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Opaque != "" {
+		return "(unparseable)"
+	}
+	if u.User != nil {
+		u.User = url.User("redacted")
+	}
+	q := u.Query()
+	if cp := q.Get("cp"); cp != "" && !strings.EqualFold(cp, cpSaas) {
+		q.Set("cp", controlurl.Redact(cp))
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
 }
