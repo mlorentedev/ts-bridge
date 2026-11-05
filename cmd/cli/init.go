@@ -706,11 +706,18 @@ func buildEnvContent(f initFlags, values map[string]string) string {
 	return sb.String()
 }
 
+// isTerminal reports whether fd is a terminal. A variable so tests can say which
+// descriptor is one: in CI every real descriptor is not, which would hide a
+// check made on the wrong stream.
+var isTerminal = func(fd uintptr) bool {
+	return term.IsTerminal(int(fd)) // #nosec G115 -- a file descriptor fits in int
+}
+
 // isNonInteractive returns true if stdin is not a terminal (piped input, CI, etc.).
 func isNonInteractive(cmd *cobra.Command) bool {
 	in := cmd.InOrStdin()
 	if f, ok := in.(*os.File); ok {
-		return !term.IsTerminal(int(f.Fd()))
+		return !isTerminal(f.Fd())
 	}
 	return true
 }

@@ -15,11 +15,11 @@ func TestDiagnoseTailscaleAPIError(t *testing.T) {
 		remedSubstr string
 	}{
 		{
-			name:        "invalid auth key",
+			name:        "invalid API key",
 			err:         errors.New("401 Unauthorized: api key does not exist"),
 			wantHint:    true,
 			wantRemed:   true,
-			hintSubstr:  "auth key rejected",
+			hintSubstr:  "API key rejected",
 			remedSubstr: "devices:read",
 		},
 		{
