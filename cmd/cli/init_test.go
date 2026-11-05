@@ -973,6 +973,12 @@ func TestInitWithoutTTYIsActionable(t *testing.T) {
 			t.Errorf("error = %q; want it to contain %q", runErr, want)
 		}
 	}
+	// The hint names flags by text; make the test fail if init stops defining them.
+	for _, name := range []string{"auth-key-file", "target"} {
+		if newInitCmd().Flags().Lookup(name) == nil {
+			t.Errorf("the refusal tells users to pass --%s but init does not define it", name)
+		}
+	}
 	if strings.Contains(stdout, "Auth key") {
 		t.Errorf("stdout = %q; the wizard prompted before refusing", stdout)
 	}
