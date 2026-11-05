@@ -140,9 +140,10 @@ For automation, use `--json`: `ts-bridge host setup --json` and `ts-bridge host 
 On Linux, use `/etc/ts-bridge/host.yaml`.
 
 **Upgrading from 1.x:** `host init` now requires `--config` and writes the YAML host file
-instead of `TS_HOST_*` lines in `.env`. A script that runs `host init` without `--config`
-fails. `TS_HOST_*` values already in a `.env` still apply to `host setup` and `host check`,
-above the host file, so remove them once their values are in the file.
+instead of `TS_HOST_*` lines in `.env`. On Windows and Linux, a script that runs `host init`
+without `--config` fails (on macOS it still writes nothing, see #459). `host setup` and
+`host check` still read `TS_HOST_*` from a `.env` in the current working directory, above the
+host file, so remove those lines once their values are in the file.
 
 **Host on a network that blocks the control plane:** when native Tailscale cannot enrol
 because the network sinkholes or TLS-inspects a self-hosted control plane, run
