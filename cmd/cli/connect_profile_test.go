@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"ts-bridge/internal/config"
 	"ts-bridge/internal/profile"
 )
@@ -173,5 +175,45 @@ func TestConnectWithoutProfileDoesNotSuggestAuthSet(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "auth set") {
 		t.Fatalf("error = %q; must not suggest auth set without --profile", err)
+	}
+}
+
+// connect and browser share loadCommandProfile; a profile that does not exist
+// yet must name the paste-runnable command that creates it.
+func TestProfileCommandsUnknownProfileNameHowToCreateIt(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  func() *cobra.Command
+		args []string
+	}{
+		{"connect", newConnectCmd, []string{"--profile", "office"}},
+		{"browser", newBrowserCmd, []string{"--profile", "office", "--url", "https://forge.example.internal/"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			oldStore, oldRunner, oldLogger := defaultProfileStorePath, Runner, LoggerInit
+			t.Cleanup(func() { defaultProfileStorePath, Runner, LoggerInit = oldStore, oldRunner, oldLogger })
+			defaultProfileStorePath = filepath.Join(t.TempDir(), "profiles.yaml")
+			LoggerInit = nil
+			Runner = func(config.Config) error { return nil }
+			t.Setenv("TS_AUTHKEY", "")
+			t.Setenv("TS_TARGET", "")
+
+			cmd := tt.cmd()
+			cmd.SetArgs(tt.args)
+			cmd.SilenceUsage, cmd.SilenceErrors = true, true
+			err := cmd.Execute()
+			if !errors.Is(err, profile.ErrNotFound) {
+				t.Fatalf("error = %v; want the unknown-profile error", err)
+			}
+			_, hint, found := strings.Cut(err.Error(), "create it first: ")
+			if !found || !strings.Contains(hint, `ts-bridge import office "tsb://HOST:3389?cp=saas"`) {
+				t.Fatalf("error = %q; want a paste-runnable `ts-bridge import office \"tsb://HOST:3389?cp=saas\"`", err)
+			}
+			if strings.ContainsAny(hint, "<>") {
+				t.Errorf("hint %q contains shell redirection characters", hint)
+			}
+		})
 	}
 }
