@@ -1,6 +1,9 @@
 package host
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -227,6 +230,49 @@ func TestSanitizeFirewallRule_SpecialChars(t *testing.T) {
 			_, err := sanitizeFirewallRule(s)
 			if err == nil {
 				t.Errorf("sanitizeFirewallRule(%q) should reject special char", s)
+			}
+		})
+	}
+}
+
+// TestCheckFor_Elevated: the result records whether the check ran with
+// privileges, so its report can tell "off" from "not readable without them".
+func TestCheckFor_Elevated(t *testing.T) {
+	for _, elevated := range []bool{true, false} {
+		got := checkFor("linux", Config{Port: 3389}, &recordingRunner{elevated: elevated})
+		if got.Elevated != elevated {
+			t.Errorf("elevated=%t: Elevated = %t", elevated, got.Elevated)
+		}
+	}
+}
+
+// TestLogCheck_DeclaredServices: the check log names the declared services, so
+// a service that is declared but not enabled does not read as none declared.
+func TestLogCheck_DeclaredServices(t *testing.T) {
+	tests := []struct {
+		name   string
+		result CheckResult
+		want   []string
+	}{
+		{
+			name:   "declared but disabled",
+			result: CheckResult{Services: []Service{{Kind: ServiceRDP, Port: 3389}}},
+			want:   []string{"rdp_port=0", "services=rdp:3389", "elevated=false"},
+		},
+		{
+			name:   "none declared",
+			result: CheckResult{Elevated: true},
+			want:   []string{`services=""`, "elevated=true"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logCheck(slog.New(slog.NewTextHandler(&buf, nil)), tt.result)
+			for _, want := range tt.want {
+				if !strings.Contains(buf.String(), want) {
+					t.Errorf("log lacks %q:\n%s", want, buf.String())
+				}
 			}
 		})
 	}
