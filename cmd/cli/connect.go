@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -142,7 +143,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	// Merge: flags > env > yaml > profile > defaults.
 	cfg, err := config.Merge(yamlCfg, flags)
 	if err != nil {
-		return err
+		return withAuthSetHint(err, profileName)
 	}
 
 	// --quiet is a console-output concern (like --profile, resolved
@@ -170,6 +171,15 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("bridge runner not initialized (call main.go first)")
 }
 
+// withAuthSetHint points a missing-credential error at the managed path when a
+// profile is selected, since the profile is what auth set attaches a key to.
+func withAuthSetHint(err error, profileName string) error {
+	if profileName == "" || !errors.Is(err, config.ErrAuthKeyRequired) {
+		return err
+	}
+	return fmt.Errorf("%w\nstore one for the profile: ts-bridge auth set --profile %s", err, profileName)
+}
+
 func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, profileName string) (string, error) {
 	selectedProfile, err := loadCommandProfile(profileName)
 	if err != nil {
@@ -185,8 +195,13 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 	if flags.AuthKey != "" || flags.AuthKeyFile != "" || os.Getenv("TS_AUTHKEY") != "" {
 		return selectedProfile.Target, nil
 	}
-	flags.ProfileAuthKey, err = loadManagedProfileCredential(selectedProfile)
-	return selectedProfile.Target, err
+	key, err := loadManagedProfileCredential(selectedProfile)
+	if err != nil {
+		// A deleted or corrupted managed key is fixed by storing it again.
+		return "", fmt.Errorf("%w\nstore it again: ts-bridge auth set --profile %s", err, profileName)
+	}
+	flags.ProfileAuthKey = key
+	return selectedProfile.Target, nil
 }
 
 // sameConnectTarget reports whether two targets name one destination: host names
