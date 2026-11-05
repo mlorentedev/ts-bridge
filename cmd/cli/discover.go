@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -24,6 +26,15 @@ func newDiscoverCmd() *cobra.Command {
 Queries the Tailscale API (or Headscale if TS_CONTROL_URL points to a
 Headscale instance) to list all authorized devices.
 
+The control-plane API takes an API key, not the node auth key that connect
+uses (TS_AUTHKEY is never sent to it):
+  Tailscale SaaS   TS_API_KEY, --api-key or --api-key-file, plus TS_TAILNET
+                   or --tailnet
+  Headscale        TS_HEADSCALE_API_KEY, --api-key or --api-key-file, with
+                   TS_CONTROL_URL set to the Headscale server
+A Headscale control URL without its API key is an error; it never falls back
+to the Tailscale SaaS API.
+
 Interactive mode (default): shows a numbered list, type a number or hostname
 to select, then optionally update .env with the chosen target.
 
@@ -34,8 +45,12 @@ Flags:
   --filter TEXT   Filter by hostname or IP substring
   --auto          Auto-select first matching host and update .env (no prompt)
   --port PORT     RDP port to use with --auto (default 3389)
-  --auth-key KEY  Tailscale auth key (overrides TS_AUTHKEY)
+  --api-key KEY   Control-plane API key (overrides the environment)
+  --api-key-file FILE  Read the API key from FILE (preferred over --api-key)
   --tailnet NAME  Tailscale tailnet name (e.g. "mycompany.ts.net")
+
+Without a terminal on stdin, discover does not offer to update .env; pass
+--auto to do it on purpose.
 
 Examples:
   ts-bridge discover
@@ -50,19 +65,23 @@ Examples:
 	cmd.Flags().String("filter", "", "Filter by hostname or IP substring")
 	cmd.Flags().Bool("auto", false, "Auto-select first matching host and update .env")
 	cmd.Flags().Int("port", 3389, "RDP port to use with --auto")
-	cmd.Flags().String("auth-key", "", "Tailscale auth key (overrides TS_AUTHKEY) — WARNING: visible in process list")
+	cmd.Flags().String("api-key", "", "Control-plane API key (overrides TS_API_KEY / TS_HEADSCALE_API_KEY) — WARNING: visible in process list")
+	cmd.Flags().String("api-key-file", "", "Read the control-plane API key from a file (secure alternative to --api-key)")
+	cmd.Flags().String("auth-key", "", "Deprecated alias of --api-key — WARNING: visible in process list")
+	_ = cmd.Flags().MarkDeprecated("auth-key", "use --api-key or --api-key-file: discover calls the control-plane API, which takes an API key, not a node auth key")
 	cmd.Flags().String("tailnet", "", "Tailscale tailnet name (e.g. mycompany.ts.net)")
 	return cmd
 }
 
 // discoverFlags holds parsed flags for the discover command.
 type discoverFlags struct {
-	JSON    bool
-	Filter  string
-	Auto    bool
-	Port    int
-	AuthKey string
-	Tailnet string
+	JSON       bool
+	Filter     string
+	Auto       bool
+	Port       int
+	APIKey     string
+	APIKeyFile string
+	Tailnet    string
 }
 
 func runDiscover(cmd *cobra.Command, args []string) error {
@@ -130,17 +149,34 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 		return updateEnvFile(".env", target, flags.Port, controlURL)
 	}
 
-	// Ask user to update .env.
-	fmt.Printf("Add TS_TARGET=%s:%d to .env? [Y/n] ", target, flags.Port)
-	var response string
-	_, _ = fmt.Scanln(&response)
-	response = strings.ToLower(strings.TrimSpace(response))
-	if response == "n" || response == "no" {
+	if !promptEnvUpdate(cmd, target, flags.Port) {
 		fmt.Println("Skipped.")
 		return nil
 	}
 
 	return updateEnvFile(".env", target, flags.Port, controlURL)
+}
+
+// promptEnvUpdate asks whether to add the target to .env. Without a terminal
+// on stdin it does not ask at all: a closed or piped stdin is not consent.
+func promptEnvUpdate(cmd *cobra.Command, target string, port int) bool {
+	if isNonInteractive(cmd) {
+		fmt.Fprintf(cmd.OutOrStdout(), "stdin is not a terminal; not updating .env (pass --auto to add TS_TARGET=%s:%d)\n", target, port)
+		return false
+	}
+	return confirmEnvUpdate(cmd.InOrStdin(), cmd.OutOrStdout(), target, port)
+}
+
+// confirmEnvUpdate prompts [Y/n] and reads one line. A bare Enter takes the
+// default (yes); EOF without an answer is a no.
+func confirmEnvUpdate(in io.Reader, out io.Writer, target string, port int) bool {
+	fmt.Fprintf(out, "Add TS_TARGET=%s:%d to .env? [Y/n] ", target, port)
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && line == "" {
+		return false
+	}
+	response := strings.ToLower(strings.TrimSpace(line))
+	return response != "n" && response != "no"
 }
 
 func parseDiscoverFlags(cmd *cobra.Command) (discoverFlags, error) {
@@ -150,7 +186,11 @@ func parseDiscoverFlags(cmd *cobra.Command) (discoverFlags, error) {
 	f.Filter, _ = cmd.Flags().GetString("filter")
 	f.Auto, _ = cmd.Flags().GetBool("auto")
 	f.Port, _ = cmd.Flags().GetInt("port")
-	f.AuthKey, _ = cmd.Flags().GetString("auth-key")
+	f.APIKey, _ = cmd.Flags().GetString("api-key")
+	if f.APIKey == "" {
+		f.APIKey, _ = cmd.Flags().GetString("auth-key")
+	}
+	f.APIKeyFile, _ = cmd.Flags().GetString("api-key-file")
 	f.Tailnet, _ = cmd.Flags().GetString("tailnet")
 
 	if f.Port < 1 || f.Port > 65535 {
@@ -160,43 +200,67 @@ func parseDiscoverFlags(cmd *cobra.Command) (discoverFlags, error) {
 	return f, nil
 }
 
-// discoverList fetches devices using auto-detection (Tailscale or Headscale).
+// discoverList fetches devices from the control plane TS_CONTROL_URL names:
+// Headscale when it points away from tailscale.com, Tailscale SaaS otherwise.
 func discoverList(ctx context.Context, flags discoverFlags) ([]discover.Device, error) {
-	authKey := flags.AuthKey
-	if authKey == "" {
-		authKey = os.Getenv("TS_AUTHKEY")
+	controlURL := os.Getenv("TS_CONTROL_URL")
+	if controlURL != "" && !strings.Contains(controlURL, "tailscale.com") {
+		return discoverHeadscale(ctx, flags, controlURL)
+	}
+	return discoverTailscale(ctx, flags)
+}
+
+func discoverHeadscale(ctx context.Context, flags discoverFlags, controlURL string) ([]discover.Device, error) {
+	apiKey, err := discoverAPIKey(flags, "TS_HEADSCALE_API_KEY")
+	if err != nil {
+		return nil, err
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("Headscale API key is required for the configured TS_CONTROL_URL (set TS_HEADSCALE_API_KEY, --api-key or --api-key-file)")
+	}
+	devices, err := discover.ListHeadscaleDevices(ctx, apiKey, controlURL)
+	if err != nil {
+		return nil, fmt.Errorf("discover from Headscale: %w", err)
+	}
+	return convertHeadscaleDevices(devices), nil
+}
+
+func discoverTailscale(ctx context.Context, flags discoverFlags) ([]discover.Device, error) {
+	apiKey, err := discoverAPIKey(flags, "TS_API_KEY")
+	if err != nil {
+		return nil, err
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("Tailscale API key is required (set TS_API_KEY, --api-key or --api-key-file); TS_AUTHKEY is a node key and cannot list devices")
 	}
 	tailnet := flags.Tailnet
 	if tailnet == "" {
 		tailnet = os.Getenv("TS_TAILNET")
 	}
-	controlURL := os.Getenv("TS_CONTROL_URL")
-	headscaleAPIKey := os.Getenv("TS_HEADSCALE_API_KEY")
-
-	// Auto-detect: if TS_CONTROL_URL looks like Headscale, use Headscale.
-	isHeadscale := controlURL != "" && !strings.Contains(controlURL, "tailscale.com")
-
-	if isHeadscale && headscaleAPIKey != "" {
-		devices, err := discover.ListHeadscaleDevices(ctx, headscaleAPIKey, controlURL)
-		if err != nil {
-			return nil, fmt.Errorf("discover from Headscale: %w", err)
-		}
-		return convertHeadscaleDevices(devices), nil
-	}
-
-	// Default: try Tailscale.
-	if authKey == "" {
-		return nil, fmt.Errorf("auth key is required (set TS_AUTHKEY or --auth-key)")
-	}
 	if tailnet == "" {
 		return nil, fmt.Errorf("tailnet name is required (set TS_TAILNET or --tailnet)")
 	}
-
-	devices, err := discover.ListDevices(ctx, authKey, tailnet)
+	devices, err := discover.ListDevices(ctx, apiKey, tailnet)
 	if err != nil {
 		return nil, fmt.Errorf("discover from Tailscale: %w", err)
 	}
 	return devices, nil
+}
+
+// discoverAPIKey resolves the control-plane API key: --api-key-file, then
+// --api-key, then the environment variable for the control plane in use.
+func discoverAPIKey(flags discoverFlags, envName string) (string, error) {
+	if flags.APIKeyFile != "" {
+		key, err := readAuthKeyFile(flags.APIKeyFile)
+		if err != nil {
+			return "", fmt.Errorf("--api-key-file: %w", err)
+		}
+		return key, nil
+	}
+	if flags.APIKey != "" {
+		return flags.APIKey, nil
+	}
+	return os.Getenv(envName), nil
 }
 
 // filterDevices returns devices whose hostname or IP contains the filter string.

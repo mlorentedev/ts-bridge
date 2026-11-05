@@ -43,7 +43,7 @@ setup() {
   # environment can never let a test satisfy validation and reach a
   # long-running or network path (the bridge runner, or the tailnet API).
   # Harmless for the other commands, which take their inputs from flags.
-  unset TS_TARGET TS_AUTHKEY TS_TAILNET TS_CONTROL_URL TS_HEADSCALE_API_KEY
+  unset TS_TARGET TS_AUTHKEY TS_TAILNET TS_CONTROL_URL TS_HEADSCALE_API_KEY TS_API_KEY
 }
 
 # ---------------------------------------------------------------------------
@@ -347,27 +347,35 @@ TARGET="100.64.0.1:3389"
 # ---------------------------------------------------------------------------
 # discover queries the tailnet API, and its default mode is interactive (it
 # prints a host list and prompts). Both are reached only AFTER a successful
-# device fetch, which needs a valid auth key + tailnet + network. setup()
-# clears the relevant env vars and these tests never supply both an auth key
+# device fetch, which needs a valid API key + tailnet + network. setup()
+# clears the relevant env vars and these tests never supply both an API key
 # and a tailnet, so every one fails during flag validation or the pre-fetch
 # required-input checks — no network call, no prompt. Filter/auto selection
 # against a live tailnet is covered by the QA-013 e2e run (see qa-coverage.md).
 
-@test "discover: with no auth key, fails asking for one" {
+@test "discover: with no API key, fails naming the key it needs" {
   run "${BIN}" discover
   assert_failure
-  assert_contains "auth key is required"
+  assert_contains "Tailscale API key is required"
+  assert_contains "TS_API_KEY"
 }
 
-@test "discover --json: with no auth key, fails and emits no device JSON" {
+@test "discover: a Headscale control URL without its API key does not query SaaS" {
+  TS_CONTROL_URL=http://127.0.0.1:1 run "${BIN}" discover
+  assert_failure
+  assert_contains "TS_HEADSCALE_API_KEY"
+  refute_contains "tailnet name is required"
+}
+
+@test "discover --json: with no API key, fails and emits no device JSON" {
   run "${BIN}" discover --json
   assert_failure
-  assert_contains "auth key is required"
+  assert_contains "API key is required"
   refute_contains "hostname"
 }
 
-@test "discover: with an auth key but no tailnet, fails asking for one" {
-  run "${BIN}" discover --auth-key tskey-x
+@test "discover: with an API key but no tailnet, fails asking for one" {
+  run "${BIN}" discover --api-key tskey-x
   assert_failure
   assert_contains "tailnet name is required"
 }
@@ -391,6 +399,8 @@ TARGET="100.64.0.1:3389"
   assert_contains "--filter"
   assert_contains "--auto"
   assert_contains "--tailnet"
+  assert_contains "--api-key-file"
+  assert_contains "TS_HEADSCALE_API_KEY"
 }
 
 # ---------------------------------------------------------------------------

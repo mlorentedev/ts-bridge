@@ -1,6 +1,9 @@
 package discover
 
 import (
+	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -116,5 +119,25 @@ func TestConvertTailscaleDevices_ExternalDevice(t *testing.T) {
 	}
 	if result[0].Authorized {
 		t.Error("external device should not be authorized")
+	}
+}
+
+func TestListDevices_DiagnosedErrorWrapsCause(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	_, err := ListDevices(ctx, "tskey-api-test", "example.ts.net")
+	if err == nil {
+		t.Fatal("expected an error from an expired context")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("errors.Is(err, DeadlineExceeded) = false for %v", err)
+	}
+}
+
+func TestListDevices_MissingKeyNamesAPIKey(t *testing.T) {
+	_, err := ListDevices(context.Background(), "", "example.ts.net")
+	if err == nil || !strings.Contains(err.Error(), "API key") {
+		t.Fatalf("error = %v; want it to say an API key is required", err)
 	}
 }

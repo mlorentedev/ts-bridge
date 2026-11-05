@@ -74,6 +74,7 @@ func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) 
 	_ = probe.Close()
 
 	cmd := deps.commandContext(childCtx, sshPath, args...)
+	cmd.Env = withoutSecrets(cmd.Environ())
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

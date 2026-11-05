@@ -40,7 +40,7 @@ func ListHeadscaleDevices(ctx context.Context, apiKey, controlURL string) ([]Hea
 	resp, err := client.Do(req)
 	if err != nil {
 		if hint, remediation := diagnoseHeadscaleAPIError(err); hint != "" {
-			return nil, fmt.Errorf("%s — %s", err, remediation)
+			return nil, fmt.Errorf("%w — %s", err, remediation)
 		}
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
