@@ -9,20 +9,21 @@ import (
 	tsv2 "tailscale.com/client/tailscale/v2"
 )
 
-// ListDevices fetches all devices from the Tailscale API.
-func ListDevices(ctx context.Context, authKey, tailnet string) ([]Device, error) {
-	if authKey == "" {
-		return nil, fmt.Errorf("auth key is required")
+// ListDevices fetches all devices from the Tailscale API. apiKey is an API
+// access token, not the node auth key that connect uses.
+func ListDevices(ctx context.Context, apiKey, tailnet string) ([]Device, error) {
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key is required")
 	}
 	if tailnet == "" {
 		return nil, fmt.Errorf("tailnet is required")
 	}
 
-	client := &tsv2.Client{Tailnet: tailnet, APIKey: authKey}
+	client := &tsv2.Client{Tailnet: tailnet, APIKey: apiKey}
 	devices, err := client.Devices().List(ctx)
 	if err != nil {
 		if hint, remediation := diagnoseTailscaleAPIError(err); hint != "" {
-			return nil, fmt.Errorf("%s — %s", err, remediation)
+			return nil, fmt.Errorf("%w — %s", err, remediation)
 		}
 		return nil, fmt.Errorf("fetch devices: %w", err)
 	}
@@ -88,7 +89,7 @@ func diagnoseTailscaleAPIError(err error) (hint, remediation string) {
 		strings.Contains(msg, "unauthorized"),
 		strings.Contains(msg, "401"),
 		strings.Contains(msg, "403"):
-		return "auth key rejected by Tailscale API (invalid, expired, or missing devices:read scope)",
+		return "API key rejected by Tailscale API (invalid, expired, or missing devices:read scope)",
 			"generate a new API key at https://login.tailscale.com/admin/settings/keys with the \"devices:read\" scope"
 	case strings.Contains(msg, "not found"),
 		strings.Contains(msg, "404"):
