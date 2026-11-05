@@ -923,7 +923,7 @@ func TestPrintNextSteps(t *testing.T) {
 	}
 }
 
-// Every command that accepts an inline --auth-key must warn that the value is
+// Every command that accepts an inline --auth-key or --api-key must warn that the value is
 // visible in the process list. Walking the whole tree instead of naming commands
 // is the point: discover took the flag without the warning because the check
 // named only init.
@@ -931,10 +931,12 @@ func TestAuthKeyFlags_WarnProcessList(t *testing.T) {
 	var walk func(c *cobra.Command) int
 	walk = func(c *cobra.Command) int {
 		n := 0
-		if f := c.Flags().Lookup("auth-key"); f != nil {
-			n++
-			if !strings.Contains(f.Usage, "visible in process list") {
-				t.Errorf("%q: --auth-key usage lacks the process-list warning: %q", c.CommandPath(), f.Usage)
+		for _, name := range []string{"auth-key", "api-key"} {
+			if f := c.Flags().Lookup(name); f != nil {
+				n++
+				if !strings.Contains(f.Usage, "visible in process list") {
+					t.Errorf("%q: --%s usage lacks the process-list warning: %q", c.CommandPath(), name, f.Usage)
+				}
 			}
 		}
 		for _, sub := range c.Commands() {
