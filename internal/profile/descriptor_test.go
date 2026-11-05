@@ -165,6 +165,8 @@ func TestParseErrorsDoNotEchoCredentials(t *testing.T) {
 		"tsb://user:secret@office:notaport?cp=saas",
 		"http://user:secret@office:3389?cp=saas",
 		"secret:x@office:3389?cp=saas",
+		"tsb://office:3389?cp=https://user:secret%zz@hs.example",
+		"tsb://office:3389?v=1&cp=https://user:secret%zz@hs.example",
 		"tsb://user:secret@office%zz:3389?cp=saas",
 	} {
 		t.Run(raw, func(t *testing.T) {

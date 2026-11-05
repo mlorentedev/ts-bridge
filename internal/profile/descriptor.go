@@ -155,7 +155,12 @@ func redactDescriptor(raw string) string {
 	if u.User != nil {
 		u.User = url.User("redacted")
 	}
-	q := u.Query()
+	q, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		// u.Query() drops the pair it cannot decode, which can be the cp
+		// holding the credential, and the raw query would then be echoed.
+		return "(unparseable)"
+	}
 	if cp := q.Get("cp"); cp != "" && !strings.EqualFold(cp, cpSaas) {
 		q.Set("cp", controlurl.Redact(cp))
 		u.RawQuery = q.Encode()
