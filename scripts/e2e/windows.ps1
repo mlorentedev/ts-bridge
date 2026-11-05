@@ -63,8 +63,8 @@ Case 'init: invalid firewall rule name refused' {
 # Fresh guest: RDP denied, no rule, sleep on, no Tailscale.
 Case 'fresh guest denies RDP' { (Get-ItemProperty $TS).fDenyTSConnections -eq 1 }
 Tsb host setup --config $C
-Case 'setup not converged: no HOST READY banner' 605 { $Out -notmatch 'HOST READY' }
-Case 'setup without IP: no empty TS_TARGET' 605 { $Out -notmatch 'TS_TARGET=:' }
+Case 'setup not converged: no HOST READY banner' { $Out -notmatch 'HOST READY' }
+Case 'setup without IP: no empty TS_TARGET' { $Out -notmatch 'TS_TARGET=:' }
 Case 'setup without Tailscale: unattended step says not installed' { $Out -match 'Tailscale CLI not found' }
 $j2 = Json setup $C
 Case 'setup #2: nothing changed' { -not @($j2.steps | Where-Object { $_.outcome -eq 'changed' }) }

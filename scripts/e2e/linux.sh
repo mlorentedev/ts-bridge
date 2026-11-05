@@ -54,8 +54,8 @@ ok "init: --firewall-rule refused on linux" -- "! code 0 && [ ! -e $W/x.yaml ]"
 # Fresh guest: no xrdp, ufw inactive, no Tailscale.
 run "$B" host setup --config "$C"
 ok "setup without xrdp: exit 2, xrdp step names the fix" -- 'code 2 && has "apt install xrdp"'
-ok "setup not converged: no HOST READY banner" 605 -- '! has "HOST READY"'
-ok "setup without IP: no empty TS_TARGET" 605 -- '! has "TS_TARGET=:"'
+ok "setup not converged: no HOST READY banner" -- '! has "HOST READY"'
+ok "setup without IP: no empty TS_TARGET" -- '! has "TS_TARGET=:"'
 outcomes setup "$C" >"$W/j"
 ok "ufw inactive: firewall step says so" 608 -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Firewall\") and \"inactive\" in s[\"message\"]]' <$W/j"
 
@@ -81,7 +81,7 @@ U="${SUDO_USER:-nobody}"
 ok "unprivileged check names the declared service" -- 'su -s /bin/sh "$U" -c "$B host check --config $C" 2>&1 | grep -q "RDP:.*3389"'
 systemctl disable --now xrdp >/dev/null 2>&1
 run "$B" host check --config "$C"
-ok "disabled xrdp: check names it NOT OK, not undeclared" 605 -- '! has "no service declared" && has "RDP:.*3389"'
+ok "disabled xrdp: check names it NOT OK, not undeclared" -- '! has "no service declared" && has "RDP:.*3389"'
 "$B" host setup --config "$C" >/dev/null 2>&1
 ok "disabled xrdp: setup enables and starts it" -- 'systemctl is-enabled -q xrdp && systemctl is-active -q xrdp'
 
