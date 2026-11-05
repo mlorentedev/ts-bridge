@@ -62,12 +62,12 @@ The scenarios cover everything the host side implements that needs no tailnet:
 
 ## Acceptance criteria
 
-- [ ] AC1: `make e2e-linux` brings a fresh Ubuntu guest up, runs the Linux scenario, prints one result line per case, and exits 0 only when no case is `FAIL` or `XPASS`.
-- [ ] AC2: `make e2e-windows` does the same on a Windows 11 Arm64 guest, running the real PowerShell reads and writes (#601).
-- [ ] AC3: every run deletes a leftover session first and leaves no session behind, whether it passes, fails or is interrupted. `make e2e-clean` removes leftovers without running anything. A second run gives the same result.
-- [ ] AC4: on both OSes, the second `host setup` reports no `changed` step, and every drift case is detected by `check` and repaired by `setup`.
-- [ ] AC5: a known open bug is marked `XFAIL #N` and does not fail the run. When it is fixed, the run reports `XPASS #N` and fails until the marker is removed.
-- [ ] AC6: `docs/runbooks/e2e-vm.md` gives the preconditions, the trigger (before cutting a breaking or significant release), how to read the results, and the cleanup. The release runbook links it.
+- [x] AC1: `make e2e-linux` brings a fresh Ubuntu guest up, runs the Linux scenario, prints one result line per case, and exits 0 only when no case is `FAIL` or `XPASS`.
+- [x] AC2: `make e2e-windows` does the same on a Windows 11 Arm64 guest, running the real PowerShell reads and writes (#601).
+- [x] AC3: every run deletes a leftover session first and leaves no session behind, whether it passes, fails or is interrupted. `make e2e-clean` removes leftovers without running anything. A second run gives the same result.
+- [x] AC4: on both OSes, the second `host setup` reports no `changed` step, and every drift case is detected by `check` and repaired by `setup`.
+- [x] AC5: a known open bug is marked `XFAIL #N` and does not fail the run. When it is fixed, the run reports `XPASS #N` and fails until the marker is removed.
+- [x] AC6: `docs/runbooks/e2e-vm.md` gives the preconditions, the trigger (before cutting a breaking or significant release), how to read the results, and the cleanup. The release runbook links it.
 
 ## References
 

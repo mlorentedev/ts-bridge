@@ -3,42 +3,42 @@
     "id": "QA-606-e2e-vm-harness-f1",
     "behavior": "AC1: make e2e-linux runs the Linux scenario on a fresh Ubuntu guest and exits 0 only when no case is FAIL or XPASS",
     "verification": "make e2e-linux",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "linux-20261105T153003Z.log on 967ee8e: 35 pass, 0 fail, 2 xfail (#608, #557), 0 xpass, exit 0"
   },
   {
     "id": "QA-606-e2e-vm-harness-f2",
     "behavior": "AC2: make e2e-windows does the same on a Windows 11 Arm64 guest with the real PowerShell reads and writes",
     "verification": "make e2e-windows",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "windows-20261105T153632Z.log on d112337: 38 pass, 0 fail, 1 xfail (#557), 0 xpass, exit 0"
   },
   {
     "id": "QA-606-e2e-vm-harness-f3",
     "behavior": "AC3: no tsb-e2e session is left after a run or after make e2e-clean, and e2e-clean is idempotent",
     "verification": "make e2e-clean && make e2e-clean && ! dotf vm linux status 2>/dev/null | grep -q '^tsb-e2e-' && ! dotf vm windows status 2>/dev/null | grep -q '^tsb-e2e-'",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "make e2e-clean twice: 'no session left' both times; dotf vm windows status empty after the run"
   },
   {
     "id": "QA-606-e2e-vm-harness-f4",
     "behavior": "AC4: the second host setup reports no changed step and every drift case is detected and repaired, on both OSes",
     "verification": "l=$(ls -t scripts/e2e/out/linux-*.log | head -1) && w=$(ls -t scripts/e2e/out/windows-*.log | head -1) && grep -q '^PASS setup #2: nothing changed' \"$l\" && grep -q '^PASS setup #2: nothing changed' \"$w\" && ! grep -q '^FAIL drift' \"$l\" \"$w\"",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "both logs: PASS setup #2: nothing changed; every drift case PASS (ufw, xrdp on Linux; UDP, disabled, deleted, RDP denied, power on Windows)"
   },
   {
     "id": "QA-606-e2e-vm-harness-f5",
     "behavior": "AC5: XFAIL does not fail the run; FAIL and XPASS do",
     "verification": "bash scripts/tests/test-e2e-report.sh",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "bash scripts/tests/test-e2e-report.sh exit 0"
   },
   {
     "id": "QA-606-e2e-vm-harness-f6",
     "behavior": "AC6: the runbook exists and the release runbook links it",
     "verification": "test -f docs/runbooks/e2e-vm.md && grep -q 'e2e-vm.md' docs/runbooks/guide-development-workflow.md",
-    "state": "pending",
-    "evidence": ""
+    "state": "passing",
+    "evidence": "docs/runbooks/e2e-vm.md present; linked from guide-development-workflow.md item 5"
   }
 ]
