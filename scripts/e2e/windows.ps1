@@ -77,7 +77,8 @@ Case 'setup not converged: no HOST READY banner' { $Out -notmatch 'HOST READY' }
 Case 'setup without IP: no empty TS_TARGET' { $Out -notmatch 'TS_TARGET=:' }
 Case 'setup without Tailscale: unattended step says not installed' { $Out -match 'Tailscale CLI not found' }
 $j2 = Json setup $C
-Case 'setup #2: nothing changed' { -not @($j2.steps | Where-Object { $_.outcome -eq 'changed' }) }
+# A negative needs a document: with no steps at all, nothing was verified.
+Case 'setup #2: nothing changed' { @($j2.steps).Count -gt 0 -and -not @($j2.steps | Where-Object { $_.outcome -eq 'changed' }) }
 Case 'setup: no Tailscale adapter is manual' { (Steps $j2 'Network profile')[0].outcome -eq 'manual' }
 Case 'RDP enabled, TermService running, listening on 3389' {
     (Get-ItemProperty $TS).fDenyTSConnections -eq 0 -and (Get-Service TermService).Status -eq 'Running' -and
@@ -114,7 +115,8 @@ Case 'drift: power reset is changed, then ok' {
 }
 
 Yaml "$W\nosleep.yaml" "version: 1`nhost:`n  services:`n    - kind: rdp`n      port: 3389`n  power:`n    prevent_sleep: false"
-Case 'prevent_sleep false: no power step' { -not (Steps (Json setup "$W\nosleep.yaml") 'Power') }
+$jn = Json setup "$W\nosleep.yaml"
+Case 'prevent_sleep false: no power step' { @($jn.steps).Count -gt 0 -and -not (Steps $jn 'Power') }
 Yaml "$W\custom.yaml" "version: 1`nhost:`n  services:`n    - kind: rdp`n      port: 3389`n  firewall:`n    rule: Custom-E2E"
 Case 'custom rule name from the file is created' { Json setup "$W\custom.yaml" | Out-Null; @(Rule 'Custom-E2E').Count -eq 1 }
 Yaml "$W\ssh.yaml" "version: 1`nhost:`n  services:`n    - kind: ssh`n      port: 22"

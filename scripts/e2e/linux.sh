@@ -64,7 +64,7 @@ ufw --force enable >/dev/null
 outcomes setup "$C" >"$W/j1"
 ok "setup #1: xrdp ok, firewall converged" -- "json 'all(s[\"outcome\"] in (\"ok\",\"changed\") for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j1"
 outcomes setup "$C" >"$W/j2"
-ok "setup #2: nothing changed" -- "json 'not [s for s in j[\"steps\"] if s[\"outcome\"]==\"changed\"]' <$W/j2"
+ok "setup #2: nothing changed" -- "json 'j[\"steps\"] and not [s for s in j[\"steps\"] if s[\"outcome\"]==\"changed\"]' <$W/j2"
 ok "setup: Tailscale step fails without a node" -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Tailscale\") and s[\"outcome\"]==\"failed\" and s[\"fix\"]]' <$W/j2"
 outcomes check "$C" >"$W/jc"
 ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True}]' <$W/jc"
