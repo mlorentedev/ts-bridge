@@ -29,6 +29,16 @@ function Tsb {
     $script:Out = (& $B @args 2>&1 | Out-String)
     $script:Code = $LASTEXITCODE
 }
+# TsbBounded is Tsb with a 20 s ceiling, as linux.sh's `timeout 20`: a serve
+# that wrongly starts is killed and fails its case (code 124) instead of
+# hanging the run.
+function TsbBounded {
+    $p = Start-Process -FilePath $B -ArgumentList $args -NoNewWindow -PassThru `
+        -RedirectStandardOutput "$W\bounded.out" -RedirectStandardError "$W\bounded.err"
+    $null = $p.Handle # without a cached handle ExitCode reads empty after exit
+    if ($p.WaitForExit(20000)) { $script:Code = $p.ExitCode } else { $p.Kill(); $p.WaitForExit(); $script:Code = 124 }
+    $script:Out = (Get-Content "$W\bounded.out", "$W\bounded.err" -Raw -ErrorAction SilentlyContinue) -join ''
+}
 function Json($cmd, $file) { & $B host $cmd --config $file --json 2>$null | Out-String | ConvertFrom-Json }
 function Steps($j, $prefix) { @($j.steps | Where-Object { $_.name -like "$prefix*" }) }
 function Rule($name) { Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue }
@@ -129,11 +139,11 @@ Set-Location $W
 # host serve preflight refusals; nothing may start or reach the network.
 function Mesh($state) { "version: 1`nhost:`n  control_url: https://hs.invalid`n  mesh:`n    hostname: e2e`n    state_dir: $state`n    auth_key_file: C:\ProgramData\ts-bridge\authkey`n  services:`n    - kind: rdp`n      port: 3389" }
 Yaml "$W\nomesh.yaml" "version: 1`nhost:`n  control_url: https://hs.invalid`n  services:`n    - kind: rdp`n      port: 3389"
-Case 'serve: no host.mesh refused' { Tsb host serve --config "$W\nomesh.yaml"; $Code -eq 1 -and $Out -match 'host\.mesh' }
+Case 'serve: no host.mesh refused' { TsbBounded host serve --config "$W\nomesh.yaml"; $Code -eq 1 -and $Out -match 'host\.mesh' }
 # An absent state_dir is created protected, so the loose one must exist first.
 New-Item -ItemType Directory -Force "$W\state" | Out-Null; icacls "$W\state" /grant 'Users:(OI)(CI)F' | Out-Null
 Yaml "$W\loose.yaml" (Mesh "$W\state")
-Case 'serve: state_dir other users can reach refused' { Tsb host serve --config "$W\loose.yaml"; $Code -eq 1 -and $Out -match 'state_dir' }
+Case 'serve: state_dir other users can reach refused' { TsbBounded host serve --config "$W\loose.yaml"; $Code -eq 1 -and $Out -match 'state_dir' }
 
 Case 'client: import a tsb:// descriptor' { Tsb import e2e 'tsb://host-e2e:3389?cp=saas'; $Code -eq 0 }
 Case 'client: malformed descriptor refused' { Tsb import bad 'http://nope'; $Code -ne 0 }
