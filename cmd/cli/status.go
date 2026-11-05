@@ -27,6 +27,10 @@ Endpoints queried:
   /health/ready  — readiness probe
   /metrics       — operational metrics
 
+The health server is off unless connect runs with --health-addr or
+TS_HEALTH_ADDR. With no answer at --addr, status exits 0 (with --json it
+prints {"running":false,"addr":...} on stdout).
+
 Examples:
   ts-bridge status
   ts-bridge status --addr 127.0.0.1:9090
@@ -36,7 +40,7 @@ Examples:
 	}
 
 	cmd.Flags().String("addr", "127.0.0.1:9090", "Health server address")
-	cmd.Flags().Bool("json", false, "Output raw JSON from /metrics")
+	cmd.Flags().Bool("json", false, "Output raw JSON from /metrics ({\"running\":false,...} when nothing answers)")
 	cmd.Flags().BoolP("watch", "w", false, "Continuously watch and update status")
 	cmd.Flags().DurationP("interval", "i", 5*time.Second, "Polling interval for --watch")
 	return cmd
@@ -72,7 +76,7 @@ func runOnce(addr string, jsonOut bool) error {
 func runStatusWithWriter(addr string, jsonOut bool, w io.Writer) error {
 	live, ready, metrics, err := fetchHealth(addr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Bridge not running at %s\n", addr)
+		reportNoAnswer(addr, jsonOut, w)
 		return nil
 	}
 
@@ -84,6 +88,21 @@ func runStatusWithWriter(addr string, jsonOut bool, w io.Writer) error {
 
 	printSummary(live, ready, metrics, w)
 	return nil
+}
+
+// reportNoAnswer explains an unanswered health probe. The health server is off
+// unless connect runs with --health-addr or TS_HEALTH_ADDR, so silence at addr
+// does not prove the bridge is down. With --json, stdout also carries
+// {"running":false,"addr":...} so a pipeline can tell down from up.
+func reportNoAnswer(addr string, jsonOut bool, w io.Writer) {
+	fmt.Fprintf(os.Stderr, "No health endpoint answered at %s: the bridge is not running, or connect was started without --health-addr / TS_HEALTH_ADDR\n", addr)
+	if jsonOut {
+		data, _ := json.Marshal(struct {
+			Running bool   `json:"running"`
+			Addr    string `json:"addr"`
+		}{false, addr})
+		fmt.Fprintln(w, string(data))
+	}
 }
 
 func runWatch(addr string, interval time.Duration, jsonOut bool, cmd *cobra.Command) error {
@@ -102,7 +121,7 @@ func runWatchLoop(addr string, interval time.Duration, jsonOut bool, w io.Writer
 
 	// First display immediately.
 	if err := displayOnce(addr, jsonOut, w); err != nil {
-		fmt.Fprintf(os.Stderr, "Bridge not running at %s\n", addr)
+		reportNoAnswer(addr, jsonOut, w)
 	}
 
 	for {
@@ -113,7 +132,7 @@ func runWatchLoop(addr string, interval time.Duration, jsonOut bool, w io.Writer
 			return nil
 		case <-ticker.C:
 			if err := displayOnce(addr, jsonOut, w); err != nil {
-				fmt.Fprintf(os.Stderr, "Bridge not running at %s\n", addr)
+				reportNoAnswer(addr, jsonOut, w)
 			}
 		}
 	}
