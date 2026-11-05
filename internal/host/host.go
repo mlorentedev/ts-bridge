@@ -2,8 +2,10 @@
 package host
 
 import (
+	"fmt"
 	"log/slog"
 	"runtime"
+	"strings"
 )
 
 // SetupFlags holds configuration for host setup (legacy alias).
@@ -44,6 +46,9 @@ type CheckResult struct {
 	FirewallOK  bool
 	TailscaleUp bool
 	ControlURL  string // as SetupResult.ControlURL
+	// Elevated is whether the check ran as root or Administrator; without it
+	// some service state cannot be read, so "off" and "unread" differ.
+	Elevated bool
 	// Published maps "kind:port" to whether host serve publishes that service;
 	// nil when no host.mesh.health_addr was probed.
 	Published map[string]bool
@@ -63,6 +68,9 @@ type Service struct {
 	Enabled    bool
 	Active     *bool
 	FirewallOK bool
+	// Unread is true when a step could not read the service and called the
+	// outcome unverified: reading it needs elevation.
+	Unread bool
 }
 
 // Check performs a read-only verification of host readiness. The resolved
@@ -71,15 +79,29 @@ type Service struct {
 // The logger may be nil — callers that don't need structured output can pass nil.
 func Check(cfg Config, logger *slog.Logger) (CheckResult, error) {
 	result := checkOn(runtime.GOOS, cfg, execRunner{})
-	if logger != nil {
-		logger.Info("host check",
-			"tailscale_up", result.TailscaleUp,
-			"rdp_port", result.RDPPort,
-			"rdp_enabled", result.RDPEnabled,
-			"firewall_ok", result.FirewallOK,
-		)
-	}
+	logCheck(logger, result)
 	return result, nil
+}
+
+// logCheck logs the check's result. rdp_port is the legacy key, set only by an
+// enabled service, so services names what the host declares.
+// The logger may be nil.
+func logCheck(logger *slog.Logger, result CheckResult) {
+	if logger == nil {
+		return
+	}
+	declared := make([]string, 0, len(result.Services))
+	for _, svc := range result.Services {
+		declared = append(declared, fmt.Sprintf("%s:%d", svc.Kind, svc.Port))
+	}
+	logger.Info("host check",
+		"tailscale_up", result.TailscaleUp,
+		"rdp_port", result.RDPPort,
+		"rdp_enabled", result.RDPEnabled,
+		"firewall_ok", result.FirewallOK,
+		"services", strings.Join(declared, ","),
+		"elevated", result.Elevated,
+	)
 }
 
 // TailscaleIP returns the Tailscale IPv4 address, or empty string on failure.
