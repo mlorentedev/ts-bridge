@@ -361,3 +361,56 @@ func TestDiscoverAPIKeyResolvesThroughTheFlagSet(t *testing.T) {
 		})
 	}
 }
+
+// In CI every descriptor is a non-terminal, so the test above cannot tell which
+// stream isNonInteractive inspects. A fake that names the one terminal can: the
+// prompt depends on stdin alone, whatever stdout is.
+func TestPromptEnvUpdate_DecidedByStdinNotStdout(t *testing.T) {
+	tests := []struct {
+		name          string
+		stdinIsTTY    bool
+		stdoutIsTTY   bool
+		wantPrompted  bool
+		wantAnswerYes bool
+	}{
+		{"stdout is a terminal, stdin is not", false, true, false, false},
+		{"stdin is a terminal, stdout is not", true, false, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// A "y" is waiting on stdin, so a wrongly offered prompt answers yes.
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := w.WriteString("y\n"); err != nil {
+				t.Fatal(err)
+			}
+			_ = w.Close()
+			t.Cleanup(func() { _ = r.Close() })
+
+			old := isTerminal
+			t.Cleanup(func() { isTerminal = old })
+			isTerminal = func(fd uintptr) bool {
+				switch fd {
+				case r.Fd():
+					return tt.stdinIsTTY
+				case os.Stdout.Fd():
+					return tt.stdoutIsTTY
+				}
+				return false
+			}
+
+			cmd := newDiscoverCmd()
+			var out strings.Builder
+			cmd.SetIn(r)
+			cmd.SetOut(&out)
+			if got := promptEnvUpdate(cmd, "host", 3389); got != tt.wantAnswerYes {
+				t.Errorf("promptEnvUpdate = %v, want %v", got, tt.wantAnswerYes)
+			}
+			if prompted := strings.Contains(out.String(), "[Y/n]"); prompted != tt.wantPrompted {
+				t.Errorf("prompt offered = %v, want %v (output %q)", prompted, tt.wantPrompted, out.String())
+			}
+		})
+	}
+}
