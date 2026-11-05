@@ -371,8 +371,9 @@ func parseAuthKey() (string, error) {
 //     with a host and no user info), so a typo (e.g. a host with no scheme) is
 //     caught here rather than failing deeper in tsnet with a less obvious
 //     error, and user info (user:password@) never reaches the banner or the
-//     logs. A query, path or fragment is not refused; control planes carry no
-//     credential there.
+//     logs. A query, path or fragment is not refused: a token placed there
+//     would reach both, an accepted risk since no documented control plane
+//     takes one there.
 //
 // Exported so every writer of a configuration file can enforce the pairing the
 // runtime will enforce when it reads that file back: a producer that accepts

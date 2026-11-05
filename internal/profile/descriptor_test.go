@@ -205,7 +205,8 @@ func TestParseErrorInputOmitsQueryAndUserInfo(t *testing.T) {
 		{"tsb://user:secret@office:3389?cp=saas&v=0", "tsb://office:3389?\u2026"},
 		{"tsb://office:3389?cp=https://user:secret@hs.example&cp=saas", "tsb://office:3389?\u2026"},
 		{"http://office:3389", "http://office:3389"},
-		{"tsb://office:3389/x?cp=ftp://hs.example", "tsb://office:3389/x?\u2026"},
+		{"tsb://office:3389/x?cp=ftp://hs.example", "tsb://office:3389/\u2026?\u2026"},
+		{"tsb://office:3389/apikey=SECRET?cp=saas&v=0", "tsb://office:3389/\u2026?\u2026"},
 		{"tsb://office:3389?cp=https://user:secret%zz@hs.example", "tsb://office:3389?\u2026"},
 		{"secret:x@office:3389", "(unparseable)"},
 	}

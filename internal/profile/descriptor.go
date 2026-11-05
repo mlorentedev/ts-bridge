@@ -166,8 +166,8 @@ func versionFromParam(vs string) (version int, reason string) {
 	return v, ""
 }
 
-// redactDescriptor reduces raw to what locates the descriptor: scheme, host,
-// port and path. The user info is dropped and a query is replaced by "?…",
+// redactDescriptor reduces raw to what locates the descriptor: scheme, host
+// and port. The user info is dropped, a path becomes "/…" and a query "?…",
 // because credentials can sit in any parameter and escaping one parameter at a
 // time is what let the next one through. A value url.Parse cannot read is
 // replaced rather than echoed, since what it could not split may hold one too.
@@ -176,7 +176,10 @@ func redactDescriptor(raw string) string {
 	if err != nil || u.Opaque != "" {
 		return "(unparseable)"
 	}
-	out := (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
+	out := (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
+	if u.Path != "" && u.Path != "/" {
+		out += "/\u2026" // a descriptor has no path, so one carries only leak surface
+	}
 	if u.RawQuery != "" || u.ForceQuery {
 		out += "?\u2026"
 	}
