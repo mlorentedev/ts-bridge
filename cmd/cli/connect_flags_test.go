@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,5 +190,16 @@ func TestAuthKeyFilePrecedence(t *testing.T) {
 
 	if capturedKey != "tskey-auth-from-file" {
 		t.Errorf("expected tskey-auth-from-file, got %q", capturedKey)
+	}
+}
+
+// run.sh and run.ps1 were removed (README); the Short must not send users to
+// them.
+func TestConnectShortDoesNotNameRemovedLaunchers(t *testing.T) {
+	short := newConnectCmd().Short
+	for _, gone := range []string{"run.sh", "run.ps1"} {
+		if strings.Contains(short, gone) {
+			t.Errorf("connect Short = %q; mentions removed %s", short, gone)
+		}
 	}
 }
