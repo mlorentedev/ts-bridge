@@ -153,8 +153,9 @@ Case 'serve: state_dir other users can reach refused' { TsbBounded host serve --
 
 Case 'client: import a tsb:// descriptor' { Tsb import e2e 'tsb://host-e2e:3389?cp=saas'; $Code -eq 0 }
 Case 'client: malformed descriptor refused' { Tsb import bad 'http://nope'; $Code -ne 0 }
-Case 'client: status with no bridge says so on stderr, stdout empty' {
+Case 'client: status with no bridge prints running false, hint on stderr' {
     $o = (& $B status --json --addr 127.0.0.1:1 2>"$W\err" | Out-String); $c = $LASTEXITCODE
-    $c -eq 0 -and $o.Trim() -eq '' -and (Get-Content "$W\err" -Raw) -match 'not running'
+    $j = $o | ConvertFrom-Json
+    $c -eq 0 -and $j.running -eq $false -and $j.addr -eq '127.0.0.1:1' -and (Get-Content "$W\err" -Raw) -match 'not running'
 }
 exit 0
