@@ -3,14 +3,6 @@ package cmd
 
 import "github.com/spf13/cobra"
 
-// Build-time variables set via ldflags.
-var (
-	//nolint:unused // wired into Runner/BuildCommit in main.go at runtime
-	version = "dev"
-	//nolint:unused // wired into BuildCommit in main.go at runtime
-	commit = "unknown"
-)
-
 // NewRootCmd constructs a complete CLI tree with invocation-local Cobra state.
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
@@ -19,15 +11,11 @@ func NewRootCmd() *cobra.Command {
 		Long: `ts-bridge is a portable TCP bridge that runs over Tailscale/Headscale
 mesh networks using tsnet. It forwards local TCP connections to a remote
 target host through the encrypted Tailscale network.`,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// Global flags resolved here so subcommands can access them early.
-		},
 		// We intentionally do NOT set Run or RunE here; the binary
 		// delegates to a subcommand (or exits with help).
 	}
 
 	root.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
-	root.PersistentFlags().String("config", "", "Config file path (reserved for future use)")
 	configureUsageOnErrors(root)
 	root.AddCommand(
 		newAuthCmd(),
