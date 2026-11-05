@@ -116,6 +116,9 @@ func readAuthInput(command *cobra.Command) (string, error) {
 	fromStdin, _ := command.Flags().GetBool("stdin")
 	if !fromStdin {
 		key, err := authSecretReader("Auth key (masked): ")
+		if errors.Is(err, errStdinNotTerminal) {
+			return "", fmt.Errorf("read credential: %w; pipe it in with --stdin", err)
+		}
 		if err != nil {
 			return "", fmt.Errorf("read credential: %w", err)
 		}
