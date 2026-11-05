@@ -126,6 +126,11 @@ func TestSameControlURL(t *testing.T) {
 		{"https://hs.example", "http://hs.example", false},
 		{"https://hs.example/a", "https://hs.example/A", false},
 		{"https://hs.example", "https://hs.example:8443", false},
+		// Empty means Tailscale SaaS, so its own URLs name the same plane.
+		{"", "https://controlplane.tailscale.com", true},
+		{"", "https://Login.Tailscale.com/", true},
+		{"", "http://controlplane.tailscale.com", false},
+		{"", "https://controlplane.tailscale.com/x", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.a+"|"+tt.b, func(t *testing.T) {

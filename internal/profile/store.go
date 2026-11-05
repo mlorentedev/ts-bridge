@@ -303,9 +303,16 @@ func (s *Store) save(data storeFile) error {
 // SameControlURL reports whether two control URLs name one control plane.
 // Scheme and host are case-insensitive and surrounding space and a trailing
 // slash do not matter; the path is compared exactly. Both empty means the
-// default Tailscale SaaS control plane.
+// default Tailscale SaaS control plane, and so does an https URL of a SaaS host.
 func SameControlURL(a, b string) bool {
 	return normalizeControlURL(a) == normalizeControlURL(b)
+}
+
+// saasHosts mirrors host.saasHosts: the hosts Tailscale SaaS answers on.
+var saasHosts = map[string]bool{
+	"controlplane.tailscale.com": true,
+	"login.tailscale.com":        true,
+	"control.tailscale.com":      true,
 }
 
 func normalizeControlURL(raw string) string {
@@ -315,5 +322,8 @@ func normalizeControlURL(raw string) string {
 		return raw
 	}
 	u.Scheme, u.Host = strings.ToLower(u.Scheme), strings.ToLower(u.Host)
+	if u.Scheme == "https" && saasHosts[u.Host] && u.Path == "" && u.RawQuery == "" {
+		return "" // the empty form means SaaS
+	}
 	return u.String()
 }
