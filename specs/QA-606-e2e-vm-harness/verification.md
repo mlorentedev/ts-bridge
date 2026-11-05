@@ -11,7 +11,7 @@ owner: manu
 
 ## Evidence
 
-- [x] AC1: `make e2e-linux` on candidate 76e6ddd (the harness merged with master 1760f49), Ubuntu 24.04 arm64: 37 pass, 0 fail, 2 xfail (#608, #557), 0 xpass, exit 0. Log: `scripts/e2e/out/linux-20261105T191852Z.log`. An earlier run on a base without #612 reported `FAIL serve: auth_key_file under /tmp refused` and exited 2, so the gate does fail a run.
+- [x] AC1: `make e2e-linux` on 8b98baf (the harness merged with master 1760f49), Ubuntu 24.04 arm64: 37 pass, 0 fail, 2 xfail (#608, #557), 0 xpass, exit 0. Log: `scripts/e2e/out/linux-20261105T202932Z.log`. (afeef03 plus the `setup #1` predicate, the only change since 76e6ddd.) An earlier run on a base without #612 reported `FAIL serve: auth_key_file under /tmp refused` and exited 2, so the gate does fail a run.
 - [x] AC2: `make e2e-windows` on candidate 76e6ddd, Windows 11 Pro Arm64: 39 pass, 0 fail, 1 xfail (#557), 0 xpass, exit 0. Log: `scripts/e2e/out/windows-20261105T192107Z.log`. This covers the real PowerShell reads and writes: registry, TermService, firewall rule, network profile and powercfg.
 - [x] AC3: after every run, `dotf vm linux status` and `dotf vm windows status` list no `tsb-e2e-*` session. Running `make e2e-clean` twice prints "no session left" both times. The EXIT trap also deleted the guest when a run failed.
 - [x] AC4: both logs have `PASS setup #2: nothing changed`. Every drift case is detected by `check` and repaired by `setup`. On Linux the cases are a removed ufw rule and a stopped or disabled xrdp. On Windows they are a rule switched to UDP, a disabled rule, a deleted rule, RDP denied, and power reset to 30 min.

@@ -4,7 +4,7 @@
     "behavior": "AC1: make e2e-linux runs the Linux scenario on a fresh Ubuntu guest and exits 0 only when no case is FAIL or XPASS",
     "verification": "make e2e-linux",
     "state": "passing",
-    "evidence": "linux-20261105T191852Z.log on 76e6ddd: 37 pass, 0 fail, 2 xfail (#608, #557), 0 xpass, exit 0"
+    "evidence": "linux-20261105T202932Z.log on 8b98baf: 37 pass, 0 fail, 2 xfail (#608, #557), 0 xpass, exit 0"
   },
   {
     "id": "QA-606-e2e-vm-harness-f2",
