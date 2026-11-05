@@ -213,7 +213,7 @@ func TestImportErrorIsNotDoublePrefixed(t *testing.T) {
 // the two arguments are; the usage line does.
 func TestImportWithoutArgsPrintsUsageLine(t *testing.T) {
 	cmd := newImportCmd()
-	cmd.SetArgs(nil)
+	cmd.SetArgs([]string{})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	cmd.SilenceUsage, cmd.SilenceErrors = true, true
