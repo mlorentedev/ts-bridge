@@ -587,7 +587,7 @@ func TestPrintCheckText_Service(t *testing.T) {
 				{Kind: host.ServiceRDP, Port: 3389, Unread: true},
 			}},
 			want:    "unread (rdp, port 3389): see the steps below",
-			notWant: "NOT OK",
+			notWant: "NOT OK (rdp",
 		},
 		{
 			name:    "declared with the port unread",
