@@ -110,9 +110,10 @@ loads it automatically; explicit key sources keep higher precedence.
 The credential is bound to the profile's control URL: if a flag, `TS_CONTROL_URL`
 (including a `./.env`) or a YAML config resolves another control URL, `connect`
 and `browser` refuse and name both URLs and the layer that set the other one.
-Likewise, `import` (or `init --profile --force`) that changes the control URL of a
-credentialed profile is refused unless `--force` is given, which clears the
-credential reference; run `ts-bridge auth set` again for the new control plane.
+Likewise, `import` that changes the control URL of a credentialed profile is
+refused, naming both URLs, unless `--force` is given. `import --force` and
+`init --profile --force` clear the credential reference instead; run
+`ts-bridge auth set` again for the new control plane.
 
 To store non-secret bootstrap, bind, hostname, state and health settings in an
 existing profile, import its local runtime YAML once:
