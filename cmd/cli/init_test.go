@@ -989,7 +989,8 @@ func TestInitWithoutTTYIsActionable(t *testing.T) {
 	if strings.Contains(stdout, "Auth key") {
 		t.Errorf("stdout = %q; the wizard prompted before refusing", stdout)
 	}
-	if _, err := os.Stat(".env"); !os.IsNotExist(err) {
-		t.Errorf(".env exists after a refused init (stat err = %v)", err)
+	// Whatever the output format, a refused init writes nothing.
+	if entries, err := os.ReadDir("."); err != nil || len(entries) != 0 {
+		t.Errorf("working directory after a refused init: %v (err %v), want it empty", entries, err)
 	}
 }
