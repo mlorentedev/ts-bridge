@@ -1,8 +1,10 @@
 package host
 
 import (
+	"errors"
 	"fmt"
 	"net/netip"
+	"os/exec"
 	"regexp"
 	"slices"
 	"strconv"
@@ -183,7 +185,12 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 		return readUFW(r, port)
 	}
 	if _, err := r.LookPath(backendIPT); err != nil {
-		return firewallRead{noBackend: true, reason: "neither ufw nor iptables is installed"}
+		read := firewallRead{noBackend: true, reason: "neither ufw nor iptables is installed"}
+		if nft, _ := tsInputInNFT(r, port); nft.reason != "" {
+			read.reason += "; " + nft.reason
+			read.fix = nft.fix
+		}
+		return read
 	}
 	return readIptables(r, port)
 }
@@ -234,7 +241,8 @@ func readIptables(r Runner, port int) firewallRead {
 	}
 	input := iptRules(string(out))
 	rules, jump := iptBeforeQualifiedJump(input)
-	if slices.ContainsFunc(strings.Split(rules, "\n"), iptTSInputJump) {
+	diverted := slices.ContainsFunc(strings.Split(rules, "\n"), iptTSInputJump)
+	if diverted {
 		chain, err := r.Output(backendIPT, "-S", tsInputChain)
 		if err != nil {
 			return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S %s: %v", tsInputChain, err)}
@@ -242,16 +250,66 @@ func readIptables(r Runner, port int) firewallRead {
 		rules = iptInlineChain(rules, iptRules(string(chain)))
 	}
 	state, rule := iptablesDecide(rules, port)
+	if state == ruleAbsent && jump == "" && !diverted {
+		if unseen, found := tsInputUnreached(r, port); found {
+			return unseen
+		}
+	}
 	if state == ruleAbsent && jump != "" {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("INPUT reaches %s through %q, which ts-bridge cannot evaluate", tsInputChain, jump),
 			fix: fmt.Sprintf("allow TCP %d inbound on the Tailscale interface ahead of %q, or confirm by hand that the jump admits it", port, jump)}
 	}
-	read := firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: iptSetupCopies(input, port)}
-	if state == rulePresent && read.copies > 0 {
-		without, _ := iptablesDecide(iptWithoutSetup(rules, port), port)
-		read.copiesAdmit = without != rulePresent
+	copies := iptSetupCopies(input, port)
+	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: copies,
+		copiesAdmit: state == rulePresent && copies > 0 && !iptablesCovers(iptWithoutSetup(rules, port), port)}
+}
+
+// tsInputUnreached reads the two places tailscaled keeps ts-input where an
+// INPUT without a jump to it hides it (#526), once nothing in INPUT has decided
+// the port. Either is an unknown read: setup must not append a rule that opens
+// every interface on a host whose tailnet ACCEPT it cannot see.
+func tsInputUnreached(r Runner, port int) (firewallRead, bool) {
+	out, err := r.Output(backendIPT, "-S", tsInputChain)
+	switch {
+	case err != nil && !chainMissing(err, "No chain/target/match by that name"):
+		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S %s: %v", tsInputChain, err)}, true
+	case err == nil && slices.Contains(strings.Split(iptRules(string(out)), "\n"), "-N "+tsInputChain):
+		// --netfilter-mode=nodivert: iptables_runner.go creates the chain and skips AddHooks.
+		return firewallRead{backend: backendIPT, reason: "ts-input exists but INPUT does not jump to it (tailscaled --netfilter-mode=nodivert, or a divert from another chain)",
+			fix: fmt.Sprintf("jump to ts-input from INPUT, or allow TCP %d inbound on the Tailscale interface by hand", port)}, true
 	}
-	return read
+	return tsInputInNFT(r, port)
+}
+
+// tsInputInNFT finds ts-input in nftables mode (TS_DEBUG_FIREWALL_MODE=nftables,
+// or auto-detected where iptables is absent). nftables_runner.go AddChains puts
+// it in the conventional `ip filter` table, which iptables-legacy never prints,
+// and iptables-nft prints only when INPUT jumps to it. Without the nft binary
+// there is nothing to ask.
+func tsInputInNFT(r Runner, port int) (firewallRead, bool) {
+	if _, err := r.LookPath("nft"); err != nil {
+		return firewallRead{}, false
+	}
+	args := []string{"list", "chain", "ip", "filter", tsInputChain}
+	out, err := r.Output("nft", args...)
+	switch {
+	case err != nil && !chainMissing(err, "No such file or directory"):
+		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("nft %s: %v", strings.Join(args, " "), err)}, true
+	case err == nil && strings.Contains(string(out), "chain "+tsInputChain):
+		return firewallRead{backend: backendIPT, reason: "tailscaled keeps ts-input in nftables table ip filter (nftables mode), which iptables does not read",
+			fix: fmt.Sprintf("read it with `nft list chain ip filter ts-input`, or allow TCP %d inbound on the Tailscale interface by hand", port)}, true
+	}
+	return firewallRead{}, false
+}
+
+// chainMissing reports a failure that says the chain does not exist: stderr
+// carries the tool's own words for it (iptables "No chain/target/match by that
+// name", nft "No such file or directory"). Exit status 1 is the only failure
+// code either tool has, so it cannot tell a missing chain from a refused read;
+// any other failure leaves the chain unread.
+func chainMissing(err error, words string) bool {
+	var exit *exec.ExitError
+	return errors.As(err, &exit) && strings.Contains(string(exit.Stderr), words)
 }
 
 // iptWithoutSetup is rules with every copy of setup's rule removed.
@@ -714,11 +772,11 @@ func firewallBlockedStep(read firewallRead, port int) SetupStep {
 }
 
 func firewallFix(read firewallRead, port int, command string) string {
-	if read.noBackend {
-		return fmt.Sprintf("install ufw, or allow TCP %d inbound with your firewall", port)
-	}
 	if read.fix != "" {
 		return read.fix
+	}
+	if read.noBackend {
+		return fmt.Sprintf("install ufw, or allow TCP %d inbound with your firewall", port)
 	}
 	return "run ts-bridge host " + command + " as root"
 }
