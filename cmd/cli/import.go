@@ -32,7 +32,7 @@ Examples:
 A managed credential stays bound to the control URL it was issued for. Importing
 a descriptor that changes the control URL of a credentialed profile is refused
 unless --force is given, which drops the profile's credential reference.`,
-		Args: cobra.ExactArgs(2),
+		Args: exactArgsWithUsage(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			force, _ := cmd.Flags().GetBool("force")
 			return runImportDirect(args[0], args[1], defaultProfileStorePath, force)
@@ -42,12 +42,25 @@ unless --force is given, which drops the profile's credential reference.`,
 	return command
 }
 
+// exactArgsWithUsage is cobra.ExactArgs(n) whose error also carries the usage
+// line: arity errors are not flag errors, so cobra prints no usage for them and
+// "accepts 2 arg(s), received 0" does not say what the arguments are.
+func exactArgsWithUsage(n int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if err := cobra.ExactArgs(n)(cmd, args); err != nil {
+			return fmt.Errorf("%w\nUsage: %s", err, cmd.UseLine())
+		}
+		return nil
+	}
+}
+
 // runImportDirect is the pure, testable core of the import command.
 // It parses the descriptor and writes it to the store at storePath.
 func runImportDirect(name, rawDescriptor, storePath string, force bool) error {
+	// Parse errors already read "invalid descriptor ...".
 	d, err := profile.Parse(rawDescriptor)
 	if err != nil {
-		return fmt.Errorf("invalid descriptor: %w", err)
+		return err
 	}
 
 	s := profile.NewStore(storePath)

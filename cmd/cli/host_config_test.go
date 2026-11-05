@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
@@ -306,5 +307,30 @@ func TestHostSetupCmd_DescriptorControlURL(t *testing.T) {
 		if !strings.Contains(out.String(), "tsb://") || !strings.Contains(out.String(), want) {
 			t.Errorf("%v: stdout = %q, want a descriptor with %s", args, out.String(), want)
 		}
+	}
+}
+
+// README: "For automation, use --json: ts-bridge host setup --json". On macOS
+// setup has no steps; --json must still print the JSON document, saying why it
+// is empty, so a script decoding stdout can tell "not applicable" from
+// "converged".
+func TestHostSetupJSONOnDarwinIsJSON(t *testing.T) {
+	isolateHostEnv(t)
+	run := runHostCmd(t, "setup", "darwin", []string{"--json"}, host.CheckResult{})
+	if run.err != nil {
+		t.Fatalf("err = %v, want exit 0", run.err)
+	}
+	var got struct {
+		Steps         []any  `json:"steps"`
+		NotApplicable string `json:"not_applicable"`
+	}
+	if err := json.Unmarshal([]byte(run.stdout), &got); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, run.stdout)
+	}
+	if got.Steps == nil || len(got.Steps) != 0 {
+		t.Errorf("steps = %v, want an empty array", got.Steps)
+	}
+	if !strings.Contains(got.NotApplicable, "macOS") {
+		t.Errorf("not_applicable = %q, want a reason naming macOS", got.NotApplicable)
 	}
 }
