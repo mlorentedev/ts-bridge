@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"ts-bridge/internal/config/envfile"
 	"ts-bridge/internal/credential"
 	"ts-bridge/internal/profile"
+	"ts-bridge/internal/secretfile"
 )
 
 // newInitCmd constructs the "ts-bridge init" subcommand.
@@ -645,14 +645,10 @@ func buildEnvConfigContent(f initFlags) string {
 	return sb.String()
 }
 
-// writeFileWithPerms writes content to a file with 0600 permissions and checks permissions.
+// writeFileWithPerms atomically replaces path with content at mode 0600,
+// tightening a file that already exists with a looser mode.
 func writeFileWithPerms(path string, content []byte) error {
-	// #nosec G306 -- path is user-controlled via --config flag.
-	if err := os.WriteFile(path, content, 0600); err != nil {
-		return err
-	}
-	checkPermissions(path)
-	return nil
+	return secretfile.WriteFile(path, content)
 }
 
 // envKeyOrder is the order known .env keys are written in, so regenerating a
@@ -732,17 +728,6 @@ func defaultConfigPath(format string) string {
 		return "ts-bridge.yaml"
 	}
 	return ".env"
-}
-
-// checkPermissions warns if the file is world-readable (Unix only).
-func checkPermissions(path string) {
-	if runtime.GOOS != windowsOS {
-		info, err := os.Stat(path)
-		if err == nil && info.Mode().Perm()&0077 != 0 {
-			fmt.Fprintf(os.Stderr, "WARNING: %s has loose permissions (%04o); consider chmod 600 %s\n",
-				path, info.Mode().Perm(), path)
-		}
-	}
 }
 
 // ─── Output helpers ──────────────────────────────────────────────
