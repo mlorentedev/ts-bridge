@@ -81,13 +81,14 @@ func TestSetupJSON_StepsCarryOutcomeAndFix(t *testing.T) {
 // TestSetupJSON_DescriptorControlURL: setup --json carries the same tsb://
 // descriptor as setup's text summary and check --json, with a declared
 // control_url as its cp= (HOST-005 AC6), and omits it when no Tailscale IP
-// is known, as the text summary does.
+// or no control plane is known, as the text summary does (#453).
 func TestSetupJSON_DescriptorControlURL(t *testing.T) {
 	tests := []struct {
 		name, ip, controlURL, want string
 	}{
 		{name: "declared control plane", ip: "100.64.0.1", controlURL: "https://hs.example", want: "cp=https%3A%2F%2Fhs.example"},
-		{name: "no control plane is saas", ip: "100.64.0.1", want: "cp=saas"},
+		{name: "saas control plane", ip: "100.64.0.1", controlURL: host.ControlPlaneSaaS, want: "cp=saas"},
+		{name: "unknown control plane is not saas", ip: "100.64.0.1"},
 		{name: "no tailscale ip", controlURL: "https://hs.example"},
 	}
 	for _, tt := range tests {

@@ -97,6 +97,11 @@ When the host runs `ts-bridge host setup` or `ts-bridge host check`, the output 
   (import with: ts-bridge import home "tsb://acemagic-office:45000?cp=saas")
 ```
 
+The `cp=` value is the host's control plane: `saas` for Tailscale SaaS, the control URL for
+Headscale. The host takes it from `host.control_url` in its host file, else from the local
+Tailscale (`tailscale debug prefs`). When neither is known, the descriptor is omitted and the
+output says so, instead of claiming SaaS.
+
 Import it once, then connect by name:
 
 ```bash
