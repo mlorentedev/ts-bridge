@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ts-bridge/internal/config"
@@ -13,10 +14,12 @@ import (
 // emit imports into a profile with the same control plane (#453).
 func TestHostDescriptor_RoundTrip(t *testing.T) {
 	tests := []struct {
-		name, controlURL, want string
+		name, controlURL, want, token string
 	}{
-		{name: "saas", controlURL: host.ControlPlaneSaaS},
-		{name: "headscale", controlURL: "https://hs.example:8443", want: "https://hs.example:8443"},
+		// SaaS imports as the default (empty ControlURL), so only the token
+		// tells "carried cp=saas" from "dropped cp".
+		{name: "saas", controlURL: host.ControlPlaneSaaS, token: "cp=saas"},
+		{name: "headscale", controlURL: "https://hs.example:8443", want: "https://hs.example:8443", token: "cp=https"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -32,6 +35,9 @@ func TestHostDescriptor_RoundTrip(t *testing.T) {
 				var out struct{ Descriptor string }
 				if err := json.Unmarshal(data, &out); err != nil || out.Descriptor == "" {
 					t.Fatalf("%s: no descriptor in %s (%v)", name, data, err)
+				}
+				if !strings.Contains(out.Descriptor, tt.token) {
+					t.Errorf("%s: descriptor %q lacks %q", name, out.Descriptor, tt.token)
 				}
 				store := filepath.Join(t.TempDir(), "profiles.yaml")
 				if err := runImportDirect("host", out.Descriptor, store); err != nil {

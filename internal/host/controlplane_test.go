@@ -49,8 +49,8 @@ func TestResolveControlPlane(t *testing.T) {
 	}
 }
 
-// TestSetupOnAndCheckOn_ControlPlane: the public entry points resolve the
-// control plane for every OS, so the descriptor never claims SaaS unasked.
+// TestSetupOnAndCheckOn_ControlPlane: setupOn and checkOn, which Setup and
+// Check call with the real runner, resolve the control plane for every OS, so the descriptor never claims SaaS unasked.
 func TestSetupOnAndCheckOn_ControlPlane(t *testing.T) {
 	hs := map[string]string{prefsCmd: prefsJSON("https://hs.example")}
 	for _, goos := range []string{"linux", "windows", "darwin"} {
