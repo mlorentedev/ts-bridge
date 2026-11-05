@@ -67,17 +67,27 @@ func (r *recordingRunner) LookPath(name string) (string, error) {
 }
 
 const (
-	psPrefix  = "powershell -NoProfile -ExecutionPolicy Bypass -Command "
-	psProfile = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
-	psEnable  = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; $RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
-	psPort    = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
-	psFw      = `Remove-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName "Rule" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3390 -Profile Any -Enabled True | Out-Null; Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue`
-	psFwCheck = `$r = @(Get-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; Write-Output "remote=$(($x | Get-NetFirewallAddressFilter).RemoteAddress)"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
-	powercfg  = "run powercfg /change standby-timeout-ac 0 /change hibernate-timeout-ac 0 /change monitor-timeout-ac 0"
+	psPrefix      = "powershell -NoProfile -ExecutionPolicy Bypass -Command "
+	psProfile     = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
+	psEnable      = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; $RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
+	psPort        = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
+	psFw          = `Remove-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName "Rule" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3390 -Profile Any -Enabled True | Out-Null; Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue`
+	psFwCheck     = `$r = @(Get-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; Write-Output "remote=$(($x | Get-NetFirewallAddressFilter).RemoteAddress)"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
+	psProfileRead = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { Write-Output "category=$($_.NetworkCategory)" }`
 )
 
+// powercfgCalls is the power step on a host whose AC timeouts are not 0:
+// one read and one /change per setting (#603).
+var powercfgCalls = []string{
+	"output powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE", "run powercfg /change standby-timeout-ac 0",
+	"output powercfg /query SCHEME_CURRENT SUB_SLEEP HIBERNATEIDLE", "run powercfg /change hibernate-timeout-ac 0",
+	"output powercfg /query SCHEME_CURRENT SUB_VIDEO VIDEOIDLE", "run powercfg /change monitor-timeout-ac 0",
+}
+
+// serviceCalls is a service step on a host where the service is not set to
+// start automatically: read both, then configure and start what is missing.
 func serviceCalls(name string, running bool) []string {
-	calls := []string{"run sc config " + name + " start=auto", "output sc query " + name}
+	calls := []string{"output sc qc " + name, "output sc query " + name, "run sc config " + name + " start=auto"}
 	if !running {
 		calls = append(calls, "run net start "+name)
 	}
@@ -89,9 +99,9 @@ func windowsSetupCalls(noSleep bool) []string {
 	calls = append(calls, serviceCalls("Tailscale", true)...)
 	calls = append(calls, serviceCalls("SSDPSRV", false)...)
 	calls = append(calls, serviceCalls("upnphost", false)...)
-	calls = append(calls, "run "+psPrefix+psProfile, "output "+psPrefix+psDeny, "output "+psPrefix+psEnable, "output "+psPrefix+psFwCheck, "run "+psPrefix+psFw)
+	calls = append(calls, "output "+psPrefix+psProfileRead, "output "+psPrefix+psDeny, "output "+psPrefix+psEnable, "output "+psPrefix+psFwCheck, "run "+psPrefix+psFw)
 	if !noSleep {
-		calls = append(calls, powercfg)
+		calls = append(calls, powercfgCalls...)
 	}
 	return calls
 }
@@ -111,13 +121,13 @@ func TestSetupFor(t *testing.T) {
 			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule"},
 			runner: &recordingRunner{output: map[string]string{"sc query Tailscale": "STATE : 4 RUNNING", psPrefix + psEnable: "3390\r\n"}},
 			calls:  windowsSetupCalls(false), port: 3390,
-			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged},
+			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeManual, OutcomeChanged, OutcomeChanged, OutcomeChanged},
 		},
 		{
 			name: "windows --no-sleep", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true},
 			runner: &recordingRunner{output: map[string]string{"sc query Tailscale": "RUNNING", psPrefix + psEnable: "3390"}},
 			calls:  windowsSetupCalls(true), port: 3390,
-			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged},
+			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeManual, OutcomeChanged, OutcomeChanged},
 		},
 		{name: "darwin stub", goos: "darwin", cfg: cfg, runner: &recordingRunner{}, port: 3389},
 	}
