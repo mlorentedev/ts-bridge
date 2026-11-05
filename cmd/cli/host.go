@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -258,17 +260,23 @@ func loadHostFile(cmd *cobra.Command) (host.File, error) {
 // failed (ADR-017 §2). Unlike check, changed and manual exit 0: setup did its
 // part, and printed the action a manual step leaves to the user.
 func setupConvergence(steps []host.SetupStep) error {
+	failed := failedSteps(steps)
+	if len(failed) == 0 {
+		return nil
+	}
+	return &ExitError{Code: exitNotConverged, Err: fmt.Errorf("host setup did not converge: %d of %d steps failed: %s",
+		len(failed), len(steps), strings.Join(failed, ", "))}
+}
+
+// failedSteps names the steps that failed, in order.
+func failedSteps(steps []host.SetupStep) []string {
 	var failed []string
 	for _, s := range steps {
 		if s.Outcome == host.OutcomeFailed {
 			failed = append(failed, s.Name)
 		}
 	}
-	if len(failed) == 0 {
-		return nil
-	}
-	return &ExitError{Code: exitNotConverged, Err: fmt.Errorf("host setup did not converge: %d of %d steps failed: %s",
-		len(failed), len(steps), strings.Join(failed, ", "))}
+	return failed
 }
 
 // ─── Check ───────────────────────────────────────────────────────
@@ -448,26 +456,40 @@ func printElevationError(w io.Writer) {
 }
 
 func printSetupSummary(w io.Writer, tsIP string, result host.SetupResult) {
-	rdpPort := result.RDPPort
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  ---------------------------------------")
-	fmt.Fprintln(w, "  HOST READY")
+	if failed := failedSteps(result.Steps); len(failed) > 0 {
+		fmt.Fprintln(w, "  HOST NOT READY")
+		fmt.Fprintf(w, "  Failed steps: %s\n", strings.Join(failed, ", "))
+	} else {
+		fmt.Fprintln(w, "  HOST READY")
+	}
 	fmt.Fprintln(w, "  ---------------------------------------")
 
 	if tsIP != "" {
 		fmt.Fprintf(w, "  Tailscale IP: %s\n", tsIP)
 	}
-	fmt.Fprintf(w, "  RDP Port:     %d\n", rdpPort)
+	fmt.Fprintf(w, "  RDP Port:     %d\n", result.RDPPort)
 	fmt.Fprintln(w)
+	printClientTarget(w, tsIP, result)
+	fmt.Fprintln(w)
+}
+
+// printClientTarget prints what a client needs to reach the host. Without a
+// Tailscale IP there is no address to name, so it says when one appears.
+func printClientTarget(w io.Writer, tsIP string, result host.SetupResult) {
+	if tsIP == "" {
+		fmt.Fprintln(w, "  The client target appears once Tailscale is up.")
+		return
+	}
 	fmt.Fprintln(w, "  For a client (ts-bridge connect, .env):")
-	fmt.Fprintf(w, "  TS_TARGET=%s:%d\n", tsIP, rdpPort)
-	if desc := buildDescriptorLine(tsIP, rdpPort, result.ControlURL); desc != "" {
+	fmt.Fprintf(w, "  TS_TARGET=%s:%d\n", tsIP, result.RDPPort)
+	if desc := buildDescriptorLine(tsIP, result.RDPPort, result.ControlURL); desc != "" {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "  Shareable descriptor:")
 		fmt.Fprintf(w, "  %s\n", desc)
 		fmt.Fprintf(w, "  (import with: ts-bridge import <name> %q)\n", desc)
 	}
-	fmt.Fprintln(w)
 }
 
 // buildDescriptorLine returns a tsb:// descriptor string for the given host IP,
@@ -551,11 +573,7 @@ func printCheckText(w io.Writer, r host.CheckResult) {
 	fmt.Fprintf(w, "  Platform:      %s\n", runtime.GOOS)
 	fmt.Fprintf(w, "  Tailscale:     %s\n", statusStr(r.TailscaleUp))
 	fmt.Fprintf(w, "  Tailscale IP:  %s\n", r.TailscaleIP)
-	if r.RDPPort > 0 {
-		fmt.Fprintf(w, "  RDP:           %s (port %d)\n", statusStr(r.RDPEnabled), r.RDPPort)
-	} else {
-		fmt.Fprintln(w, "  RDP:           no service declared")
-	}
+	fmt.Fprintf(w, "  RDP:           %s\n", rdpLine(r))
 	fmt.Fprintf(w, "  Firewall:      %s\n", statusStr(r.FirewallOK))
 	for _, step := range r.Steps {
 		if step.Outcome != host.OutcomeOK {
@@ -567,6 +585,28 @@ func printCheckText(w io.Writer, r host.CheckResult) {
 	}
 	fmt.Fprintln(w, "  ---------------------------------------")
 	fmt.Fprintln(w)
+}
+
+// rdpLine is the RDP line of the check. The legacy RDPPort is set only by an
+// enabled service, so a declared service that is off or unread is named from
+// Services rather than reported as undeclared. It claims "unread" only when a
+// step said so: a service the check read and found off is NOT OK.
+func rdpLine(r host.CheckResult) string {
+	if r.RDPPort > 0 {
+		return fmt.Sprintf("%s (port %d)", statusStr(r.RDPEnabled), r.RDPPort)
+	}
+	i := slices.IndexFunc(r.Services, func(s host.Service) bool { return s.Kind == host.ServiceRDP })
+	if i < 0 {
+		return "no service declared"
+	}
+	port := "unknown"
+	if p := r.Services[i].Port; p > 0 {
+		port = strconv.Itoa(p)
+	}
+	if svc := r.Services[i]; svc.Unread && !r.Elevated {
+		return fmt.Sprintf("unread (rdp, port %s): its state needs root/administrator to read", port)
+	}
+	return fmt.Sprintf("%s (rdp, port %s)", statusStr(false), port)
 }
 
 func checkJSON(r host.CheckResult) ([]byte, error) {

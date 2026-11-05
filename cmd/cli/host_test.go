@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -547,6 +549,44 @@ func TestPrintCheckText_Service(t *testing.T) {
 			want:    "no service declared",
 			notWant: "port 0",
 		},
+		{
+			name: "enabled service reads as ok without elevation",
+			result: host.CheckResult{RDPPort: 3389, RDPEnabled: true, Services: []host.Service{
+				{Kind: host.ServiceRDP, Port: 3389, Enabled: true},
+			}},
+			want:    "✓ OK (port 3389)",
+			notWant: "needs root/administrator",
+		},
+		{
+			name: "declared and unreadable without elevation",
+			result: host.CheckResult{Services: []host.Service{
+				{Kind: host.ServiceRDP, Port: 3389, Unread: true},
+			}},
+			want:    "needs root/administrator",
+			notWant: "no service declared",
+		},
+		{
+			name: "declared and read as off without elevation",
+			result: host.CheckResult{Services: []host.Service{
+				{Kind: host.ServiceRDP, Port: 3389},
+			}},
+			want:    "✗ NOT OK (rdp, port 3389)",
+			notWant: "needs root/administrator",
+		},
+		{
+			name: "declared and off under elevation",
+			result: host.CheckResult{Elevated: true, Services: []host.Service{
+				{Kind: host.ServiceRDP, Port: 3389},
+			}},
+			want:    "✗ NOT OK (rdp, port 3389)",
+			notWant: "needs root/administrator",
+		},
+		{
+			name:    "declared with the port unread",
+			result:  host.CheckResult{Services: []host.Service{{Kind: host.ServiceRDP}}},
+			want:    "rdp, port unknown",
+			notWant: "port 0",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -560,5 +600,89 @@ func TestPrintCheckText_Service(t *testing.T) {
 				t.Errorf("output contains %q:\n%s", tt.notWant, got)
 			}
 		})
+	}
+}
+
+func TestPrintSetupSummary_Convergence(t *testing.T) {
+	ok := host.SetupStep{Name: "firewall", Outcome: host.OutcomeOK, Success: true}
+	changed := host.SetupStep{Name: "xrdp service", Outcome: host.OutcomeChanged, Success: true}
+	manual := host.SetupStep{Name: "screen sharing", Outcome: host.OutcomeManual}
+	failedX := host.SetupStep{Name: "xrdp service", Outcome: host.OutcomeFailed}
+	failedIP := host.SetupStep{Name: "Tailscale IP", Outcome: host.OutcomeFailed}
+	tests := []struct {
+		name    string
+		steps   []host.SetupStep
+		want    []string
+		notWant []string
+	}{
+		{name: "every step converged", steps: []host.SetupStep{ok, changed}, want: []string{"HOST READY"}, notWant: []string{"NOT READY"}},
+		{name: "a manual step is not a failure", steps: []host.SetupStep{ok, manual}, want: []string{"HOST READY"}, notWant: []string{"NOT READY"}},
+		{name: "no steps", want: []string{"HOST READY"}, notWant: []string{"NOT READY"}},
+		{
+			name:    "failed steps are named",
+			steps:   []host.SetupStep{failedX, ok, failedIP},
+			want:    []string{"HOST NOT READY", "xrdp service, Tailscale IP"},
+			notWant: []string{"HOST READY"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			cmdpkg.PrintSetupSummaryForTest(&buf, "100.64.0.1", host.SetupResult{RDPPort: 3389, Steps: tt.steps})
+			for _, want := range tt.want {
+				if !strings.Contains(buf.String(), want) {
+					t.Errorf("summary lacks %q:\n%s", want, buf.String())
+				}
+			}
+			for _, notWant := range tt.notWant {
+				if strings.Contains(buf.String(), notWant) {
+					t.Errorf("summary contains %q:\n%s", notWant, buf.String())
+				}
+			}
+		})
+	}
+}
+
+// TestPrintSetupSummary_NoIP: without a Tailscale IP there is no client target
+// and no descriptor to print, only the way to get one.
+func TestPrintSetupSummary_NoIP(t *testing.T) {
+	var buf bytes.Buffer
+	cmdpkg.PrintSetupSummaryForTest(&buf, "", host.SetupResult{RDPPort: 3389})
+	got := buf.String()
+	for _, notWant := range []string{"TS_TARGET", "tsb://", "Tailscale IP:"} {
+		if strings.Contains(got, notWant) {
+			t.Errorf("summary contains %q:\n%s", notWant, got)
+		}
+	}
+	if !strings.Contains(got, "target appears once Tailscale is up") {
+		t.Errorf("summary does not say when the target appears:\n%s", got)
+	}
+}
+
+// TestHostSetupCmd_NotConvergedBanner: the real command prints the not-ready
+// banner and still returns the exit-2 error.
+func TestHostSetupCmd_NotConvergedBanner(t *testing.T) {
+	isolateHostEnv(t)
+	cmdpkg.SetHostTailscaleIPForTest(t, "")
+	c := cmdpkg.HostSetupCmdForTest(t, "linux", true, func(cfg host.Config, _ *slog.Logger) (host.SetupResult, error) {
+		return host.SetupResult{RDPPort: cfg.Port, Steps: []host.SetupStep{
+			{Name: "xrdp service", Outcome: host.OutcomeFailed},
+			{Name: "Tailscale IP", Outcome: host.OutcomeFailed},
+		}}, nil
+	})
+	var out bytes.Buffer
+	c.SetOut(&out)
+	c.SetErr(io.Discard)
+	err := c.Execute()
+	if err == nil || !strings.Contains(err.Error(), "2 of 2 steps failed") {
+		t.Fatalf("err = %v, want the not-converged error", err)
+	}
+	for _, want := range []string{"HOST NOT READY", "xrdp service, Tailscale IP"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("stdout lacks %q:\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "TS_TARGET") {
+		t.Errorf("stdout names a target without an address:\n%s", out.String())
 	}
 }
