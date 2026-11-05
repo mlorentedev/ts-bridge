@@ -168,8 +168,8 @@ func TestConnectWithoutProfileDoesNotSuggestAuthSet(t *testing.T) {
 	cmd.SetArgs([]string{"--target", "host:22"})
 	cmd.SilenceUsage, cmd.SilenceErrors = true, true
 	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("connect without any credential succeeded")
+	if !errors.Is(err, config.ErrAuthKeyRequired) {
+		t.Fatalf("error = %v; want config.ErrAuthKeyRequired, or this guard does not exercise the no-hint branch", err)
 	}
 	if strings.Contains(err.Error(), "auth set") {
 		t.Fatalf("error = %q; must not suggest auth set without --profile", err)

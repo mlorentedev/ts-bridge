@@ -220,7 +220,13 @@ func TestAuthSetUnknownProfileNamesHowToCreateIt(t *testing.T) {
 	if err == nil {
 		t.Fatal("auth set for a missing profile succeeded")
 	}
-	if !strings.Contains(err.Error(), "ts-bridge import office") {
-		t.Fatalf("error = %q; want it to name `ts-bridge import office <tsb://...>`", err)
+	hint := err.Error()
+	_, hint, found := strings.Cut(hint, "create it first: ")
+	if !found || !strings.Contains(hint, `ts-bridge import office "tsb://HOST:3389?cp=saas"`) {
+		t.Fatalf("error = %q; want a paste-runnable `ts-bridge import office \"tsb://HOST:3389?cp=saas\"`", err)
+	}
+	// < and > are shell redirections, so a placeholder like <tsb://...> cannot be pasted.
+	if strings.ContainsAny(hint, "<>") {
+		t.Errorf("hint %q contains shell redirection characters", hint)
 	}
 }
