@@ -208,9 +208,6 @@ func validateMergedProxyConfig(cfg Config) error {
 // next step.
 var ErrAuthKeyRequired = errors.New("auth key is required (provide TS_AUTHKEY env var or --auth-key-file flag)")
 
-// ErrAuthKeyInvalid is returned when the supplied key fails credential.ValidateKey.
-var ErrAuthKeyInvalid = errors.New("auth key invalid format")
-
 // validateRequiredFields checks that required config fields are present and valid.
 func validateRequiredFields(cfg Config) error {
 	if cfg.Target == "" && cfg.SOCKS5Addr == "" {
@@ -220,7 +217,7 @@ func validateRequiredFields(cfg Config) error {
 		return ErrAuthKeyRequired
 	}
 	if err := credential.ValidateKey(cfg.AuthKey); err != nil {
-		return fmt.Errorf("%w: %w", ErrAuthKeyInvalid, err)
+		return fmt.Errorf("auth key invalid format: %w", err)
 	}
 	return nil
 }

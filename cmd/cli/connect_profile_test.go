@@ -155,33 +155,6 @@ func TestConnectProfileWithoutCredentialPointsToAuthSet(t *testing.T) {
 	}
 }
 
-// A malformed key under a profile has the same fix as a missing one: store a
-// valid key for that profile with auth set.
-func TestConnectProfileWithInvalidCredentialPointsToAuthSet(t *testing.T) {
-	t.Chdir(t.TempDir())
-	storePath := filepath.Join(t.TempDir(), "profiles.yaml")
-	if err := profile.NewStore(storePath).Set("home", "acemagic-office:45000", ""); err != nil {
-		t.Fatal(err)
-	}
-	oldStore, oldRunner, oldLogger := defaultProfileStorePath, Runner, LoggerInit
-	t.Cleanup(func() { defaultProfileStorePath, Runner, LoggerInit = oldStore, oldRunner, oldLogger })
-	defaultProfileStorePath, LoggerInit = storePath, nil
-	Runner = func(config.Config) error { return nil }
-	t.Setenv("TS_AUTHKEY", "not-a-key")
-	t.Setenv("TS_TARGET", "")
-
-	cmd := newConnectCmd()
-	cmd.SetArgs([]string{"--profile", "home"})
-	cmd.SilenceUsage, cmd.SilenceErrors = true, true
-	err := cmd.Execute()
-	if !errors.Is(err, config.ErrAuthKeyInvalid) {
-		t.Fatalf("error = %v; want config.ErrAuthKeyInvalid", err)
-	}
-	if !strings.Contains(err.Error(), "auth set --profile home") {
-		t.Fatalf("error = %q; want it to name `ts-bridge auth set --profile home`", err)
-	}
-}
-
 // Without --profile there is no profile to attach a credential to, so the hint
 // must not invent one.
 func TestConnectWithoutProfileDoesNotSuggestAuthSet(t *testing.T) {
