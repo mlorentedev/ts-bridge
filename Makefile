@@ -31,7 +31,7 @@ COVERAGE  ?= coverage.out
 
 .PHONY: help
 help: ## Show this help.
-	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+	@grep -hE '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: cover
@@ -68,3 +68,23 @@ mutation-dry: mutation-install ## List the mutants gremlins would generate (no t
 .PHONY: mutation
 mutation: mutation-install ## Run mutation testing on the whole module (advisory; writes mutation-report.json).
 	$(GREMLINS) unleash --output mutation-report.json
+
+# Local e2e on throwaway `dotf vm` guests (#606). Not run in CI: the runners cannot
+# nest a VM. Each target brings a fresh session up and always deletes it; run before
+# a release with a breaking or host-facing change. See docs/runbooks/e2e-vm.md.
+.PHONY: e2e
+e2e: ## Run the Linux, then the Windows e2e scenario on throwaway VMs.
+	scripts/e2e/run.sh linux
+	scripts/e2e/run.sh windows
+
+.PHONY: e2e-linux
+e2e-linux: ## Run the e2e scenario on a throwaway Ubuntu VM.
+	scripts/e2e/run.sh linux
+
+.PHONY: e2e-windows
+e2e-windows: ## Run the e2e scenario on a throwaway Windows 11 VM.
+	scripts/e2e/run.sh windows
+
+.PHONY: e2e-clean
+e2e-clean: ## Delete any e2e VM session left behind (idempotent).
+	scripts/e2e/run.sh clean
