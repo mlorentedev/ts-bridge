@@ -295,3 +295,14 @@ func TestStatusWatchMode(t *testing.T) {
 	// signal handler path — confirming clean exit without panic).
 	<-stop
 }
+
+// The two --json shapes differ (the up document is /metrics and carries no
+// "running" key), so the help must tell scripts to test for the key.
+func TestStatusHelpExplainsJSONShapes(t *testing.T) {
+	long := newStatusCmd().Long
+	for _, want := range []string{`{"running":false`, `has("running")`} {
+		if !strings.Contains(long, want) {
+			t.Errorf("status --help lacks %q", want)
+		}
+	}
+}

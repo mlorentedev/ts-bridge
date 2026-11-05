@@ -28,8 +28,11 @@ Endpoints queried:
   /metrics       — operational metrics
 
 The health server is off unless connect runs with --health-addr or
-TS_HEALTH_ADDR. With no answer at --addr, status exits 0 (with --json it
-prints {"running":false,"addr":...} on stdout).
+TS_HEALTH_ADDR. With no answer at --addr, status exits 0.
+
+With --json, a down bridge prints {"running":false,"addr":...} and an up
+one prints the /metrics document, which has no "running" key. A script
+should test for the key (jq 'has("running")'), not read its value.
 
 Examples:
   ts-bridge status
