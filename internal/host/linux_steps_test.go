@@ -669,7 +669,7 @@ func TestCheckForLinux(t *testing.T) {
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(nil), fail: map[string]bool{ufwAdded: true}},
 			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded, "lookpath iptables"},
 			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
-			services: []Service{{Kind: "rdp", Port: 3389}},
+			services: []Service{{Kind: "rdp", Port: 3389, Unread: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
 		},
 		{
@@ -845,7 +845,7 @@ func TestCheckForLinux(t *testing.T) {
 			if !reflect.DeepEqual(got.Services, tt.services) {
 				t.Errorf("services = %+v, want %+v", got.Services, tt.services)
 			}
-			got.Steps, got.Services = nil, nil
+			got.Steps, got.Services, got.Elevated = nil, nil, false // Elevated is the runner's, not a legacy key
 			if !reflect.DeepEqual(got, tt.legacy) {
 				t.Errorf("legacy keys = %+v, want %+v", got, tt.legacy)
 			}

@@ -120,7 +120,14 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
 
 	// Derive auto-instance values (LocalAddr, Hostname, StateDir) only
 	// when auto-mode is active (BUG-020).
-	applyAutoInstance(&cfg, flags)
+	if err := applyAutoInstance(&cfg, flags); err != nil {
+		return Config{}, err
+	}
+	// TCP mode with no listener from any layer binds loopback, never the
+	// wildcard address an empty net.Listen address would mean (#620).
+	if cfg.SOCKS5Addr == "" && cfg.LocalAddr == "" {
+		cfg.LocalAddr = defaultLocalAddr
+	}
 	if err := validateBootstrapListenerCollision(cfg); err != nil {
 		return Config{}, err
 	}
@@ -529,30 +536,21 @@ func resolveAutoInstance(cfg *Config, yamlCfg PartialConfig, flags FlagSet) {
 	// Default: auto-mode is on (already set by defaults()).
 }
 
-func applyAutoInstance(cfg *Config, flags FlagSet) {
+func applyAutoInstance(cfg *Config, flags FlagSet) error {
 	if !cfg.AutoInstance {
-		return
+		return nil
 	}
 
 	// Derive LocalAddr from the explicit port-range flag (if provided),
 	// otherwise fall back to the well-known default so the user only
-	// needs to configure hostname + auth key (BUG-021 fix).
-	if cfg.LocalAddr == "" {
-		portRange := flags.PortRange
-		if portRange == "" {
-			portRange = os.Getenv("TS_PORT_RANGE")
+	// needs to configure hostname + auth key (BUG-021 fix). SOCKS5 mode
+	// listens on SOCKS5Addr and has no use for a derived TCP listener.
+	if cfg.LocalAddr == "" && cfg.SOCKS5Addr == "" {
+		localAddr, err := deriveFlagLocalAddr(cfg, flags)
+		if err != nil {
+			return fmt.Errorf("derive local address: %w", err)
 		}
-		if portRange == "" {
-			portRange = defaultAutoPortRange
-		}
-		instanceName := flags.Instance
-		if instanceName == "" {
-			instanceName = os.Getenv("TS_INSTANCE_NAME")
-		}
-		localAddr, err := deriveAutoLocalAddr(cfg.Target, instanceName, portRange)
-		if err == nil {
-			cfg.LocalAddr = localAddr
-		}
+		cfg.LocalAddr = localAddr
 	}
 
 	// Derive hostname from the instance flag (if provided), otherwise
@@ -574,6 +572,24 @@ func applyAutoInstance(cfg *Config, flags FlagSet) {
 		cfg.StateDir = EphemeralStateDir(cfg.Hostname)
 		cfg.EphemeralState = true
 	}
+	return nil
+}
+
+// deriveFlagLocalAddr resolves the port range and instance name from the
+// flags, then the environment, and derives the auto-mode listener address.
+func deriveFlagLocalAddr(cfg *Config, flags FlagSet) (string, error) {
+	portRange := flags.PortRange
+	if portRange == "" {
+		portRange = os.Getenv("TS_PORT_RANGE")
+	}
+	if portRange == "" {
+		portRange = defaultAutoPortRange
+	}
+	instanceName := flags.Instance
+	if instanceName == "" {
+		instanceName = os.Getenv("TS_INSTANCE_NAME")
+	}
+	return deriveAutoLocalAddr(cfg.Target, instanceName, portRange)
 }
 
 // validateTarget checks the target format.
