@@ -41,8 +41,9 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 	port := linuxPort(cfg)
 	x := readXRDP(r)
 	fw := readLinuxFirewall(r, port)
-	result.Steps = append(result.Steps, xrdpCheckStep(x), firewallCheckStep(fw, port))
-	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent}
+	xrdp := xrdpCheckStep(x)
+	result.Steps = append(result.Steps, xrdp, firewallCheckStep(fw, port))
+	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent, Unread: xrdp.Outcome == OutcomeUnverified}
 	if x.readable {
 		active := x.active
 		svc.Active = &active

@@ -76,7 +76,7 @@ func setupFor(goos string, cfg Config, r Runner) SetupResult {
 // command (the Linux iptables read is `iptables -S INPUT` through Output).
 // darwin declares no service until #459.
 func checkFor(goos string, cfg Config, r Runner) CheckResult {
-	result := CheckResult{TailscaleIP: tailscaleIP(r), ControlURL: cfg.ControlURL}
+	result := CheckResult{TailscaleIP: tailscaleIP(r), ControlURL: cfg.ControlURL, Elevated: r.Elevated()}
 	result.TailscaleUp = result.TailscaleIP != ""
 	result.Steps = []SetupStep{tailscaleStep(result.TailscaleIP)}
 	switch goos {
