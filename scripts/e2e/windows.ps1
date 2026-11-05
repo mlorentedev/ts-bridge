@@ -93,7 +93,9 @@ Case 'check --json: rdp 3389 enabled, firewall ok' {
     $s = (Json check $C).services; $s.Count -eq 1 -and $s[0].kind -eq 'rdp' -and $s[0].port -eq 3389 -and $s[0].enabled -and $s[0].firewall_ok
 }
 
-# Drift: each change is seen by check and repaired by setup.
+# Drift: each change is seen by check and repaired by setup. A negative is
+# asserted only on a document that still lists the service, so a check that
+# drops it cannot pass as drift seen.
 $drifts = [ordered]@{
     'rule switched to UDP' = { Rule 'Tailscale-RDP-Ingress' | Set-NetFirewallRule -Protocol UDP }
     'rule disabled'        = { Rule 'Tailscale-RDP-Ingress' | Disable-NetFirewallRule }
@@ -101,12 +103,12 @@ $drifts = [ordered]@{
 }
 foreach ($d in $drifts.Keys) {
     & $drifts[$d]
-    Case "drift: $d seen by check" { -not (Json check $C).services[0].firewall_ok }
+    Case "drift: $d seen by check" { $s = (Json check $C).services; $s.Count -eq 1 -and -not $s[0].firewall_ok }
     Json setup $C | Out-Null
     Case "drift: $d repaired by setup" { (Json check $C).services[0].firewall_ok }
 }
 Set-ItemProperty $TS -Name fDenyTSConnections -Value 1
-Case 'drift: RDP denied seen by check' { -not (Json check $C).services[0].enabled }
+Case 'drift: RDP denied seen by check' { $s = (Json check $C).services; $s.Count -eq 1 -and -not $s[0].enabled }
 Json setup $C | Out-Null
 Case 'drift: RDP denied repaired by setup' { (Get-ItemProperty $TS).fDenyTSConnections -eq 0 }
 powercfg /change standby-timeout-ac 30
