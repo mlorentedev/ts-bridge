@@ -58,7 +58,7 @@ ok "setup not converged: no HOST READY banner" -- '! has "HOST READY"'
 ok "setup without IP: no empty TS_TARGET" -- '! has "TS_TARGET=:"'
 outcomes setup "$C" >"$W/j"
 # Unmarked, so a missing or broken document is a FAIL and not #608.
-ok "ufw inactive: setup prints its steps as JSON" -- "json '\"steps\" in j' <$W/j"
+ok "ufw inactive: setup prints its Firewall step" -- "json '[s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"]' <$W/j"
 ok "ufw inactive: firewall step says so" 608 -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Firewall\") and \"inactive\" in s[\"message\"]]' <$W/j"
 
 apt-get -qq update >/dev/null 2>&1 && apt-get -qq install -y xrdp >/dev/null 2>&1
