@@ -101,8 +101,9 @@ Import once, with the intended binary:
 ts-bridge init --profile work --config runtime.yaml --force
 ```
 
-`target` and `control_url` may also be supplied in the input. Omitted settings,
-the existing target and the managed credential association are preserved.
+`target` and `control_url` may also be supplied in the input. Omitted settings
+and the existing target are preserved, and so is the managed credential
+association while `control_url` stays the same.
 Empty values also preserve existing settings; this import cannot clear a runtime
 field. An explicit clearing operation is follow-up work tracked under #399.
 Repeating this command with the same input is idempotent. `--force` authorizes
