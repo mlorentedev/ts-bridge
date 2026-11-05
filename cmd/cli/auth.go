@@ -88,7 +88,7 @@ func runAuthSet(command *cobra.Command, args []string) error {
 	profileStore := profile.NewStore(defaultProfileStorePath)
 	selectedProfile, err := profileStore.Get(profileName)
 	if err != nil {
-		return fmt.Errorf("load profile %q: %w", profileName, err)
+		return profileLoadError(profileName, err)
 	}
 	credentialName := profileName
 	if len(args) == 1 {

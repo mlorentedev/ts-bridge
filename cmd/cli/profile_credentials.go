@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -103,9 +104,18 @@ func loadCommandProfile(name string) (profile.Profile, error) {
 	}
 	selected, err := profile.NewStore(defaultProfileStorePath).Get(name)
 	if err != nil {
-		return profile.Profile{}, fmt.Errorf("load profile %q: %w", name, err)
+		return profile.Profile{}, profileLoadError(name, err)
 	}
 	return selected, nil
+}
+
+// profileLoadError wraps a profile lookup failure; for a profile that does not
+// exist it also names the paste-runnable command that creates one.
+func profileLoadError(name string, err error) error {
+	if errors.Is(err, profile.ErrNotFound) {
+		return fmt.Errorf("load profile %q: %w\ncreate it first: ts-bridge import %s \"tsb://HOST:3389?cp=saas\"", name, err, name)
+	}
+	return fmt.Errorf("load profile %q: %w", name, err)
 }
 
 func loadManagedProfileCredential(selected profile.Profile) (string, error) {
