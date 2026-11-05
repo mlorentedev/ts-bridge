@@ -755,13 +755,13 @@ func TestInitValidatesTheEffectiveEnvLayer(t *testing.T) {
 			name:       "malformed preserved control URL is refused when no flag is given",
 			envContent: "TS_AUTHKEY=tskey-auth-old\nTS_CONTROL_URL=headscale.example.com\n",
 			key:        "hskey-abcdef",
-			wantErr:    "control URL must be",
+			wantErr:    "control URL: must be an http or https URL",
 		},
 		{
 			name:       "malformed preserved control URL is refused for a Tailscale key too",
 			envContent: "TS_CONTROL_URL=headscale.example.com\n",
 			key:        "tskey-auth-init-secret",
-			wantErr:    "control URL must be",
+			wantErr:    "control URL: must be an http or https URL",
 		},
 		{
 			name:       "malformed preserved target loses to the flag",
