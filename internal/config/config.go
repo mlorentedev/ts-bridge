@@ -370,7 +370,9 @@ func parseAuthKey() (string, error) {
 //   - Any non-empty control URL must pass controlurl.Validate (an http(s) URL
 //     with a host and no user info), so a typo (e.g. a host with no scheme) is
 //     caught here rather than failing deeper in tsnet with a less obvious
-//     error, and a credential in the URL never reaches the banner or the logs.
+//     error, and user info (user:password@) never reaches the banner or the
+//     logs. A query, path or fragment is not refused; control planes carry no
+//     credential there.
 //
 // Exported so every writer of a configuration file can enforce the pairing the
 // runtime will enforce when it reads that file back: a producer that accepts
