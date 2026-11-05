@@ -116,7 +116,7 @@ ok "serve: state_dir under /tmp refused, naming it" -- 'code 1 && has "/tmp"'
 install -d -m 0700 /var/lib/ts-bridge-e2e && echo k >/tmp/e2e-key && chmod 600 /tmp/e2e-key
 mesh /var/lib/ts-bridge-e2e /tmp/e2e-key >"$W/key.yaml"
 run timeout 20 "$B" host serve --config "$W/key.yaml"
-ok "serve: auth_key_file under /tmp refused" 595 -- 'code 1 && has "/tmp"'
+ok "serve: auth_key_file under /tmp refused" -- 'code 1 && has "/tmp"'
 
 run "$B" import e2e "tsb://host-e2e:3389?cp=saas"
 ok "client: import a tsb:// descriptor" -- 'code 0'
