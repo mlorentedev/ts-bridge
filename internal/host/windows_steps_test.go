@@ -168,6 +168,7 @@ func TestWindowsUnattendedStep(t *testing.T) {
 		runner  *recordingRunner
 		calls   []string
 		outcome Outcome
+		message string // checked when set
 	}{
 		{
 			name:    "already unattended",
@@ -201,9 +202,19 @@ func TestWindowsUnattendedStep(t *testing.T) {
 			runner: &recordingRunner{
 				output: map[string]string{prefsRead: `{"ForceDaemon": false}`},
 				fail:   map[string]bool{setUnattend: true},
+				onPath: map[string]bool{"tailscale": true},
 			},
-			calls:   []string{"output " + prefsRead, "run " + setUnattend},
+			calls:   []string{"output " + prefsRead, "run " + setUnattend, "lookpath tailscale"},
 			outcome: OutcomeFailed,
+			message: "Could not enable via CLI — check Tailscale GUI",
+		},
+		{
+			// #609: with no CLI the cause is the install, not the GUI.
+			name:    "tailscale not installed",
+			runner:  &recordingRunner{fail: map[string]bool{prefsRead: true, setUnattend: true}},
+			calls:   []string{"output " + prefsRead, "run " + setUnattend, "lookpath tailscale"},
+			outcome: OutcomeFailed,
+			message: "Tailscale CLI not found — is Tailscale installed?",
 		},
 	}
 	for _, tt := range tests {
@@ -223,6 +234,9 @@ func TestWindowsUnattendedStep(t *testing.T) {
 			if got.Outcome == OutcomeFailed && got.Fix == "" {
 				t.Error("failed step carries no fix")
 			}
+			if tt.message != "" && got.Message != tt.message {
+				t.Errorf("message = %q, want %q", got.Message, tt.message)
+			}
 		})
 	}
 }
@@ -236,5 +250,126 @@ func TestWindowsFirewallInvalidName(t *testing.T) {
 		if step.Outcome != OutcomeFailed || !strings.Contains(step.Fix, "host.firewall.rule") {
 			t.Errorf("%s: %s, fix %q, want failed naming host.firewall.rule", name, step.Outcome, step.Fix)
 		}
+	}
+}
+
+// TestWindowsServiceStep pins #604: a service already set to start
+// automatically and running is "ok" with no write; otherwise only the missing
+// half is written.
+func TestWindowsServiceStep(t *testing.T) {
+	const qc, query = "sc qc SSDPSRV", "sc query SSDPSRV"
+	const auto, running = "START_TYPE         : 2   AUTO_START", "STATE              : 4  RUNNING"
+	tests := []struct {
+		name    string
+		runner  *recordingRunner
+		calls   []string
+		outcome Outcome
+	}{
+		{"converged", &recordingRunner{output: map[string]string{qc: auto, query: running}},
+			[]string{"output " + qc, "output " + query}, OutcomeOK},
+		{"delayed auto start counts as auto", &recordingRunner{output: map[string]string{qc: auto + "  (DELAYED)", query: running}},
+			[]string{"output " + qc, "output " + query}, OutcomeOK},
+		{"manual start, running", &recordingRunner{output: map[string]string{qc: "3   DEMAND_START", query: running}},
+			[]string{"output " + qc, "output " + query, "run sc config SSDPSRV start=auto"}, OutcomeChanged},
+		{"auto, stopped", &recordingRunner{output: map[string]string{qc: auto, query: "1  STOPPED"}},
+			[]string{"output " + qc, "output " + query, "run net start SSDPSRV"}, OutcomeChanged},
+		{"reads fail, so it acts", &recordingRunner{fail: map[string]bool{qc: true, query: true}},
+			[]string{"output " + qc, "output " + query, "run sc config SSDPSRV start=auto", "run net start SSDPSRV"}, OutcomeChanged},
+		{"start fails", &recordingRunner{output: map[string]string{qc: auto}, fail: map[string]bool{"net start SSDPSRV": true}},
+			[]string{"output " + qc, "output " + query, "run net start SSDPSRV"}, OutcomeFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := serviceStep(tt.runner, "SSDPSRV", "SSDP Discovery", "Failed to start SSDPSRV", "start the SSDPSRV service")
+			if !reflect.DeepEqual(tt.runner.calls, tt.calls) {
+				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
+			}
+			if got.Outcome != tt.outcome {
+				t.Errorf("outcome = %q, want %q (%s)", got.Outcome, tt.outcome, got.Message)
+			}
+		})
+	}
+}
+
+// TestWindowsNetworkProfileStep pins #604: the profile is read first, and a
+// host with no Tailscale adapter is "manual", never "changed".
+func TestWindowsNetworkProfileStep(t *testing.T) {
+	read, set := psPrefix+psProfileRead, psPrefix+psProfile
+	tests := []struct {
+		name    string
+		runner  *recordingRunner
+		calls   []string
+		outcome Outcome
+	}{
+		{"no tailscale adapter", &recordingRunner{}, []string{"output " + read}, OutcomeManual},
+		{"already private", &recordingRunner{output: map[string]string{read: "category=Private\r\n"}}, []string{"output " + read}, OutcomeOK},
+		{"public", &recordingRunner{output: map[string]string{read: "category=Public\r\n"}}, []string{"output " + read, "run " + set}, OutcomeChanged},
+		{"one of two public", &recordingRunner{output: map[string]string{read: "category=Private\r\ncategory=Public"}}, []string{"output " + read, "run " + set}, OutcomeChanged},
+		{"read fails", &recordingRunner{fail: map[string]bool{read: true}}, []string{"output " + read}, OutcomeFailed},
+		{"set fails", &recordingRunner{output: map[string]string{read: "category=Public"}, fail: map[string]bool{set: true}}, []string{"output " + read, "run " + set}, OutcomeFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := networkProfileStep(tt.runner)
+			if !reflect.DeepEqual(tt.runner.calls, tt.calls) {
+				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
+			}
+			if got.Outcome != tt.outcome {
+				t.Errorf("outcome = %q, want %q (%s)", got.Outcome, tt.outcome, got.Message)
+			}
+			if !got.Success && got.Fix == "" {
+				t.Errorf("%s step carries no fix", got.Outcome)
+			}
+		})
+	}
+}
+
+// powercfgQuery is `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE`
+// output, as read on a Windows 11 guest (labels localize, the order does not).
+func powercfgQuery(ac string) string {
+	return "Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)\r\n" +
+		"  Subgroup GUID: 238c9fa8-0aad-41ed-83f4-97be242c8f20  (Sleep)\r\n" +
+		"    Power Setting GUID: 29f6c1db-86da-48c5-9fdb-f2b67b1f44da  (Sleep after)\r\n" +
+		"      Minimum Possible Setting: 0x00000000\r\n      Maximum Possible Setting: 0xffffffff\r\n" +
+		"      Possible Settings increment: 0x00000001\r\n      Possible Settings units: Seconds\r\n" +
+		"    Current AC Power Setting Index: " + ac + "\r\n    Current DC Power Setting Index: 0x00000384\r\n"
+}
+
+// TestWindowsPowerStep pins #603: powercfg takes one /change per call, and a
+// timeout already 0 is not written again.
+func TestWindowsPowerStep(t *testing.T) {
+	const standby, hibernate, monitor = "powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE",
+		"powercfg /query SCHEME_CURRENT SUB_SLEEP HIBERNATEIDLE", "powercfg /query SCHEME_CURRENT SUB_VIDEO VIDEOIDLE"
+	zero, on := powercfgQuery("0x00000000"), powercfgQuery("0x00000384")
+	tests := []struct {
+		name    string
+		runner  *recordingRunner
+		calls   []string
+		outcome Outcome
+	}{
+		{"all zero", &recordingRunner{output: map[string]string{standby: zero, hibernate: zero, monitor: zero}},
+			[]string{"output " + standby, "output " + hibernate, "output " + monitor}, OutcomeOK},
+		{"standby on", &recordingRunner{output: map[string]string{standby: on, hibernate: zero, monitor: zero}},
+			[]string{"output " + standby, "run powercfg /change standby-timeout-ac 0", "output " + hibernate, "output " + monitor}, OutcomeChanged},
+		{"unreadable, so all set", &recordingRunner{}, powercfgCalls, OutcomeChanged},
+		{"a DC-only zero is not AC zero", &recordingRunner{output: map[string]string{standby: on, hibernate: on, monitor: on}}, powercfgCalls, OutcomeChanged},
+		{"change fails", &recordingRunner{fail: map[string]bool{"powercfg /change standby-timeout-ac 0": true}},
+			[]string{"output " + standby, "run powercfg /change standby-timeout-ac 0"}, OutcomeFailed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := powerStep(tt.runner)
+			if !reflect.DeepEqual(tt.runner.calls, tt.calls) {
+				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
+			}
+			for _, c := range tt.runner.calls {
+				if strings.Count(c, "/change") > 1 {
+					t.Errorf("%q: powercfg takes one /change per call", c)
+				}
+			}
+			if got.Outcome != tt.outcome {
+				t.Errorf("outcome = %q, want %q (%s)", got.Outcome, tt.outcome, got.Message)
+			}
+		})
 	}
 }

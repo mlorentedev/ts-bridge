@@ -3,26 +3,24 @@ package host
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
 
-// Most Windows steps act on each run, so success is "changed". #455 adds the
-// reads that let a converged host report "ok": unattended mode (W1) and the
-// RDP denial (W2) and the firewall rule (W3) read first.
+// Every Windows step reads before it acts, so a converged host reports "ok"
+// and a second run changes nothing (ADR-017): unattended mode (W1), the RDP
+// denial (W2) and the firewall rule (W3) from #455; the services, the network
+// profile and the power timeouts from #604 and #603.
 
 func setupWindows(cfg Config, r Runner) SetupResult {
 	steps := []SetupStep{
 		unattendedStep(r),
-		actStep("Tailscale service", startService(r, "Tailscale"),
-			"Service running", "Tailscale service not found — is Tailscale installed?", "install Tailscale"),
+		serviceStep(r, "Tailscale", "Tailscale service", "Tailscale service not found — is Tailscale installed?", "install Tailscale"),
+		serviceStep(r, "SSDPSRV", "SSDP Discovery", "Failed to start SSDPSRV", "start the SSDPSRV service"),
+		serviceStep(r, "upnphost", "UPnP Device Host", "Failed to start upnphost", "start the upnphost service"),
+		networkProfileStep(r),
 	}
-	for _, svc := range []struct{ name, desc string }{{"SSDPSRV", "SSDP Discovery"}, {"upnphost", "UPnP Device Host"}} {
-		err := startService(r, svc.name)
-		steps = append(steps, actStep(svc.desc, err, "Running", fmt.Sprintf("Failed to start: %v", err), "start the "+svc.name+" service"))
-	}
-	steps = append(steps, actStep("Network profile", runPS(r, psNetworkProfilePrivate),
-		"Set to Private", "Could not set network profile to Private", "set the Tailscale network profile to Private"))
 
 	// The RDP port lives in the registry; the firewall must open that exact port.
 	rdpStep, rdpPort := rdpSetupStep(r)
@@ -31,8 +29,7 @@ func setupWindows(cfg Config, r Runner) SetupResult {
 	steps = append(steps, windowsFirewallSetupStep(r, cfg.FirewallRule, rdpPort))
 
 	if !cfg.NoSleep {
-		err := r.Run("powercfg", "/change", "standby-timeout-ac", "0", "/change", "hibernate-timeout-ac", "0", "/change", "monitor-timeout-ac", "0")
-		steps = append(steps, actStep("Power settings", err, "Sleep disabled (AC power)", "Could not modify power settings", "disable sleep on AC power"))
+		steps = append(steps, powerStep(r))
 	}
 	return SetupResult{RDPPort: rdpPort, Steps: steps}
 }
@@ -50,8 +47,13 @@ func unattendedStep(r Runner) SetupStep {
 			return newStep(name, OutcomeOK, "Unattended mode already enabled", "")
 		}
 	}
-	return actStep(name, r.Run("tailscale", "set", "--unattended"),
-		"Unattended mode enabled", "Could not enable via CLI — check Tailscale GUI", "enable unattended mode in the Tailscale GUI")
+	if err := r.Run("tailscale", "set", "--unattended"); err != nil {
+		if _, lerr := r.LookPath("tailscale"); lerr != nil {
+			return newStep(name, OutcomeFailed, "Tailscale CLI not found — is Tailscale installed?", "install Tailscale")
+		}
+		return newStep(name, OutcomeFailed, "Could not enable via CLI — check Tailscale GUI", "enable unattended mode in the Tailscale GUI")
+	}
+	return newStep(name, OutcomeChanged, "Unattended mode enabled", "")
 }
 
 // actStep maps an action's error to "changed" or "failed".
@@ -181,6 +183,7 @@ func actRead(name string, err error, okMsg, failMsg, fix string) SetupStep {
 }
 
 const (
+	psReadNetworkProfile    = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { Write-Output "category=$($_.NetworkCategory)" }`
 	psNetworkProfilePrivate = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
 	psReadRDPPort           = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
 	psReadRDPDeny           = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; Write-Output "policy=$p"; Write-Output "local=$l"`
@@ -208,19 +211,123 @@ func readPortPS(r Runner, script string) (int, error) {
 	return port, nil
 }
 
-func startService(r Runner, name string) error {
-	if err := r.Run("sc", "config", name, "start=auto"); err != nil {
-		return err
+// serviceStep sets service name to start automatically and starts it, reading
+// both first: "ok" when it already is, "changed" when this run acted (#604).
+func serviceStep(r Runner, svc, name, failMsg, fix string) SetupStep {
+	auto, running := serviceState(r, svc)
+	if auto && running {
+		return newStep(name, OutcomeOK, "Already running", "")
 	}
-	out, err := r.Output("sc", "query", name)
-	if err != nil {
-		return err
+	if !auto {
+		if err := r.Run("sc", "config", svc, "start=auto"); err != nil {
+			return newStep(name, OutcomeFailed, failMsg, fix)
+		}
 	}
-	if !strings.Contains(string(out), "RUNNING") {
-		return r.Run("net", "start", name)
+	if !running {
+		if err := r.Run("net", "start", svc); err != nil {
+			return newStep(name, OutcomeFailed, failMsg, fix)
+		}
 	}
-	return nil
+	return newStep(name, OutcomeChanged, "Running", "")
 }
+
+// serviceState reads the start type (sc qc) and the state (sc query). A read
+// that fails reports false, so the step acts rather than trusting it.
+func serviceState(r Runner, svc string) (auto, running bool) {
+	if out, err := r.Output("sc", "qc", svc); err == nil {
+		auto = strings.Contains(string(out), "AUTO_START")
+	}
+	if out, err := r.Output("sc", "query", svc); err == nil {
+		running = strings.Contains(string(out), "RUNNING")
+	}
+	return auto, running
+}
+
+// networkProfileStep sets the Tailscale connection profile to Private after
+// reading it. With no Tailscale adapter there is nothing to set: "manual",
+// never "changed" (#604).
+func networkProfileStep(r Runner) SetupStep {
+	const name = "Network profile"
+	const fail, fix = "Could not set network profile to Private", "set the Tailscale network profile to Private"
+	out, err := outputPS(r, psReadNetworkProfile)
+	if err != nil {
+		return newStep(name, OutcomeFailed, fail, fix)
+	}
+	count, private := parseNetworkProfiles(string(out))
+	switch {
+	case count == 0:
+		return newStep(name, OutcomeManual, "No Tailscale network adapter", "install Tailscale and log in, then run host setup again")
+	case private == count:
+		return newStep(name, OutcomeOK, "Already Private", "")
+	}
+	if err := runPS(r, psNetworkProfilePrivate); err != nil {
+		return newStep(name, OutcomeFailed, fail, fix)
+	}
+	return newStep(name, OutcomeChanged, "Set to Private", "")
+}
+
+// parseNetworkProfiles counts the Tailscale profiles psReadNetworkProfile
+// lists and how many of them are Private.
+func parseNetworkProfiles(out string) (count, private int) {
+	for _, line := range strings.Split(out, "\n") {
+		v, ok := strings.CutPrefix(strings.TrimSpace(line), "category=")
+		if !ok {
+			continue
+		}
+		count++
+		if v == "Private" {
+			private++
+		}
+	}
+	return count, private
+}
+
+// powerSettings are the AC timeouts setup sets to 0, with the powercfg
+// subgroup and setting aliases that read them.
+var powerSettings = []struct{ change, sub, setting string }{
+	{"standby-timeout-ac", "SUB_SLEEP", "STANDBYIDLE"},
+	{"hibernate-timeout-ac", "SUB_SLEEP", "HIBERNATEIDLE"},
+	{"monitor-timeout-ac", "SUB_VIDEO", "VIDEOIDLE"},
+}
+
+// powerStep disables sleep on AC power. powercfg takes one /change per call
+// (#603), and each timeout is read first so a converged host reports "ok".
+func powerStep(r Runner) SetupStep {
+	const name = "Power settings"
+	changed := false
+	for _, p := range powerSettings {
+		if acTimeoutZero(r, p.sub, p.setting) {
+			continue
+		}
+		if err := r.Run("powercfg", "/change", p.change, "0"); err != nil {
+			return newStep(name, OutcomeFailed, "Could not modify power settings ("+p.change+")", "disable sleep on AC power")
+		}
+		changed = true
+	}
+	if !changed {
+		return newStep(name, OutcomeOK, "Sleep already disabled (AC power)", "")
+	}
+	return newStep(name, OutcomeChanged, "Sleep disabled (AC power)", "")
+}
+
+// acTimeoutZero reads one setting of the active scheme. powercfg localizes its
+// labels but not their order: the AC index is the second-to-last hex value,
+// the DC index the last. An unreadable answer reports false, so the step sets
+// the value rather than trusting it.
+func acTimeoutZero(r Runner, sub, setting string) bool {
+	out, err := r.Output("powercfg", "/query", "SCHEME_CURRENT", sub, setting)
+	if err != nil {
+		return false
+	}
+	hex := hexValue.FindAllString(string(out), -1)
+	if len(hex) < 2 {
+		return false
+	}
+	v, err := strconv.ParseUint(hex[len(hex)-2][2:], 16, 32)
+	return err == nil && v == 0
+}
+
+var hexValue = regexp.MustCompile(`0x[0-9a-fA-F]{8}`)
 
 const (
 	windowsFirewallFix     = "allow TCP %d inbound in Windows Defender Firewall"
