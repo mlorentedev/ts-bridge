@@ -318,3 +318,46 @@ func TestPromptEnvUpdate_NonTerminalStdinIsNo(t *testing.T) {
 		t.Errorf("output = %q; want it to point at --auto", out.String())
 	}
 }
+
+// The key sources are wired in parseDiscoverFlags and discoverAPIKey; driving
+// the real flag set is what proves --api-key, --api-key-file and the deprecated
+// --auth-key reach the resolved key, and in which order.
+func TestDiscoverAPIKeyResolvesThroughTheFlagSet(t *testing.T) {
+	keyFile := filepath.Join(t.TempDir(), "apikey")
+	if err := os.WriteFile(keyFile, []byte("from-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		args []string
+		env  string
+		want string
+	}{
+		{"file only", []string{"--api-key-file", keyFile}, "", "from-file"},
+		{"flag only", []string{"--api-key", "from-flag"}, "", "from-flag"},
+		{"env only", nil, "from-env", "from-env"},
+		{"deprecated --auth-key", []string{"--auth-key", "from-alias"}, "", "from-alias"},
+		{"--api-key beats the deprecated alias", []string{"--auth-key", "from-alias", "--api-key", "from-flag"}, "", "from-flag"},
+		{"flag beats env", []string{"--api-key", "from-flag"}, "from-env", "from-flag"},
+		{"file beats flag and env", []string{"--api-key", "from-flag", "--api-key-file", keyFile}, "from-env", "from-file"},
+		{"nothing set", nil, "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TS_HEADSCALE_API_KEY", tt.env)
+			cmd := newDiscoverCmd()
+			cmd.SetErr(&strings.Builder{}) // the deprecation notice goes here
+			if err := cmd.ParseFlags(tt.args); err != nil {
+				t.Fatal(err)
+			}
+			flags, err := parseDiscoverFlags(cmd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := discoverAPIKey(flags, "TS_HEADSCALE_API_KEY")
+			if err != nil || got != tt.want {
+				t.Fatalf("discoverAPIKey = %q, %v; want %q", got, err, tt.want)
+			}
+		})
+	}
+}
