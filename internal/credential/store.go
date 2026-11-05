@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"ts-bridge/internal/secretfile"
 )
 
 var ErrCredentialExists = errors.New("credential already exists")
@@ -69,7 +71,10 @@ func (s *Store) Set(name, rawKey string, replace bool) error {
 			return fmt.Errorf("stat credential %q: %w", name, err)
 		}
 	}
-	return s.writeAtomic(path, name, key)
+	if err := secretfile.WriteFileWith(path, []byte(key), s.rename); err != nil {
+		return fmt.Errorf("write credential %q: %w", name, err)
+	}
+	return nil
 }
 
 func (s *Store) Get(name string) (string, error) {
@@ -125,50 +130,8 @@ func (s *Store) ensureDir() error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return fmt.Errorf("create credential directory: %w", err)
 	}
-	if err := hardenCredentialPath(s.dir, true); err != nil {
+	if err := secretfile.Harden(s.dir, true); err != nil {
 		return fmt.Errorf("secure credential directory: %w", err)
-	}
-	return nil
-}
-
-func (s *Store) writeAtomic(path, name, key string) error {
-	temp, err := os.CreateTemp(s.dir, "."+name+"-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create temporary credential: %w", err)
-	}
-	tempPath := temp.Name()
-	defer func() { _ = os.Remove(tempPath) }()
-
-	if err := writeCredentialTemp(temp, key); err != nil {
-		return err
-	}
-	if err := hardenCredentialPath(tempPath, false); err != nil {
-		return fmt.Errorf("secure temporary credential: %w", err)
-	}
-	if err := s.rename(tempPath, path); err != nil {
-		return fmt.Errorf("replace credential %q: %w", name, err)
-	}
-	if err := hardenCredentialPath(path, false); err != nil {
-		return fmt.Errorf("secure credential %q: %w", name, err)
-	}
-	return nil
-}
-
-func writeCredentialTemp(file *os.File, key string) error {
-	if err := file.Chmod(0o600); err != nil {
-		_ = file.Close()
-		return fmt.Errorf("set credential permissions: %w", err)
-	}
-	if _, err := file.WriteString(key); err != nil {
-		_ = file.Close()
-		return fmt.Errorf("write credential: %w", err)
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return fmt.Errorf("sync credential: %w", err)
-	}
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("close credential: %w", err)
 	}
 	return nil
 }
