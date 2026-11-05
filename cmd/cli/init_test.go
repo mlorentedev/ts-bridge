@@ -974,8 +974,13 @@ func TestInitWithoutTTYIsActionable(t *testing.T) {
 		}
 	}
 	// The hint names flags by text; make the test fail if init stops defining them.
+	// Look them up on the init the root above executes, not on a fresh newInitCmd().
+	initCmd, _, err := root.Find([]string{"init"})
+	if err != nil || initCmd.Name() != "init" {
+		t.Fatalf("root has no init command: %v", err)
+	}
 	for _, name := range []string{"auth-key-file", "target"} {
-		if newInitCmd().Flags().Lookup(name) == nil {
+		if initCmd.Flags().Lookup(name) == nil {
 			t.Errorf("the refusal tells users to pass --%s but init does not define it", name)
 		}
 	}
