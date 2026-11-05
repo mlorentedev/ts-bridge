@@ -111,7 +111,8 @@ main() {
   if [ "$KEEP" = 1 ]; then
     trap 'rm -rf "$dir"; echo "e2e: kept session $SESSION (make e2e-clean removes it)"' EXIT
   else
-    trap 'rm -rf "$dir"; down "$OS"' EXIT
+    # A teardown that fails leaves the guest running: the run must not pass.
+    trap 'rc=$?; rm -rf "$dir"; down "$OS" || { [ "$rc" != 0 ] || rc=1; }; exit "$rc"' EXIT
   fi
   dotf vm "$OS" up --session "$SESSION" >/dev/null
   echo "e2e $OS: candidate $(cd "$ROOT" && git rev-parse --short HEAD), previous $(cat "$dir/prev-tag")"

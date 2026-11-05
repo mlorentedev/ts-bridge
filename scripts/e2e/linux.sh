@@ -68,7 +68,7 @@ outcomes setup "$C" >"$W/j1"
 ok "setup #1: xrdp ok, firewall converged" -- "json '{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"xrdp service\") in (\"ok\",\"changed\") and {s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"Firewall configuration\") in (\"ok\",\"changed\") and all(s[\"outcome\"] in (\"ok\",\"changed\") for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j1"
 outcomes setup "$C" >"$W/j2"
 # ADR-017: a second setup on a converged host reports ok, not failed or manual.
-ok "setup #2: nothing changed" -- "json 'j[\"steps\"] and all(s[\"outcome\"]==\"ok\" for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j2"
+ok "setup #2: nothing changed" -- "json '{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"xrdp service\")==\"ok\" and {s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"Firewall configuration\")==\"ok\" and all(s[\"outcome\"]==\"ok\" for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j2"
 ok "setup: Tailscale step fails without a node" -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Tailscale\") and s[\"outcome\"]==\"failed\" and s[\"fix\"]]' <$W/j2"
 outcomes check "$C" >"$W/jc"
 ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True}]' <$W/jc"
