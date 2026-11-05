@@ -87,6 +87,9 @@ func runAuthSet(command *cobra.Command, args []string) error {
 	}
 	profileStore := profile.NewStore(defaultProfileStorePath)
 	selectedProfile, err := profileStore.Get(profileName)
+	if errors.Is(err, profile.ErrNotFound) {
+		return fmt.Errorf("load profile %q: %w\ncreate it first: ts-bridge import %s <tsb://host:port?cp=...>", profileName, err, profileName)
+	}
 	if err != nil {
 		return fmt.Errorf("load profile %q: %w", profileName, err)
 	}

@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ts-bridge/internal/config"
@@ -117,5 +119,59 @@ func TestConnectProfileResolvedBeforeValidation(t *testing.T) {
 				t.Errorf("ControlURL = %q, want %q", captured.ControlURL, tt.wantControl)
 			}
 		})
+	}
+}
+
+// After `ts-bridge import home tsb://...` the next documented step is
+// `connect --profile home`; without a credential it must point at the managed
+// path (ADR-015) the profile is built for, not only at TS_AUTHKEY.
+func TestConnectProfileWithoutCredentialPointsToAuthSet(t *testing.T) {
+	t.Chdir(t.TempDir())
+	storePath := filepath.Join(t.TempDir(), "profiles.yaml")
+	if err := profile.NewStore(storePath).Set("home", "acemagic-office:45000", ""); err != nil {
+		t.Fatal(err)
+	}
+	oldStore, oldRunner, oldLogger := defaultProfileStorePath, Runner, LoggerInit
+	t.Cleanup(func() { defaultProfileStorePath, Runner, LoggerInit = oldStore, oldRunner, oldLogger })
+	defaultProfileStorePath, LoggerInit = storePath, nil
+	Runner = func(config.Config) error { return nil }
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_TARGET", "")
+
+	cmd := newConnectCmd()
+	cmd.SetArgs([]string{"--profile", "home"})
+	cmd.SilenceUsage, cmd.SilenceErrors = true, true
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("connect --profile home without any credential succeeded")
+	}
+	if !strings.Contains(err.Error(), "auth set --profile home") {
+		t.Fatalf("error = %q; want it to name `ts-bridge auth set --profile home`", err)
+	}
+	if !errors.Is(err, config.ErrAuthKeyRequired) {
+		t.Fatalf("error = %v; want it to still wrap config.ErrAuthKeyRequired", err)
+	}
+}
+
+// Without --profile there is no profile to attach a credential to, so the hint
+// must not invent one.
+func TestConnectWithoutProfileDoesNotSuggestAuthSet(t *testing.T) {
+	t.Chdir(t.TempDir())
+	oldRunner, oldLogger := Runner, LoggerInit
+	t.Cleanup(func() { Runner, LoggerInit = oldRunner, oldLogger })
+	LoggerInit = nil
+	Runner = func(config.Config) error { return nil }
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_TARGET", "")
+
+	cmd := newConnectCmd()
+	cmd.SetArgs([]string{"--target", "host:22"})
+	cmd.SilenceUsage, cmd.SilenceErrors = true, true
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("connect without any credential succeeded")
+	}
+	if strings.Contains(err.Error(), "auth set") {
+		t.Fatalf("error = %q; must not suggest auth set without --profile", err)
 	}
 }

@@ -55,7 +55,8 @@ ts-bridge --help
 > **Security Note:** Keys in environment variables or `.env` files are readable by child processes, and `--auth-key` is visible in the process list. Prefer managed onboarding:
 >
 > ```bash
-> ts-bridge auth set --profile office
+> ts-bridge import office "tsb://my-desktop:3389?cp=saas"   # creates the profile
+> ts-bridge auth set --profile office                       # masked prompt
 > ts-bridge connect --profile office
 > ```
 >

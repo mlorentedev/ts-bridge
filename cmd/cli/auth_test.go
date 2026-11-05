@@ -210,3 +210,17 @@ func TestAuthDefaultsUsePerUserPaths(t *testing.T) {
 		t.Fatalf("default credential dir = %q, want %q", defaultCredentialStoreDir, config.CredentialStoreDir())
 	}
 }
+
+// On a fresh install the profile does not exist; the error must name the
+// command that creates it, not just the store path.
+func TestAuthSetUnknownProfileNamesHowToCreateIt(t *testing.T) {
+	setupAuthCommandTest(t)
+	authSecretReader = func(string) (string, error) { return "tskey-auth-kAbc-Secret", nil }
+	_, _, err := executeAuthCommand(t, "set", "--profile", "office")
+	if err == nil {
+		t.Fatal("auth set for a missing profile succeeded")
+	}
+	if !strings.Contains(err.Error(), "ts-bridge import office") {
+		t.Fatalf("error = %q; want it to name `ts-bridge import office <tsb://...>`", err)
+	}
+}

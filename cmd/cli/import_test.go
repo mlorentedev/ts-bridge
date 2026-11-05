@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ts-bridge/internal/config"
@@ -186,5 +187,21 @@ func TestBackwardCompat_ExistingTargetWithoutProfile(t *testing.T) {
 	}
 	if cfg.ControlURL != "" {
 		t.Errorf("ControlURL should be empty; got %q", cfg.ControlURL)
+	}
+}
+
+// import is the first step of import -> auth set -> connect; it must say what
+// comes next, since the profile cannot connect without a credential.
+func TestRunImport_PrintsNextSteps(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "profiles.yaml")
+	stdout, _ := captureInitOutput(t, func() {
+		if err := runImportDirect("home", "tsb://acemagic-office:45000?cp=saas", storePath); err != nil {
+			t.Errorf("runImportDirect: %v", err)
+		}
+	})
+	for _, want := range []string{"ts-bridge auth set --profile home", "ts-bridge connect --profile home"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout = %q; want it to contain %q", stdout, want)
+		}
 	}
 }
