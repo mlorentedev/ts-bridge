@@ -309,6 +309,34 @@ func TestConnectProfileCredentialLoadErrorPointsToAuthSet(t *testing.T) {
 			if got := strings.Contains(err.Error(), "auth set --profile office"); got != tt.wantHint {
 				t.Fatalf("error = %q; names auth set = %v, want %v", err, got, tt.wantHint)
 			}
+			if !tt.wantHint && !strings.Contains(err.Error(), "auth key invalid format") {
+				t.Fatalf("error = %q; want the env key's format error, or this case tests another path", err)
+			}
 		})
+	}
+}
+
+// browser is a profile command too: a profile with no credential yet must name
+// the step that stores one.
+func TestBrowserProfileWithoutCredentialPointsToAuthSet(t *testing.T) {
+	profilePath, _ := setupProfileCredentialTest(t)
+	if err := profile.NewStore(profilePath).Set("bare", "acemagic-office:45000", ""); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_CONTROL_URL", "")
+	oldRunner, oldLogger := BrowserRunner, LoggerInit
+	t.Cleanup(func() { BrowserRunner, LoggerInit = oldRunner, oldLogger })
+	LoggerInit = nil
+	BrowserRunner = func(config.Config, BrowserOptions) error { return nil }
+
+	command := newBrowserCmd()
+	command.SetArgs([]string{"--profile", "bare", "--url", "https://forge.example.internal/",
+		"--route", "forge.example.internal:443=apps:443"})
+	command.SilenceUsage, command.SilenceErrors = true, true
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "auth set --profile bare") {
+		t.Fatalf("browser --profile bare = %v; want it to name `ts-bridge auth set --profile bare`", err)
 	}
 }
