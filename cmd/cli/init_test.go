@@ -755,13 +755,13 @@ func TestInitValidatesTheEffectiveEnvLayer(t *testing.T) {
 			name:       "malformed preserved control URL is refused when no flag is given",
 			envContent: "TS_AUTHKEY=tskey-auth-old\nTS_CONTROL_URL=headscale.example.com\n",
 			key:        "hskey-abcdef",
-			wantErr:    "control URL must be",
+			wantErr:    "control URL: must be an http or https URL",
 		},
 		{
 			name:       "malformed preserved control URL is refused for a Tailscale key too",
 			envContent: "TS_CONTROL_URL=headscale.example.com\n",
 			key:        "tskey-auth-init-secret",
-			wantErr:    "control URL must be",
+			wantErr:    "control URL: must be an http or https URL",
 		},
 		{
 			name:       "malformed preserved target loses to the flag",
@@ -923,7 +923,7 @@ func TestPrintNextSteps(t *testing.T) {
 	}
 }
 
-// Every command that accepts an inline --auth-key must warn that the value is
+// Every command that accepts an inline --auth-key or --api-key must warn that the value is
 // visible in the process list. Walking the whole tree instead of naming commands
 // is the point: discover took the flag without the warning because the check
 // named only init.
@@ -931,10 +931,12 @@ func TestAuthKeyFlags_WarnProcessList(t *testing.T) {
 	var walk func(c *cobra.Command) int
 	walk = func(c *cobra.Command) int {
 		n := 0
-		if f := c.Flags().Lookup("auth-key"); f != nil {
-			n++
-			if !strings.Contains(f.Usage, "visible in process list") {
-				t.Errorf("%q: --auth-key usage lacks the process-list warning: %q", c.CommandPath(), f.Usage)
+		for _, name := range []string{"auth-key", "api-key"} {
+			if f := c.Flags().Lookup(name); f != nil {
+				n++
+				if !strings.Contains(f.Usage, "visible in process list") {
+					t.Errorf("%q: --%s usage lacks the process-list warning: %q", c.CommandPath(), name, f.Usage)
+				}
 			}
 		}
 		for _, sub := range c.Commands() {
@@ -944,5 +946,51 @@ func TestAuthKeyFlags_WarnProcessList(t *testing.T) {
 	}
 	if n := walk(NewRootCmd()); n < 3 {
 		t.Fatalf("found --auth-key on %d commands, want at least connect, init and discover", n)
+	}
+}
+
+// `init --target X` without a terminal (CI, a pipe) used to enter the wizard,
+// print the masked prompt and die with a raw ioctl error. It must refuse before
+// prompting, name the flags that work without a terminal, and write nothing.
+func TestInitWithoutTTYIsActionable(t *testing.T) {
+	t.Chdir(t.TempDir())
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	t.Cleanup(func() { _ = r.Close() })
+
+	root := NewRootCmd()
+	root.SetIn(r)
+	root.SetArgs([]string{"init", "--target", "100.64.0.1:3389"})
+	var runErr error
+	stdout, stderr := captureInitOutput(t, func() { runErr = root.Execute() })
+
+	if runErr == nil {
+		t.Fatal("init without a TTY and without a key flag succeeded")
+	}
+	for _, want := range []string{"stdin is not a terminal", "--auth-key-file", "--target"} {
+		if !strings.Contains(runErr.Error(), want) {
+			t.Errorf("error = %q; want it to contain %q", runErr, want)
+		}
+	}
+	// The hint names flags by text; make the test fail if init stops defining them.
+	// Look them up on the init the root above executes, not on a fresh newInitCmd().
+	initCmd, _, err := root.Find([]string{"init"})
+	if err != nil || initCmd.Name() != "init" {
+		t.Fatalf("root has no init command: %v", err)
+	}
+	for _, name := range []string{"auth-key-file", "target"} {
+		if initCmd.Flags().Lookup(name) == nil {
+			t.Errorf("the refusal tells users to pass --%s but init does not define it", name)
+		}
+	}
+	if strings.Contains(stdout+stderr, "Auth key") {
+		t.Errorf("output = %q; the wizard prompted before refusing", stdout+stderr)
+	}
+	// Whatever the output format, a refused init writes nothing.
+	if entries, err := os.ReadDir("."); err != nil || len(entries) != 0 {
+		t.Errorf("working directory after a refused init: %v (err %v), want it empty", entries, err)
 	}
 }
