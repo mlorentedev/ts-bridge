@@ -58,3 +58,41 @@ func TestConfigureUsageOnErrors_FlagErrorShowsUsage(t *testing.T) {
 		t.Errorf("flag-parse error should show usage, got:\n%s", out.String())
 	}
 }
+
+// The root used to declare a persistent --config ("reserved for future use")
+// that every command without its own flag accepted and ignored.
+func TestRootConfigFlagIsNotSilentlyIgnored(t *testing.T) {
+	for _, args := range [][]string{
+		{"status", "--addr", "127.0.0.1:1", "--config", "/nonexistent/ts-bridge.yaml"},
+		{"auth", "list", "--config", "/nonexistent/ts-bridge.yaml"},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			setupAuthCommandTest(t)
+			root := NewRootCmd()
+			root.SetArgs(args)
+			root.SetOut(&bytes.Buffer{})
+			root.SetErr(&bytes.Buffer{})
+			var err error
+			captureInitOutput(t, func() { err = root.Execute() })
+			if err == nil {
+				t.Fatalf("%v: --config of a missing file was accepted and ignored", args)
+			}
+		})
+	}
+}
+
+// Guard for the class: a command may take --config only by declaring it itself,
+// never by inheriting a flag that nothing reads. Walking the tree keeps this
+// true for commands added later.
+func TestNoCommandInheritsAConfigFlag(t *testing.T) {
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		if f := c.InheritedFlags().Lookup("config"); f != nil {
+			t.Errorf("%q inherits --config from an ancestor; declare it on the command that reads it", c.CommandPath())
+		}
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(NewRootCmd())
+}
