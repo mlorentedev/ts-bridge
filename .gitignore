@@ -73,3 +73,4 @@ pr-body.md
 specs/**/review-transcript.jsonl
 specs/**/review-transcript.jsonl.stderr
 mutation-report.json
+scripts/e2e/out/

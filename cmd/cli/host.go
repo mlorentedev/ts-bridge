@@ -143,10 +143,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 
 	// macOS: not applicable.
 	if hostGOOS == "darwin" {
-		out := cmd.OutOrStdout()
-		fmt.Fprintln(out, "Host setup is not applicable on macOS.")
-		fmt.Fprintln(out, "Use the client mode (ts-bridge connect) to connect to a remote host.")
-		return nil
+		return printSetupNotApplicable(cmd)
 	}
 
 	// Admin check.
@@ -230,6 +227,31 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	// Windows comes from the registry and may differ from the requested --port.
 	printSetupSummary(cmd.OutOrStdout(), hostTailscaleIP(), result)
 	return setupConvergence(result.Steps)
+}
+
+// printSetupNotApplicable answers "host setup" on macOS. With --json it still
+// prints the JSON document (no steps, the reason in not_applicable), so a
+// script decoding stdout can tell "not applicable" from "converged".
+func printSetupNotApplicable(cmd *cobra.Command) error {
+	const reason = "Host setup is not applicable on macOS."
+	const hint = "Use the client mode (ts-bridge connect) to connect to a remote host."
+	out := cmd.OutOrStdout()
+	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+		data, err := json.MarshalIndent(setupJSONOutput{
+			Steps:         []setupStepJSON{},
+			Warnings:      []string{},
+			Errors:        []string{},
+			NotApplicable: reason + " " + hint,
+		}, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal setup result: %w", err)
+		}
+		fmt.Fprintln(out, string(data))
+		return nil
+	}
+	fmt.Fprintln(out, reason)
+	fmt.Fprintln(out, hint)
+	return nil
 }
 
 // rdpPortDeclared reports whether the RDP port came from --port, the env layer
@@ -484,11 +506,13 @@ func printClientTarget(w io.Writer, tsIP string, result host.SetupResult) {
 	}
 	fmt.Fprintln(w, "  For a client (ts-bridge connect, .env):")
 	fmt.Fprintf(w, "  TS_TARGET=%s:%d\n", tsIP, result.RDPPort)
-	if desc := buildDescriptorLine(tsIP, result.RDPPort, result.ControlURL); desc != "" {
+	if desc := hostDescriptorLine(tsIP, result.RDPPort, result.ControlURL); desc != "" {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "  Shareable descriptor:")
 		fmt.Fprintf(w, "  %s\n", desc)
 		fmt.Fprintf(w, "  (import with: ts-bridge import <name> %q)\n", desc)
+	} else if result.RDPPort != 0 {
+		fmt.Fprintf(w, "\n  %s\n", descriptorOmittedNote)
 	}
 }
 
@@ -503,6 +527,22 @@ func buildDescriptorLine(ip string, port int, controlURL string) string {
 	return d.String()
 }
 
+// descriptorOmittedNote is the one line host setup and check print in place of
+// a descriptor whose control plane is neither declared nor detected.
+const descriptorOmittedNote = "Descriptor omitted: control plane unknown; declare host.control_url"
+
+// hostDescriptorLine is buildDescriptorLine for a host result: an unknown
+// control plane ("") yields no descriptor instead of a SaaS one (#453).
+func hostDescriptorLine(ip string, port int, controlURL string) string {
+	switch controlURL {
+	case "":
+		return ""
+	case host.ControlPlaneSaaS:
+		controlURL = ""
+	}
+	return buildDescriptorLine(ip, port, controlURL)
+}
+
 // setupJSONOutput is the JSON structure for host setup --json output.
 type setupJSONOutput struct {
 	Steps    []setupStepJSON `json:"steps"`
@@ -511,6 +551,8 @@ type setupJSONOutput struct {
 	Errors   []string        `json:"errors"`
 	// Descriptor is the tsb:// line of the text summary; absent without an IP.
 	Descriptor string `json:"descriptor,omitempty"`
+	// NotApplicable is why setup ran no steps; absent where setup applies.
+	NotApplicable string `json:"not_applicable,omitempty"`
 }
 
 type setupStepJSON struct {
@@ -547,7 +589,7 @@ func setupJSON(tsIP string, result host.SetupResult) ([]byte, error) {
 		Steps:      stepsJSON(result.Steps),
 		Warnings:   []string{},
 		Errors:     []string{},
-		Descriptor: buildDescriptorLine(tsIP, result.RDPPort, result.ControlURL),
+		Descriptor: hostDescriptorLine(tsIP, result.RDPPort, result.ControlURL),
 	}
 	for _, step := range result.Steps {
 		if !step.Success {
@@ -580,8 +622,10 @@ func printCheckText(w io.Writer, r host.CheckResult) {
 			fmt.Fprintf(w, "  ! %s (%s): %s\n", step.Name, step.Outcome, step.Fix)
 		}
 	}
-	if desc := buildDescriptorLine(r.TailscaleIP, r.RDPPort, r.ControlURL); desc != "" {
+	if desc := hostDescriptorLine(r.TailscaleIP, r.RDPPort, r.ControlURL); desc != "" {
 		fmt.Fprintf(w, "  Descriptor:    %s\n", desc)
+	} else if r.TailscaleIP != "" && r.RDPPort != 0 {
+		fmt.Fprintf(w, "  %s\n", descriptorOmittedNote)
 	}
 	fmt.Fprintln(w, "  ---------------------------------------")
 	fmt.Fprintln(w)
@@ -633,7 +677,7 @@ func checkJSON(r host.CheckResult) ([]byte, error) {
 		FirewallOK:  r.FirewallOK,
 		TailscaleUp: r.TailscaleUp,
 		Platform:    runtime.GOOS,
-		Descriptor:  buildDescriptorLine(r.TailscaleIP, r.RDPPort, r.ControlURL),
+		Descriptor:  hostDescriptorLine(r.TailscaleIP, r.RDPPort, r.ControlURL),
 		Services:    make([]serviceJSON, 0, len(r.Services)),
 		Steps:       stepsJSON(r.Steps),
 	}

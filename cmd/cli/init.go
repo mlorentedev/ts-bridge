@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +20,7 @@ import (
 	"ts-bridge/internal/config/envfile"
 	"ts-bridge/internal/credential"
 	"ts-bridge/internal/profile"
+	"ts-bridge/internal/secretfile"
 )
 
 // newInitCmd constructs the "ts-bridge init" subcommand.
@@ -243,6 +244,11 @@ func parseInitFlags(cmd *cobra.Command) (initFlags, error) {
 
 // runInitInteractive prompts the user for all required values.
 func runInitInteractive(cmd *cobra.Command, f initFlags) error {
+	// The masked prompt needs a terminal; without one it fails with a raw ioctl
+	// error after printing the prompt. Refuse first and name the way out.
+	if isNonInteractive(cmd) {
+		return fmt.Errorf("stdin is not a terminal; pass --auth-key-file FILE --target HOST:PORT")
+	}
 	in := cmd.InOrStdin()
 	reader := bufio.NewReader(in)
 
@@ -356,7 +362,14 @@ func runInitNonInteractive(cmd *cobra.Command, f initFlags) error {
 // ─── Input helpers ───────────────────────────────────────────────
 
 // readMaskedInput reads a line with no echo (masked) using golang.org/x/term.
+// errStdinNotTerminal is returned by readMaskedInput when stdin is a pipe or a
+// file: the masked read needs a terminal, so it refuses before prompting.
+var errStdinNotTerminal = errors.New("stdin is not a terminal, so the key cannot be read masked")
+
 func readMaskedInput(prompt string) (string, error) {
+	if !isTerminal(os.Stdin.Fd()) {
+		return "", errStdinNotTerminal
+	}
 	fmt.Print(prompt)
 
 	// #nosec G104,G115 -- user-provided prompt, not a credential; os.Stdin.Fd() is always valid.
@@ -645,14 +658,10 @@ func buildEnvConfigContent(f initFlags) string {
 	return sb.String()
 }
 
-// writeFileWithPerms writes content to a file with 0600 permissions and checks permissions.
+// writeFileWithPerms atomically replaces path with content at mode 0600,
+// tightening a file that already exists with a looser mode.
 func writeFileWithPerms(path string, content []byte) error {
-	// #nosec G306 -- path is user-controlled via --config flag.
-	if err := os.WriteFile(path, content, 0600); err != nil {
-		return err
-	}
-	checkPermissions(path)
-	return nil
+	return secretfile.WriteFile(path, content)
 }
 
 // envKeyOrder is the order known .env keys are written in, so regenerating a
@@ -710,11 +719,18 @@ func buildEnvContent(f initFlags, values map[string]string) string {
 	return sb.String()
 }
 
+// isTerminal reports whether fd is a terminal. A variable so tests can say which
+// descriptor is one: in CI every real descriptor is not, which would hide a
+// check made on the wrong stream.
+var isTerminal = func(fd uintptr) bool {
+	return term.IsTerminal(int(fd)) // #nosec G115 -- a file descriptor fits in int
+}
+
 // isNonInteractive returns true if stdin is not a terminal (piped input, CI, etc.).
 func isNonInteractive(cmd *cobra.Command) bool {
 	in := cmd.InOrStdin()
 	if f, ok := in.(*os.File); ok {
-		return !term.IsTerminal(int(f.Fd()))
+		return !isTerminal(f.Fd())
 	}
 	return true
 }
@@ -725,17 +741,6 @@ func defaultConfigPath(format string) string {
 		return "ts-bridge.yaml"
 	}
 	return ".env"
-}
-
-// checkPermissions warns if the file is world-readable (Unix only).
-func checkPermissions(path string) {
-	if runtime.GOOS != windowsOS {
-		info, err := os.Stat(path)
-		if err == nil && info.Mode().Perm()&0077 != 0 {
-			fmt.Fprintf(os.Stderr, "WARNING: %s has loose permissions (%04o); consider chmod 600 %s\n",
-				path, info.Mode().Perm(), path)
-		}
-	}
 }
 
 // ─── Output helpers ──────────────────────────────────────────────

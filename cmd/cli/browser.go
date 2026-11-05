@@ -129,7 +129,7 @@ func applyBrowserProfile(yamlConfig *config.PartialConfig, flags *config.FlagSet
 			return err
 		}
 		if flags.AuthKey == "" {
-			return fmt.Errorf("profile %q has no managed credential", profileName)
+			return fmt.Errorf("profile %q has no managed credential\nstore one for the profile: ts-bridge auth set --profile %s", profileName, profileName)
 		}
 	}
 	return nil

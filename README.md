@@ -55,7 +55,8 @@ ts-bridge --help
 > **Security Note:** Keys in environment variables or `.env` files are readable by child processes, and `--auth-key` is visible in the process list. Prefer managed onboarding:
 >
 > ```bash
-> ts-bridge auth set --profile office
+> ts-bridge import office "tsb://my-desktop:3389?cp=saas"   # creates the profile
+> ts-bridge auth set --profile office                       # masked prompt
 > ts-bridge connect --profile office
 > ```
 >
@@ -96,6 +97,11 @@ When the host runs `ts-bridge host setup` or `ts-bridge host check`, the output 
   tsb://acemagic-office:45000?cp=saas
   (import with: ts-bridge import home "tsb://acemagic-office:45000?cp=saas")
 ```
+
+The `cp=` value is the host's control plane: `saas` for Tailscale SaaS, the control URL for
+Headscale. The host takes it from `host.control_url` in its host file, else from the local
+Tailscale (`tailscale debug prefs`). When neither is known, the descriptor is omitted and the
+output says so, instead of claiming SaaS.
 
 Import it once, then connect by name:
 

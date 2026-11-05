@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -202,13 +203,18 @@ func validateMergedProxyConfig(cfg Config) error {
 	return validateRequiredFields(cfg)
 }
 
+// ErrAuthKeyRequired is returned when no credential source supplied a key.
+// Callers that know the selected profile wrap it with the managed-credential
+// next step.
+var ErrAuthKeyRequired = errors.New("auth key is required (provide TS_AUTHKEY env var or --auth-key-file flag)")
+
 // validateRequiredFields checks that required config fields are present and valid.
 func validateRequiredFields(cfg Config) error {
 	if cfg.Target == "" && cfg.SOCKS5Addr == "" {
 		return fmt.Errorf("target is required unless a SOCKS5 listener is provided (use --target or --socks5)")
 	}
 	if cfg.AuthKey == "" {
-		return fmt.Errorf("auth key is required (provide TS_AUTHKEY env var or --auth-key-file flag)")
+		return ErrAuthKeyRequired
 	}
 	if err := credential.ValidateKey(cfg.AuthKey); err != nil {
 		return fmt.Errorf("auth key invalid format: %w", err)

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"ts-bridge/internal/controlurl"
 	"ts-bridge/internal/credential"
 )
 
@@ -366,9 +367,13 @@ func parseAuthKey() (string, error) {
 //   - A Tailscale key (tskey-) needs no control URL — it routes to SaaS by
 //     default — and a tskey- with a custom control URL is left alone, since it
 //     may be a legitimate self-hosted Tailscale-compatible control plane.
-//   - Any non-empty control URL must look like an http(s):// URL, so a typo
-//     (e.g. a host with no scheme) is caught here rather than failing deeper in
-//     tsnet with a less obvious error.
+//   - Any non-empty control URL must pass controlurl.Validate (an http(s) URL
+//     with a host and no user info), so a typo (e.g. a host with no scheme) is
+//     caught here rather than failing deeper in tsnet with a less obvious
+//     error, and user info (user:password@) never reaches the banner or the
+//     logs. A query, path or fragment is not refused: a token placed there
+//     would reach both, an accepted risk since no documented control plane
+//     takes one there.
 //
 // Exported so every writer of a configuration file can enforce the pairing the
 // runtime will enforce when it reads that file back: a producer that accepts
@@ -380,9 +385,9 @@ func ValidateControlPlane(authKey, controlURL string) error {
 			"set TS_CONTROL_URL (or --control-url) to your Headscale server, e.g. https://headscale.example.com")
 	}
 	if trimmed != "" {
-		scheme := strings.ToLower(trimmed)
-		if !strings.HasPrefix(scheme, "http://") && !strings.HasPrefix(scheme, "https://") {
-			return fmt.Errorf("control URL must be an http:// or https:// URL, got %q", controlURL)
+		if err := controlurl.Validate(trimmed); err != nil {
+			// The URL is not echoed: it may carry credentials (#618).
+			return fmt.Errorf("control URL: %w", err)
 		}
 	}
 	return nil
