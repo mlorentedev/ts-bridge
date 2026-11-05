@@ -946,3 +946,37 @@ func TestAuthKeyFlags_WarnProcessList(t *testing.T) {
 		t.Fatalf("found --auth-key on %d commands, want at least connect, init and discover", n)
 	}
 }
+
+// `init --target X` without a terminal (CI, a pipe) used to enter the wizard,
+// print the masked prompt and die with a raw ioctl error. It must refuse before
+// prompting, name the flags that work without a terminal, and write nothing.
+func TestInitWithoutTTYIsActionable(t *testing.T) {
+	t.Chdir(t.TempDir())
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	t.Cleanup(func() { _ = r.Close() })
+
+	root := NewRootCmd()
+	root.SetIn(r)
+	root.SetArgs([]string{"init", "--target", "100.64.0.1:3389"})
+	var runErr error
+	stdout, _ := captureInitOutput(t, func() { runErr = root.Execute() })
+
+	if runErr == nil {
+		t.Fatal("init without a TTY and without a key flag succeeded")
+	}
+	for _, want := range []string{"stdin is not a terminal", "--auth-key-file", "--target"} {
+		if !strings.Contains(runErr.Error(), want) {
+			t.Errorf("error = %q; want it to contain %q", runErr, want)
+		}
+	}
+	if strings.Contains(stdout, "Auth key") {
+		t.Errorf("stdout = %q; the wizard prompted before refusing", stdout)
+	}
+	if _, err := os.Stat(".env"); !os.IsNotExist(err) {
+		t.Errorf(".env exists after a refused init (stat err = %v)", err)
+	}
+}

@@ -243,6 +243,11 @@ func parseInitFlags(cmd *cobra.Command) (initFlags, error) {
 
 // runInitInteractive prompts the user for all required values.
 func runInitInteractive(cmd *cobra.Command, f initFlags) error {
+	// The masked prompt needs a terminal; without one it fails with a raw ioctl
+	// error after printing the prompt. Refuse first and name the way out.
+	if isNonInteractive(cmd) {
+		return fmt.Errorf("stdin is not a terminal; pass --auth-key-file FILE --target HOST:PORT")
+	}
 	in := cmd.InOrStdin()
 	reader := bufio.NewReader(in)
 

@@ -239,6 +239,9 @@ TARGET="100.64.0.1:3389"
   # is refused before the wizard (#401), so it would not exercise this path.
   run "${BIN}" init --target 100.64.0.1:3389 </dev/null
   assert_failure
+  assert_contains "stdin is not a terminal"
+  assert_contains "--auth-key-file"
+  refute_contains "Auth key (tskey"
 }
 
 # ---------------------------------------------------------------------------
