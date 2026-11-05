@@ -44,8 +44,9 @@ build() {
   (cd "$ROOT" && GOOS="$goos" GOARCH=arm64 CGO_ENABLED=0 go build -o "$dir/tsb-new$ext" ./cmd/ts-bridge)
   tag="${PREV:-$(gh release view --repo mlorentedev/ts-bridge --json tagName -q .tagName)}"
   if [ "$OS" = windows ]; then asset="ts-bridge-$tag-windows-arm64.zip"; else asset="ts-bridge-$tag-linux-arm64.tar.gz"; fi
+  # Check the asset's own line: --ignore-missing would pass an asset with none.
   (cd "$dir" && gh release download "$tag" --repo mlorentedev/ts-bridge -p "$asset" -p checksums.txt --clobber >/dev/null &&
-    shasum -a 256 -c --ignore-missing checksums.txt >/dev/null) || die "could not verify $asset"
+    grep -E "^[0-9a-f]{64}  $asset\$" checksums.txt | shasum -a 256 -c - >/dev/null) || die "could not verify $asset"
   if [ "$OS" = windows ]; then
     (cd "$dir" && unzip -oq "$asset" && cp ts-bridge-windows-arm64/ts-bridge.exe tsb-old.exe)
   else

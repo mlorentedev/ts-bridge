@@ -124,6 +124,8 @@ Case 'unknown key warned by name, check still runs' { Tsb host check --config "$
 Yaml "$W\v2.yaml" "version: 2`nhost: {}"
 Case 'unsupported version refused' { Tsb host check --config "$W\v2.yaml"; $Code -eq 1 -and $Out -match 'version' }
 Yaml "$W\p.yaml" "version: 1`nhost:`n  services:`n    - kind: rdp`n      port: 3390"
+# The command itself must work, unmarked, so an exception is a FAIL and not #557.
+Case 'declared port 3390: check prints its steps as JSON' { $null -ne (Json check "$W\p.yaml").steps }
 Case 'check: declared port differs from the registry port' 557 {
     @((Json check "$W\p.yaml").steps | Where-Object { $_.outcome -in 'manual', 'failed' -and $_.message -match '3390' }).Count -gt 0
 }
