@@ -91,6 +91,7 @@ git push --force-with-lease
 2. `release-please` detects version-bumping commits and creates/updates a Release PR
 3. Merging the Release PR triggers tag + binary builds + GitHub Release
 4. **Never** manually edit `CHANGELOG.md` or version tags — release-please owns those
+5. Before merging a Release PR that carries a breaking or host-facing change, run the local e2e harness (`make e2e`, see [e2e-vm.md](e2e-vm.md)) and paste its summary lines into the Release PR
 
 ## Why This Exists
 

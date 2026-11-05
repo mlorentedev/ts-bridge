@@ -27,6 +27,46 @@ func TestStatusCommandNotRunning(t *testing.T) {
 	}
 }
 
+// The health server is off unless --health-addr / TS_HEALTH_ADDR is set, so
+// "no answer" does not mean "no bridge". The message must name the opt-in.
+func TestStatusNotRunningNamesHealthAddrOptIn(t *testing.T) {
+	var buf bytes.Buffer
+	_, stderr := captureInitOutput(t, func() {
+		_ = runStatusWithWriter("127.0.0.1:1", false, &buf)
+	})
+	for _, want := range []string{"127.0.0.1:1", "--health-addr", "TS_HEALTH_ADDR"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr = %q; want it to contain %q", stderr, want)
+		}
+	}
+}
+
+// `status --json | jq` must tell "down" from "up": with no answer, stdout
+// carries {"running":false,"addr":...} and the exit stays 0 (smoke.bats pins it).
+func TestStatusJSONNotRunningIsMachineReadable(t *testing.T) {
+	var buf bytes.Buffer
+	var err error
+	captureInitOutput(t, func() {
+		err = runStatusWithWriter("127.0.0.1:1", true, &buf)
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+	var got struct {
+		Running *bool  `json:"running"`
+		Addr    string `json:"addr"`
+	}
+	if jerr := json.Unmarshal(buf.Bytes(), &got); jerr != nil {
+		t.Fatalf("stdout %q is not JSON: %v", buf.String(), jerr)
+	}
+	if got.Running == nil || *got.Running {
+		t.Errorf("running = %v; want false", got.Running)
+	}
+	if got.Addr != "127.0.0.1:1" {
+		t.Errorf("addr = %q; want 127.0.0.1:1", got.Addr)
+	}
+}
+
 func TestStatusCommandJSONDirect(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
@@ -254,4 +294,15 @@ func TestStatusWatchMode(t *testing.T) {
 	// stderr in this test, but we verify the function returned nil — the
 	// signal handler path — confirming clean exit without panic).
 	<-stop
+}
+
+// The two --json shapes differ (the up document is /metrics and carries no
+// "running" key), so the help must tell scripts to test for the key.
+func TestStatusHelpExplainsJSONShapes(t *testing.T) {
+	long := newStatusCmd().Long
+	for _, want := range []string{`{"running":false`, `has("running")`} {
+		if !strings.Contains(long, want) {
+			t.Errorf("status --help lacks %q", want)
+		}
+	}
 }
