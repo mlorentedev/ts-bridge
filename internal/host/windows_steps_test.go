@@ -287,6 +287,9 @@ func TestWindowsServiceStep(t *testing.T) {
 			if got.Outcome != tt.outcome {
 				t.Errorf("outcome = %q, want %q (%s)", got.Outcome, tt.outcome, got.Message)
 			}
+			if tt.outcome == OutcomeFailed && !strings.Contains(got.Message, "exit status 1") {
+				t.Errorf("message %q drops the command's error", got.Message)
+			}
 		})
 	}
 }

@@ -220,12 +220,12 @@ func serviceStep(r Runner, svc, name, failMsg, fix string) SetupStep {
 	}
 	if !auto {
 		if err := r.Run("sc", "config", svc, "start=auto"); err != nil {
-			return newStep(name, OutcomeFailed, failMsg, fix)
+			return newStep(name, OutcomeFailed, fmt.Sprintf("%s: sc config: %v", failMsg, err), fix)
 		}
 	}
 	if !running {
 		if err := r.Run("net", "start", svc); err != nil {
-			return newStep(name, OutcomeFailed, failMsg, fix)
+			return newStep(name, OutcomeFailed, fmt.Sprintf("%s: net start: %v", failMsg, err), fix)
 		}
 	}
 	return newStep(name, OutcomeChanged, "Running", "")
