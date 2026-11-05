@@ -64,7 +64,8 @@ ok "ufw inactive: firewall step says so" 608 -- "json '[s for s in j[\"steps\"] 
 apt-get -qq update >/dev/null 2>&1 && apt-get -qq install -y xrdp >/dev/null 2>&1
 ufw --force enable >/dev/null
 outcomes setup "$C" >"$W/j1"
-ok "setup #1: xrdp ok, firewall converged" -- "json 'all(s[\"outcome\"] in (\"ok\",\"changed\") for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j1"
+# Name the two steps: all() over no step at all would pass.
+ok "setup #1: xrdp ok, firewall converged" -- "json '{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"xrdp service\") in (\"ok\",\"changed\") and {s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"Firewall configuration\") in (\"ok\",\"changed\") and all(s[\"outcome\"] in (\"ok\",\"changed\") for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j1"
 outcomes setup "$C" >"$W/j2"
 # ADR-017: a second setup on a converged host reports ok, not failed or manual.
 ok "setup #2: nothing changed" -- "json 'j[\"steps\"] and all(s[\"outcome\"]==\"ok\" for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j2"
