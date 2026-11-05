@@ -1,7 +1,6 @@
 package discover
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"os"
@@ -56,9 +55,13 @@ func readEnvFile(path string) (map[string]string, []string, error) {
 		return nil, nil, fmt.Errorf("read .env: %w", err)
 	}
 
-	scanner := bufio.NewScanner(strings.NewReader(string(data)))
-	for scanner.Scan() {
-		line := scanner.Text()
+	if len(data) == 0 {
+		return existingVars, otherLines, nil
+	}
+	// Split, not bufio.Scanner: a line over its 64 KiB limit ends the scan
+	// silently, and the rewrite would drop every variable after it.
+	for _, line := range strings.Split(strings.TrimSuffix(string(data), "\n"), "\n") {
+		line = strings.TrimSuffix(line, "\r")
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			otherLines = append(otherLines, line)

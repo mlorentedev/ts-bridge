@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -61,5 +62,28 @@ func TestUpdateEnvRefusesAnUnreadableFile(t *testing.T) {
 	}
 	if string(got) != original {
 		t.Fatalf(".env = %q after a refused update, want it untouched", got)
+	}
+}
+
+// A line longer than bufio.Scanner's 64 KiB token limit stopped the scan
+// silently, so the rewrite dropped every variable after it, TS_AUTHKEY included.
+func TestUpdateEnvKeepsVariablesAfterALongLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".env")
+	long := "TS_BLOB=" + strings.Repeat("x", 70*1024)
+	if err := os.WriteFile(path, []byte(long+"\nTS_AUTHKEY=tskey-auth-keep\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := UpdateEnv(path, "office", 3389); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"TS_AUTHKEY=tskey-auth-keep", long, "TS_TARGET=office:3389"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf(".env after UpdateEnv lacks %.40q", want)
+		}
 	}
 }
