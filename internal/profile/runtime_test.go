@@ -14,8 +14,11 @@ func TestProfileRuntimePreserved(t *testing.T) {
 		update func(*Store) error
 	}{
 		{"read", func(*Store) error { return nil }},
-		{"set target", func(s *Store) error { return s.Set("work", "updated:443", "https://vpn.example.com") }},
-		{"import descriptor", func(s *Store) error { return s.Import("work", Descriptor{Host: "imported", Port: 443}) }},
+		{"set target", func(s *Store) error { return s.Set("work", "updated:443", "") }},
+		{"import descriptor", func(s *Store) error {
+			_, err := s.Import("work", Descriptor{Host: "imported", Port: 443}, false)
+			return err
+		}},
 		{"set credential", func(s *Store) error { return s.SetCredential("work", "replacement") }},
 		{"clear credential", func(s *Store) error { return s.ClearCredential("work") }},
 	}

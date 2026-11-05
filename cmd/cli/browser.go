@@ -119,12 +119,8 @@ func applyBrowserProfile(yamlConfig *config.PartialConfig, flags *config.FlagSet
 	if err != nil {
 		return err
 	}
-	if yamlConfig.ControlURL == "" {
-		yamlConfig.ControlURL = selectedProfile.ControlURL
-	}
-	applyProfileRuntime(yamlConfig, selectedProfile)
 	if flags.AuthKey == "" {
-		flags.AuthKey, err = loadManagedProfileCredential(selectedProfile)
+		flags.AuthKey, err = loadBoundProfileCredential(profileName, selectedProfile, *flags, *yamlConfig)
 		if err != nil {
 			return err
 		}
@@ -132,6 +128,10 @@ func applyBrowserProfile(yamlConfig *config.PartialConfig, flags *config.FlagSet
 			return fmt.Errorf("profile %q has no managed credential", profileName)
 		}
 	}
+	if yamlConfig.ControlURL == "" {
+		yamlConfig.ControlURL = selectedProfile.ControlURL
+	}
+	applyProfileRuntime(yamlConfig, selectedProfile)
 	return nil
 }
 

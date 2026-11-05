@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,26 +57,70 @@ func NewStore(path string) *Store {
 	return &Store{path: path}
 }
 
+// ControlPlaneChangeError reports an update that would move a credentialed
+// profile to another control plane: the managed credential was issued for the
+// old one and must not follow the profile to the new one (#617).
+type ControlPlaneChangeError struct {
+	Name       string
+	From, To   string
+	Credential string
+}
+
+func (e *ControlPlaneChangeError) Error() string {
+	return fmt.Sprintf("profile %q has managed credential %q bound to control URL %q; refusing to move it to %q (use --force to drop the credential reference)",
+		e.Name, e.Credential, displayControlURL(e.From), displayControlURL(e.To))
+}
+
+// displayControlURL names the empty control URL for what it means.
+func displayControlURL(raw string) string {
+	if raw == "" {
+		return "(Tailscale SaaS)"
+	}
+	return raw
+}
+
+// bindCredential returns existing's credential for a profile that will use
+// controlURL. A credential survives only on the control plane it was issued
+// for: a change refuses unless force is set, which clears the reference.
+// cleared reports that the reference was dropped.
+func bindCredential(name string, existing profileEntry, controlURL string, force bool) (credentialName string, cleared bool, err error) {
+	if existing.Credential == "" || SameControlURL(existing.ControlURL, controlURL) {
+		return existing.Credential, false, nil
+	}
+	if !force {
+		return "", false, &ControlPlaneChangeError{Name: name, From: existing.ControlURL, To: controlURL, Credential: existing.Credential}
+	}
+	return "", true, nil
+}
+
 // Import writes (or updates) a named profile derived from d.
 // Re-importing the same descriptor is idempotent — the file ends up with
 // exactly one entry per name regardless of how many times it is called.
-func (s *Store) Import(name string, d Descriptor) error {
+// Changing the control URL of a credentialed profile refuses unless force is
+// set; force clears the credential reference and reports it through cleared.
+func (s *Store) Import(name string, d Descriptor, force bool) (cleared bool, err error) {
 	data, err := s.load()
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	target := fmt.Sprintf("%s:%d", d.Host, d.Port)
 	existing := data.Profiles[name]
+	credentialName, cleared, err := bindCredential(name, existing, d.ControlURL, force)
+	if err != nil {
+		return false, err
+	}
 	data.Profiles[name] = profileEntry{
-		Target:     target,
+		Target:     fmt.Sprintf("%s:%d", d.Host, d.Port),
 		ControlURL: d.ControlURL,
-		Credential: existing.Credential,
+		Credential: credentialName,
 		Runtime:    existing.Runtime,
 	}
 	data.DescriptorVersion = 1
 
-	return s.save(data)
+	if err := s.save(data); err != nil {
+		return false, err
+	}
+	return cleared, nil
 }
 
 // secretPrefixes holds auth-key prefixes that must never appear in a profile target.
@@ -85,11 +130,14 @@ var secretPrefixes = []string{"tskey-", "hskey-"}
 // Use this when no tsb:// descriptor is available (e.g. ts-bridge init --profile).
 // Returns an error if name is empty or if target contains a known secret prefix.
 func (s *Store) Set(name, target, controlURL string) error {
-	return s.set(name, target, controlURL, nil)
+	_, err := s.set(name, target, controlURL, nil, false)
+	return err
 }
 
-// Configure replaces connection settings while preserving the managed credential.
-func (s *Store) Configure(name string, selected Profile) error {
+// Configure replaces connection settings while preserving the managed credential
+// on the control plane it was issued for. Moving a credentialed profile to
+// another control URL refuses unless force is set, which clears the reference.
+func (s *Store) Configure(name string, selected Profile, force bool) (cleared bool, err error) {
 	for _, value := range []string{
 		selected.ControlURL,
 		selected.BootstrapSSH, selected.BootstrapSOCKSAddr, selected.Hostname,
@@ -97,42 +145,46 @@ func (s *Store) Configure(name string, selected Profile) error {
 	} {
 		for _, prefix := range secretPrefixes {
 			if strings.Contains(value, prefix) {
-				return fmt.Errorf("profile configuration must not contain auth key material")
+				return false, fmt.Errorf("profile configuration must not contain auth key material")
 			}
 		}
 	}
-	return s.set(name, selected.Target, selected.ControlURL, &selected.Runtime)
+	return s.set(name, selected.Target, selected.ControlURL, &selected.Runtime, force)
 }
 
-func (s *Store) set(name, target, controlURL string, settings *Runtime) error {
+func (s *Store) set(name, target, controlURL string, settings *Runtime, force bool) (bool, error) {
 	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("profile name must not be empty")
+		return false, fmt.Errorf("profile name must not be empty")
 	}
 	for _, pfx := range secretPrefixes {
 		if strings.Contains(target, pfx) {
-			return fmt.Errorf("profile target must not contain auth key material (found %q prefix)", pfx)
+			return false, fmt.Errorf("profile target must not contain auth key material (found %q prefix)", pfx)
 		}
 	}
 
 	data, err := s.load()
 	if err != nil {
-		return fmt.Errorf("load profile store: %w", err)
+		return false, fmt.Errorf("load profile store: %w", err)
 	}
 	existing := data.Profiles[name]
+	credentialName, cleared, err := bindCredential(name, existing, controlURL, force)
+	if err != nil {
+		return false, err
+	}
 	if settings != nil {
 		existing.Runtime = *settings
 	}
 	data.Profiles[name] = profileEntry{
 		Target:     target,
 		ControlURL: controlURL,
-		Credential: existing.Credential,
+		Credential: credentialName,
 		Runtime:    existing.Runtime,
 	}
 	data.DescriptorVersion = 1
 	if err := s.save(data); err != nil {
-		return fmt.Errorf("save profile store: %w", err)
+		return false, fmt.Errorf("save profile store: %w", err)
 	}
-	return nil
+	return cleared, nil
 }
 
 // Get returns the named profile or an error if it does not exist.
@@ -246,4 +298,22 @@ func (s *Store) save(data storeFile) error {
 		return fmt.Errorf("write profile store %s: %w", s.path, err)
 	}
 	return nil
+}
+
+// SameControlURL reports whether two control URLs name one control plane.
+// Scheme and host are case-insensitive and surrounding space and a trailing
+// slash do not matter; the path is compared exactly. Both empty means the
+// default Tailscale SaaS control plane.
+func SameControlURL(a, b string) bool {
+	return normalizeControlURL(a) == normalizeControlURL(b)
+}
+
+func normalizeControlURL(raw string) string {
+	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	u.Scheme, u.Host = strings.ToLower(u.Scheme), strings.ToLower(u.Host)
+	return u.String()
 }

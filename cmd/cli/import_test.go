@@ -17,7 +17,7 @@ func TestApplyProfile_ResolvesTargetFromStore(t *testing.T) {
 
 	s := profile.NewStore(storePath)
 	d := profile.Descriptor{Host: "acemagic-office", Port: 45000, ControlURL: ""}
-	if err := s.Import("home", d); err != nil {
+	if _, err := s.Import("home", d, false); err != nil {
 		t.Fatalf("Import: %v", err)
 	}
 
@@ -38,7 +38,7 @@ func TestApplyProfile_SetsControlURLForHeadscale(t *testing.T) {
 
 	s := profile.NewStore(storePath)
 	d := profile.Descriptor{Host: "host", Port: 3389, ControlURL: "https://vpn.example.com"}
-	if err := s.Import("work", d); err != nil {
+	if _, err := s.Import("work", d, false); err != nil {
 		t.Fatalf("Import: %v", err)
 	}
 
@@ -58,7 +58,7 @@ func TestApplyProfile_ExplicitTargetWins(t *testing.T) {
 	storePath := filepath.Join(dir, "profiles.yaml")
 
 	s := profile.NewStore(storePath)
-	if err := s.Import("home", profile.Descriptor{Host: "profile-host", Port: 45000}); err != nil {
+	if _, err := s.Import("home", profile.Descriptor{Host: "profile-host", Port: 45000}, false); err != nil {
 		t.Fatalf("Import: %v", err)
 	}
 
@@ -119,7 +119,7 @@ func TestRunImport_WritesProfile(t *testing.T) {
 	defer func() { defaultProfileStorePath = origPath }()
 
 	storePath := defaultProfileStorePath
-	if err := runImportDirect("home", "tsb://acemagic-office:45000?cp=saas", storePath); err != nil {
+	if err := runImportDirect("home", "tsb://acemagic-office:45000?cp=saas", storePath, false); err != nil {
 		t.Fatalf("runImportDirect: %v", err)
 	}
 
@@ -137,7 +137,7 @@ func TestRunImport_WritesProfile(t *testing.T) {
 func TestRunImport_MalformedDescriptor(t *testing.T) {
 	dir := t.TempDir()
 	storePath := filepath.Join(dir, "profiles.yaml")
-	err := runImportDirect("home", "not-a-descriptor", storePath)
+	err := runImportDirect("home", "not-a-descriptor", storePath, false)
 	if err == nil {
 		t.Error("expected error for malformed descriptor")
 	}
@@ -157,7 +157,7 @@ func TestControlPlaneParity_HeadscaleDescriptorRoundTrip(t *testing.T) {
 	const headscaleURL = "https://vpn.corp.example.com"
 	descriptor := "tsb://rdp.corp.example.com:3389?cp=" + headscaleURL
 
-	if err := runImportDirect("work", descriptor, storePath); err != nil {
+	if err := runImportDirect("work", descriptor, storePath, false); err != nil {
 		t.Fatalf("runImportDirect with Headscale URL: %v", err)
 	}
 

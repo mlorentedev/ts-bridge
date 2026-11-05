@@ -106,8 +106,19 @@ the existing target and the managed credential association are preserved.
 Empty values also preserve existing settings; this import cannot clear a runtime
 field. An explicit clearing operation is follow-up work tracked under #399.
 Repeating this command with the same input is idempotent. `--force` authorizes
-updating this profile, not replacing its credential or changing another profile.
+updating this profile, never another profile; it also drops the profile's credential
+reference when the update changes the control URL (below).
 The command does not generate a `.env` sidecar in profile mode.
+
+The managed credential is bound to the profile's `control_url` (#617). If the input
+changes `control_url` on a profile that has a credential, the command is refused,
+naming both URLs, unless `--force` is given. With `--force` the credential
+reference is cleared and the output says so; run `ts-bridge auth set` again for
+the new control plane. The same binding applies to `ts-bridge import <name> <tsb://...>`,
+which takes `--force` for this case. At connect time, `connect --profile` and
+`browser --profile` refuse to load the credential when a flag, `TS_CONTROL_URL`
+(shell or `./.env`) or a YAML config resolves a different control URL than the
+profile's; pass `--auth-key-file` to use another key deliberately.
 
 Only this profile schema is imported: unknown settings, unsupported versions,
 additional YAML documents, auth keys and credential paths/references are errors,

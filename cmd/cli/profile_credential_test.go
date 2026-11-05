@@ -263,3 +263,19 @@ func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 		t.Fatalf("stderr = %q, did not expect ignored-environment warning with --auth-key-file", stderr.String())
 	}
 }
+
+// bindOfficeCredential re-binds profile "office" and its credential to controlURL
+// through the store, the way a profile issued for that control plane would be.
+func bindOfficeCredential(t *testing.T, storePath, controlURL string) {
+	t.Helper()
+	store := profile.NewStore(storePath)
+	if err := store.ClearCredential("office"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("office", "acemagic-office:45000", controlURL); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetCredential("office", "office-key"); err != nil {
+		t.Fatal(err)
+	}
+}

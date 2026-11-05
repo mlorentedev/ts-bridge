@@ -11,7 +11,7 @@ func TestStore_ImportDescriptor_WritesProfile(t *testing.T) {
 	s := NewStore(filepath.Join(dir, "profiles.yaml"))
 
 	d := Descriptor{Host: "acemagic-office", Port: 45000, ControlURL: ""}
-	if err := s.Import("home", d); err != nil {
+	if _, err := s.Import("home", d, false); err != nil {
 		t.Fatalf("Import error: %v", err)
 	}
 
@@ -32,7 +32,7 @@ func TestStore_Import_Headscale(t *testing.T) {
 	s := NewStore(filepath.Join(dir, "profiles.yaml"))
 
 	d := Descriptor{Host: "acemagic-office", Port: 45000, ControlURL: "https://vpn.example.com"}
-	if err := s.Import("work", d); err != nil {
+	if _, err := s.Import("work", d, false); err != nil {
 		t.Fatalf("Import error: %v", err)
 	}
 
@@ -51,7 +51,7 @@ func TestStore_Import_Idempotent(t *testing.T) {
 
 	d := Descriptor{Host: "host", Port: 3389, ControlURL: ""}
 	for i := 0; i < 3; i++ {
-		if err := s.Import("office", d); err != nil {
+		if _, err := s.Import("office", d, false); err != nil {
 			t.Fatalf("Import #%d error: %v", i+1, err)
 		}
 	}
@@ -85,7 +85,7 @@ func TestStore_MultipleProfiles(t *testing.T) {
 		"office": {Host: "host-b", Port: 45000},
 	}
 	for name, d := range imports {
-		if err := s.Import(name, d); err != nil {
+		if _, err := s.Import(name, d, false); err != nil {
 			t.Fatalf("Import %q error: %v", name, err)
 		}
 	}
@@ -104,7 +104,7 @@ func TestStore_PersistsToDisk(t *testing.T) {
 	path := filepath.Join(dir, "profiles.yaml")
 
 	s1 := NewStore(path)
-	if err := s1.Import("home", Descriptor{Host: "host", Port: 3389}); err != nil {
+	if _, err := s1.Import("home", Descriptor{Host: "host", Port: 3389}, false); err != nil {
 		t.Fatalf("Import error: %v", err)
 	}
 

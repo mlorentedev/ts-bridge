@@ -175,6 +175,14 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 	if err != nil {
 		return "", err
 	}
+	// Bind the credential before the profile fills the YAML layer, which would
+	// hide which layer set the control URL.
+	if flags.AuthKey == "" && flags.AuthKeyFile == "" && os.Getenv("TS_AUTHKEY") == "" {
+		flags.ProfileAuthKey, err = loadBoundProfileCredential(profileName, selectedProfile, *flags, *yamlCfg)
+		if err != nil {
+			return selectedProfile.Target, err
+		}
+	}
 	if yamlCfg.Target == "" {
 		yamlCfg.Target = selectedProfile.Target
 	}
@@ -182,11 +190,7 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 		yamlCfg.ControlURL = selectedProfile.ControlURL
 	}
 	applyProfileRuntime(yamlCfg, selectedProfile)
-	if flags.AuthKey != "" || flags.AuthKeyFile != "" || os.Getenv("TS_AUTHKEY") != "" {
-		return selectedProfile.Target, nil
-	}
-	flags.ProfileAuthKey, err = loadManagedProfileCredential(selectedProfile)
-	return selectedProfile.Target, err
+	return selectedProfile.Target, nil
 }
 
 // sameConnectTarget reports whether two targets name one destination: host names

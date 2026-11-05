@@ -190,6 +190,12 @@ The secret file and its path are never exported through `tsb://`.
 - ADR-015 supersedes #368's proposed storage of a machine-local auth-key **file
   path** in the profile. The profile stores a managed credential name instead;
   the credential store owns the path.
+- A credential is bound to the control URL its profile declares (#617). The
+  shared resolver loads it only when the resolved control URL equals the
+  profile's; a flag, `TS_CONTROL_URL` (including `./.env`) or YAML layer that
+  names another one is refused with both URLs and the layer. `import` and
+  `init --profile --force` that change the control URL of a credentialed profile
+  are refused unless `--force`, which clears the credential reference.
 - SaaS and Headscale profiles retain separate credential references and state
   identities. Credential resolution must not collapse their state directories
   or control-plane selection.
