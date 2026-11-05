@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net/url"
 	"os"
 	"slices"
-	"strconv"
 
 	"gopkg.in/yaml.v3"
+
+	"ts-bridge/internal/controlurl"
 )
 
 // fileVersion is the host configuration schema version this build reads.
@@ -220,31 +220,10 @@ func validateControlURL(raw *string) error {
 	if *raw == "" {
 		return errors.New("host.control_url: empty; omit it to use the detected control plane")
 	}
-	u, err := url.Parse(*raw)
-	if err != nil {
-		return errors.New("host.control_url: not a valid URL")
-	}
-	if u.User != nil {
-		return errors.New("host.control_url: must not carry credentials; the host needs none")
-	}
-	if (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
-		// Not echoed: an opaque or scheme-less value can hide user info from u.User.
-		return errors.New("host.control_url: must be an http or https URL with a host")
-	}
-	if !validURLPort(u.Port()) {
-		return errors.New("host.control_url: port must be between 1 and 65535")
+	if err := controlurl.Validate(*raw); err != nil {
+		return fmt.Errorf("host.control_url: %w", err)
 	}
 	return nil
-}
-
-// validURLPort reports whether p, a URL's port ("" when it has none), is
-// absent or within 1-65535. url.Parse checks only that it is digits.
-func validURLPort(p string) bool {
-	if p == "" {
-		return true
-	}
-	n, err := strconv.Atoi(p)
-	return err == nil && n >= 1 && n <= 65535
 }
 
 // Known keys per level of the file. Anything else is warned about and ignored.

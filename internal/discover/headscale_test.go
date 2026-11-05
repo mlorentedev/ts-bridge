@@ -3,10 +3,12 @@ package discover
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestListHeadscaleDevices_Success(t *testing.T) {
@@ -167,4 +169,19 @@ func TestListHeadscaleDevices_StringIP(t *testing.T) {
 // contains is a case-insensitive substring check.
 func contains(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
+}
+
+// A diagnosed failure must still wrap the transport error so callers can match
+// it with errors.Is (the remediation is appended, not substituted).
+func TestListHeadscaleDevices_DiagnosedErrorWrapsCause(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	_, err := ListHeadscaleDevices(ctx, "test-key", "http://127.0.0.1:1")
+	if err == nil {
+		t.Fatal("expected an error from an expired context")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("errors.Is(err, DeadlineExceeded) = false for %v", err)
+	}
 }
