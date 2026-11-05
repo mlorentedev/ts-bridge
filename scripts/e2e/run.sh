@@ -19,11 +19,13 @@ dir=""
 
 die() { echo "e2e: $*" >&2; exit 2; }
 
-# down removes the session if it exists; a missing one is not an error.
+# down removes the session if it exists; a missing one is not an error, but a
+# session it cannot list or delete is.
 down() {
-  local os="$1" s="tsb-e2e-$1"
-  if dotf vm "$os" status 2>/dev/null | awk '{print $1}' | grep -qx "$s"; then
-    dotf vm "$os" down --session "$s" >/dev/null 2>&1 || echo "e2e: could not delete session $s" >&2
+  local os="$1" s="tsb-e2e-$1" list
+  list="$(dotf vm "$os" status 2>/dev/null)" || { echo "e2e: could not list $os sessions" >&2; return 1; }
+  if awk '{print $1}' <<<"$list" | grep -qx "$s"; then
+    dotf vm "$os" down --session "$s" >/dev/null 2>&1 || { echo "e2e: could not delete session $s" >&2; return 1; }
   fi
 }
 
@@ -88,13 +90,20 @@ report() {
 
 main() {
   case "$OS" in
-    clean) down linux; down windows; echo "e2e: no session left"; exit 0 ;;
+    clean)
+      local rc=0
+      down linux || rc=1
+      down windows || rc=1
+      [ "$rc" -eq 0 ] && echo "e2e: no session left"
+      exit "$rc"
+      ;;
     linux | windows) ;;
     *) die "usage: $0 linux|windows|clean" ;;
   esac
   preflight
   local log
   dir="$(mktemp -d)" # global: the EXIT trap runs after main returns
+  trap 'rm -rf "$dir"' EXIT # until the session exists; replaced below
   mkdir -p "$OUT"
   log="$OUT/$OS-$(date -u +%Y%m%dT%H%M%SZ).log"
   build "$dir"
@@ -107,8 +116,11 @@ main() {
   dotf vm "$OS" up --session "$SESSION" >/dev/null
   echo "e2e $OS: candidate $(cd "$ROOT" && git rev-parse --short HEAD), previous $(cat "$dir/prev-tag")"
   # The exit status goes through a file: the pipeline would hide it.
-  { "run_$OS" "$dir" 2>&1 && echo 0 >"$dir/rc" || echo $? >"$dir/rc"; } |
-    tee "$log" | grep -E '^(PASS|FAIL|XFAIL|XPASS) ' || true
+  # A failed log write must not pass: tee keeps copying to stdout after one.
+  if ! { "run_$OS" "$dir" 2>&1 && echo 0 >"$dir/rc" || echo $? >"$dir/rc"; } |
+    tee "$log" | { grep -E '^(PASS|FAIL|XFAIL|XPASS) ' || true; }; then
+    die "could not write the log $log"
+  fi
   report "$log" "$(cat "$dir/rc")"
 }
 

@@ -23,7 +23,7 @@
   {
     "id": "QA-606-e2e-vm-harness-f4",
     "behavior": "AC4: the second host setup reports no changed step and every drift case is detected and repaired, on both OSes",
-    "verification": "l=$(ls -t scripts/e2e/out/linux-*.log | head -1) && w=$(ls -t scripts/e2e/out/windows-*.log | head -1) && grep -q '^PASS setup #2: nothing changed' \"$l\" && grep -q '^PASS setup #2: nothing changed' \"$w\" && ! grep -q '^FAIL drift' \"$l\" \"$w\"",
+    "verification": "l=$(ls -t scripts/e2e/out/linux-*.log | head -1) && w=$(ls -t scripts/e2e/out/windows-*.log | head -1) && grep -q '^PASS setup #2: nothing changed' \"$l\" && grep -q '^PASS setup #2: nothing changed' \"$w\" && [ \"$(grep -c '^PASS drift' \"$l\")\" -eq 4 ] && [ \"$(grep -c '^PASS drift' \"$w\")\" -eq 9 ]",
     "state": "passing",
     "evidence": "both logs: PASS setup #2: nothing changed; every drift case PASS (ufw, xrdp on Linux; UDP, disabled, deleted, RDP denied, power on Windows)"
   },

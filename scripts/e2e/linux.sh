@@ -57,6 +57,8 @@ ok "setup without xrdp: exit 2, xrdp step names the fix" -- 'code 2 && has "apt 
 ok "setup not converged: no HOST READY banner" -- '! has "HOST READY"'
 ok "setup without IP: no empty TS_TARGET" -- '! has "TS_TARGET=:"'
 outcomes setup "$C" >"$W/j"
+# Unmarked, so a missing or broken document is a FAIL and not #608.
+ok "ufw inactive: setup prints its steps as JSON" -- "json '\"steps\" in j' <$W/j"
 ok "ufw inactive: firewall step says so" 608 -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Firewall\") and \"inactive\" in s[\"message\"]]' <$W/j"
 
 apt-get -qq update >/dev/null 2>&1 && apt-get -qq install -y xrdp >/dev/null 2>&1
@@ -64,7 +66,8 @@ ufw --force enable >/dev/null
 outcomes setup "$C" >"$W/j1"
 ok "setup #1: xrdp ok, firewall converged" -- "json 'all(s[\"outcome\"] in (\"ok\",\"changed\") for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j1"
 outcomes setup "$C" >"$W/j2"
-ok "setup #2: nothing changed" -- "json 'j[\"steps\"] and not [s for s in j[\"steps\"] if s[\"outcome\"]==\"changed\"]' <$W/j2"
+# ADR-017: a second setup on a converged host reports ok, not failed or manual.
+ok "setup #2: nothing changed" -- "json 'j[\"steps\"] and all(s[\"outcome\"]==\"ok\" for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j2"
 ok "setup: Tailscale step fails without a node" -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Tailscale\") and s[\"outcome\"]==\"failed\" and s[\"fix\"]]' <$W/j2"
 outcomes check "$C" >"$W/jc"
 ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True}]' <$W/jc"
@@ -81,7 +84,7 @@ U="${SUDO_USER:-nobody}"
 ok "unprivileged check names the declared service" -- 'su -s /bin/sh "$U" -c "$B host check --config $C" 2>&1 | grep -q "RDP:.*3389"'
 systemctl disable --now xrdp >/dev/null 2>&1
 run "$B" host check --config "$C"
-ok "disabled xrdp: check names it NOT OK, not undeclared" -- '! has "no service declared" && has "RDP:.*3389"'
+ok "disabled xrdp: check names it NOT OK, not undeclared" -- '! has "no service declared" && has "RDP:.*NOT OK.*3389"'
 "$B" host setup --config "$C" >/dev/null 2>&1
 ok "disabled xrdp: setup enables and starts it" -- 'systemctl is-enabled -q xrdp && systemctl is-active -q xrdp'
 

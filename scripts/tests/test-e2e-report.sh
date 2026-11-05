@@ -28,7 +28,7 @@ check() { # [RC=<scenario exit>] check <case> <want: pass|fail> <log lines...>
 }
 
 check clean       pass 'PASS a' 'PASS b'
-check xfail-only  pass 'PASS a' 'XFAIL #1 b'
+check xfail-only  pass 'XFAIL #1 b'
 check one-fail    fail 'PASS a' 'FAIL b'
 check one-xpass   fail 'PASS a' 'XPASS #1 b'
 check noise-only  pass 'PASS a' 'some guest output' 'FAILED to resolve' 'PASSWORD prompt'
