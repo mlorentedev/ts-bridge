@@ -143,10 +143,7 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 
 	// macOS: not applicable.
 	if hostGOOS == "darwin" {
-		out := cmd.OutOrStdout()
-		fmt.Fprintln(out, "Host setup is not applicable on macOS.")
-		fmt.Fprintln(out, "Use the client mode (ts-bridge connect) to connect to a remote host.")
-		return nil
+		return printSetupNotApplicable(cmd)
 	}
 
 	// Admin check.
@@ -230,6 +227,31 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 	// Windows comes from the registry and may differ from the requested --port.
 	printSetupSummary(cmd.OutOrStdout(), hostTailscaleIP(), result)
 	return setupConvergence(result.Steps)
+}
+
+// printSetupNotApplicable answers "host setup" on macOS. With --json it still
+// prints the JSON document (no steps, the reason in not_applicable), so a
+// script decoding stdout can tell "not applicable" from "converged".
+func printSetupNotApplicable(cmd *cobra.Command) error {
+	const reason = "Host setup is not applicable on macOS."
+	const hint = "Use the client mode (ts-bridge connect) to connect to a remote host."
+	out := cmd.OutOrStdout()
+	if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+		data, err := json.MarshalIndent(setupJSONOutput{
+			Steps:         []setupStepJSON{},
+			Warnings:      []string{},
+			Errors:        []string{},
+			NotApplicable: reason + " " + hint,
+		}, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshal setup result: %w", err)
+		}
+		fmt.Fprintln(out, string(data))
+		return nil
+	}
+	fmt.Fprintln(out, reason)
+	fmt.Fprintln(out, hint)
+	return nil
 }
 
 // rdpPortDeclared reports whether the RDP port came from --port, the env layer
@@ -511,6 +533,8 @@ type setupJSONOutput struct {
 	Errors   []string        `json:"errors"`
 	// Descriptor is the tsb:// line of the text summary; absent without an IP.
 	Descriptor string `json:"descriptor,omitempty"`
+	// NotApplicable is why setup ran no steps; absent where setup applies.
+	NotApplicable string `json:"not_applicable,omitempty"`
 }
 
 type setupStepJSON struct {

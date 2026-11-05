@@ -210,3 +210,15 @@ func TestAuthDefaultsUsePerUserPaths(t *testing.T) {
 		t.Fatalf("default credential dir = %q, want %q", defaultCredentialStoreDir, config.CredentialStoreDir())
 	}
 }
+
+// An empty store used to print nothing, which reads as a hang or a bug.
+func TestAuthListEmptyTellsHowToCreateOne(t *testing.T) {
+	setupAuthCommandTest(t)
+	stdout, _, err := executeAuthCommand(t, "list")
+	if err != nil {
+		t.Fatalf("auth list error = %v", err)
+	}
+	if !strings.Contains(stdout, "No managed credentials") || !strings.Contains(stdout, "ts-bridge auth set --profile") {
+		t.Errorf("stdout = %q; want it to say the store is empty and name auth set", stdout)
+	}
+}
