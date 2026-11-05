@@ -326,13 +326,13 @@ func TestWindowsNetworkProfileStep(t *testing.T) {
 
 // powercfgQuery is `powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE`
 // output, as read on a Windows 11 guest (labels localize, the order does not).
-func powercfgQuery(ac string) string {
+func powercfgQuery(ac, dc string) string {
 	return "Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)\r\n" +
 		"  Subgroup GUID: 238c9fa8-0aad-41ed-83f4-97be242c8f20  (Sleep)\r\n" +
 		"    Power Setting GUID: 29f6c1db-86da-48c5-9fdb-f2b67b1f44da  (Sleep after)\r\n" +
 		"      Minimum Possible Setting: 0x00000000\r\n      Maximum Possible Setting: 0xffffffff\r\n" +
 		"      Possible Settings increment: 0x00000001\r\n      Possible Settings units: Seconds\r\n" +
-		"    Current AC Power Setting Index: " + ac + "\r\n    Current DC Power Setting Index: 0x00000384\r\n"
+		"    Current AC Power Setting Index: " + ac + "\r\n    Current DC Power Setting Index: " + dc + "\r\n"
 }
 
 // TestWindowsPowerStep pins #603: powercfg takes one /change per call, and a
@@ -340,7 +340,8 @@ func powercfgQuery(ac string) string {
 func TestWindowsPowerStep(t *testing.T) {
 	const standby, hibernate, monitor = "powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE",
 		"powercfg /query SCHEME_CURRENT SUB_SLEEP HIBERNATEIDLE", "powercfg /query SCHEME_CURRENT SUB_VIDEO VIDEOIDLE"
-	zero, on := powercfgQuery("0x00000000"), powercfgQuery("0x00000384")
+	zero, on := powercfgQuery("0x00000000", "0x00000384"), powercfgQuery("0x00000384", "0x00000384")
+	dcOnly := powercfgQuery("0x00000384", "0x00000000")
 	tests := []struct {
 		name    string
 		runner  *recordingRunner
@@ -352,7 +353,8 @@ func TestWindowsPowerStep(t *testing.T) {
 		{"standby on", &recordingRunner{output: map[string]string{standby: on, hibernate: zero, monitor: zero}},
 			[]string{"output " + standby, "run powercfg /change standby-timeout-ac 0", "output " + hibernate, "output " + monitor}, OutcomeChanged},
 		{"unreadable, so all set", &recordingRunner{}, powercfgCalls, OutcomeChanged},
-		{"a DC-only zero is not AC zero", &recordingRunner{output: map[string]string{standby: on, hibernate: on, monitor: on}}, powercfgCalls, OutcomeChanged},
+		{"all on", &recordingRunner{output: map[string]string{standby: on, hibernate: on, monitor: on}}, powercfgCalls, OutcomeChanged},
+		{"a DC-only zero is not AC zero", &recordingRunner{output: map[string]string{standby: dcOnly, hibernate: dcOnly, monitor: dcOnly}}, powercfgCalls, OutcomeChanged},
 		{"change fails", &recordingRunner{fail: map[string]bool{"powercfg /change standby-timeout-ac 0": true}},
 			[]string{"output " + standby, "run powercfg /change standby-timeout-ac 0"}, OutcomeFailed},
 	}
