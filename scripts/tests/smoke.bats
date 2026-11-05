@@ -255,18 +255,19 @@ TARGET="100.64.0.1:3389"
 # job's global timeout. Its flags are verified via `status --help`, and
 # runWatchLoop has unit coverage via an injected signal channel.
 
-@test "status: reports 'not running' when no bridge is up (exit 0)" {
+@test "status: reports no health endpoint and names the opt-in (exit 0)" {
   run "${BIN}" status
   assert_success
-  assert_contains "Bridge not running"
+  assert_contains "No health endpoint answered"
+  assert_contains "--health-addr"
 }
 
-@test "status --json: no bridge, reports not-running with no metrics JSON" {
-  # The health check fails before the JSON branch, so --json degrades to the
-  # same not-running message rather than printing an empty/garbage object.
+@test "status --json: no bridge, prints {\"running\":false} and no metrics" {
+  # The health check fails before the metrics branch, so --json prints the
+  # machine-readable not-running object rather than an empty stdout.
   run "${BIN}" status --json
   assert_success
-  assert_contains "Bridge not running"
+  assert_contains '"running":false'
   refute_contains "active_connections"
 }
 

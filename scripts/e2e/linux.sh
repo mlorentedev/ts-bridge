@@ -129,5 +129,5 @@ ok "client: import a tsb:// descriptor" -- 'code 0'
 run "$B" import bad "http://nope"
 ok "client: malformed descriptor refused" -- '! code 0'
 "$B" status --json --addr 127.0.0.1:1 >"$W/out" 2>"$W/last"; echo $? >"$W/code"
-ok "client: status with no bridge says so on stderr, stdout empty" -- 'code 0 && [ ! -s "$W/out" ] && has "not running"'
+ok "client: status with no bridge prints running false, hint on stderr" -- 'code 0 && json "j[\"running\"] is False and j[\"addr\"]==\"127.0.0.1:1\"" <"$W/out" && has "not running"'
 exit 0
