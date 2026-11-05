@@ -74,8 +74,10 @@ func TestRootConfigFlagIsNotSilentlyIgnored(t *testing.T) {
 			root.SetErr(&bytes.Buffer{})
 			var err error
 			captureInitOutput(t, func() { err = root.Execute() })
-			if err == nil {
-				t.Fatalf("%v: --config of a missing file was accepted and ignored", args)
+			// Assert the cause: status exits 0 against a dead endpoint, so a bare
+			// err != nil could go green for an unrelated reason.
+			if err == nil || !strings.Contains(err.Error(), "unknown flag: --config") {
+				t.Fatalf("%v: err = %v; want \"unknown flag: --config\"", args, err)
 			}
 		})
 	}
@@ -94,5 +96,9 @@ func TestNoCommandInheritsAConfigFlag(t *testing.T) {
 			walk(sub)
 		}
 	}
-	walk(NewRootCmd())
+	root := NewRootCmd()
+	if root.PersistentFlags().Lookup("config") != nil {
+		t.Error("root declares a persistent --config")
+	}
+	walk(root)
 }
