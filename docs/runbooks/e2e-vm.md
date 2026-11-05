@@ -23,6 +23,9 @@ It does not run in CI: GitHub runners cannot nest a VM. Run it:
 - `dotf` >= 0.79 (`dotf vm linux|windows up/exec/cp/down`), `gh` logged in, Go.
 - Windows only: a clean base image, built once with `dotf vm windows build`
   (`~/.local/state/dotfiles/vm/windows/clean-base.qcow2`).
+- An Arm64 host (Apple Silicon). `run.sh` builds both candidates with
+  `GOARCH=arm64` and downloads the previous release's arm64 assets, so on an
+  x86_64 host the guest is amd64 and every case fails with `exec format error`.
 - RAM: one guest at a time. `make e2e` runs Linux, then Windows, never both.
 
 ## Run
