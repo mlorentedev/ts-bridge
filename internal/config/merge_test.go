@@ -605,8 +605,10 @@ func TestMergeAutoModeLocalAddrFromEnv(t *testing.T) {
 	}
 }
 
-func TestMergeManualModeNoLocalAddrDerived(t *testing.T) {
-	// Manual mode: LocalAddr stays empty (user must set it).
+func TestMergeManualModeDefaultsLocalAddr(t *testing.T) {
+	// Manual mode: nothing derives LocalAddr, so the loopback default applies
+	// rather than an empty address that net.Listen would bind on every
+	// interface (#620).
 	os.Unsetenv("TS_LOCAL_ADDR")
 	os.Unsetenv("TS_HOSTNAME")
 	os.Unsetenv("TS_TARGET")
@@ -626,8 +628,8 @@ func TestMergeManualModeNoLocalAddrDerived(t *testing.T) {
 	if cfg.AutoInstance {
 		t.Error("AutoInstance should be false in manual mode")
 	}
-	if cfg.LocalAddr != "" {
-		t.Errorf("LocalAddr should be empty in manual mode, got %q", cfg.LocalAddr)
+	if cfg.LocalAddr != defaultLocalAddr {
+		t.Errorf("LocalAddr = %q in manual mode, want %q", cfg.LocalAddr, defaultLocalAddr)
 	}
 }
 
@@ -845,9 +847,10 @@ func TestMergeManualModeFlagDisablesAutoInstance(t *testing.T) {
 	if cfg.AutoInstance {
 		t.Error("AutoInstance should be false when --manual-mode flag is set")
 	}
-	// In manual mode, LocalAddr/Hostname should NOT be auto-derived.
-	if cfg.LocalAddr != "" {
-		t.Errorf("LocalAddr should be empty in manual mode without explicit flag, got %q", cfg.LocalAddr)
+	// In manual mode, LocalAddr/Hostname are not auto-derived; LocalAddr
+	// takes the loopback default instead (#620).
+	if cfg.LocalAddr != defaultLocalAddr {
+		t.Errorf("LocalAddr = %q in manual mode without explicit flag, want %q", cfg.LocalAddr, defaultLocalAddr)
 	}
 	if cfg.Hostname != "ts-bridge" {
 		t.Errorf("Hostname should be default 'ts-bridge' in manual mode, got %q", cfg.Hostname)
@@ -981,10 +984,74 @@ func TestMergeManualModeNoAutoDerivedValues(t *testing.T) {
 	if cfg.EphemeralState {
 		t.Error("EphemeralState should be false in manual mode (no auto-derived StateDir)")
 	}
-	// LocalAddr should be empty (no auto-derivation, no env, no flag).
-	// The default LocalAddr is applied by LoadConfig(), not Merge().
-	if cfg.LocalAddr != "" {
-		t.Errorf("LocalAddr should be empty in manual mode without explicit value, got %q", cfg.LocalAddr)
+	// No auto-derivation, no env, no flag: the loopback default applies (#620).
+	if cfg.LocalAddr != "127.0.0.1:33389" {
+		t.Errorf("LocalAddr = %q in manual mode without explicit value, want 127.0.0.1:33389", cfg.LocalAddr)
+	}
+}
+
+func TestMergeLocalAddrDefaultNeverWildcard(t *testing.T) {
+	for _, key := range stateEnvKeys {
+		t.Setenv(key, "")
+	}
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_AUTHKEY", "")
+
+	tests := []struct {
+		name      string
+		flags     FlagSet
+		wantAddr  string
+		wantErr   string
+		wantEmpty bool
+	}{
+		{
+			name:     "manual mode without local-addr",
+			flags:    FlagSet{Target: "100.64.0.1:3389", AuthKey: "tskey-auth-test-secret", ManualMode: true},
+			wantAddr: "127.0.0.1:33389",
+		},
+		{
+			name:    "auto mode with malformed port range",
+			flags:   FlagSet{Target: "100.64.0.1:3389", AuthKey: "tskey-auth-test-secret", PortRange: "garbage"},
+			wantErr: "TS_PORT_RANGE",
+		},
+		{
+			name:    "auto mode with out-of-bounds port range",
+			flags:   FlagSet{Target: "100.64.0.1:3389", AuthKey: "tskey-auth-test-secret", PortRange: "70000-80000"},
+			wantErr: "TS_PORT_RANGE",
+		},
+		{
+			name:      "SOCKS5 mode keeps LocalAddr unset despite a bad port range",
+			flags:     FlagSet{SOCKS5Addr: "127.0.0.1:1080", AuthKey: "tskey-auth-test-secret", PortRange: "garbage"},
+			wantEmpty: true,
+		},
+		{
+			name:      "SOCKS5 manual mode keeps LocalAddr unset",
+			flags:     FlagSet{SOCKS5Addr: "127.0.0.1:1080", AuthKey: "tskey-auth-test-secret", ManualMode: true},
+			wantEmpty: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := Merge(PartialConfig{}, tt.flags)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %v, want one containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantEmpty {
+				if cfg.LocalAddr != "" {
+					t.Fatalf("LocalAddr = %q, want empty in SOCKS5 mode", cfg.LocalAddr)
+				}
+				return
+			}
+			if cfg.LocalAddr != tt.wantAddr {
+				t.Fatalf("LocalAddr = %q, want %q", cfg.LocalAddr, tt.wantAddr)
+			}
+		})
 	}
 }
 
