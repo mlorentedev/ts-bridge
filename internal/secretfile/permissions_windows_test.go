@@ -1,6 +1,6 @@
 //go:build windows
 
-package credential
+package secretfile
 
 import (
 	"reflect"
@@ -18,10 +18,10 @@ func TestHardenCredentialPathUsesOwnerOnlyWindowsACLs(t *testing.T) {
 		return nil
 	}
 
-	if err := hardenCredentialPath(`C:\store`, true); err != nil {
+	if err := Harden(`C:\store`, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := hardenCredentialPath(`C:\store\office.key`, false); err != nil {
+	if err := Harden(`C:\store\office.key`, false); err != nil {
 		t.Fatal(err)
 	}
 
