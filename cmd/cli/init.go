@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -361,7 +362,14 @@ func runInitNonInteractive(cmd *cobra.Command, f initFlags) error {
 // ─── Input helpers ───────────────────────────────────────────────
 
 // readMaskedInput reads a line with no echo (masked) using golang.org/x/term.
+// errStdinNotTerminal is returned by readMaskedInput when stdin is a pipe or a
+// file: the masked read needs a terminal, so it refuses before prompting.
+var errStdinNotTerminal = errors.New("stdin is not a terminal, so the key cannot be read masked")
+
 func readMaskedInput(prompt string) (string, error) {
+	if !isTerminal(os.Stdin.Fd()) {
+		return "", errStdinNotTerminal
+	}
 	fmt.Print(prompt)
 
 	// #nosec G104,G115 -- user-provided prompt, not a credential; os.Stdin.Fd() is always valid.

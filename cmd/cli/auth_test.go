@@ -210,3 +210,27 @@ func TestAuthDefaultsUsePerUserPaths(t *testing.T) {
 		t.Fatalf("default credential dir = %q, want %q", defaultCredentialStoreDir, config.CredentialStoreDir())
 	}
 }
+
+// auth set reads the key through the masked prompt, which cannot work on a pipe.
+// It must refuse before prompting and name --stdin, not die on a raw ioctl error.
+func TestAuthSetWithoutTTYNamesStdinFlag(t *testing.T) {
+	profilePath, _ := setupAuthCommandTest(t)
+	if err := profile.NewStore(profilePath).Set("office", "acemagic-office:45000", ""); err != nil {
+		t.Fatal(err)
+	}
+	authSecretReader = readMaskedInput
+	oldIsTerminal := isTerminal
+	t.Cleanup(func() { isTerminal = oldIsTerminal })
+	isTerminal = func(uintptr) bool { return false }
+
+	var err error
+	stdout, stderr := captureInitOutput(t, func() {
+		_, _, err = executeAuthCommand(t, "set", "--profile", "office")
+	})
+	if err == nil || !strings.Contains(err.Error(), "--stdin") {
+		t.Fatalf("auth set without a TTY = %v; want a refusal naming --stdin", err)
+	}
+	if strings.Contains(stdout+stderr, "Auth key") {
+		t.Errorf("output = %q; the masked prompt was printed before refusing", stdout+stderr)
+	}
+}

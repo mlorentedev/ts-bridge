@@ -965,7 +965,7 @@ func TestInitWithoutTTYIsActionable(t *testing.T) {
 	root.SetIn(r)
 	root.SetArgs([]string{"init", "--target", "100.64.0.1:3389"})
 	var runErr error
-	stdout, _ := captureInitOutput(t, func() { runErr = root.Execute() })
+	stdout, stderr := captureInitOutput(t, func() { runErr = root.Execute() })
 
 	if runErr == nil {
 		t.Fatal("init without a TTY and without a key flag succeeded")
@@ -986,8 +986,8 @@ func TestInitWithoutTTYIsActionable(t *testing.T) {
 			t.Errorf("the refusal tells users to pass --%s but init does not define it", name)
 		}
 	}
-	if strings.Contains(stdout, "Auth key") {
-		t.Errorf("stdout = %q; the wizard prompted before refusing", stdout)
+	if strings.Contains(stdout+stderr, "Auth key") {
+		t.Errorf("output = %q; the wizard prompted before refusing", stdout+stderr)
 	}
 	// Whatever the output format, a refused init writes nothing.
 	if entries, err := os.ReadDir("."); err != nil || len(entries) != 0 {
