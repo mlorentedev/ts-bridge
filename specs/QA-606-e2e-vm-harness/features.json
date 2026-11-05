@@ -11,7 +11,7 @@
     "behavior": "AC2: make e2e-windows does the same on a Windows 11 Arm64 guest with the real PowerShell reads and writes",
     "verification": "make e2e-windows",
     "state": "passing",
-    "evidence": "windows-20261105T192107Z.log on 76e6ddd: 39 pass, 0 fail, 1 xfail (#557), 0 xpass, exit 0"
+    "evidence": "windows-20261105T213621Z.log on 2170109: 39 pass, 0 fail, 1 xfail (#557), 0 xpass, exit 0"
   },
   {
     "id": "QA-606-e2e-vm-harness-f3",
