@@ -46,19 +46,6 @@ func Validate(raw string) error {
 	return nil
 }
 
-// Redact returns raw with its user info masked, or a placeholder when raw is
-// not a URL that Validate could judge, for the error that has to name the input.
-func Redact(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil || u.Opaque != "" || u.Scheme == "" || u.Host == "" {
-		return "(invalid URL)"
-	}
-	if u.User != nil {
-		u.User = url.User("redacted")
-	}
-	return u.String()
-}
-
 // validPort reports whether p, a URL's port ("" when it has none), is absent or
 // within 1-65535. url.Parse checks only that it is digits.
 func validPort(p string) bool {

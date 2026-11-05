@@ -46,24 +46,3 @@ func TestValidate(t *testing.T) {
 		})
 	}
 }
-
-func TestRedact(t *testing.T) {
-	tests := []struct {
-		name string
-		raw  string
-		want string
-	}{
-		{"clean", "https://hs.example:8443/p", "https://hs.example:8443/p"},
-		{"user info masked", "https://user:secret@hs.example", "https://redacted@hs.example"},
-		{"opaque", "https:user:secret@hs.example", "(invalid URL)"},
-		{"no scheme", "user@hs.example", "(invalid URL)"},
-		{"unparseable", "user:secret@hs.example", "(invalid URL)"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := Redact(tt.raw); got != tt.want {
-				t.Errorf("Redact(%q) = %q, want %q", tt.raw, got, tt.want)
-			}
-		})
-	}
-}

@@ -97,16 +97,23 @@ func Parse(raw string) (Descriptor, error) {
 	}
 
 	q := u.Query()
-	cp, ok := q["cp"]
-	if !ok || len(cp) == 0 {
+	cp, present, reason := singleParam(q, "cp")
+	if reason != "" {
+		return wrap(reason)
+	}
+	if !present {
 		return wrap("missing required query param cp")
 	}
-	controlURL, reason := controlURLFromParam(cp[0])
+	controlURL, reason := controlURLFromParam(cp)
 	if reason != "" {
 		return wrap(reason)
 	}
 
-	version, reason := versionFromParam(q.Get("v"))
+	vs, _, reason := singleParam(q, "v")
+	if reason != "" {
+		return wrap(reason)
+	}
+	version, reason := versionFromParam(vs)
 	if reason != "" {
 		return wrap(reason)
 	}
@@ -117,6 +124,20 @@ func Parse(raw string) (Descriptor, error) {
 		ControlURL: controlURL,
 		Version:    version,
 	}, nil
+}
+
+// singleParam returns the one value of key, whether it is present, or the
+// reason it is refused when it is given more than once: validating only the
+// first of two values would let the second reach the profile unchecked.
+func singleParam(q url.Values, key string) (value string, present bool, reason string) {
+	vals := q[key]
+	switch len(vals) {
+	case 0:
+		return "", false, ""
+	case 1:
+		return vals[0], true, ""
+	}
+	return "", true, fmt.Sprintf("query param %s given more than once", key)
 }
 
 // controlURLFromParam turns the cp value into the descriptor's control URL
@@ -139,31 +160,25 @@ func versionFromParam(vs string) (version int, reason string) {
 	}
 	v, err := strconv.Atoi(vs)
 	if err != nil || v < 1 {
-		return 0, fmt.Sprintf("invalid version %q", vs)
+		// vs is not echoed: it is attacker-chosen text, and %q would print it.
+		return 0, "invalid version (must be a positive integer)"
 	}
 	return v, ""
 }
 
-// redactDescriptor masks the user info of the descriptor and of its cp control
-// URL. A value url.Parse cannot read is replaced rather than echoed, because
-// what it could not split may still hold a credential.
+// redactDescriptor reduces raw to what locates the descriptor: scheme, host,
+// port and path. The user info is dropped and a query is replaced by "?…",
+// because credentials can sit in any parameter and escaping one parameter at a
+// time is what let the next one through. A value url.Parse cannot read is
+// replaced rather than echoed, since what it could not split may hold one too.
 func redactDescriptor(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.Opaque != "" {
 		return "(unparseable)"
 	}
-	if u.User != nil {
-		u.User = url.User("redacted")
+	out := (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
+	if u.RawQuery != "" || u.ForceQuery {
+		out += "?\u2026"
 	}
-	q, err := url.ParseQuery(u.RawQuery)
-	if err != nil {
-		// u.Query() drops the pair it cannot decode, which can be the cp
-		// holding the credential, and the raw query would then be echoed.
-		return "(unparseable)"
-	}
-	if cp := q.Get("cp"); cp != "" && !strings.EqualFold(cp, cpSaas) {
-		q.Set("cp", controlurl.Redact(cp))
-		u.RawQuery = q.Encode()
-	}
-	return u.String()
+	return out
 }
