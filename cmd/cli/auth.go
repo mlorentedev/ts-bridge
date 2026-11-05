@@ -175,7 +175,7 @@ func runAuthList(command *cobra.Command, _ []string) error {
 		return err
 	}
 	if len(entries) == 0 {
-		_, _ = fmt.Fprintln(command.OutOrStdout(), "No managed credentials. Store one with: ts-bridge auth set --profile <name>")
+		_, _ = fmt.Fprintln(command.ErrOrStderr(), "No managed credentials. Store one with: ts-bridge auth set --profile <name>")
 		return nil
 	}
 	for _, entry := range entries {
