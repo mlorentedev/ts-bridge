@@ -3,6 +3,7 @@ package profile
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"sort"
 	"strings"
@@ -38,6 +39,9 @@ func (s *Store) BindCredential(creds *credential.Store, b Binding) error {
 			return err
 		}
 		previous, previousErr := creds.Get(b.Credential)
+		if unreadable(previousErr) {
+			return fmt.Errorf("credential %q exists but cannot be read, so it could not be restored: %w", b.Credential, previousErr)
+		}
 		if err := creds.Set(b.Credential, b.Key, b.Replace); err != nil {
 			return fmt.Errorf("store credential %q: %w", b.Credential, err)
 		}
@@ -55,6 +59,14 @@ func (s *Store) BindCredential(creds *credential.Store, b Binding) error {
 		}
 		return fmt.Errorf("profile association failed, credential store restored: %w", assocErr)
 	})
+}
+
+// unreadable reports a stored key that exists but could not be read. A missing
+// key or one whose content is invalid is replaceable; this one is not, because a
+// failed association would then delete it instead of putting it back.
+func unreadable(err error) bool {
+	var pathErr *fs.PathError
+	return errors.As(err, &pathErr) && !errors.Is(err, fs.ErrNotExist)
 }
 
 func checkBinding(b Binding, selected Profile) error {

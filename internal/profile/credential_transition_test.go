@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -173,6 +174,33 @@ func TestBindCredentialUndoesTheKeyWhenTheAssociationFails(t *testing.T) {
 				t.Fatalf("profile references %q after the failed association", got)
 			}
 		})
+	}
+}
+
+// A stored key that cannot be read is not "no previous key": replacing it
+// would leave nothing to restore if the association then failed, so the bind
+// refuses before it writes.
+func TestBindCredentialRefusesToReplaceAnUnreadableKey(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("file mode 0000 does not deny reads here")
+	}
+	f := newTransitionFixture(t, map[string]string{"office": ""})
+	if err := f.creds.Set("k", keyOriginal, false); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(f.credsDir, "k.key")
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	err := f.store.BindCredential(f.creds, Binding{Profile: "office", Credential: "k", Key: keyReplacement, Replace: true})
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err == nil {
+		t.Fatal("BindCredential() over an unreadable key = nil, want a refusal")
+	}
+	if got := f.key(t, "k"); got != keyOriginal {
+		t.Fatalf("credential k = %q after the refusal, want the original kept", got)
 	}
 }
 
