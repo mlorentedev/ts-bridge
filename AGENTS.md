@@ -6,7 +6,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 
 - **Language:** Go 1.27.3+
 - **Key dependency:** `tailscale.com/tsnet` (userspace networking) — version pinned in `go.mod`
-- **Architecture:** Single binary, multi-package — `cmd/ts-bridge/main.go` (~40 lines, thin entry point) delegates to the `cmd/cli` Cobra tree (ADR-010) over fifteen `internal/` packages, counting `internal/config/envfile` (ADR-007).
+- **Architecture:** Single binary, multi-package — `cmd/ts-bridge/main.go` (~40 lines, thin entry point) delegates to the `cmd/cli` Cobra tree (ADR-010) over ADR-007's multi-package split, now fifteen `internal/` packages counting `internal/config/envfile` (ADR-007's own list is older).
 - **Config:** Flags, environment variables, and YAML config files, in that precedence order, plus named profiles (ADR-011/012). `.env.example` documents the env-var surface; `init` writes either format.
 - **Logging:** `log/slog` (structured, text or JSON)
 - **Metrics:** `sync/atomic` counters, JSON endpoint at `/metrics`
