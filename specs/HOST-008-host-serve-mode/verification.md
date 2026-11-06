@@ -33,7 +33,12 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   skips, including `TestEnsureStateDir` without an elevated Windows token).
 - `go vet ./internal/host ./cmd/cli ./internal/serve` passed with each of
   `GOOS=windows`, `GOOS=linux` and `GOOS=darwin`. Changed Go files are gofmt-clean.
-  The blocked Windows linter was not invoked; CI for this patch has not run.
+  The blocked Windows linter was not invoked; CI is authoritative for lint.
+- The first PR lint run flagged G703 at the shared test-file writer after the
+  regression read and rewrote its generated fixture. The fixture is now constructed
+  directly with its declared services, without the read-back/rewrite dataflow or a
+  security-linter suppression. CI results are recorded on the PR and in the candidate
+  qualification receipt.
 - A rebuilt Windows development probe accepted SSH/RDP in both orders through
   file validation, then stopped at the deliberately absent `state_dir` requirement.
   The same binary's `host setup` and `host check` still rejected SSH with #521.

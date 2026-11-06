@@ -232,13 +232,18 @@ func serveGOOS() string {
 // directory, and returns the file and that directory.
 func serveFile(t *testing.T, extra string) (path, stateDir string) {
 	t.Helper()
+	return serveServicesFile(t, extra, "    - kind: rdp\n      port: 3390\n")
+}
+
+func serveServicesFile(t *testing.T, extra, services string) (path, stateDir string) {
+	t.Helper()
 	dir := isolateHostEnv(t)
 	stateDir = filepath.Join(dir, "state")
 	if err := os.Mkdir(stateDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	key := writeTestFile(t, filepath.Join(dir, "authkey"), "tskey-auth-test\n")
-	body := "host:\n  control_url: https://hs.example\n  services:\n    - kind: rdp\n      port: 3390\n" +
+	body := "host:\n  control_url: https://hs.example\n  services:\n" + services +
 		"  mesh:\n    hostname: lab-01\n    state_dir: '" + stateDir + "'\n    auth_key_file: '" + key + "'\n" + extra
 	return writeTestFile(t, filepath.Join(dir, "host.yaml"), body), stateDir
 }
@@ -324,13 +329,7 @@ func TestHostServeCmd_ExistingSSHAndRDP(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			path, _ := serveFile(t, "")
-			body, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			writeTestFile(t, path, strings.Replace(string(body),
-				"    - kind: rdp\n      port: 3390\n", tc.services, 1))
+			path, _ := serveServicesFile(t, "", tc.services)
 			run := runHostServe(t, serveGOOS(), []string{"--config", path}, []string{"tag:lab"}, nil)
 			if run.err != nil {
 				t.Fatalf("host serve rejected existing services: %v", run.err)
