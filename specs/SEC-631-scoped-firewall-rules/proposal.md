@@ -57,7 +57,10 @@ Windows needs no tier: the rule is recreated by name, so recreating it scoped is
 replacement. The order matches the other OSes: the scoped rule is created first (under the same
 display name, which Windows allows to repeat) and the rules that were there are removed after, so
 RDP is never left without an allow rule. A failed create is terminating and removes nothing.
-Removing first would lock out an operator running `host setup` over the RDP session it is
+The old rules are identified before the create, by the objects `Get-NetFirewallRule` returned
+(their `Name`, the unique key), and removed through the pipeline; removing by display name would
+delete the new rule too, since it repeats the name. `check` therefore expects exactly one rule of
+that name after a recreate. Removing first would lock out an operator running `host setup` over the RDP session it is
 configuring.
 
 ### Windows: the built-in "Remote Desktop" group
@@ -84,10 +87,17 @@ Decision: **setup stops enabling `-DisplayGroup "Remote Desktop"`**, does not di
 
 - IPv6 on the iptables backend: setup never wrote `ip6tables` rules (#526 tracks it).
 - A tailscaled started with `--tun=<name>`: the interface name is fixed at `tailscale0`. A custom
-  name makes the scoped rule match nothing, which fails closed (the port is unreachable until the
-  operator allows it by hand), and `check` says so because it reads the rule it expects.
+  name makes the scoped rule match nothing. That fails closed only under a restrictive policy (INPUT
+  default DROP, or active ufw): the port is then unreachable until the operator allows it by hand.
+  On a host with `iptables -P INPUT ACCEPT` and no other firewall the scope restricts nothing, the
+  port stays open as it was before this change, and `check` still reports the rule it expects as
+  satisfied; `check` reads the rule text, not the policy or the interface. Reporting a permissive
+  policy is #691, an owner decision (it would turn every default-ACCEPT host `manual`).
 - macOS: `socketfilterfw` is per application and has no port rules (§5).
-- `ssh` on Linux, which is refused today (#521).
+- `ssh` on Linux and Windows, which is refused today (#521; `internal/host/file.go` lists it as
+  planned). Windows setup therefore never enables OpenSSH Server and its built-in
+  `OpenSSH-Server-In-TCP` rule (any address, all profiles); when #521 lands it must scope that rule
+  or report it `manual` the same way as the RDP group.
 
 ## Risks / open questions
 
