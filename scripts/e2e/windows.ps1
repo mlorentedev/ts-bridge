@@ -52,15 +52,20 @@ function AcZero {
 }
 # Listening PORT [SECONDS]: polls for a TCP listener on PORT, 1 s apart. A
 # service reports Running before its listener is up (#680), so a single read
-# right after setup fails on a correct host. On timeout it prints the last read.
+# right after setup fails on a correct host. On timeout it prints what the last
+# read reported and the TermService state, so "nothing listening" can be told
+# apart from a query that failed.
 function Listening($port, $seconds = 30) {
     $deadline = (Get-Date).AddSeconds($seconds)
     do {
-        $n = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue).Count
+        $err = $null
+        $n = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue -ErrorVariable err).Count
         if ($n -gt 0) { return $true }
         Start-Sleep -Seconds 1
     } while ((Get-Date) -lt $deadline)
-    Write-Host "  no listener on port $port after ${seconds}s; last read: $n listening connection(s)"
+    $why = if ($err) { $err[0].Exception.Message } else { 'no error' }
+    $svc = (Get-Service TermService -ErrorAction SilentlyContinue).Status
+    Write-Host "  no listener on port $port after ${seconds}s; last read: $why; TermService: $svc"
     $false
 }
 function Yaml($path, $text) { Set-Content -Path $path -Value $text -Encoding ascii }
