@@ -1,6 +1,7 @@
 package host
 
 import (
+	"cmp"
 	"reflect"
 	"slices"
 	"strings"
@@ -1356,21 +1357,36 @@ func TestNoBackendKeepsTheNFTFix(t *testing.T) {
 // ufw 0.36.2 on Ubuntu 24.04 (Lima), read under LC_ALL=C.
 func TestUFWInactive(t *testing.T) {
 	ufwOnly := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true}
-	inactive := func(added string) *recordingRunner {
-		return &recordingRunner{elevated: true, onPath: ufwOnly, output: linuxUp(map[string]string{ufwStatus: "Status: inactive\n", ufwAdded: ufwAddedHeader + added})}
+	withIPT := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true, "iptables": true}
+	inactive := func(added, input string) *recordingRunner {
+		out := map[string]string{ufwStatus: "Status: inactive\n", ufwAdded: ufwAddedHeader + added}
+		path := ufwOnly
+		if input != "" {
+			out[iptRead], out[iptChain], path = input, tsInputDefault, withIPT
+		}
+		return &recordingRunner{elevated: true, onPath: path, output: linuxUp(out)}
 	}
 	tests := []struct {
 		name    string
 		added   string
-		writes  bool // setup adds the allow, so it holds once ufw is enabled
+		input   string // iptables INPUT; empty means iptables is not installed
+		writes  bool   // setup adds the allow, so it holds once ufw is enabled
 		message string
+		check   string // what check's message names, when not just "inactive"
 	}{
 		{name: "no allow yet", writes: true, message: "allow added"},
 		{name: "allow already added", added: "ufw allow 3389/tcp\n", message: "allow is in place"},
+		// A ufw deny decides the port once ufw is enabled: name it, add nothing.
+		{name: "a ufw deny", added: "ufw deny 3389/tcp\n", message: "ufw deny 3389/tcp", check: "ufw deny 3389/tcp"},
+		// tailscaled's ts-input admits the tailnet whatever ufw's state: an
+		// unscoped ufw allow would open the port on every interface (#530).
+		{name: "ts-input admits the tailnet", input: ufwHostInput, message: "iptables admits TCP 3389", check: "iptables admits TCP 3389"},
+		// The copies are live iptables rules, so both commands name them (#576).
+		{name: "leftover copies", input: ufwHostCopies, message: "2 copies of", check: "2 copies of"},
 	}
 	for _, tt := range tests {
 		t.Run("setup/"+tt.name, func(t *testing.T) {
-			r := inactive(tt.added)
+			r := inactive(tt.added, tt.input)
 			s := firewallSetupStep(r, 3389)
 			assertUFWInactiveStep(t, s, tt.message)
 			if got := slices.Contains(r.calls, "run ufw allow 3389/tcp"); got != tt.writes {
@@ -1378,11 +1394,12 @@ func TestUFWInactive(t *testing.T) {
 			}
 		})
 		t.Run("check/"+tt.name, func(t *testing.T) {
-			r := inactive(tt.added)
+			r := inactive(tt.added, tt.input)
 			var result CheckResult
 			checkLinux(Config{Port: 3389}, r, &result)
-			assertUFWInactiveStep(t, result.Steps[1], "inactive")
-			if result.Services[0].FirewallOK {
+			assertUFWInactiveStep(t, result.Steps[1], cmp.Or(tt.check, "inactive"))
+			deriveLegacy(&result)
+			if result.Services[0].FirewallOK || result.FirewallOK {
 				t.Error("check reports firewall_ok for a port no firewall filters")
 			}
 			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") }) {
