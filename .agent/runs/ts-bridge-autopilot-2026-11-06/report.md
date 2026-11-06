@@ -18,3 +18,40 @@ One line per item: item, outcome, PRs, notes.
 - 12:20Z 391: #690 REAL finding applied in 9357777: the bind refuses to replace a stored key that exists but cannot be read, with a red-first test. The "vacuous assertion" finding was declined because the assertion can fail. The triage is posted; the re-review is pending.
 - 12:20Z 607: opened PR 2 as #696 (Part of #607), merged with master. `make e2e-mesh-linux` passed at 753e19a: 3 pass, 0 fail, no leftover container. The first attempt failed for an environmental reason: the worktree was under /private/tmp, which the Docker VM does not share. The worktree was moved under ~/Projects. PR 3 commit cf83d90 stays local on test/issue-607-mesh-linux (not run live).
 - 13:22Z land-open-prs: merged #686 (80108b2, part 1 of the #631 stack), #681 (02367c8, Closes #680 -> Done) and #696 (369321c, #607 PR 2). #687 was merged with master after the #686 squash; six conflicts resolved, two of them as unions. `make e2e-linux` passed at 6e960d7, 67 pass and 0 fail, posted on the PR. It was then marked ready, because PR-Agent skips drafts. The #696 REAL findings were applied in a689131. On #690 and #687, PR-Agent repeatedly "succeeded" without publishing a review; its log suspects NaN concurrency exhaustion. Both jobs were re-run, and land run 10 is queued for them.
+- 13:56Z land-open-prs: merged #687 (605e5d2, Part of #631) after REAL findings were applied in 69690fe. The first was an ACCEPT on another interface or source counted as the tailnet rule, so setup could delete the legacy copy without adding `-i tailscale0`. The second was a PR 3 checkbox copied in by the merge. `make e2e-linux` passed at 69690fe, 67 pass and 0 fail. **The PR-Agent review on 69690fe failed without publishing, and land.sh still merged it.** land.sh accepted any completed review, and `dotf pr triage-queue` reported the queue clear. This is disclosed on #687. land.sh now requires `review=success`; run 11 was stopped, and #690 goes through the stricter run 12.
+
+## Disarm report (written 14:00Z)
+
+Stop reason: the landing window closed at 14:00Z, as planned before expires_at 14:55Z. The envelope was unchanged on every tick. The wake lock (caffeinate) covered the whole window.
+
+### Merged during the run (06:55Z to 14:00Z)
+
+- #667 99406dd (Part of #630), #668 debd0a1, #669 3090051, #670 e38ae47 (Closes #588).
+- #679 635945a (Closes #598), #659 3fd908d (Closes #633), #664 398ead6 (Closes #653), #678 fd06fd5 (Closes #601), #665 7165991 (Closes #646).
+- #662 da7f8af (Closes #628), #672 f77459d (Closes #638), #682 9ec0c90 (#607 PR 1), #686 80108b2 (#631 PR 1), #681 02367c8 (Closes #680).
+- #696 369321c (#607 PR 2), #687 605e5d2 (#631 PR 2).
+
+That is 16 PRs. Every closed issue is moved to Done on the board.
+
+### Open, with the next step
+
+- **#690** (#391 store lock): REAL findings were applied (the #664 fold in 758fba0; the unreadable-key refusal in 9357777). Its review job failed to publish three times. The next step is the result of land run 12. If that run does not merge it, re-run the `review` job, triage what it finds, and then land.
+- **#688** (#631 PR 3, ufw) is a draft, now based on master. Next: merge origin/master (expect the same spec conflicts as #687), run `make e2e-linux`, mark it ready, triage, land.
+- **#689** (#631 PR 4, Windows) is a draft based on #688. After #688 lands: retarget it, merge master, re-run the Windows e2e on the new head (message the VM peer first), triage, then land. It must keep `Closes #631` and `Closes #685`.
+- **#607 PR 3**: commit cf83d90 is local on `test/issue-607-mesh-linux`. It needs its live Lima run and mutants before it gets a PR. PR 4 (Windows mesh) and PR 5 (runbook) follow the spec.
+- **#676** (complexity baseline): it has conflicts and an untriaged review. It was not reached.
+- Not mine: #523 (release), #583, #584, #674, #675, #677.
+
+### Queue items not started
+
+#684, #526 and #565. #684 was blocked on #665, which has now merged, so it is free for the next run. #526 is blocked on the #631 stack. #565 was vetoed for this run because it needs a live control-plane outage.
+
+### Iterations
+
+Seven queue items were worked: land-open-prs, 631, 391, 607, plus the #686, #687 and #690 sub-steps inside them. No item was parked.
+
+### Lessons for the operator
+
+- Serial landing converges at about one PR per 25 minutes. Every update-branch starts a new PR-Agent review, and that review often raises a new finding. The trigger configuration lives in `.github/`, which is yours to change.
+- PR-Agent "succeeded but published no review" about six times today, and its log suspects NaN concurrency exhaustion. `dotf pr triage-queue` does not treat a failed review on the head as pending, so a script that trusts it can merge an unreviewed commit (#687). The fix belongs in dotf, the owner of triage-queue; land.sh is now stricter locally.
+- A worktree under /private/tmp is not shared into the Docker VM. Headscale then starts with an empty config and fails with "no config file found". Keep e2e worktrees under ~/Projects.
