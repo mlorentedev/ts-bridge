@@ -59,6 +59,7 @@ type Config struct {
 	FirewallRule string
 	NoSleep      bool
 	Port         int
+	PortDeclared bool // a flag, TS_HOST_RDP_PORT or the file named Port (#557)
 	Verbose      bool
 	LogFormat    string
 	Services     []DeclaredService
@@ -116,6 +117,7 @@ func applyFile(cfg *Config, h FileHost) { //nolint:gocyclo // baseline #629
 			cfg.Services = append(cfg.Services, DeclaredService{Kind: s.Kind, Port: port})
 			if s.Kind == ServiceRDP {
 				cfg.Port = port
+				cfg.PortDeclared = s.Port != nil
 			}
 		}
 	}
@@ -175,7 +177,7 @@ func applyEnv(cfg *Config) { //nolint:gocyclo // baseline #629
 		} else if port < 1 || port > 65535 {
 			warnHostEnvVar("TS_HOST_RDP_PORT", v, "must be between 1 and 65535")
 		} else {
-			cfg.Port = port
+			cfg.Port, cfg.PortDeclared = port, true
 		}
 	}
 
@@ -209,7 +211,7 @@ func applyFlags(cfg *Config, flags Flags) {
 
 	// RDP Port — apply only if positive (zero means "not set").
 	if flags.Port > 0 {
-		cfg.Port = flags.Port
+		cfg.Port, cfg.PortDeclared = flags.Port, true
 	}
 
 	// Verbose — apply only if explicitly passed (same reasoning as NoSleep).
