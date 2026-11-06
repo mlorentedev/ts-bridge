@@ -73,11 +73,6 @@ func InitLogger(cfg config.Config) {
 	config.SetLogger(logger)
 }
 
-// LogFile returns the current log file path for banner display.
-func LogFile() string {
-	return logDir
-}
-
 func ensureStateDir(dir string) error {
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
