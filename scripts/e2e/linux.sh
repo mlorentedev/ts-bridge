@@ -130,6 +130,33 @@ mesh /var/lib/ts-bridge-e2e /tmp/e2e-key >"$W/key.yaml"
 run timeout 20 "$B" host serve --config "$W/key.yaml"
 ok "serve: auth_key_file under /tmp refused" -- 'code 1 && has "/tmp"'
 
+# POSIX ACLs on a state_dir ancestor (#598). setfacl raises the mask with a named entry and the group
+# bits mirror it, so the mode check alone already refuses that; the ACL read names the principal, and is
+# the only layer that sees an entry the mask hides (setfacl -n).
+apt-get -qq install -y acl >/dev/null 2>&1
+ok "acl: setfacl is installed" -- 'command -v setfacl'
+install -d -m 0755 /var/lib/acl-e2e && install -d -m 0755 /etc/ts-bridge && echo k >/etc/ts-bridge/e2e-key && chmod 600 /etc/ts-bridge/e2e-key
+mesh /var/lib/acl-e2e/state /etc/ts-bridge/e2e-key >"$W/acl.yaml"
+setfacl -m u:nobody:rwx /var/lib/acl-e2e
+ok "acl: setfacl raises the mask, and stat shows it as the group bits (0775)" -- '[ "$(stat -c %a /var/lib/acl-e2e)" = 775 ]'
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a named-user write ACL refused, naming it and the user" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to user"'
+setfacl -b /var/lib/acl-e2e && setfacl -n -m u:nobody:rwx /var/lib/acl-e2e
+ok "acl: setfacl -n leaves the mask at r-x, so the mode stays 0755" -- '[ "$(stat -c %a /var/lib/acl-e2e)" = 755 ]'
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: a named-user write the mask hides is still refused" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to user"'
+setfacl -b /var/lib/acl-e2e && setfacl -m g:nogroup:rwx /var/lib/acl-e2e
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a named-group write ACL refused, naming it and the group" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to group"'
+# A refusal creates nothing; a pass creates state_dir (EnsureStateDir walks the ancestors first). That
+# makes the directory the positive half of the next case, so it cannot go green on an unrelated error.
+ok "acl: the refused runs created no state_dir" -- '[ ! -e /var/lib/acl-e2e/state ]'
+setfacl -b /var/lib/acl-e2e && setfacl -m u:nobody:r-x /var/lib/acl-e2e
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a read-only named-user ACL is not refused, and the walk lets state_dir be created" -- '! has "ancestor" && [ -d /var/lib/acl-e2e/state ]'
+rm -rf /var/lib/acl-e2e/state
+setfacl -b /var/lib/acl-e2e
+
 run "$B" import e2e "tsb://host-e2e:3389?cp=saas"
 ok "client: import a tsb:// descriptor" -- 'code 0'
 run "$B" import bad "http://nope"

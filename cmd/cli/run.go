@@ -211,6 +211,7 @@ func runBridge(
 	var tunnelStatus health.TunnelStatus
 	var healthServer *http.Server
 	if cfg.HealthAddr != "" {
+		warnHealthExposure(logger, cfg)
 		healthServer = health.StartServer(cfg.HealthAddr, &tunnelStatus, logger)
 	}
 
@@ -535,4 +536,16 @@ func writeStartupBanner(w io.Writer, cfg config.Config) {
 	fmt.Fprintln(w, "  +---------------------------------------+")
 	fmt.Fprintln(w, "  Waiting for connections...")
 	fmt.Fprintln(w)
+}
+
+// warnHealthExposure records that the operator opted in to a health listener
+// reachable beyond loopback, and what that makes reachable (#633).
+func warnHealthExposure(log *slog.Logger, cfg config.Config) {
+	if !config.HealthExposed(cfg) {
+		return
+	}
+	log.Warn("health endpoint is reachable beyond loopback (--health-allow-remote)",
+		"addr", cfg.HealthAddr,
+		"endpoints", "/health/live, /health/ready (readiness reason), /metrics (connection counters)",
+		"authentication", "none")
 }
