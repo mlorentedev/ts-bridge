@@ -24,7 +24,7 @@ GREMLINS         := $(GOBIN)/gremlins
 # Coverage floor, in percent of statements. Set below the measured value so it bars
 # regression rather than pretending to be an aspiration; override per run with
 # `make cover-check COVER_MIN=nn`.
-COVER_MIN ?= 60
+COVER_MIN ?= 78
 COVERAGE  ?= coverage.out
 
 .DEFAULT_GOAL := help

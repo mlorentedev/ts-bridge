@@ -121,7 +121,7 @@ func AcceptSOCKS5Loop(
 	}
 }
 
-func handleSOCKS5Conn(
+func handleSOCKS5Conn( //nolint:funlen,gocyclo // baseline #629
 	client net.Conn,
 	dialer Dialer,
 	resolve SOCKSTargetResolver,

@@ -25,7 +25,7 @@ import (
 // (a writer validating the layer its consumer will read) does not need a second
 // copy of the parsing rules. A missing file yields an empty map and a nil error,
 // matching Load.
-func Values(path string) (map[string]string, error) {
+func Values(path string) (map[string]string, error) { //nolint:funlen,gocyclo // baseline #629
 	values := make(map[string]string)
 
 	// #nosec G304 -- callers pass a path they already resolved (CWD .env, or the

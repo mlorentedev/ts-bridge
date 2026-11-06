@@ -240,7 +240,7 @@ func (r *FileRotator) compress(day string) {
 }
 
 // cleanup removes log files older than maxDays and keeps at most maxFiles.
-func (r *FileRotator) cleanup() {
+func (r *FileRotator) cleanup() { //nolint:funlen,gocyclo // baseline #629
 	const maxDays = 7
 	const maxFiles = 10
 
