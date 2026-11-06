@@ -30,7 +30,7 @@ func (s *Store) Lock(name string) (*os.File, error) {
 	}
 	file, err := s.tryLock(fmt.Sprintf("%x.lock", sha256.Sum256([]byte(name))))
 	if errors.Is(err, errLockHeld) {
-		return nil, errProfileInUse
+		err = errProfileInUse
 	}
 	if err != nil {
 		return nil, fmt.Errorf("lock profile %q: %w", name, err)

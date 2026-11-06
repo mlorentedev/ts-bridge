@@ -33,7 +33,15 @@ owner: manu
 
 ## Test status
 
-Filled with the command output once CI is green.
+Local run at the head of PR 1 (macOS), before the CI run:
+
+- `go test -race ./...` exit 0 (`./internal/profile` 5.0 s, `./cmd/cli` 5.8 s, `./internal` 1.1 s).
+- `golangci-lint run`: 0 issues. `gosec ./...`: 0 issues.
+- `GOOS=windows go vet ./...` and `GOOS=linux go vet ./...` exit 0; the Windows test binary compiles.
+- `check-features-shape`, `check-features-selectors`, `check-conflict-markers`, `check-lessons` and
+  `check-ai-trailers origin/master HEAD` exit 0.
+- Not run locally: the Windows tests (retrying rename, helper processes). The `test-windows` CI job
+  is the evidence for those.
 
 ## Decisions made during implementation
 
