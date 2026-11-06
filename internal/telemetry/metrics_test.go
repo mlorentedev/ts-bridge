@@ -52,8 +52,8 @@ func TestTryClaimConnection_AtomicUnderRace(t *testing.T) {
 	if got != cap {
 		t.Fatalf("under race: %d claims succeeded, want exactly %d", got, cap)
 	}
-	if GetActiveConnections() != cap {
-		t.Errorf("ActiveConnections = %d, want %d", GetActiveConnections(), cap)
+	if active := GetMetrics().ActiveConnections; active != cap {
+		t.Errorf("ActiveConnections = %d, want %d", active, cap)
 	}
 
 	// Cleanup so subsequent tests start clean.
