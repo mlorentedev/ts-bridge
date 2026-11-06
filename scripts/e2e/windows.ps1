@@ -50,6 +50,24 @@ function AcZero {
     }
     $true
 }
+# Listening PORT [SECONDS]: polls for a TCP listener on PORT, 1 s apart. A
+# service reports Running before its listener is up (#680), so a single read
+# right after setup fails on a correct host. On timeout it prints whether the
+# last read found nothing listening or failed, and the TermService state.
+function Listening($port, $seconds = 30) {
+    $deadline = (Get-Date).AddSeconds($seconds)
+    do {
+        $err = $null
+        $n = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue -ErrorVariable err).Count
+        if ($n -gt 0) { return $true }
+        Start-Sleep -Seconds 1
+    } while ((Get-Date) -lt $deadline)
+    # No match is itself a non-terminating error; anything else is a failed query.
+    $why = if (-not $err -or $err[0].Exception.Message -match 'No MSFT_NetTCPConnection objects found') { 'nothing listening' } else { "query failed: $($err[0].Exception.Message)" }
+    $svc = (Get-Service TermService -ErrorAction SilentlyContinue).Status
+    Write-Host "  no listener on port $port after ${seconds}s; last read: $why; TermService: $svc"
+    $false
+}
 function Yaml($path, $text) { Set-Content -Path $path -Value $text -Encoding ascii }
 
 Case 'version prints' { Tsb version; $Code -eq 0 }
@@ -82,7 +100,7 @@ Case 'setup #2: nothing changed' { @($j2.steps).Count -gt 0 -and -not @($j2.step
 Case 'setup: no Tailscale adapter is manual' { (Steps $j2 'Network profile')[0].outcome -eq 'manual' }
 Case 'RDP enabled, TermService running, listening on 3389' {
     (Get-ItemProperty $TS).fDenyTSConnections -eq 0 -and (Get-Service TermService).Status -eq 'Running' -and
-    @(Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue).Count -gt 0
+    (Listening 3389)
 }
 Case 'firewall rule: one, enabled, inbound TCP 3389' {
     $r = @(Rule 'Tailscale-RDP-Ingress'); $f = $r | Get-NetFirewallPortFilter

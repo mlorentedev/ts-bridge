@@ -2,11 +2,15 @@ package logging
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -305,5 +309,103 @@ func TestNew_FailedDirectoryCreation(t *testing.T) {
 	// Should still return a valid logger with console output.
 	if l.console == nil {
 		t.Fatal("console logger should still be created even if file dir fails")
+	}
+}
+
+// Combined fans one record out to the console and the file, each at its own
+// level: a debug record reaches only the file, a warning reaches both, and
+// With/WithGroup context lands on both.
+func TestLogger_CombinedFansOutByLevel(t *testing.T) {
+	var console, file strings.Builder
+	l := &Logger{
+		console: slog.New(slog.NewTextHandler(&console, &slog.HandlerOptions{Level: slog.LevelWarn})),
+		file:    slog.New(slog.NewJSONHandler(&file, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+	combined := l.Combined().With("node", "n1").WithGroup("conn")
+
+	combined.Debug("debug-only-in-file", "id", 1)
+	combined.Warn("warn-in-both", "id", 2)
+
+	if strings.Contains(console.String(), "debug-only-in-file") {
+		t.Errorf("console received a debug record: %q", console.String())
+	}
+	if !strings.Contains(file.String(), "debug-only-in-file") {
+		t.Errorf("file did not receive the debug record: %q", file.String())
+	}
+	if !strings.Contains(console.String(), "warn-in-both") || !strings.Contains(file.String(), "warn-in-both") {
+		t.Errorf("warning must reach both sinks; console %q, file %q", console.String(), file.String())
+	}
+	if !strings.Contains(console.String(), "node=n1") || !strings.Contains(console.String(), "conn.id=2") {
+		t.Errorf("console lost the With/WithGroup context: %q", console.String())
+	}
+	if !strings.Contains(file.String(), `"node":"n1"`) || !strings.Contains(file.String(), `"conn":{"id":2}`) {
+		t.Errorf("file lost the With/WithGroup context: %q", file.String())
+	}
+	if !l.Combined().Enabled(context.Background(), slog.LevelDebug) {
+		t.Error("combined logger must be enabled at debug while the file sink is")
+	}
+}
+
+func TestLogger_CombinedWithoutFileIsTheConsole(t *testing.T) {
+	var console strings.Builder
+	l := &Logger{console: slog.New(slog.NewTextHandler(&console, nil))}
+
+	l.Combined().Info("only-console")
+
+	if !strings.Contains(console.String(), "only-console") {
+		t.Errorf("console = %q, want the record", console.String())
+	}
+}
+
+// cleanup keeps files for 7 days and at most 10 compressed logs. Each case
+// pins one side of a boundary, so shifting a limit or a comparison fails here.
+func TestFileRotatorCleanup_Retention(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	write := func(name string, age time.Duration) {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		mod := now.Add(-age)
+		if err := os.Chtimes(path, mod, mod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const day = 24 * time.Hour
+
+	// Ten newest compressed logs sit just inside the limit; the eleventh and
+	// twelfth are over it although they are young enough to keep by age.
+	for i := 1; i <= 12; i++ {
+		write(fmt.Sprintf("ts-bridge-2026-01-%02d.log.gz", i), time.Duration(i)*time.Minute)
+	}
+	write("ts-bridge-just-inside-age.log", 7*day-time.Hour)
+	write("ts-bridge-just-outside-age.log", 7*day+time.Hour)
+	write("ts-bridge-just-outside-age.log.gz", 7*day+time.Hour)
+	// Uncompressed logs are not counted against the 10-file cap.
+	write("ts-bridge-today.log", 0)
+	write("unrelated-old.log", 30*day)
+
+	NewFileRotator(dir).cleanup()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, 0, len(entries))
+	for _, e := range entries {
+		got = append(got, e.Name())
+	}
+	sort.Strings(got)
+
+	var want []string
+	for i := 1; i <= 10; i++ {
+		want = append(want, fmt.Sprintf("ts-bridge-2026-01-%02d.log.gz", i))
+	}
+	want = append(want, "ts-bridge-just-inside-age.log", "ts-bridge-today.log", "unrelated-old.log")
+	sort.Strings(want)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("retained files:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
