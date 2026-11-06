@@ -34,18 +34,9 @@ func (s *Store) CheckCredentialShare(profileName, credentialName string) error {
 	return sharedConflict(data, profileName, credentialName, entry.ControlURL)
 }
 
-// AssociateCredential references credentialName from profileName, re-reading
-// the profile in the same load and save: if its control_url no longer matches
-// controlURL, the one the caller read before storing the key, it refuses. The
-// profile and credential stores share no lock, so this narrows the window
-// between the read and the write rather than closing it (#391).
-func (s *Store) AssociateCredential(profileName, credentialName, controlURL string) error {
-	return s.associate(profileName, credentialName, &controlURL)
-}
-
-// associate checks the reference and, when want is set, the profile's current
-// control_url, then writes the reference.
-func (s *Store) associate(profileName, credentialName string, want *string) error {
+// associate checks the reference and writes it. Callers hold the store lock
+// (Tx.SetCredential), so the check and the write are one transition (#391).
+func (s *Store) associate(profileName, credentialName string) error {
 	if err := credential.ValidateName(credentialName); err != nil {
 		return fmt.Errorf("invalid credential reference: %w", err)
 	}
@@ -56,10 +47,6 @@ func (s *Store) associate(profileName, credentialName string, want *string) erro
 	entry, ok := data.Profiles[profileName]
 	if !ok {
 		return fmt.Errorf("profile %q %w in %s", profileName, ErrNotFound, s.path)
-	}
-	if want != nil && !SameControlURL(entry.ControlURL, *want) {
-		return fmt.Errorf("profile %q moved from control plane %s to %s while the credential was stored; run auth set again",
-			profileName, displayControlURL(*want), displayControlURL(entry.ControlURL))
 	}
 	if err := sharedConflict(data, profileName, credentialName, entry.ControlURL); err != nil {
 		return err
