@@ -28,7 +28,7 @@ Nothing is implemented yet: this file records how each criterion will be proved,
 
 - Fixture tests: `bash scripts/tests/test-e2e-headscale.sh`, `test-e2e-report.sh`, `test-e2e-probe.sh` and `test-e2e-mesh-preflight.sh` -> exit 0 each at `a2d7764`
 - `bash scripts/check-shellcheck.sh` -> exit 0 at `b574736` (22 scripts); `bash scripts/check-features-shape.sh` -> exit 0 (37 files)
-- Data-path runs: `make e2e-mesh-linux` at `a2d7764` twice, both exit 0: 3 pass, 0 fail, 0 xfail, 0 xpass (logs `scripts/e2e/out/mesh-linux-20261106T052348Z.log` and `...T052812Z.log`; no `hskey` in either). `make e2e-mesh-windows` waits for PR 4.
+- Data-path runs: `make e2e-mesh-linux` at `a2d7764` twice, both exit 0: 3 pass, 0 fail, 0 xfail, 0 xpass (logs `scripts/e2e/out/mesh-linux-20261106T052348Z.log` and `...T052812Z.log`; no `hskey` in either). After the merge from `master`, `make e2e-mesh-linux` at `753e19a` -> exit 0, 3 pass, 0 fail, 0 xfail, 0 xpass (log `scripts/e2e/out/mesh-linux-20261106T121353Z.log`; no `hskey` in the run output; no `tsb-e2e=headscale` container afterwards). `make e2e-mesh-windows` waits for PR 4.
 - Not run in CI by design: GitHub runners cannot nest a VM, and `.github/**` is not touched.
 
 ## Experiments
