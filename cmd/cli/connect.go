@@ -19,7 +19,7 @@ import (
 const windowsOS = "windows"
 
 // newConnectCmd constructs the "ts-bridge connect" subcommand.
-func newConnectCmd() *cobra.Command {
+func newConnectCmd() *cobra.Command { //nolint:funlen // baseline #629
 	cmd := &cobra.Command{
 		Use:   "connect [flags]",
 		Short: "Start the TCP bridge",
@@ -91,7 +91,7 @@ Examples:
 	return cmd
 }
 
-func runConnect(cmd *cobra.Command, args []string) error {
+func runConnect(cmd *cobra.Command, args []string) error { //nolint:funlen,gocyclo // baseline #629
 	// Collect CLI flag values.
 	flags := collectFlags(cmd)
 

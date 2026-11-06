@@ -8,15 +8,27 @@ linters:
   default: standard
   enable:
     - goconst
+    - funlen
     - gocyclo
     - gosec
     - misspell
+    - nolintlint
     - prealloc
     - unconvert
     - unparam
   settings:
     gocyclo:
-      min-complexity: 15
+      min-complexity: 9
+    funlen:
+      lines: 40
+      # The documented limit is on length; statement count is a second, stricter
+      # reading nobody agreed to.
+      statements: -1
+      ignore-comments: false
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
     goconst:
       min-len: 3
       min-occurrences: 3
@@ -52,6 +64,7 @@ linters:
     rules:
       - path: '_test\.go'
         linters:
+          - funlen
           - gocyclo
           - goconst
           - unparam

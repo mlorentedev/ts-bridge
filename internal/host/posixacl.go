@@ -33,30 +33,47 @@ const (
 // this read can see is the entry itself, and naming the principal. A malformed
 // value is an error: an ACL that cannot be read is not one that grants nothing.
 func aclWriters(raw []byte) ([]string, error) {
-	if len(raw) < aclHeaderSize || (len(raw)-aclHeaderSize)%aclEntrySize != 0 {
-		return nil, fmt.Errorf("malformed POSIX ACL: %d bytes", len(raw))
-	}
-	if v := binary.LittleEndian.Uint32(raw); v != aclXattrVersion {
-		return nil, fmt.Errorf("unsupported POSIX ACL version %d, want %d", v, aclXattrVersion)
+	if err := aclHeaderValid(raw); err != nil {
+		return nil, err
 	}
 	if err := aclShapeValid(raw); err != nil {
 		return nil, err
 	}
 	var out []string
 	for off := aclHeaderSize; off < len(raw); off += aclEntrySize {
-		tag := binary.LittleEndian.Uint16(raw[off:])
-		perm := binary.LittleEndian.Uint16(raw[off+2:])
-		id := binary.LittleEndian.Uint32(raw[off+4:])
-		if (tag != aclUser && tag != aclGroup) || perm&aclWrite == 0 || id == 0 {
-			continue
+		if w, ok := aclEntryWriter(raw[off : off+aclEntrySize]); ok {
+			out = append(out, w)
 		}
-		kind := "user"
-		if tag == aclGroup {
-			kind = "group"
-		}
-		out = append(out, fmt.Sprintf("%s %d", kind, id))
 	}
 	return out, nil
+}
+
+// aclHeaderValid refuses a value that is not a whole number of entries after
+// the header, or that carries a version other than the one the kernel writes.
+func aclHeaderValid(raw []byte) error {
+	if len(raw) < aclHeaderSize || (len(raw)-aclHeaderSize)%aclEntrySize != 0 {
+		return fmt.Errorf("malformed POSIX ACL: %d bytes", len(raw))
+	}
+	if v := binary.LittleEndian.Uint32(raw); v != aclXattrVersion {
+		return fmt.Errorf("unsupported POSIX ACL version %d, want %d", v, aclXattrVersion)
+	}
+	return nil
+}
+
+// aclEntryWriter names the principal of one entry when it is a named user or
+// group, other than root, with the write bit set.
+func aclEntryWriter(entry []byte) (string, bool) {
+	tag := binary.LittleEndian.Uint16(entry)
+	perm := binary.LittleEndian.Uint16(entry[2:])
+	id := binary.LittleEndian.Uint32(entry[4:])
+	if (tag != aclUser && tag != aclGroup) || perm&aclWrite == 0 || id == 0 {
+		return "", false
+	}
+	kind := "user"
+	if tag == aclGroup {
+		kind = "group"
+	}
+	return fmt.Sprintf("%s %d", kind, id), true
 }
 
 // aclShapeValid applies the kernel's posix_acl_valid shape: exactly one

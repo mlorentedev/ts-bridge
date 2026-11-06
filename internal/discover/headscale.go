@@ -11,7 +11,7 @@ import (
 )
 
 // ListHeadscaleDevices fetches all devices from a Headscale instance.
-func ListHeadscaleDevices(ctx context.Context, apiKey, controlURL string) ([]HeadscaleDevice, error) {
+func ListHeadscaleDevices(ctx context.Context, apiKey, controlURL string) ([]HeadscaleDevice, error) { //nolint:funlen,gocyclo // baseline #629
 	if apiKey == "" {
 		return nil, fmt.Errorf("Headscale API key is required")
 	}

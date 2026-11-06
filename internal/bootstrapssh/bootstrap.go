@@ -55,7 +55,7 @@ func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
 	})
 }
 
-func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) {
+func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) { //nolint:funlen // baseline #629
 	sshPath, err := deps.lookPath("ssh")
 	if err != nil {
 		return nil, fmt.Errorf("find OpenSSH executable %q in PATH (install OpenSSH or add its directory to PATH): %w", "ssh", err)
@@ -120,7 +120,7 @@ func startupError(client string, err error) error {
 		"check IdentityFile or keys in its matching ssh-agent (ssh-add -l) and unlock interactively in this terminal", client, err)
 }
 
-func waitUntilReady(ctx context.Context, tunnel *Tunnel, cfg Config, deps dependencies) error {
+func waitUntilReady(ctx context.Context, tunnel *Tunnel, cfg Config, deps dependencies) error { //nolint:gocyclo // baseline #629
 	timeout := cfg.ReadyTimeout
 	if timeout <= 0 {
 		timeout = defaultReadyTimeout
