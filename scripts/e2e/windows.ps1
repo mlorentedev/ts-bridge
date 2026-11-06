@@ -112,6 +112,7 @@ Case 'drift: RDP denied seen by check' { $s = (Json check $C).services; $s.Count
 Json setup $C | Out-Null
 Case 'drift: RDP denied repaired by setup' { (Get-ItemProperty $TS).fDenyTSConnections -eq 0 }
 powercfg /change standby-timeout-ac 30
+Case 'drift: power reset seen by check' { (Steps (Json check $C) 'Power')[0].outcome -eq 'changed' }
 Case 'drift: power reset is changed, then ok' {
     (Steps (Json setup $C) 'Power')[0].outcome -eq 'changed' -and (Steps (Json setup $C) 'Power')[0].outcome -eq 'ok' -and (AcZero)
 }
@@ -128,11 +129,12 @@ Case 'unknown key warned by name, check still runs' { Tsb host check --config "$
 Yaml "$W\v2.yaml" "version: 2`nhost: {}"
 Case 'unsupported version refused' { Tsb host check --config "$W\v2.yaml"; $Code -eq 1 -and $Out -match 'version' }
 Yaml "$W\p.yaml" "version: 1`nhost:`n  services:`n    - kind: rdp`n      port: 3390"
-# The command itself must work, unmarked, so an exception is a FAIL and not #557.
+# Windows does not move the RDP listener: a declared port it does not listen on is manual (#557).
 Case 'declared port 3390: check prints its steps as JSON' { @((Json check "$W\p.yaml").steps).Count -gt 0 }
-Case 'check: declared port differs from the registry port' 557 {
-    @((Json check "$W\p.yaml").steps | Where-Object { $_.outcome -in 'manual', 'failed' -and $_.message -match '3390' }).Count -gt 0
+Case 'check: declared port differs from the registry port' {
+    @((Json check "$W\p.yaml").steps | Where-Object { $_.name -eq 'RDP configuration' -and $_.outcome -eq 'manual' -and $_.message -match '3390' -and $_.message -match '3389' }).Count -eq 1
 }
+Case 'check: a declared port mismatch exits 2' { Tsb host check --config "$W\p.yaml"; $Code -eq 2 }
 
 # Upgrade: the previous release's .env still applies from its directory.
 New-Item -ItemType Directory -Force "$W\up" | Out-Null; Set-Location "$W\up"; Remove-Item .env -ErrorAction SilentlyContinue

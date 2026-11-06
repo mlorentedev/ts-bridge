@@ -24,7 +24,7 @@ func setupWindows(cfg Config, r Runner) SetupResult {
 
 	// The RDP port lives in the registry; the firewall must open that exact port.
 	rdpStep, rdpPort := rdpSetupStep(r)
-	steps = append(steps, rdpStep)
+	steps = append(steps, declaredRDPPort(rdpStep, cfg, rdpPort))
 
 	steps = append(steps, windowsFirewallSetupStep(r, cfg.FirewallRule, rdpPort))
 
@@ -166,12 +166,28 @@ func checkWindows(cfg Config, r Runner, result *CheckResult) {
 	if err == nil {
 		svc.Port = port
 		step, svc.Enabled = rdpCheckStep(r, port)
+		step = declaredRDPPort(step, cfg, port)
 	}
 	result.Steps = append(result.Steps, step)
 	fwStep, fwOK := windowsFirewallCheckStep(r, cfg.FirewallRule, svc.Port)
 	svc.FirewallOK = fwOK
 	result.Steps = append(result.Steps, fwStep)
+	if !cfg.NoSleep {
+		result.Steps = append(result.Steps, powerCheckStep(r))
+	}
 	result.Services = []Service{svc}
+}
+
+// declaredRDPPort turns a converged RDP step manual when the host declares a
+// port the registry does not listen on (#557). ts-bridge does not move the RDP
+// listener on Windows, so the operator changes it or the declaration.
+func declaredRDPPort(step SetupStep, cfg Config, port int) SetupStep {
+	if !cfg.PortDeclared || port == cfg.Port || !step.Outcome.Succeeded() {
+		return step
+	}
+	return newStep(step.Name, OutcomeManual,
+		fmt.Sprintf("RDP listens on port %d (set in the registry), not the declared %d", port, cfg.Port),
+		fmt.Sprintf(`declare port %d, or change PortNumber under HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp to %d and restart the TermService service`, port, cfg.Port))
 }
 
 // actRead maps a read's error to "ok" or "failed".
@@ -315,16 +331,46 @@ func powerStep(r Runner) SetupStep {
 // the DC index the last. An unreadable answer reports false, so the step sets
 // the value rather than trusting it.
 func acTimeoutZero(r Runner, sub, setting string) bool {
+	zero, err := readACTimeoutZero(r, sub, setting)
+	return err == nil && zero
+}
+
+// readACTimeoutZero reads whether an AC timeout is 0, telling an unreadable
+// value apart from a non-zero one for check (#652).
+func readACTimeoutZero(r Runner, sub, setting string) (bool, error) {
 	out, err := r.Output("powercfg", "/query", "SCHEME_CURRENT", sub, setting)
 	if err != nil {
-		return false
+		return false, err
 	}
 	hex := hexValue.FindAllString(string(out), -1)
 	if len(hex) < 2 {
-		return false
+		return false, fmt.Errorf("powercfg printed no AC setting index for %s %s", sub, setting)
 	}
 	v, err := strconv.ParseUint(hex[len(hex)-2][2:], 16, 32)
-	return err == nil && v == 0
+	if err != nil {
+		return false, fmt.Errorf("powercfg AC index for %s %s: %w", sub, setting, err)
+	}
+	return v == 0, nil
+}
+
+// powerCheckStep is the read half of powerStep: "changed" names the AC
+// timeouts setup would set to 0.
+func powerCheckStep(r Runner) SetupStep {
+	const name = "Power settings"
+	var drift []string
+	for _, p := range powerSettings {
+		zero, err := readACTimeoutZero(r, p.sub, p.setting)
+		if err != nil {
+			return newStep(name, OutcomeFailed, "Could not read "+p.change+": "+err.Error(), "run `powercfg /query SCHEME_CURRENT` to inspect the power plan")
+		}
+		if !zero {
+			drift = append(drift, p.change)
+		}
+	}
+	if len(drift) == 0 {
+		return newStep(name, OutcomeOK, "Sleep disabled (AC power)", "")
+	}
+	return newStep(name, OutcomeChanged, "Sleep is enabled on AC power: "+strings.Join(drift, ", ")+" not 0", "run ts-bridge host setup as an administrator")
 }
 
 var hexValue = regexp.MustCompile(`0x[0-9a-fA-F]{8}`)

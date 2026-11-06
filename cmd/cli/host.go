@@ -47,7 +47,8 @@ func newHostSetupCmd() *cobra.Command {
 		Long: `Configure the host machine for RDP access over the Tailscale mesh network.
 
 On Windows:
-  - Enables RDP via registry
+  - Enables RDP via registry; a declared port the registry does not listen
+    on is reported for you to change (ts-bridge does not move the listener)
   - Enables Tailscale unattended mode
   - Configures Windows firewall for RDP on Tailscale interface
   - Enables UPnP services
@@ -56,6 +57,8 @@ On Windows:
 
 On Linux:
   - Enables and starts xrdp (systemctl enable --now) when it is not already
+  - Points xrdp at a declared non-default RDP port (port= in [Globals] of
+    /etc/xrdp/xrdp.ini) and restarts it, when it listens elsewhere
   - Allows the RDP port inbound with ufw (or iptables) when no rule allows it yet
   - Prints Tailscale IP
 
@@ -162,7 +165,6 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	warnRDPPortNotApplied(cmd, file, cfg, result)
 	return printSetupResult(cmd, result)
 }
 
@@ -218,20 +220,6 @@ func resolveHostSetupConfig(cmd *cobra.Command, file host.File) (host.Config, er
 	return cfg, nil
 }
 
-// warnRDPPortNotApplied tells the operator when a declared RDP port was not
-// used. On Windows the RDP listening port is read from the registry, not set by
-// ts-bridge; the firewall opens the actual (registry) port. If a port was
-// declared (--port, TS_HOST_RDP_PORT or the file) and differs, say so rather
-// than leaving the declaration silently ineffective.
-func warnRDPPortNotApplied(cmd *cobra.Command, file host.File, cfg host.Config, result host.SetupResult) {
-	if hostGOOS == windowsOS && rdpPortDeclared(cmd, file) && cfg.Port != result.RDPPort {
-		printWarn(cmd.ErrOrStderr(), fmt.Sprintf(
-			"RDP port %d not applied: Windows RDP listens on port %d (set in the registry). "+
-				"Change the RDP port in Windows, then re-run host setup.",
-			cfg.Port, result.RDPPort))
-	}
-}
-
 // printSetupResult prints the setup outcome, as JSON with --json or step by
 // step, and returns the convergence verdict (the exit status).
 func printSetupResult(cmd *cobra.Command, result host.SetupResult) error {
@@ -282,20 +270,6 @@ func printSetupNotApplicable(cmd *cobra.Command) error {
 	fmt.Fprintln(out, reason)
 	fmt.Fprintln(out, hint)
 	return nil
-}
-
-// rdpPortDeclared reports whether the RDP port came from --port, the env layer
-// or the file rather than the default.
-func rdpPortDeclared(cmd *cobra.Command, file host.File) bool {
-	if cmd.Flags().Changed("port") || os.Getenv("TS_HOST_RDP_PORT") != "" {
-		return true
-	}
-	for _, s := range file.Host.Services {
-		if s.Kind == host.ServiceRDP && s.Port != nil {
-			return true
-		}
-	}
-	return false
 }
 
 // loadHostFile loads and validates the --config host file for hostGOOS,

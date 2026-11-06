@@ -272,6 +272,7 @@ func collectFlags(cmd *cobra.Command) config.FlagSet {
 	fs.MaxConns, _ = cmd.Flags().GetInt64("max-conns")
 
 	collectOptionalNumericFlags(cmd, &fs)
+	fs.Verbose = collectVerboseFlag(cmd)
 
 	fs.ManualMode, _ = cmd.Flags().GetBool("manual-mode")
 	fs.Reset, _ = cmd.Flags().GetBool("reset")
@@ -299,6 +300,17 @@ func collectOptionalNumericFlags(cmd *cobra.Command, fs *config.FlagSet) {
 		v, _ := cmd.Flags().GetInt("dial-retries")
 		fs.DialRetries = &v
 	}
+}
+
+// collectVerboseFlag returns the persistent --verbose flag only when the user
+// passed it, so an unset flag does not override TS_VERBOSE and an explicit
+// --verbose=false does.
+func collectVerboseFlag(cmd *cobra.Command) *bool {
+	if !cmd.Flags().Changed("verbose") {
+		return nil
+	}
+	v, _ := cmd.Flags().GetBool("verbose")
+	return &v
 }
 
 // readAuthKeyFile reads an auth key from a file with permission checks.
