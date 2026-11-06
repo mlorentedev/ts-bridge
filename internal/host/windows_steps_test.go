@@ -516,6 +516,12 @@ func TestWindowsFirewallRecreateOrder(t *testing.T) {
 	if stop < 0 || stop > read || read > create || create > remove {
 		t.Errorf("recreate %q: want errors terminating, then the old rules read, the new one created, the old removed", recreate)
 	}
+	// The old rules are removed through the pipeline, by the objects read before
+	// the create. A removal by display name would delete the new rule too, since
+	// it repeats the name.
+	if !strings.HasSuffix(recreate, "$old | Remove-NetFirewallRule") || strings.Contains(recreate, "Remove-NetFirewallRule -DisplayName") {
+		t.Errorf("recreate %q: want the old rules removed by the objects read before the create, not by display name", recreate)
+	}
 }
 
 // TestWindowsBuiltinGroup pins the report folded in from #685: an enabled

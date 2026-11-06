@@ -53,7 +53,7 @@ PR 4 (Windows):
   see the PR body.
 - Mutants, each killed by the unit tests: no `-RemoteAddress` in the recreate (19 failures), any
   remote accepted (5), IPv4 mask not normalized (2), IPv6 case not folded (2), legacy never
-  reported (2), recreate errors not terminating (19), remove before create (19), check ignores the
+  reported (2), recreate errors not terminating (19), remove before create (19), remove by display name (1), check ignores the
   built-in group (5), group never reported (3).
 - **Windows e2e is PENDING.** `scripts/e2e/windows.ps1` gained cases (scoped address, legacy rule
   repaired, built-in group untouched) and parses clean under `pwsh`, but it was not run: the
