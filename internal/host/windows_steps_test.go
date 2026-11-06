@@ -83,10 +83,13 @@ func fwRule(enabled, action, direction, port string) string {
 	return fwRuleScoped(enabled, action, direction, "TCP", "Any", port)
 }
 
+// tailnetRemote is the RemoteAddress the recreate sets, as the read prints it.
+const tailnetRemote = "100.64.0.0/10,fd7a:115c:a1e0::/48"
+
 // fwRuleScoped is fwRule with the protocol and profile the recreate sets.
 func fwRuleScoped(enabled, action, direction, protocol, profile, port string) string {
 	return "enabled=" + enabled + "\r\naction=" + action + "\r\ndirection=" + direction +
-		"\r\nprofile=" + profile + "\r\nremote=Any\r\nprotocol=" + protocol + "\r\nport=" + port + "\r\n"
+		"\r\nprofile=" + profile + "\r\nremote=" + tailnetRemote + "\r\nprotocol=" + protocol + "\r\nport=" + port + "\r\n"
 }
 
 // TestWindowsFirewallRule pins W3 (#455): setup reads the named rule and
@@ -111,7 +114,12 @@ func TestWindowsFirewallRule(t *testing.T) {
 		{name: "outbound", read: "count=1\r\n" + fwRule("True", "Allow", "Outbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		{name: "udp", read: "count=1\r\n" + fwRuleScoped("True", "Allow", "Inbound", "UDP", "Any", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		{name: "public profile only", read: "count=1\r\n" + fwRuleScoped("True", "Allow", "Inbound", "TCP", "Public", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
-		{name: "restricted remote address", read: "count=1\r\n" + strings.Replace(good, "remote=Any", "remote=10.0.0.0/255.0.0.0", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "restricted remote address", read: "count=1\r\n" + strings.Replace(good, "remote="+tailnetRemote, "remote=10.0.0.0/255.0.0.0", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "legacy any address", read: "count=1\r\n" + strings.Replace(good, "remote="+tailnetRemote, "remote=Any", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "tailnet plus one more range", read: "count=1\r\n" + strings.Replace(good, tailnetRemote, tailnetRemote+",10.0.0.0/8", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "only the IPv4 range", read: "count=1\r\n" + strings.Replace(good, tailnetRemote, "100.64.0.0/10", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "windows normalised form", read: "count=1\r\n" + strings.Replace(good, tailnetRemote, "100.64.0.0/255.192.0.0,FD7A:115C:A1E0::/48", 1), setup: OutcomeOK, check: OutcomeOK, ok: true},
+		{name: "reordered", read: "count=1\r\n" + strings.Replace(good, tailnetRemote, "fd7a:115c:a1e0::/48,100.64.0.0/10", 1), setup: OutcomeOK, check: OutcomeOK, ok: true},
 		{name: "duplicated", read: "count=2\r\n" + good + good, setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		// The recreate is idempotent, so setup acts on an unreadable rule;
 		// check cannot say what setup would do, so it fails with the read.
@@ -149,6 +157,9 @@ func TestWindowsFirewallRule(t *testing.T) {
 				want := "differs from what setup creates"
 				if tt.name == "absent" {
 					want = "No firewall rule found"
+				}
+				if tt.name == "legacy any address" {
+					want = "legacy"
 				}
 				if !strings.Contains(step.Message, want) {
 					t.Errorf("check message %q, want it to say %q", step.Message, want)
@@ -463,4 +474,105 @@ func stepNamedIn(steps []SetupStep, name string) SetupStep {
 		}
 	}
 	return SetupStep{}
+}
+
+// TestWindowsFirewallRecreateScoped pins ADR-017 Amendment B: the recreate
+// carries the tailnet RemoteAddress and no longer enables the built-in
+// "Remote Desktop" group, whose rules allow any address.
+func TestWindowsFirewallRecreateScoped(t *testing.T) {
+	r := &recordingRunner{output: map[string]string{psPrefix + psFwCheck: "count=0\r\n"}}
+	windowsFirewallSetupStep(r, "Rule", 3390)
+	var recreate string
+	for _, c := range r.calls {
+		if strings.HasPrefix(c, "run ") {
+			recreate = c
+		}
+	}
+	if !strings.Contains(recreate, "-RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48") {
+		t.Errorf("recreate %q lacks the tailnet RemoteAddress", recreate)
+	}
+	if strings.Contains(recreate, "Enable-NetFirewallRule") || strings.Contains(recreate, "Remote Desktop") {
+		t.Errorf("recreate %q enables the built-in Remote Desktop group", recreate)
+	}
+}
+
+// TestWindowsFirewallRecreateOrder pins the order of the recreate: the scoped
+// rule is created first and the rules that were there are removed after, with
+// errors terminating, so a failed create removes nothing and RDP is never left
+// without an allow rule.
+func TestWindowsFirewallRecreateOrder(t *testing.T) {
+	r := &recordingRunner{output: map[string]string{psPrefix + psFwCheck: "count=0\r\n"}}
+	windowsFirewallSetupStep(r, "Rule", 3390)
+	var recreate string
+	for _, c := range r.calls {
+		if strings.HasPrefix(c, "run ") {
+			recreate = c
+		}
+	}
+	stop := strings.Index(recreate, "$ErrorActionPreference = 'Stop'")
+	read := strings.Index(recreate, "$old = @(Get-NetFirewallRule")
+	create := strings.Index(recreate, "New-NetFirewallRule")
+	remove := strings.Index(recreate, "Remove-NetFirewallRule")
+	if stop < 0 || stop > read || read > create || create > remove {
+		t.Errorf("recreate %q: want errors terminating, then the old rules read, the new one created, the old removed", recreate)
+	}
+	// The old rules are removed through the pipeline, by the objects read before
+	// the create. A removal by display name would delete the new rule too, since
+	// it repeats the name.
+	if !strings.HasSuffix(recreate, "$old | Remove-NetFirewallRule") || strings.Contains(recreate, "Remove-NetFirewallRule -DisplayName") {
+		t.Errorf("recreate %q: want the old rules removed by the objects read before the create, not by display name", recreate)
+	}
+}
+
+// TestWindowsBuiltinGroup pins the report folded in from #685: an enabled
+// any-address rule in the built-in "Remote Desktop" group voids the tailnet
+// scope, so a converged named rule is not enough. Setup reports it and leaves
+// the group alone; check says the same and firewall_ok is false.
+func TestWindowsBuiltinGroup(t *testing.T) {
+	good := "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")
+	tests := []struct {
+		name      string
+		rule      string
+		group     string
+		groupFail bool
+		want      Outcome
+		ok        bool
+	}{
+		{name: "none enabled", rule: good, group: "exposed=0\r\n", want: OutcomeOK, ok: true},
+		{name: "unreadable output counts as none", rule: good, group: "", want: OutcomeOK, ok: true},
+		{name: "two enabled", rule: good, group: "exposed=2\r\n", want: OutcomeManual},
+		{name: "read fails", rule: good, groupFail: true, want: OutcomeUnverified},
+		{name: "named rule drifted, group not read", rule: "count=0\r\n", group: "exposed=2\r\n", want: OutcomeChanged},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{
+					output: map[string]string{psPrefix + psFwCheck: tt.rule, psPrefix + psReadRDGroup: tt.group},
+					fail:   map[string]bool{psPrefix + psReadRDGroup: tt.groupFail},
+				}
+			}
+			step, ok := windowsFirewallCheckStep(newRunner(), "Rule", 3390)
+			if step.Outcome != tt.want || ok != tt.ok {
+				t.Errorf("check: outcome %q ok %v, want %q ok %v (%s)", step.Outcome, ok, tt.want, tt.ok, step.Message)
+			}
+			if tt.want == OutcomeManual && !strings.Contains(step.Fix, `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`) {
+				t.Errorf("check: fix %q lacks the disable command", step.Fix)
+			}
+			r := newRunner()
+			step = windowsFirewallSetupStep(r, "Rule", 3390)
+			wantSetup := tt.want
+			if tt.name == "named rule drifted, group not read" {
+				wantSetup = OutcomeManual // the recreate converges, then the group is read
+			}
+			if step.Outcome != wantSetup {
+				t.Errorf("setup: outcome %q, want %q (%s)", step.Outcome, wantSetup, step.Message)
+			}
+			for _, c := range r.calls {
+				if strings.HasPrefix(c, "run ") && strings.Contains(c, "Disable-NetFirewallRule") {
+					t.Errorf("setup ran %q; it must not disable the built-in group", c)
+				}
+			}
+		})
+	}
 }

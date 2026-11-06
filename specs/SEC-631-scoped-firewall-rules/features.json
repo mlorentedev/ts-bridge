@@ -61,5 +61,40 @@
     "verification": "go test ./internal/host -run 'TestSetupForLinux|TestUFWInactive' -count=1",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f10",
+    "behavior": "The Windows recreate carries -RemoteAddress for the tailnet ranges and no longer enables the built-in Remote Desktop group",
+    "verification": "go test ./internal/host -run 'TestWindowsFirewallRecreateScoped' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f11",
+    "behavior": "Check compares the rule's RemoteAddress as a normalized set; a rule open to any address is reported as legacy and recreated scoped",
+    "verification": "go test ./internal/host -run 'TestWindowsFirewallRule' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f12",
+    "behavior": "On a real Windows host setup writes the scoped rule and repairs a legacy one (pending: the Windows guest is shared)",
+    "verification": "pwsh scripts/e2e/windows.ps1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f13",
+    "behavior": "The Windows recreate creates the scoped rule before removing the old ones and a failed create is terminating",
+    "verification": "go test ./internal/host -run 'TestWindowsFirewallRecreateOrder' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f14",
+    "behavior": "Check and setup report an enabled built-in Remote Desktop group as manual with the disable command, and never disable it",
+    "verification": "go test ./internal/host -run 'TestWindowsBuiltinGroup' -count=1",
+    "state": "pending",
+    "evidence": ""
   }
 ]
