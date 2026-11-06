@@ -11,14 +11,14 @@ owner: manu
 
 ## Evidence
 
-- [ ] AC1 -> `docs/adr/adr-017-host-desired-state.md`, Amendment B (PR 1).
+- [x] AC1 -> `docs/adr/adr-017-host-desired-state.md`, Amendment B (PR 1).
 - [x] AC2 -> PR 2: unit tests on the iptables append and the printed form; e2e on a real VM with
   ufw removed, setup twice, `iptables -S INPUT` holds the scoped line, the second run is `ok`.
 - [x] AC3 -> PR 3: unit tests on the ufw write; e2e: `ufw show added` holds the scoped line.
 - [x] AC4 -> PR 2 (iptables) and PR 3 (ufw): unit tests per tier; e2e: a hand-added unscoped rule is reported by
   `check` and replaced by `setup`.
-- [ ] AC5 -> PR 4: unit tests on the recreate command and the read. Windows e2e is pending.
-- [ ] AC6 -> `scripts/e2e/linux.sh` (run), `scripts/e2e/windows.ps1` (written, run pending).
+- [x] AC5 -> PR 4: unit tests on the recreate command and the read. Windows e2e is pending.
+- [x] AC6 -> `scripts/e2e/linux.sh` (run), `scripts/e2e/windows.ps1` (written, run pending).
 
 ## Test status
 
@@ -46,6 +46,20 @@ PR 3 (Linux ufw):
 - Mutants, each killed by the unit tests: wrong interface in the ufw write (16 failures), legacy ufw
   allow ignored (13), scoped rule never added (11), scoped ts-input rule ignored (3), delete any
   unscoped allow (9).
+
+PR 4 (Windows):
+
+- `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`, `GOOS=windows`) and `gosec ./...`:
+  see the PR body.
+- Mutants, each killed by the unit tests: no `-RemoteAddress` in the recreate (19 failures), any
+  remote accepted (5), IPv4 mask not normalized (2), IPv6 case not folded (2), legacy never
+  reported (2).
+- **Windows e2e is PENDING.** `scripts/e2e/windows.ps1` gained cases (scoped address, legacy rule
+  repaired, built-in group untouched) and parses clean under `pwsh`, but it was not run: the
+  Windows guest is shared. The normalized form Windows prints for `RemoteAddress` (a dotted mask
+  for the IPv4 range, upper-case IPv6) is therefore unverified on a real host; the read accepts
+  the CIDR and the dotted-mask forms and compares as a set, so a different spelling would make
+  `check` report `changed` and setup recreate the rule every run until the form is added.
 
 ## Decisions made during implementation
 

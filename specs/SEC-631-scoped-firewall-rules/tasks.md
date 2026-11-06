@@ -48,12 +48,12 @@ the last says `Closes #631`.
 
 ## PR 4 - Windows
 
-- [ ] [AC5] Failing test: the recreate command carries `-RemoteAddress
+- [x] [AC5] Failing test: the recreate command carries `-RemoteAddress
   100.64.0.0/10,fd7a:115c:a1e0::/48` and no `Enable-NetFirewallRule`
-- [ ] [AC5] `windowsFirewallRuleOK` compares `RemoteAddress` as a set; `Any` is a legacy rule, and
+- [x] [AC5] `windowsFirewallRuleOK` compares `RemoteAddress` as a set; `Any` is a legacy rule, and
   check says so
-- [ ] [AC6] `scripts/e2e/windows.ps1` cases written; the run is pending (the guest is shared)
-- [ ] `features.json`, the Windows runbook, `Closes #631`
+- [x] [AC6] `scripts/e2e/windows.ps1` cases written; the run is pending (the guest is shared), not run
+- [x] `features.json`, the Windows runbook, `Closes #631`
 
 ## Closing (every PR)
 

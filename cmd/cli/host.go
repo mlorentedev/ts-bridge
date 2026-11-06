@@ -50,7 +50,7 @@ On Windows:
   - Enables RDP via registry; a declared port the registry does not listen
     on is reported for you to change (ts-bridge does not move the listener)
   - Enables Tailscale unattended mode
-  - Configures Windows firewall for RDP on Tailscale interface
+  - Configures a Windows firewall rule for RDP from the tailnet addresses only
   - Enables UPnP services
   - Sets Tailscale network profile to Private
   - Optionally disables sleep mode

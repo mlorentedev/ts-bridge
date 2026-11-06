@@ -74,16 +74,17 @@ Desktop Services".
 ### 3. Firewall — Allow RDP from Tailscale Subnet
 
 ```powershell
-# Enable built-in RDP rules
-Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-# Create rule restricted to Tailscale CGNAT range
-New-NetFirewallRule -DisplayName "Allow RDP over Tailscale" `
+# Create a rule restricted to the tailnet addresses (what `host setup` writes)
+New-NetFirewallRule -DisplayName "Tailscale-RDP-Ingress" `
     -Direction Inbound -Protocol TCP -LocalPort 3389 `
-    -RemoteAddress 100.64.0.0/10 -Action Allow -Profile Private
+    -RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48 -Action Allow -Profile Any
 ```
 
-Restricting to `100.64.0.0/10` ensures RDP is only accessible via Tailscale, not the local LAN.
+Restricting to the tailnet addresses ensures RDP is only accessible via Tailscale, not the local LAN.
+`host setup` no longer enables the built-in `Remote Desktop` rule group: its rules allow any
+address and would void that scope. If an earlier setup or an operator enabled the group, disable
+it yourself (`Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`); `host check` reports a
+named rule that allows any address as a legacy rule, and `host setup` recreates it scoped.
 
 ### 4. Tailscale Configuration
 

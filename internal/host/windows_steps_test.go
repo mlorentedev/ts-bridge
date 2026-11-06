@@ -83,10 +83,13 @@ func fwRule(enabled, action, direction, port string) string {
 	return fwRuleScoped(enabled, action, direction, "TCP", "Any", port)
 }
 
+// tailnetRemote is the RemoteAddress the recreate sets, as the read prints it.
+const tailnetRemote = "100.64.0.0/10,fd7a:115c:a1e0::/48"
+
 // fwRuleScoped is fwRule with the protocol and profile the recreate sets.
 func fwRuleScoped(enabled, action, direction, protocol, profile, port string) string {
 	return "enabled=" + enabled + "\r\naction=" + action + "\r\ndirection=" + direction +
-		"\r\nprofile=" + profile + "\r\nremote=Any\r\nprotocol=" + protocol + "\r\nport=" + port + "\r\n"
+		"\r\nprofile=" + profile + "\r\nremote=" + tailnetRemote + "\r\nprotocol=" + protocol + "\r\nport=" + port + "\r\n"
 }
 
 // TestWindowsFirewallRule pins W3 (#455): setup reads the named rule and
@@ -111,7 +114,12 @@ func TestWindowsFirewallRule(t *testing.T) {
 		{name: "outbound", read: "count=1\r\n" + fwRule("True", "Allow", "Outbound", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		{name: "udp", read: "count=1\r\n" + fwRuleScoped("True", "Allow", "Inbound", "UDP", "Any", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		{name: "public profile only", read: "count=1\r\n" + fwRuleScoped("True", "Allow", "Inbound", "TCP", "Public", "3390"), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
-		{name: "restricted remote address", read: "count=1\r\n" + strings.Replace(good, "remote=Any", "remote=10.0.0.0/255.0.0.0", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "restricted remote address", read: "count=1\r\n" + strings.Replace(good, "remote="+tailnetRemote, "remote=10.0.0.0/255.0.0.0", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "legacy any address", read: "count=1\r\n" + strings.Replace(good, "remote="+tailnetRemote, "remote=Any", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "tailnet plus one more range", read: "count=1\r\n" + strings.Replace(good, tailnetRemote, tailnetRemote+",10.0.0.0/8", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "only the IPv4 range", read: "count=1\r\n" + strings.Replace(good, tailnetRemote, "100.64.0.0/10", 1), setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
+		{name: "windows normalised form", read: "count=1\r\n" + strings.Replace(good, tailnetRemote, "100.64.0.0/255.192.0.0,FD7A:115C:A1E0::/48", 1), setup: OutcomeOK, check: OutcomeOK, ok: true},
+		{name: "reordered", read: "count=1\r\n" + strings.Replace(good, tailnetRemote, "fd7a:115c:a1e0::/48,100.64.0.0/10", 1), setup: OutcomeOK, check: OutcomeOK, ok: true},
 		{name: "duplicated", read: "count=2\r\n" + good + good, setup: OutcomeChanged, recreated: true, check: OutcomeChanged},
 		// The recreate is idempotent, so setup acts on an unreadable rule;
 		// check cannot say what setup would do, so it fails with the read.
@@ -149,6 +157,9 @@ func TestWindowsFirewallRule(t *testing.T) {
 				want := "differs from what setup creates"
 				if tt.name == "absent" {
 					want = "No firewall rule found"
+				}
+				if tt.name == "legacy any address" {
+					want = "legacy"
 				}
 				if !strings.Contains(step.Message, want) {
 					t.Errorf("check message %q, want it to say %q", step.Message, want)
@@ -463,4 +474,24 @@ func stepNamedIn(steps []SetupStep, name string) SetupStep {
 		}
 	}
 	return SetupStep{}
+}
+
+// TestWindowsFirewallRecreateScoped pins ADR-017 Amendment B: the recreate
+// carries the tailnet RemoteAddress and no longer enables the built-in
+// "Remote Desktop" group, whose rules allow any address.
+func TestWindowsFirewallRecreateScoped(t *testing.T) {
+	r := &recordingRunner{output: map[string]string{psPrefix + psFwCheck: "count=0\r\n"}}
+	windowsFirewallSetupStep(r, "Rule", 3390)
+	var recreate string
+	for _, c := range r.calls {
+		if strings.HasPrefix(c, "run ") {
+			recreate = c
+		}
+	}
+	if !strings.Contains(recreate, "-RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48") {
+		t.Errorf("recreate %q lacks the tailnet RemoteAddress", recreate)
+	}
+	if strings.Contains(recreate, "Enable-NetFirewallRule") || strings.Contains(recreate, "Remote Desktop") {
+		t.Errorf("recreate %q enables the built-in Remote Desktop group", recreate)
+	}
 }

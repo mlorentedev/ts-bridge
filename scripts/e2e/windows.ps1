@@ -88,6 +88,18 @@ Case 'firewall rule: one, enabled, inbound TCP 3389' {
     $r = @(Rule 'Tailscale-RDP-Ingress'); $f = $r | Get-NetFirewallPortFilter
     $r.Count -eq 1 -and $r[0].Enabled -eq 'True' -and $r[0].Direction -eq 'Inbound' -and $f.Protocol -eq 'TCP' -and $f.LocalPort -eq '3389'
 }
+Case 'firewall rule: scoped to the tailnet addresses' {
+    $ra = @((Rule 'Tailscale-RDP-Ingress' | Get-NetFirewallAddressFilter).RemoteAddress)
+    # Windows may print the IPv4 range with a dotted mask; compare the normalized set.
+    $ra.Count -eq 2 -and ($ra | Where-Object { $_ -match '^100\.64\.0\.0/(10|255\.192\.0\.0)$' }) -and ($ra | Where-Object { $_ -ieq 'fd7a:115c:a1e0::/48' })
+}
+Case 'setup: the built-in Remote Desktop group is left as it was' {
+    # setup must not enable it; an operator-enabled group is the operator's to disable (#685)
+    $before = (Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count
+    Json setup $C | Out-Null
+    $after = (Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count
+    $before -eq $after
+}
 Case 'power: AC sleep, hibernate and monitor timeouts are 0' { AcZero }
 Case 'check --json: rdp 3389 enabled, firewall ok' {
     $s = (Json check $C).services; $s.Count -eq 1 -and $s[0].kind -eq 'rdp' -and $s[0].port -eq 3389 -and $s[0].enabled -and $s[0].firewall_ok
@@ -100,6 +112,7 @@ $drifts = [ordered]@{
     'rule switched to UDP' = { Rule 'Tailscale-RDP-Ingress' | Set-NetFirewallRule -Protocol UDP }
     'rule disabled'        = { Rule 'Tailscale-RDP-Ingress' | Disable-NetFirewallRule }
     'rule deleted'         = { Rule 'Tailscale-RDP-Ingress' | Remove-NetFirewallRule }
+    'rule open to any address (legacy)' = { Rule 'Tailscale-RDP-Ingress' | Get-NetFirewallAddressFilter | Set-NetFirewallAddressFilter -RemoteAddress Any }
 }
 foreach ($d in $drifts.Keys) {
     & $drifts[$d]
