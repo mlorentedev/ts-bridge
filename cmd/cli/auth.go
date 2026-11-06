@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 
@@ -86,6 +85,8 @@ func runAuthSet(command *cobra.Command, args []string) error {
 		return fmt.Errorf("--profile is required")
 	}
 	profileStore := profile.NewStore(defaultProfileStorePath)
+	// Read before prompting, so a missing profile fails before the user types a
+	// key; the transition below reads it again under the store lock.
 	selectedProfile, err := profileStore.Get(profileName)
 	if err != nil {
 		return profileLoadError(profileName, err)
@@ -98,15 +99,13 @@ func runAuthSet(command *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if strings.HasPrefix(key, "hskey-") && selectedProfile.ControlURL == "" {
-		return fmt.Errorf("Headscale credential requires a profile with a custom control URL")
-	}
 	force, _ := command.Flags().GetBool("force")
-	if err := credential.NewStore(defaultCredentialStoreDir).Set(credentialName, key, force); err != nil {
-		return fmt.Errorf("store credential %q: %w", credentialName, err)
-	}
-	if err := profileStore.SetCredential(profileName, credentialName); err != nil {
-		return fmt.Errorf("credential stored but profile association failed: %w", err)
+	err = profileStore.BindCredential(credential.NewStore(defaultCredentialStoreDir), profile.Binding{
+		Profile: profileName, Credential: credentialName, Key: key,
+		Replace: force, ControlURL: selectedProfile.ControlURL,
+	})
+	if err != nil {
+		return err
 	}
 	_, _ = fmt.Fprintf(command.OutOrStdout(), "Credential %q stored for profile %q\n", credentialName, profileName)
 	return nil
@@ -205,62 +204,31 @@ func credentialReferences() (map[string][]string, error) {
 }
 
 func runAuthRemove(command *cobra.Command, args []string) error {
-	name, profileName, err := resolveAuthSelection(command, args)
+	profileName, _ := command.Flags().GetString("profile")
+	if len(args) == 1 && profileName != "" {
+		return fmt.Errorf("provide a credential name or --profile, not both")
+	}
+	if len(args) == 0 && profileName == "" {
+		return fmt.Errorf("credential name or --profile is required")
+	}
+	removal := profile.Removal{Profile: profileName}
+	removal.Force, _ = command.Flags().GetBool("force")
+	if len(args) == 1 {
+		removal.Credential = args[0]
+	}
+	// The store resolves a profile's credential itself, under its lock.
+	result, err := profile.NewStore(defaultProfileStorePath).UnbindCredential(credential.NewStore(defaultCredentialStoreDir), removal)
 	if err != nil {
 		return err
 	}
-	force, _ := command.Flags().GetBool("force")
-	references, err := credentialReferences()
-	if err != nil {
-		return err
-	}
-	if profileName != "" {
-		return removeProfileCredential(command, name, profileName, references[name])
-	}
-	if len(references[name]) > 0 && !force {
-		return fmt.Errorf("credential %q is referenced by profiles %s; use --force to remove it",
-			name, strings.Join(references[name], ", "))
-	}
-	if force {
-		if err := clearCredentialReferences(name, references[name]); err != nil {
-			return err
-		}
-	}
-	if err := credential.NewStore(defaultCredentialStoreDir).Remove(name); err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(command.OutOrStdout(), "Credential %q removed\n", name)
-	return nil
-}
-
-func removeProfileCredential(command *cobra.Command, name, profileName string, references []string) error {
-	profileStore := profile.NewStore(defaultProfileStorePath)
-	if err := profileStore.ClearCredential(profileName); err != nil {
-		return err
-	}
-	if len(references) > 1 {
-		_, _ = fmt.Fprintf(command.OutOrStdout(), "Credential %q unlinked from profile %q\n", name, profileName)
-		return nil
-	}
-	if err := credential.NewStore(defaultCredentialStoreDir).Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	_, _ = fmt.Fprintf(command.OutOrStdout(), "Credential %q removed with profile %q association\n", name, profileName)
-	return nil
-}
-
-func clearCredentialReferences(credentialName string, profileNames []string) error {
-	store := profile.NewStore(defaultProfileStorePath)
-	for _, profileName := range profileNames {
-		selected, err := store.Get(profileName)
-		if err != nil {
-			return err
-		}
-		if selected.Credential == credentialName {
-			if err := store.ClearCredential(profileName); err != nil {
-				return err
-			}
-		}
+	out := command.OutOrStdout()
+	switch result.Outcome {
+	case profile.Unlinked:
+		_, _ = fmt.Fprintf(out, "Credential %q unlinked from profile %q\n", result.Credential, profileName)
+	case profile.RemovedWithProfile:
+		_, _ = fmt.Fprintf(out, "Credential %q removed with profile %q association\n", result.Credential, profileName)
+	default:
+		_, _ = fmt.Fprintf(out, "Credential %q removed\n", result.Credential)
 	}
 	return nil
 }

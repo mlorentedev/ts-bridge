@@ -1,0 +1,30 @@
+[
+  {
+    "id": "SEC-391-store-lock-f1",
+    "behavior": "Concurrent writers in one or several processes lose no profile, through a per-user store lock and an atomic save",
+    "verification": "go test ./internal/profile -run '^(TestConcurrentWritersLoseNoProfile|TestConcurrentProcessesLoseNoProfile|TestUpdateHoldsOffAnotherWriterUntilItEnds|TestUpdateReleasesTheLockWhenItsFunctionFails|TestSaveFailureKeepsThePreviousStore|TestRetryingRenameOutlastsATransientFailure)$' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-391-store-lock-f2",
+    "behavior": "Non-forced credential creation has exactly one winner among concurrent creators",
+    "verification": "go test ./internal/profile -run '^TestBindCredentialExclusiveCreationHasOneWinner$' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-391-store-lock-f3",
+    "behavior": "A credential transition refuses before replacing the key, undoes the key when the reference cannot be written, and deletes the key before clearing references",
+    "verification": "go test ./internal/profile ./cmd/cli -run '^(TestBindCredentialRefusesAMovedControlPlaneBeforeReplacingTheKey|TestBindCredentialRefusesAHeadscaleKeyForTheSaaSControlPlane|TestBindCredentialUnknownProfileIsNotFoundAndStoresNothing|TestBindCredentialUndoesTheKeyWhenTheAssociationFails|TestUnbindCredentialSeesAReferenceAddedWhileItWaits|TestUnbindCredentialKeepsReferencesWhenTheKeyCannotBeDeleted|TestUnbindCredentialRerunClearsAReferenceToADeletedKey|TestAuthSetKeepsTheStoredKeyWhenTheControlURLMovesMidCommand)$' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-391-store-lock-f4",
+    "behavior": "Reads stay available while a mutation holds the lock, a mutation that cannot get it says so, and a killed holder or an abandoned temporary file leaves nothing to clear",
+    "verification": "go test ./internal/profile ./cmd/cli -run '^(TestStoreLockAcrossProcesses|TestAbandonedTemporaryFileDoesNotAffectTheStore|TestAuthCommandsHonourTheStoreLock)$' -count=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]

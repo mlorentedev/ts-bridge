@@ -157,7 +157,7 @@ func TestWalkStateDirAncestors(t *testing.T) {
 				}
 				return "", fs.ErrInvalid
 			}
-			err := walkStateDirAncestors(tc.path, ancestorFS{lstat, readlink})
+			err := walkStateDirAncestors(tc.path, ancestorFS{lstat, readlink, nil})
 			for _, p := range read {
 				if p == tc.path {
 					t.Errorf("the walk read the leaf %s; CheckStateDir owns it", p)
@@ -182,7 +182,7 @@ func TestWalkStateDirAncestors(t *testing.T) {
 // ancestor only root can write would let the walk pass.
 func requireRefusedAncestors(t *testing.T, path string) {
 	t.Helper()
-	if walkStateDirAncestors(path, ancestorFS{lstatOwner, os.Readlink}) == nil {
+	if walkStateDirAncestors(path, ancestorFS{lstatOwner, os.Readlink, readAccessACL}) == nil {
 		t.Skipf("the ancestors of %s are all root-controlled; this test needs a writable one", path)
 	}
 }
@@ -231,7 +231,7 @@ func TestWalkStateDirAncestors_LinearInLinks(t *testing.T) {
 	}
 	readlink := func(string) (string, error) { return ".", nil }
 	path := "/srv" + strings.Repeat("/l", depth) + "/serve"
-	if err := walkStateDirAncestors(path, ancestorFS{lstat, readlink}); err != nil {
+	if err := walkStateDirAncestors(path, ancestorFS{lstat, readlink, nil}); err != nil {
 		t.Fatalf("walk(%s) = %v, want nil", path, err)
 	}
 	if visits > 4*depth {

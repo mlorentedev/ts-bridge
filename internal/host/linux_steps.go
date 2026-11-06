@@ -326,8 +326,25 @@ func iptUnscopedRead(input, walked string, port int, state ruleState) (foreign [
 	unscoped := iptUnscoped(input, port)
 	legacy := iptPrinted(iptablesLegacy(port))
 	foreign = slices.DeleteFunc(slices.Clone(unscoped), func(line string) bool { return slices.Equal(strings.Fields(line), legacy) })
-	rest := slices.DeleteFunc(strings.Split(walked, "\n"), func(line string) bool { return slices.Contains(unscoped, strings.TrimSpace(line)) })
+	rest := slices.DeleteFunc(strings.Split(walked, "\n"), func(line string) bool {
+		return slices.Contains(unscoped, strings.TrimSpace(line)) || iptAcceptOffTailnet(line)
+	})
 	return foreign, state == rulePresent && iptablesCovers(strings.Join(rest, "\n"), port)
+}
+
+// iptAcceptOffTailnet reports an ACCEPT scoped to something other than the
+// tailnet: another interface, or a source or destination address. Such a rule
+// admits the port, but not from the tailnet, so it is not the scoped rule and
+// setup must still add `-i tailscale0` before it deletes a legacy copy.
+func iptAcceptOffTailnet(line string) bool {
+	f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+	if iptFlag(f, "-j") != iptAccept {
+		return false
+	}
+	if in := iptFlag(f, "-i"); in != "" && in != tailnetInterface {
+		return true
+	}
+	return iptFlag(f, "-s") != "" || iptFlag(f, "-d") != ""
 }
 
 // tsInputUnreached reads the two places tailscaled keeps ts-input where an

@@ -2,7 +2,9 @@ package host
 
 import (
 	"cmp"
+	"errors"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -786,6 +788,15 @@ func TestCheckForLinux(t *testing.T) {
 			name:     "no systemctl, ufw unreadable",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(nil), fail: map[string]bool{ufwAdded: true}},
 			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwStatus, "output " + ufwAdded, "lookpath iptables"},
+			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Unread: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
+		},
+		{
+			// What the e2e shim does: a systemctl that exits 1 and prints nothing is unread, not off (#638).
+			name:     "systemctl present, answers nothing, ufw unreadable",
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isEnabled: "", isActive: ""}), exit: map[string]int{isEnabled: 1, isActive: 1}, fail: map[string]bool{ufwAdded: true}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389, Unread: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
@@ -1624,8 +1635,9 @@ func TestReadIptablesUnscoped(t *testing.T) {
 		{"two copies", iptTwoCopies, 2, 0, false},
 		{"multiport allow", iptEmpty + iptForeignRule, 0, 1, false},
 		{"a comment on the legacy rule makes it foreign", iptEmpty + `-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "rdp" -j ACCEPT` + "\n", 0, 1, false},
-		{"a source address scopes it", iptEmpty + "-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, true},
-		{"another interface scopes it", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, true},
+		{"a source address does not admit the tailnet", iptEmpty + "-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"another interface does not admit the tailnet", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"a legacy copy beside an eth1 rule is not scoped", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n" + iptLegacyRule, 1, 0, false},
 		{"a port-less accept is the operator's posture", iptEmpty + "-A INPUT -p tcp -j ACCEPT\n", 0, 0, true},
 		{"another port", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n", 0, 0, false},
 		{"a drop is not an allow", iptDropFirst, 0, 0, false},
@@ -1691,5 +1703,26 @@ func TestReadUFWUnscoped(t *testing.T) {
 				t.Errorf("legacy %v foreign %q scoped %v, want %v, %d, %v", legacy, foreign, scoped, tt.legacy, tt.foreign, tt.scoped)
 			}
 		})
+	}
+}
+
+// The RDP line of check points at "the steps below for the cause" when a
+// service is unread (#638), so the fix of every unread step names that cause
+// and never falls back to blaming privilege.
+func TestUnreadStepFixesDoNotBlamePrivilege(t *testing.T) {
+	privilege := regexp.MustCompile(`(?i)\b(root|sudo|administrator|elevat)`)
+	steps := map[string]SetupStep{}
+	for name, x := range map[string]xrdpState{
+		"no systemd reading": {installed: true},
+		"undecided answer":   {installed: true, readable: true, undecided: "indirect"},
+	} {
+		step, _ := xrdpUnmet(x, OutcomeUnverified)
+		steps["xrdp: "+name] = step
+	}
+	steps["windows: RDP port unread"] = actRead("RDP configuration", errors.New("read failed"), "", "Could not read the RDP port from the registry", rdpEnableFix)
+	for name, step := range steps {
+		if step.Fix == "" || privilege.MatchString(step.Fix) {
+			t.Errorf("%s: fix %q should name the cause, not privilege", name, step.Fix)
+		}
 	}
 }
