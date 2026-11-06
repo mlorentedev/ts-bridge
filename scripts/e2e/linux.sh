@@ -57,9 +57,10 @@ ok "setup without xrdp: exit 2, xrdp step names the fix" -- 'code 2 && has "apt 
 ok "setup not converged: no HOST READY banner" -- '! has "HOST READY"'
 ok "setup without IP: no empty TS_TARGET" -- '! has "TS_TARGET=:"'
 outcomes setup "$C" >"$W/j"
-# Unmarked, so a missing or broken document is a FAIL and not #608.
+# The step must exist, so all() over no step at all cannot pass.
 ok "ufw inactive: setup prints its Firewall step" -- "json '[s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"]' <$W/j"
-ok "ufw inactive: firewall step says so" 608 -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Firewall\") and \"inactive\" in s[\"message\"]]' <$W/j"
+ok "ufw inactive: firewall step says so" -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Firewall\") and \"inactive\" in s[\"message\"]]' <$W/j"
+ok "ufw inactive: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
 
 apt-get -qq update >/dev/null 2>&1 && apt-get -qq install -y xrdp >/dev/null 2>&1
 ufw --force enable >/dev/null
@@ -99,9 +100,14 @@ printf 'version: 2\nhost: {}\n' >"$W/v2.yaml"
 run "$B" host check --config "$W/v2.yaml"
 ok "unsupported version refused" -- '! code 0 && ! code 2 && has "version"'
 printf 'version: 1\nhost:\n  services:\n    - kind: rdp\n      port: 3390\n' >"$W/p.yaml"
-# The command itself must work, unmarked, so a crash is a FAIL and not #557.
-ok "declared port 3390: setup prints its steps as JSON" -- "outcomes setup $W/p.yaml | json 'len(j[\"steps\"])>0'"
-ok "declared port no step applies is not converged" 557 -- "outcomes setup $W/p.yaml | json '[s for s in j[\"steps\"] if s[\"outcome\"] in (\"failed\",\"manual\") and \"3390\" in s[\"message\"]]'"
+# A declared port moves the xrdp listener, not only the firewall (#557).
+xport() { json "{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"xrdp port\")==\"$1\""; }
+ok "declared port 3390: setup points xrdp at it" -- "outcomes setup $W/p.yaml | xport changed"
+ok "declared port 3390: xrdp listens on it" -- "sleep 2; ss -ltn | grep -q ':3390 ' && grep -q '^port=3390$' /etc/xrdp/xrdp.ini"
+ok "declared port 3390: second setup changes nothing" -- "outcomes setup $W/p.yaml | xport ok"
+ok "declared port 3390: the stock file sees the drift" -- "outcomes check $C | xport changed"
+ok "declared port 3389: setup moves xrdp back" -- "outcomes setup $C | xport changed && sleep 2 && ss -ltn | grep -q ':3389 '"
+ok "declared port 3389: back to the stock step list" -- "outcomes check $C | json 'not [s for s in j[\"steps\"] if s[\"name\"]==\"xrdp port\"]'"
 
 # Upgrade: the previous release's .env still applies from its directory.
 mkdir -p "$W/up" && cd "$W/up" && rm -f .env
