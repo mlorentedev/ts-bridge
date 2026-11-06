@@ -178,23 +178,24 @@ func TestHostSetupCmd_ConfigInvalidOnDarwin(t *testing.T) {
 	}
 }
 
-// Windows RDP listens on the registry's port; a port the file declares and
-// setup cannot apply is warned about, as --port is (review of #554).
-func TestHostSetupCmd_FilePortNotAppliedWarns(t *testing.T) {
+// A port the file declares reaches setup marked as declared, so the Windows
+// RDP step can compare it with the registry's (#557; review of #554).
+func TestHostSetupCmd_FilePortReachesSetupAsDeclared(t *testing.T) {
 	dir := isolateHostEnv(t)
 	path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  services:\n    - kind: rdp\n      port: 3390\n")
+	var got host.Config
 	var c = cmdpkg.HostSetupCmdForTest(t, "windows", true, func(cfg host.Config, _ *slog.Logger) (host.SetupResult, error) {
+		got = cfg
 		return host.SetupResult{RDPPort: 3389}, nil
 	})
-	var out, errOut bytes.Buffer
-	c.SetOut(&out)
-	c.SetErr(&errOut)
+	c.SetOut(&bytes.Buffer{})
+	c.SetErr(&bytes.Buffer{})
 	c.SetArgs([]string{"--json", "--config", path})
 	if err := c.Execute(); err != nil {
 		t.Fatalf("Execute() = %v", err)
 	}
-	if !strings.Contains(errOut.String(), "RDP port 3390 not applied") || !strings.Contains(errOut.String(), "port 3389") {
-		t.Errorf("stderr = %q, want a warning that 3390 is not applied and RDP listens on 3389", errOut.String())
+	if got.Port != 3390 || !got.PortDeclared {
+		t.Errorf("setup got Port %d PortDeclared %v, want 3390 declared", got.Port, got.PortDeclared)
 	}
 }
 
