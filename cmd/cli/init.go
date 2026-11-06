@@ -786,8 +786,3 @@ func printProfileNextSteps(name string, hasCredential bool) {
 	}
 	fmt.Printf("  ts-bridge connect --profile %s\n\n", name)
 }
-
-// SanitizeHostnameLabel delegates to config.SanitizeHostnameLabel.
-func SanitizeHostnameLabel(value string) string {
-	return config.SanitizeHostnameLabel(value)
-}

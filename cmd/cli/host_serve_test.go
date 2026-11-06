@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -165,7 +166,7 @@ func TestHostServeCmd_BootstrapRestarts(t *testing.T) {
 			tunnels <- b
 			return b, nil
 		},
-		func(context.Context, string, string) error { return nil })
+		func(context.Context, string, string, *slog.Logger) error { return nil })
 	ls := startHostServe(t, []string{"--config", path})
 	first := <-tunnels
 	waitFor(t, "ready health", func() bool { code, _ := getReady(addr); return code == 200 })
@@ -374,7 +375,7 @@ func TestHostServeCmd_Bootstrap(t *testing.T) {
 					}
 					return tunnel, nil
 				},
-				func(_ context.Context, controlURL, socks string) error {
+				func(_ context.Context, controlURL, socks string, _ *slog.Logger) error {
 					proxied = []string{controlURL, socks}
 					return nil
 				})

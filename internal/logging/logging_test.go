@@ -28,9 +28,6 @@ func TestNew_DisabledFileOutput(t *testing.T) {
 	if l.fileRot != nil {
 		t.Fatal("fileRotator should be nil when LogDir is empty")
 	}
-	if l.LogPath() != "" {
-		t.Fatal("LogPath should be empty when file logging is disabled")
-	}
 }
 
 func TestNew_CreatesLogDirectory(t *testing.T) {
@@ -55,12 +52,12 @@ func TestNew_CreatesLogDirectory(t *testing.T) {
 	}
 
 	// Log path should be set.
-	path := l.LogPath()
+	path := l.fileRot.CurrentPath()
 	if path == "" {
-		t.Fatal("LogPath should not be empty")
+		t.Fatal("current log path should not be empty")
 	}
 	if !strings.Contains(path, "ts-bridge-") {
-		t.Fatalf("LogPath should contain ts-bridge- prefix, got %s", path)
+		t.Fatalf("current log path should contain ts-bridge- prefix, got %s", path)
 	}
 }
 
@@ -293,23 +290,6 @@ func TestLogDirForPlatform(t *testing.T) {
 	}
 	if got := LogDirForPlatform(); got != want {
 		t.Errorf("LogDirForPlatform() = %q, want %q", got, want)
-	}
-}
-
-func TestLevelString(t *testing.T) {
-	tests := []struct {
-		level slog.Level
-		want  string
-	}{
-		{slog.LevelDebug, "DBG"},
-		{slog.LevelInfo, "INF"},
-		{slog.LevelWarn, "WRN"},
-		{slog.LevelError, "ERR"},
-	}
-	for _, tt := range tests {
-		if got := LevelString(tt.level); got != tt.want {
-			t.Errorf("LevelString(%v) = %s, want %s", tt.level, got, tt.want)
-		}
 	}
 }
 
