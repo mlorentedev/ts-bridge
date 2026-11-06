@@ -15,7 +15,7 @@ func ValidateHealthListener(cfg Config) error {
 	if !HealthExposed(cfg) || cfg.HealthAllowRemote {
 		return nil
 	}
-	return fmt.Errorf("health address %q (--health-addr, TS_HEALTH_ADDR or health_addr) is not a loopback address; "+
+	return fmt.Errorf("health address %q (--health-addr, TS_HEALTH_ADDR, or health_addr in the config file or profile) is not a loopback address; "+
 		"the endpoint exposes /metrics counters and the readiness reason to anything that can reach it. "+
 		"Bind 127.0.0.1, or pass --health-allow-remote (TS_HEALTH_ALLOW_REMOTE=1) to accept the exposure", cfg.HealthAddr)
 }

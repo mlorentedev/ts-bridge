@@ -15,24 +15,32 @@ import (
 // whichever layer supplied it, unless the operator opted in (#633).
 func TestConnectHealthAddrRefusesNonLoopback(t *testing.T) {
 	tests := []struct {
-		name    string
-		env     map[string]string
-		yaml    string
-		args    []string
-		wantErr bool
+		name          string
+		env           map[string]string
+		yaml          string
+		args          []string
+		profileHealth string
+		wantErr       bool
 	}{
-		{"flag loopback", nil, "", []string{"--health-addr", "127.0.0.1:9090"}, false},
-		{"flag remote", nil, "", []string{"--health-addr", "0.0.0.0:9090"}, true},
-		{"flag remote with opt-in", nil, "", []string{"--health-addr", "0.0.0.0:9090", "--health-allow-remote"}, false},
-		{"env remote", map[string]string{"TS_HEALTH_ADDR": "0.0.0.0:9090"}, "", nil, true},
-		{"env remote with env opt-in", map[string]string{"TS_HEALTH_ADDR": "0.0.0.0:9090", "TS_HEALTH_ALLOW_REMOTE": "true"}, "", nil, false},
-		{"env remote with flag opt-out over env opt-in", map[string]string{"TS_HEALTH_ADDR": "0.0.0.0:9090", "TS_HEALTH_ALLOW_REMOTE": "1"}, "", []string{"--health-allow-remote=false"}, true},
-		{"yaml remote", nil, "health_addr: 10.0.0.5:9090\n", nil, true},
+		{"flag loopback", nil, "", []string{"--health-addr", "127.0.0.1:9090"}, "", false},
+		{"flag remote", nil, "", []string{"--health-addr", "0.0.0.0:9090"}, "", true},
+		{"flag remote with opt-in", nil, "", []string{"--health-addr", "0.0.0.0:9090", "--health-allow-remote"}, "", false},
+		{"env remote", map[string]string{"TS_HEALTH_ADDR": "0.0.0.0:9090"}, "", nil, "", true},
+		{"env remote with env opt-in", map[string]string{"TS_HEALTH_ADDR": "0.0.0.0:9090", "TS_HEALTH_ALLOW_REMOTE": "true"}, "", nil, "", false},
+		{"env remote with flag opt-out over env opt-in", map[string]string{"TS_HEALTH_ADDR": "0.0.0.0:9090", "TS_HEALTH_ALLOW_REMOTE": "1"}, "", []string{"--health-allow-remote=false"}, "", true},
+		{"yaml remote", nil, "health_addr: 10.0.0.5:9090\n", nil, "", true},
+		{"profile remote", nil, "", nil, "0.0.0.0:9090", true},
+		{"profile remote with opt-in", nil, "", []string{"--health-allow-remote"}, "0.0.0.0:9090", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := setupProfileRuntimeTest(t)
 			writeProfileRuntimeFixture(t, path)
+			if tt.profileHealth != "" {
+				// The only remote address comes from the profile: no flag, env or YAML
+				// layer outranks it, so the guard must see it through the merge.
+				writeProfileRuntimeFixtureWithHealth(t, path, tt.profileHealth)
+			}
 			t.Setenv("TS_HEALTH_ALLOW_REMOTE", "")
 			for k, v := range tt.env {
 				t.Setenv(k, v)
