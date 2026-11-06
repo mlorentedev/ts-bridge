@@ -97,6 +97,15 @@ check up-mounts-something logged '^run .*-v '
 check up-user-once test "$(grep -c 'users create e2e' "$SHIM_LOG")" = 1
 check up-writes-config grep -qx 'server_url: http://10.9.8.7:8080' "$HS_DIR/conf/config.yaml"
 
+# The host moved to another network: a running control plane still advertising the old address
+# is replaced, not reported as up.
+shim ipconfig '[ "$2" = en7 ] && echo 10.9.8.8 || echo 10.0.0.1'
+: >"$SHIM_LOG"
+check up-after-address-change hs_up
+check up-after-address-change-recreates test "$(grep -c '^run ' "$SHIM_LOG")" = 1
+check up-after-address-change-renders grep -qx 'server_url: http://10.9.8.8:8080' "$HS_DIR/conf/config.yaml"
+shim ipconfig '[ "$2" = en7 ] && echo 10.9.8.7 || echo 10.0.0.1'
+
 # A start that never gets healthy, or cannot create its user, must not leave a container the next
 # hs_up would take for a working one.
 HS_HEALTH_TRIES=1
@@ -129,6 +138,7 @@ check down-removes-state test ! -e "$HS_DIR"
 hs_up >/dev/null 2>&1
 : >"$SHIM_LOG"
 key="$(hs_mint_key tag:e2e-host)"
+check mint-prints-the-key test "$key" = hskey-auth-FAKE
 check mint-targets-the-user logged 'preauthkeys create .*(-u|--user) 4( |$)'
 check mint-tagged logged 'preauthkeys create .*--tags tag:e2e-host'
 check mint-one-hour logged 'preauthkeys create .*--expiration 1h'

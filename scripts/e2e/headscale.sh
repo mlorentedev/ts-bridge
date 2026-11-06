@@ -44,11 +44,15 @@ hs_premise_ok() {
 
 hs_cli() { docker exec "$HS_NAME" /ko-app/headscale "$@"; }
 
-# hs_up starts the control plane and creates its one user. A second call changes nothing.
+# hs_up starts the control plane and creates its one user. A second call changes nothing,
+# unless the host address changed: a running one still advertising the old address is replaced.
 hs_up() {
   local ip
   ip="$(hs_host_ip)" || return 1
-  [ -z "$(docker ps -q --filter "label=$HS_LABEL")" ] || return 0
+  if [ -n "$(docker ps -q --filter "label=$HS_LABEL")" ] &&
+    grep -qx "server_url: http://$ip:$HS_PORT" "$HS_DIR/conf/config.yaml" 2>/dev/null; then
+    return 0
+  fi
   # A stopped leftover keeps the name and its database: the old user would fail the new one.
   docker rm -f "$HS_NAME" >/dev/null 2>&1 || true
   rm -rf "$HS_DIR"

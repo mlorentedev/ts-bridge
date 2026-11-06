@@ -14,7 +14,7 @@ Nothing is implemented yet: this file records how each criterion will be proved,
 ## Evidence
 
 - [x] AC1: `scripts/e2e/run.sh headscale-up` and `headscale-down` twice each, exit 0, no container left -> commit `b574736`, `bash scripts/tests/test-e2e-headscale.sh` exit 0; live: `headscale-up` twice, `headscale-down` twice, all rc=0, `docker ps -aq --filter label=tsb-e2e=headscale` empty, `make e2e-clean` printed `e2e: no session left, no headscale container`
-- [x] AC2 (preflight pieces only): `bash scripts/tests/test-e2e-headscale.sh` covers the premise and guest-reach failure messages; E2 and E3 outcomes below -> commit `b574736`. Calling both from a mesh run, and the test that proves it, is PR 2 task 1; AC2 closes there
+- [ ] AC2 (open; preflight pieces done here): `bash scripts/tests/test-e2e-headscale.sh` covers the premise and guest-reach failure messages; E2 and E3 outcomes below -> commit `b574736`. Calling both from a mesh run, and the test that proves it, is PR 2 task 1; AC2 closes there
 - [ ] AC3: `make e2e-mesh-linux` -> `PASS mesh rdp: X.224 confirm through connect`, log `scripts/e2e/out/mesh-linux-<timestamp>.log`
 - [ ] AC4: same log -> `PASS mesh ssh: banner through connect`, `PASS mesh ssh: key login through connect --socks5`, `XFAIL #521 mesh ssh: kind ssh is published`
 - [ ] AC5: `make e2e-mesh-windows` -> `PASS mesh rdp: X.224 confirm through connect`, log `scripts/e2e/out/mesh-windows-<timestamp>.log`
