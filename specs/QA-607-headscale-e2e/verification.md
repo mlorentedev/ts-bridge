@@ -35,7 +35,7 @@ Nothing is implemented yet: this file records how each criterion will be proved,
 
 Outcomes are recorded here by the task that resolves each, with the command and its output.
 
-- E1 (PR 2, task 1): DERP over plain HTTP carries bytes between the host client and the Linux guest -> `<result, how the relay was observed>`
+- E1 (PR 1, task 6 by hand; PR 2, task 1 automated): DERP over plain HTTP carries bytes between the host client and the Linux guest -> `<result, how the relay was observed>`
 - E2 (PR 1, task 6): each guest reaches `http://<host-ip>:8080/health` -> `<result per guest>`
 - E3 (PR 1, task 4): the pinned module registers `TS_DEBUG_USE_DERP_HTTP` -> `<module version, file>`
 - E4 (PR 4, task 2): the Scheduled Task sees the variables -> `<result>`
