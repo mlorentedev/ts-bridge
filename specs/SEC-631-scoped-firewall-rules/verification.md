@@ -26,4 +26,4 @@ Filled per PR with the command output.
 
 ## Decisions made during implementation
 
-See the proposal: two-tier replacement, Windows built-in group left as is, fixed `tailscale0`.
+See the proposal: two-tier replacement, Windows built-in group reported but not disabled, fixed `tailscale0`.
