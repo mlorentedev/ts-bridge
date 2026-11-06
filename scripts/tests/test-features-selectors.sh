@@ -81,8 +81,14 @@ build() {
 func TestOnlyWindows(t *testing.T) {}"
       spec "$c" A "go test ./pkg -run '^TestOnlyWindows\$'" ;;
     kinds)
-      gopkg "$c" pkg BenchmarkB FuzzF ExampleE
-      spec "$c" A "go test ./pkg -run 'BenchmarkB|FuzzF|ExampleE'" ;;
+      gopkg "$c" pkg FuzzF ExampleE
+      spec "$c" A "go test ./pkg -run 'FuzzF|ExampleE'" ;;
+    benchmark-is-not-run) gopkg "$c" pkg TestA BenchmarkB; spec "$c" A "go test ./pkg -run '^BenchmarkB\$'" ;;
+    multi-line)
+      gopkg "$c" one TestA
+      gopkg "$c" two TestB
+      spec "$c" A "go test ./one -run '^TestGone\$'
+go test ./two -run '^TestB\$'" ;;
     method-is-not-a-test)
       put "$c" pkg/p_test.go "package p
 func (s *S) TestMethod(t *testing.T) {}"
@@ -126,6 +132,8 @@ subtest-ok:0:OK (1 go test
 subtest-bad:1:matches no test: TestGone
 other-os-file:0:OK (1 go test
 kinds:0:OK (1 go test
+benchmark-is-not-run:1:matches no test: ^BenchmarkB$
+multi-line:1:matches no test: ^TestGone$ (in ./one)
 method-is-not-a-test:1:matches no test: TestMethod
 missing-package:1:no such package: ./nope
 tree-wildcard:0:OK (1 go test

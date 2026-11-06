@@ -8,8 +8,9 @@
 # has five). So each top-level alternative is checked on its own, not the selector as a whole.
 #
 # Static, not a run: the commands are never executed (some build sites, some start VMs). The
-# selector is matched against the Test, Benchmark, Fuzz and Example functions declared in the
-# named packages' *_test.go files, whatever their build tags, so a test that exists only for
+# selector is matched against the Test, Fuzz and Example functions declared in the named
+# packages' *_test.go files (-run never selects a Benchmark; an Example without an Output comment
+# is compiled but not run, which this static read cannot tell apart), whatever their build tags, so a test that exists only for
 # another OS counts. Reading the declarations is what makes the check cheap enough for CI.
 #
 # Reads: only `go test` segments that carry -run, with ./relative package paths (`./pkg`,
@@ -99,7 +100,7 @@ function emit(pkgs, run,   i, c, depth, cls, alt, new) {
   flush_segment()
 }'
 
-# Test, Benchmark, Fuzz and Example function names declared in the *_test.go files of one package
+# Test, Fuzz and Example function names declared in the *_test.go files of one package
 # argument (a trailing /... takes the subtree). Fails when the directory does not exist.
 declared_tests() { # declared_tests <pkg path>
   local p="$1" dir f
@@ -107,7 +108,7 @@ declared_tests() { # declared_tests <pkg path>
   [ -d "$dir" ] || return 1
   # find, not a glob: zsh aborts on a pattern that matches nothing, bash passes it through.
   while IFS= read -r f; do
-    { grep -E '^func (Test|Benchmark|Fuzz|Example)[A-Za-z0-9_]*\(' "$f" || true; } |
+    { grep -E '^func (Test|Fuzz|Example)[A-Za-z0-9_]*\(' "$f" || true; } |
       sed -E 's/^func ([A-Za-z0-9_]+)\(.*/\1/'
   done <<EOF
 $(if [ "${p%/...}" != "$p" ]; then find "$dir" -type f -name '*_test.go'; else find "$dir" -maxdepth 1 -type f -name '*_test.go'; fi)
@@ -169,7 +170,7 @@ while IFS= read -r -d '' f; do
 $(printf '%s\n' "$cmd" | awk -v sq="'" "$SELECTORS")
 EOF
   done <<EOF
-$(jq -r '.[] | select((.verification | type) == "string") | [.id, (.verification | gsub("\n"; " "))] | @tsv' "$f")
+$(jq -r '.[] | select((.verification | type) == "string") | [.id, (.verification | gsub("\n"; " ; "))] | @tsv' "$f")
 EOF
 done <"$list"
 
