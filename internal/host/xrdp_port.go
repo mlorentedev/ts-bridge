@@ -53,7 +53,7 @@ func readXRDPListener(r Runner) (xrdpListener, error) {
 			continue
 		}
 		key, value, ok := strings.Cut(line, "=")
-		if section != "[Globals]" || !ok || strings.TrimSpace(key) != "port" {
+		if section != "[Globals]" || !ok || strings.TrimSpace(key) != keyPort {
 			continue
 		}
 		l.line, l.value = i, strings.TrimSpace(value)
