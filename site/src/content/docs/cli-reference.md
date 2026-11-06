@@ -19,8 +19,10 @@ Available Commands:
 
 Flags:
   -v, --verbose   Enable verbose logging
-      --config string   Config file path (reserved for future use)
 ```
+
+`--config` is not a global flag. `connect`, `browser`, `init` and `host` each take
+their own `--config`, documented in their sections.
 
 ## `ts-bridge auth`
 
@@ -102,6 +104,42 @@ ts-bridge connect --control-url https://vpn.example.com \
   --bootstrap-ssh deployer@bastion.example.com \
   --auth-key-file /run/secrets/headscale-authkey \
   --target mesh-host:3389
+```
+
+## `ts-bridge browser`
+
+Open Microsoft Edge with an isolated profile that reaches allow-listed private
+origins through a loopback SOCKS5 proxy over the mesh (ADR-014).
+
+```bash
+ts-bridge browser [flags]
+```
+
+### Flags
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--auth-key-file` | string | Read auth key from a local file |
+| `--config` | string | Path to YAML config file |
+| `--control-url` | string | Custom Headscale control plane URL |
+| `--dial-timeout` | duration | Per-dial timeout |
+| `--edge-path` | string | Path to the Microsoft Edge executable (auto-detected when omitted) |
+| `--hostname` | string | Tailscale hostname |
+| `--pac-addr` | string | Loopback address for the local PAC server (default `127.0.0.1:0`) |
+| `--profile` | string | Named profile supplying control plane and managed credential |
+| `--route` | string (repeatable) | Allow-listed route `SOURCE_HOST:PORT=MESH_HOST:PORT` |
+| `--socks5` | string | Loopback SOCKS5 listener address (default `127.0.0.1:1080`) |
+| `--state-dir` | string | State directory |
+| `--timeout` | duration | Connect timeout for tsnet init |
+| `--url` | string | Private HTTPS URL to open |
+| `--user-data-dir` | string | Isolated Edge user-data directory (default: a `ts-bridge-browser` directory under the system temp dir) |
+
+### Example
+
+```bash
+ts-bridge browser --profile office \
+  --route "forge.example.internal:443=apps:443" \
+  --url https://forge.example.internal/
 ```
 
 ## `ts-bridge init`
