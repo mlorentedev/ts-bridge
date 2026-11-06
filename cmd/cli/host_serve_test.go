@@ -326,6 +326,8 @@ func TestHostServeCmd_ExistingSSHAndRDP(t *testing.T) {
 			"services=ssh:22,rdp:45000", []string{":22", ":45000"}},
 		{"rdp first", "    - kind: rdp\n      port: 45000\n    - kind: ssh\n      port: 22\n",
 			"services=rdp:45000,ssh:22", []string{":45000", ":22"}},
+		{"ssh default port", "    - kind: ssh\n",
+			"services=ssh:22", []string{":22"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

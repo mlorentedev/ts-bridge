@@ -129,7 +129,7 @@ sudo systemctl enable --now ts-bridge-serve.service
 
 ## 4. Confirm, then delete the key
 
-The first start prints `READY node=lab-pc-01 services=rdp:3389 enrolled=true`.
+The first start prints `READY node=lab-pc-01 services=rdp:3389,ssh:22 enrolled=true`.
 `enrolled=true` means this start used the auth key, so the provisioning script
 should delete the key file now; serve never deletes it. Later starts reuse the
 identity in `state_dir` and print `enrolled=false`.

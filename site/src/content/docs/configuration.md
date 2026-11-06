@@ -105,8 +105,9 @@ empty value is an error.
 On Windows and Linux, `host.services` may declare already-provisioned SSH and RDP
 for publication. This does not mean the OS convergence commands support SSH:
 `host setup` and `host check` still reject it until #521, and `host init` still
-generates an RDP-only file. For a combined file, read `/health/ready` directly
-rather than using `host check`.
+generates an RDP-only file. For a combined file, configure `host.mesh.health_addr`
+as a loopback address before starting serve (restart it if already running).
+Read `/health/ready` at that address directly rather than using `host check`.
 
 ### Boolean parsing
 

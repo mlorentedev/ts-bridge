@@ -46,6 +46,11 @@ Map every acceptance criterion from `proposal.md` to concrete proof (commit hash
   with embedded `vcs.modified=true`; it is not a merged replacement candidate.
 - The exact `features.json` f9 verification command passed through the existing
   Git Bash installation. No feature or live criterion outside f9 was marked passed.
+- Review follow-up: the real-root regression also covers an SSH-only declaration
+  with no `port`, asserting exactly `:22` and no implicit RDP listener. The existing
+  resolver supplies that default; no production port-resolution change was needed.
+- The native Linux and Windows CI jobs run the same unfiltered Go suite; the
+  production-root regression has no build tags or skip path.
 - This correction is offline only. No live AC1, AC2, AC4 or #565 result is implied.
 
 - Test suite: `go test ./... -count=1` -> all 14 packages ok (Windows, 2026-11-02); `go vet ./...` clean for windows, linux, darwin; `features.json` f1-f4, f6, f7 pass; f5 passes except `TestEnsureStateDir` on an unelevated Windows token (Linux run in WSL passed).
