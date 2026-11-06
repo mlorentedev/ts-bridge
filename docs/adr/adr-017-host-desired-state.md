@@ -165,8 +165,15 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 | OS | Services | Automated | Verified and guided only |
 | --- | --- | --- | --- |
 | Windows | `rdp` (+ `ssh` via OpenSSH Server when declared) | RDP enable honouring Group Policy precedence, firewall rule (state-first), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
-| Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, firewall INPUT rule (ufw `allow` / iptables `-C` then `-A`) | none |
+| Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule (ufw `allow` / iptables `-C` then `-A`) | none |
 | macOS | `ssh` (Remote Login), `vnc` (Screen Sharing) | Remote Login when elevated and Full Disk Access is granted | Screen Sharing; Remote Login without Full Disk Access; application-firewall "block all" |
+
+A declared RDP port is applied where the OS lets a CLI move the listener and reported
+where it does not (#557, amended 2026-11-06). Linux rewrites xrdp's `port=` and restarts
+xrdp; the step appears only when the declared port or xrdp's is not the default 3389, so a
+stock host keeps its step list. Windows never writes `PortNumber`: a declared port the
+registry does not listen on makes the RDP step `manual` in `setup` and `check`, naming both
+ports. A port no layer declares takes the registry's, with nothing to compare.
 
 On macOS, `check` reads Remote Login without root from the launchd override for
 `com.openssh.sshd` and, when no override exists, from the `Disabled` key of its launch
