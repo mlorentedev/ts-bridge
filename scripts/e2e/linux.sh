@@ -71,7 +71,7 @@ outcomes setup "$C" >"$W/j2"
 ok "setup #2: nothing changed" -- "json '{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"xrdp service\")==\"ok\" and {s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"Firewall configuration\")==\"ok\" and all(s[\"outcome\"]==\"ok\" for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j2"
 ok "setup: Tailscale step fails without a node" -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Tailscale\") and s[\"outcome\"]==\"failed\" and s[\"fix\"]]' <$W/j2"
 outcomes check "$C" >"$W/jc"
-ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True}]' <$W/jc"
+ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True,\"unread\":False}]' <$W/jc"
 ok "xrdp listens on 3389" -- "ss -ltn | grep -q ':3389 '"
 
 ufw delete allow 3389/tcp >/dev/null 2>&1
@@ -83,6 +83,16 @@ ok "drift: setup starts xrdp" -- "outcomes setup $C >/dev/null; systemctl is-act
 
 U="${SUDO_USER:-nobody}"
 ok "unprivileged check names the declared service" -- 'su -s /bin/sh "$U" -c "$B host check --config $C" 2>&1 | grep -q "RDP:.*3389"'
+# #638: a systemctl that answers nothing leaves the unit unread, whoever runs the
+# check, and elevation cannot fix that. The declared service must still be
+# listed, flagged unread, and the wording must offer elevation only to a non-root
+# run.
+mkdir -p "$W/shim" && printf '#!/bin/sh\nexit 1\n' >"$W/shim/systemctl" && chmod 755 "$W/shim/systemctl"
+as_user() { su -s /bin/sh "$U" -c "PATH=$W/shim $B host check --config $C $1" 2>/dev/null; }
+ok "unprivileged unread: check --json lists rdp 3389 with unread true" -- "as_user --json | json 'j[\"rdp_port\"]==0 and [(s[\"kind\"],s[\"port\"],s[\"unread\"]) for s in j[\"services\"]]==[(\"rdp\",3389,True)]'"
+ok "unprivileged unread: line names the steps, elevation only as a maybe" -- 'as_user "" | grep -q "RDP:.*unread (rdp, port 3389): see the steps below for the cause; running as root/administrator may help"'
+run env PATH="$W/shim" "$B" host check --config "$C"
+ok "root unread: line names the steps and does not suggest elevation" -- 'has "RDP:.*unread (rdp, port 3389): see the steps below for the cause" && ! has "may help"'
 systemctl disable --now xrdp >/dev/null 2>&1
 run "$B" host check --config "$C"
 ok "disabled xrdp: check names it NOT OK, not undeclared" -- '! has "no service declared" && has "RDP:.*NOT OK.*3389"'
