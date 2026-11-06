@@ -3,7 +3,9 @@ package host
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
+	"slices"
 	"strings"
 )
 
@@ -35,14 +37,25 @@ type Runner interface {
 
 type execRunner struct{}
 
-func (execRunner) Run(name string, args ...string) error {
+// command runs under the C locale: the reads match the tools' own English
+// words, which ufw, iptables and systemctl translate (#608). LANGUAGE goes too,
+// since gettext lets it outrank the locale.
+func command(name string, args ...string) *exec.Cmd {
 	// #nosec G204 -- every caller passes a fixed system binary and generated arguments.
-	return exec.Command(name, args...).Run()
+	cmd := exec.Command(name, args...)
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		return strings.HasPrefix(kv, "LC_ALL=") || strings.HasPrefix(kv, "LANGUAGE=")
+	})
+	cmd.Env = append(env, "LC_ALL=C")
+	return cmd
+}
+
+func (execRunner) Run(name string, args ...string) error {
+	return command(name, args...).Run()
 }
 
 func (execRunner) Output(name string, args ...string) ([]byte, error) {
-	// #nosec G204 -- every caller passes a fixed system binary and generated arguments.
-	return exec.Command(name, args...).Output()
+	return command(name, args...).Output()
 }
 
 func (execRunner) LookPath(name string) (string, error) {

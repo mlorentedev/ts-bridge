@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -1053,6 +1055,61 @@ func TestMergeLocalAddrDefaultNeverWildcard(t *testing.T) {
 			}
 		})
 	}
+}
+
+// An exhausted or invalid --port-range must fail Merge the way the env path
+// does, not fall back to a fixed loopback port (#589, #620).
+func TestMergeFailsWhenPortRangeIsExhausted(t *testing.T) {
+	for _, key := range stateEnvKeys {
+		t.Setenv(key, "")
+	}
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_PORT_RANGE", "")
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	flags := FlagSet{
+		Target:    "100.64.0.1:3389",
+		AuthKey:   "tskey-auth-test-secret",
+		PortRange: strconv.Itoa(port) + "-" + strconv.Itoa(port),
+	}
+
+	t.Run("real selector with the only port occupied", func(t *testing.T) {
+		_, err := Merge(PartialConfig{}, flags)
+		if err == nil || !strings.Contains(err.Error(), "TS_PORT_RANGE has no free ports") {
+			t.Fatalf("error = %v, want one containing %q", err, "TS_PORT_RANGE has no free ports")
+		}
+	})
+
+	t.Run("selector seam reporting exhaustion", func(t *testing.T) {
+		original := selectAvailablePort
+		t.Cleanup(func() { selectAvailablePort = original })
+		var selectorErr error
+		selectAvailablePort = func(_ string, start, end int) (int, error) {
+			selectorErr = fmt.Errorf("TS_PORT_RANGE has no free ports in %d-%d", start, end)
+			return 0, selectorErr
+		}
+
+		cfg, err := Merge(PartialConfig{}, flags)
+		if selectorErr == nil || !errors.Is(err, selectorErr) {
+			t.Fatalf("error = %v (LocalAddr %q), want it to wrap %v", err, cfg.LocalAddr, selectorErr)
+		}
+	})
+
+	t.Run("invalid range", func(t *testing.T) {
+		bad := flags
+		bad.PortRange = "bad-range"
+		cfg, err := Merge(PartialConfig{}, bad)
+		if err == nil || !strings.Contains(err.Error(), "derive local address") {
+			t.Fatalf("error = %v (LocalAddr %q), want a derive local address error", err, cfg.LocalAddr)
+		}
+	})
 }
 
 func boolPtr(b bool) *bool {
