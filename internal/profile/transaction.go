@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"time"
-
-	"ts-bridge/internal/credential"
 )
 
 // Tx is the store while its mutation lock is held. A function given to Update
@@ -44,11 +42,14 @@ func (t *Tx) ListProfiles() (map[string]Profile, error) {
 }
 
 // SetCredential associates a managed credential name with an existing profile.
+// It refuses a name another profile references on a different control plane.
 func (t *Tx) SetCredential(profileName, credentialName string) error {
-	if err := credential.ValidateName(credentialName); err != nil {
-		return fmt.Errorf("invalid credential reference: %w", err)
-	}
-	return t.store.updateCredential(profileName, credentialName)
+	return t.store.associate(profileName, credentialName)
+}
+
+// CheckCredentialShare is Store.CheckCredentialShare inside the lock.
+func (t *Tx) CheckCredentialShare(profileName, credentialName string) error {
+	return t.store.CheckCredentialShare(profileName, credentialName)
 }
 
 // ClearCredential removes the managed credential reference from a profile.

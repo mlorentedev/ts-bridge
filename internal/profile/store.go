@@ -250,6 +250,7 @@ func (s *Store) ListProfiles() (map[string]Profile, error) {
 }
 
 // SetCredential associates a managed credential name with an existing profile.
+// It refuses a name another profile references on a different control plane.
 func (s *Store) SetCredential(profileName, credentialName string) error {
 	return s.Update(func(tx *Tx) error { return tx.SetCredential(profileName, credentialName) })
 }

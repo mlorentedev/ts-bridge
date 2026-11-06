@@ -33,6 +33,10 @@ func (s *Store) BindCredential(creds *credential.Store, b Binding) error {
 		if err := checkBinding(b, selected); err != nil {
 			return err
 		}
+		// Refuse a shared name before the key is replaced, not after (#653).
+		if err := tx.CheckCredentialShare(b.Profile, b.Credential); err != nil {
+			return err
+		}
 		previous, previousErr := creds.Get(b.Credential)
 		if err := creds.Set(b.Credential, b.Key, b.Replace); err != nil {
 			return fmt.Errorf("store credential %q: %w", b.Credential, err)

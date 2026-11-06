@@ -97,6 +97,27 @@ func TestBindCredentialRefusesAMovedControlPlaneBeforeReplacingTheKey(t *testing
 	}
 }
 
+// A name another profile references on a different control plane is refused
+// inside the transition, before the stored key is replaced (#653).
+func TestBindCredentialRefusesASharedNameBeforeReplacingTheKey(t *testing.T) {
+	f := newTransitionFixture(t, map[string]string{"office": "https://p.example.com", "home": ""})
+	if err := f.store.BindCredential(f.creds, Binding{Profile: "office", Credential: "k", Key: keyOriginal, ControlURL: "https://p.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := f.store.BindCredential(f.creds, Binding{Profile: "home", Credential: "k", Key: keyReplacement, Replace: true})
+	var shared *CredentialSharedError
+	if !errors.As(err, &shared) || shared.Profile != "office" {
+		t.Fatalf("BindCredential(home, k) = %v, want a CredentialSharedError naming office", err)
+	}
+	if got := f.key(t, "k"); got != keyOriginal {
+		t.Fatalf("stored key = %q after the refusal, want the original kept", got)
+	}
+	if got := f.reference(t, "home"); got != "" {
+		t.Fatalf("profile home references %q after the refusal", got)
+	}
+}
+
 func TestBindCredentialRefusesAHeadscaleKeyForTheSaaSControlPlane(t *testing.T) {
 	f := newTransitionFixture(t, map[string]string{"office": ""})
 	err := f.store.BindCredential(f.creds, Binding{Profile: "office", Credential: "k", Key: "hskey-auth-wrong-plane"})
