@@ -136,7 +136,7 @@ Examples:
 
 // ─── Setup ───────────────────────────────────────────────────────
 
-func runHostSetup(cmd *cobra.Command, args []string) error { //nolint:funlen,gocyclo // baseline #629
+func runHostSetup(cmd *cobra.Command, args []string) error {
 	// The file is validated on every OS, so an invalid --config is an error
 	// even where setup has no steps.
 	file, err := loadHostFile(cmd)
