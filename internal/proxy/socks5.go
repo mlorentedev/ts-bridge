@@ -130,6 +130,7 @@ func handleSOCKS5Conn( //nolint:funlen,gocyclo // baseline #629
 	logger *slog.Logger,
 ) error {
 	defer client.Close()
+	connStart := time.Now()
 	if cfg.DialTimeout > 0 {
 		_ = client.SetDeadline(time.Now().Add(cfg.DialTimeout))
 		defer func() { _ = client.SetDeadline(time.Time{}) }()
@@ -181,7 +182,14 @@ func handleSOCKS5Conn( //nolint:funlen,gocyclo // baseline #629
 
 	client = withIdleTimeout(client, cfg.IdleTimeout)
 	remote = withIdleTimeout(remote, cfg.IdleTimeout)
-	_, _ = proxyConnections(client, remote, client.RemoteAddr().String(), logger)
+	addr := client.RemoteAddr().String()
+	bytesTx, bytesRx := proxyConnections(client, remote, addr, logger)
+	logger.Info("connection closed",
+		"client", addr,
+		"target", target,
+		"duration", time.Since(connStart),
+		"bytes_tx", bytesTx,
+		"bytes_rx", bytesRx)
 	return nil
 }
 

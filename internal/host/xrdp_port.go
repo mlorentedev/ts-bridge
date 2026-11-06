@@ -70,7 +70,7 @@ func readXRDPListener(r Runner) (xrdpListener, error) {
 // globalsPort returns the value of a `port=` line when line sits in [Globals].
 func globalsPort(section, line string) (string, bool) {
 	key, value, ok := strings.Cut(line, "=")
-	if section != "[Globals]" || !ok || strings.TrimSpace(key) != "port" {
+	if section != "[Globals]" || !ok || strings.TrimSpace(key) != keyPort {
 		return "", false
 	}
 	return strings.TrimSpace(value), true

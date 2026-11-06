@@ -20,6 +20,8 @@ const (
 	backendIPT    = "iptables"
 	protoTCP      = "tcp"
 	iptAccept     = "ACCEPT"
+	iptInput      = "INPUT"
+	iptDport      = "--dport"
 )
 
 func linuxPort(cfg Config) int {
@@ -56,7 +58,7 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 		}
 	}
 	result.Steps = append(result.Steps, firewallCheckStep(fw, port))
-	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent && !fw.ufwInactive, Unread: xrdp.Outcome == OutcomeUnverified}
+	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent && !fw.ufwInactive && !iptLegacy(fw), Unread: xrdp.Outcome == OutcomeUnverified}
 	if x.readable {
 		active := x.active
 		svc.Active = &active
@@ -172,7 +174,7 @@ type firewallRead struct {
 	reason    string
 	blockedBy string // the deny rule, when state is ruleBlocked
 	fix       string // the fix for an unknown read, when the generic one does not apply
-	copies    int    // copies of the rule setup appends to INPUT (#480), counted on ufw hosts too (#530)
+	copies    int    // copies of the unscoped rule setup appended to INPUT before #631 (#480), counted on ufw hosts too (#530)
 	decidedBy string // the tool whose rules decided state, when not backend: iptables on a ufw host (#530)
 	// copiesAdmit means the copies are the only allow: without them the port is closed (#576).
 	copiesAdmit bool
@@ -180,6 +182,11 @@ type firewallRead struct {
 	// rules, so its allow admits nothing and its absence closes nothing (#608).
 	ufwInactive bool
 	ufwAllows   bool // ufw's own rules allow the port, whatever iptables decided
+	// foreign lists the unscoped allows for the port that setup did not write, and
+	// scoped means a rule limited to part of the traffic admits the port, so
+	// setup adds none (#631). copies counts the unscoped rule setup wrote before.
+	foreign []string
+	scoped  bool
 }
 
 // source names the tool whose rules decided the read, for messages; backend
@@ -267,14 +274,14 @@ func readUFWStatus(r Runner) (active bool, reason string) {
 // with --netfilter-mode=on it inserts tsInputJump at the top of INPUT (#492).
 const tsInputChain = "ts-input"
 
-var tsInputJump = []string{"-A", "INPUT", "-j", tsInputChain}
+var tsInputJump = []string{"-A", iptInput, "-j", tsInputChain}
 
 // readIptables reads INPUT and, behind tailscaled's unqualified jump, the
 // ts-input chain. A failed read of either is an unknown state, and so is a
 // qualified jump into ts-input that the walk reaches with nothing decided:
 // setup never appends an open rule on a guess (#532).
 func readIptables(r Runner, port int) firewallRead { //nolint:gocyclo // baseline #629
-	out, err := r.Output(backendIPT, "-S", "INPUT")
+	out, err := r.Output(backendIPT, "-S", iptInput)
 	if err != nil {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
 	}
@@ -298,9 +305,39 @@ func readIptables(r Runner, port int) firewallRead { //nolint:gocyclo // baselin
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("INPUT reaches %s through %q, which ts-bridge cannot evaluate", tsInputChain, jump),
 			fix: fmt.Sprintf("allow TCP %d inbound on the Tailscale interface ahead of %q, or confirm by hand that the jump admits it", port, jump)}
 	}
-	copies := iptSetupCopies(input, port)
-	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: copies,
-		copiesAdmit: state == rulePresent && copies > 0 && !iptablesCovers(iptWithoutSetup(rules, port), port)}
+	copies := iptLegacyCopies(input, port)
+	foreign, scoped := iptUnscopedRead(input, rules, port, state)
+	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: copies, foreign: foreign, scoped: scoped,
+		copiesAdmit: state == rulePresent && copies > 0 && !iptablesCovers(iptWithoutLegacy(rules, port), port)}
+}
+
+// iptUnscopedRead splits the unscoped allows for port in INPUT into the ones
+// setup did not write and says whether a scoped rule admits the port without
+// them (#631). Rules walked is what decided state: tailscaled's ts-input is
+// inlined there, so its `-i tailscale0 -j ACCEPT` counts as the scoped rule.
+func iptUnscopedRead(input, walked string, port int, state ruleState) (foreign []string, scoped bool) {
+	unscoped := iptUnscoped(input, port)
+	legacy := iptPrinted(iptablesLegacy(port))
+	foreign = slices.DeleteFunc(slices.Clone(unscoped), func(line string) bool { return slices.Equal(strings.Fields(line), legacy) })
+	rest := slices.DeleteFunc(strings.Split(walked, "\n"), func(line string) bool {
+		return slices.Contains(unscoped, strings.TrimSpace(line)) || iptAcceptOffTailnet(line)
+	})
+	return foreign, state == rulePresent && iptablesCovers(strings.Join(rest, "\n"), port)
+}
+
+// iptAcceptOffTailnet reports an ACCEPT scoped to something other than the
+// tailnet: another interface, or a source or destination address. Such a rule
+// admits the port, but not from the tailnet, so it is not the scoped rule and
+// setup must still add `-i tailscale0` before it deletes a legacy copy.
+func iptAcceptOffTailnet(line string) bool {
+	f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+	if iptFlag(f, "-j") != iptAccept {
+		return false
+	}
+	if in := iptFlag(f, "-i"); in != "" && in != tailnetInterface {
+		return true
+	}
+	return iptFlag(f, "-s") != "" || iptFlag(f, "-d") != ""
 }
 
 // tsInputUnreached reads the two places tailscaled keeps ts-input where an
@@ -351,9 +388,9 @@ func chainMissing(err error, words string) bool {
 	return errors.As(err, &exit) && strings.Contains(string(exit.Stderr), words)
 }
 
-// iptWithoutSetup is rules with every copy of setup's rule removed.
-func iptWithoutSetup(rules string, port int) string {
-	printed := iptSetupPrinted(port)
+// iptWithoutLegacy is rules with every copy of the legacy unscoped rule removed.
+func iptWithoutLegacy(rules string, port int) string {
+	printed := iptPrinted(iptablesLegacy(port))
 	kept := slices.DeleteFunc(strings.Split(rules, "\n"), func(line string) bool {
 		return slices.Equal(strings.Fields(line), printed)
 	})
@@ -374,10 +411,10 @@ func iptInlineChain(input, chain string) string {
 	return strings.Join(lines, "\n")
 }
 
-// iptSetupCopies counts the lines of rules that are the rule setup appends,
-// in the form `iptables -S` prints it.
-func iptSetupCopies(rules string, port int) int {
-	printed := iptSetupPrinted(port)
+// iptLegacyCopies counts the lines of rules that are the unscoped rule setup
+// appended before #631, in the form `iptables -S` prints it.
+func iptLegacyCopies(rules string, port int) int {
+	printed := iptPrinted(iptablesLegacy(port))
 	n := 0
 	for _, line := range strings.Split(rules, "\n") {
 		if slices.Equal(strings.Fields(line), printed) {
@@ -387,12 +424,12 @@ func iptSetupCopies(rules string, port int) int {
 	return n
 }
 
-// iptSetupPrinted is iptablesAppend's rule as `iptables -S` prints it: the
-// protocol after `-p` gains an explicit `-m <protocol>` match.
-func iptSetupPrinted(port int) []string {
-	rule := iptablesAppend(port)
+// iptPrinted is a rule setup writes as `iptables -S` prints it: the protocol
+// after `-p` gains an explicit `-m <protocol>` match. The interface stays ahead
+// of `-p`, where iptables prints it.
+func iptPrinted(rule []string) []string {
 	i := slices.Index(rule, "-p") + 2
-	return slices.Insert(rule, i, "-m", rule[i-1])
+	return slices.Insert(slices.Clone(rule), i, "-m", rule[i-1])
 }
 
 func iptTSInputJump(line string) bool {
@@ -456,7 +493,7 @@ var iptQuoted = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
 // iptDestPortFlags name a destination port list; iptPortFlags are every flag
 // that makes a rule port-bearing, negated or not.
 var (
-	iptDestPortFlags = []string{"--dport", "--dports", "--ports"}
+	iptDestPortFlags = []string{iptDport, "--dports", "--ports"}
 	iptPortFlags     = append(slices.Clone(iptDestPortFlags), "--sport", "--sports")
 )
 
@@ -482,7 +519,7 @@ func iptablesDecide(rules string, port int) (ruleState, string) {
 		case iptAccept:
 			return rulePresent, ""
 		case "DROP", "REJECT":
-			if !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptScopeFlags, w) }) {
+			if !iptHasScope(f) {
 				return ruleBlocked, strings.TrimSpace(line)
 			}
 		}
@@ -493,6 +530,26 @@ func iptablesDecide(rules string, port int) (ruleState, string) {
 // iptScopeFlags narrow a rule to part of the traffic; a deny carrying one is
 // the operator's scope and never decides the port.
 var iptScopeFlags = []string{"-i", "-s", "-d", "!"}
+
+func iptHasScope(f []string) bool {
+	return slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptScopeFlags, w) })
+}
+
+// iptUnscoped lists the INPUT rules that accept TCP port with no interface,
+// source or destination qualifier: the legacy rules of #631. A rule with no
+// port in it is the operator's posture, not a rule for the port, and is not
+// listed. Another narrowing (conntrack, a comment) is not looked at, so such a
+// rule is listed too and reported rather than deleted.
+func iptUnscoped(input string, port int) []string {
+	var found []string
+	for _, line := range strings.Split(input, "\n") {
+		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+		if len(f) > 1 && f[0] == "-A" && f[1] == iptInput && iptFlag(f, "-j") == iptAccept && iptPortCovers(f, port) && !iptLoopback(f) && !iptHasScope(f) {
+			found = append(found, strings.TrimSpace(line))
+		}
+	}
+	return found
+}
 
 // iptMatchesPort reports whether a rule's match, whatever its target, applies
 // to new TCP connections on port.
@@ -594,8 +651,29 @@ func iptFlag(f []string, flag string) string {
 	return f[i+1]
 }
 
+// tailnetInterface is the interface tailscaled creates, and the only one setup
+// opens the service port on (ADR-017 Amendment B, #631).
+const tailnetInterface = "tailscale0"
+
+// iptablesAppend is the rule setup appends: the port, on the tailnet interface.
 func iptablesAppend(port int) []string {
-	return []string{"-A", "INPUT", "-p", protoTCP, "--dport", strconv.Itoa(port), "-j", iptAccept}
+	return []string{"-A", iptInput, "-i", tailnetInterface, "-p", protoTCP, iptDport, strconv.Itoa(port), "-j", iptAccept}
+}
+
+// iptablesLegacy is the unscoped rule setup appended before #631.
+func iptablesLegacy(port int) []string {
+	return []string{"-A", iptInput, "-p", protoTCP, iptDport, strconv.Itoa(port), "-j", iptAccept}
+}
+
+// iptablesDelete deletes one copy of the legacy rule.
+func iptablesDelete(port int) []string {
+	return append([]string{"-D"}, iptablesLegacy(port)[1:]...)
+}
+
+// iptLegacy reports whether an iptables host holds an unscoped allow for the
+// port: setup replaces the copies it wrote and reports the others (#631).
+func iptLegacy(read firewallRead) bool {
+	return read.backend == backendIPT && read.state == rulePresent && (read.copies > 0 || len(read.foreign) > 0)
 }
 
 // ufwAllows reports whether `ufw show added` holds an inbound allow for TCP
@@ -712,6 +790,9 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 	}
 	switch read.state {
 	case rulePresent:
+		if iptLegacy(read) {
+			return iptLegacySetupStep(r, read, port)
+		}
 		// Setup read the same copies check reports, so it reports them the same way (#576).
 		if extraCopies(read) > 0 {
 			return firewallCopiesStep(read, port)
@@ -734,6 +815,53 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 			fmt.Sprintf("allow TCP %d inbound with %s, as root", port, read.backend))
 	}
 	return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Firewall rule added: TCP %d (%s)", port, read.backend), "")
+}
+
+// iptLegacySetupStep replaces the unscoped allows for the port (#631). The
+// scoped rule goes in first, so the port is never closed in between, and a
+// failed add deletes nothing. Only the exact copies setup wrote are deleted;
+// any other unscoped allow is reported, since setup cannot know it wrote it.
+func iptLegacySetupStep(r Runner, read firewallRead, port int) SetupStep {
+	if !read.scoped {
+		if err := r.Run(backendIPT, iptablesAppend(port)...); err != nil {
+			return newStep(linuxFwName, OutcomeFailed, fmt.Sprintf("Could not add the firewall rule scoped to %s: %v", tailnetInterface, err),
+				fmt.Sprintf("allow TCP %d inbound on %s with iptables, as root; the unscoped rule is still in place", port, tailnetInterface))
+		}
+	}
+	for range read.copies {
+		if err := r.Run(backendIPT, iptablesDelete(port)...); err != nil {
+			return newStep(linuxFwName, OutcomeFailed, fmt.Sprintf("Could not delete the legacy unscoped firewall rule: %v", err),
+				fmt.Sprintf("run `iptables %s`, as root, to delete it", strings.Join(iptablesDelete(port), " ")))
+		}
+	}
+	if len(read.foreign) > 0 {
+		return newStep(linuxFwName, OutcomeManual, fmt.Sprintf("Firewall allows TCP %d on %s (iptables), but legacy unscoped rule: %s", port, tailnetInterface, strings.Join(read.foreign, "; ")),
+			iptForeignFix(read))
+	}
+	if read.scoped {
+		return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Legacy unscoped firewall rule deleted: TCP %d stays allowed by the scoped rule (iptables)", port), "")
+	}
+	return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Firewall rule replaced: TCP %d is now allowed on %s only (iptables)", port, tailnetInterface), "")
+}
+
+// iptLegacyCheckStep is the read half of iptLegacySetupStep: "changed" when
+// setup would act alone, "manual" when a rule it did not write is involved.
+func iptLegacyCheckStep(read firewallRead, port int) SetupStep {
+	held := slices.Clone(read.foreign)
+	if read.copies > 0 {
+		held = slices.Insert(held, 0, copiesHeld(read, port))
+	}
+	message := fmt.Sprintf("Firewall allows TCP %d on every interface (iptables), not only %s: legacy unscoped rule: %s", port, tailnetInterface, strings.Join(held, "; "))
+	if len(read.foreign) > 0 {
+		return newStep(linuxFwName, OutcomeManual, message, iptForeignFix(read))
+	}
+	return newStep(linuxFwName, OutcomeChanged, message,
+		fmt.Sprintf("run ts-bridge host setup as root: it adds the rule scoped to %s and deletes the unscoped one", tailnetInterface))
+}
+
+// iptForeignFix is the operator's part: setup deletes only the rule it wrote.
+func iptForeignFix(read firewallRead) string {
+	return fmt.Sprintf("scope %s to %s (`-i %s`), or remove it; setup does not delete rules it did not write", strings.Join(read.foreign, "; "), tailnetInterface, tailnetInterface)
 }
 
 // firewallUnreadable is the message and fix for a firewall that could not be
@@ -816,21 +944,21 @@ func firewallCheckStep(read firewallRead, port int) SetupStep {
 	if read.state == ruleBlocked {
 		return firewallBlockedStep(read, port)
 	}
+	if iptLegacy(read) {
+		return iptLegacyCheckStep(read, port)
+	}
 	if extraCopies(read) > 0 {
 		return firewallCopiesStep(read, port)
 	}
 	return firewallReadStep(linuxFwName, read.state == rulePresent, port)
 }
 
-// extraCopies is how many copies of setup's iptables rule the operator should
-// delete: all but one on an iptables host, where one is setup's own rule, and
-// every one on a ufw host, where setup writes through ufw and each copy is a
-// leftover that admits the port on every interface (#530).
+// extraCopies is how many copies of the legacy iptables rule the operator
+// should delete on a ufw host, where setup writes through ufw and each copy is
+// a leftover that admits the port on every interface (#530). An iptables host
+// never reaches it: setup deletes the copies itself (#631).
 func extraCopies(read firewallRead) int {
-	if read.backend == backendUFW {
-		return read.copies
-	}
-	return max(read.copies-1, 0)
+	return read.copies
 }
 
 // firewallCopiesStep reports the copies of its own rule that setup appended on
@@ -848,21 +976,18 @@ func copiesHeld(read firewallRead, port int) string {
 	if read.copies == 1 {
 		noun = "copy"
 	}
-	return fmt.Sprintf("%d %s of %s", read.copies, noun, strings.Join(iptSetupPrinted(port), " "))
+	return fmt.Sprintf("%d %s of %s", read.copies, noun, strings.Join(iptPrinted(iptablesLegacy(port)), " "))
 }
 
 // copiesFix is the delete command for the copies extraCopies counts.
 func copiesFix(read firewallRead, port int) string {
-	remains, first := "so one copy remains", ""
-	if read.backend == backendUFW {
-		remains = "so none remains: ufw manages this host's rules, and under its default deny policy each copy admits the port on every interface"
-		if read.copiesAdmit {
-			// Deleting every copy would close the port the step reports as allowed.
-			first = fmt.Sprintf("run `ufw allow %d/tcp` first, as root, since the copies are what admits the port now; then ", port)
-		}
+	first := ""
+	if read.copiesAdmit {
+		// Deleting every copy would close the port the step reports as allowed.
+		first = fmt.Sprintf("run `ufw allow %d/tcp` first, as root, since the copies are what admits the port now; then ", port)
 	}
-	return fmt.Sprintf("%srun `iptables -D %s` %d time(s), as root, %s; setup does not delete firewall rules",
-		first, strings.Join(iptablesAppend(port)[1:], " "), extraCopies(read), remains)
+	return fmt.Sprintf("%srun `iptables %s` %d time(s), as root, so none remains: ufw manages this host's rules, and under its default deny policy each copy admits the port on every interface; setup does not delete firewall rules",
+		first, strings.Join(iptablesDelete(port), " "), extraCopies(read))
 }
 
 // firewallBlockedStep reports a deny that decides the port before any allow.

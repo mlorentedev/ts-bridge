@@ -2,7 +2,9 @@ package host
 
 import (
 	"cmp"
+	"errors"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -67,7 +69,8 @@ const (
 	ufwActive  = "Status: active\n"
 	iptRead    = "iptables -S INPUT"
 	iptChain   = "iptables -S ts-input"
-	iptAppend  = "iptables -A INPUT -p tcp --dport 3389 -j ACCEPT"
+	iptAppend  = "iptables -A INPUT -i tailscale0 -p tcp --dport 3389 -j ACCEPT"
+	iptDelete  = "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT"
 	isEnabled  = "systemctl is-enabled xrdp"
 	isActive   = "systemctl is-active xrdp"
 	enableXRDP = "systemctl enable --now xrdp"
@@ -87,13 +90,18 @@ const (
 )
 
 // iptSetupRule is the rule `host setup` appends, as `iptables -S INPUT` prints
-// it (iptables 1.8.10 adds `-m tcp`; recorded end to end in BUG-492). Setup
-// before #477 appended it on every run, so old hosts carry copies (#480).
+// it (iptables 1.8.10 adds `-m tcp`; recorded end to end in BUG-492).
+// iptLegacyRule is the unscoped rule setup appended before #631, and on every
+// run before #477, so old hosts carry copies (#480).
 const (
-	iptSetupRule  = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\n"
-	iptTwoCopies  = iptEmpty + iptSetupRule + iptSetupRule
-	iptCopiesFix  = "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time"
-	iptCopiesNote = "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
+	iptSetupRule  = "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	iptLegacyRule = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	// iptForeignRule is an unscoped allow for the port that setup never wrote.
+	iptForeignRule    = "-A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT\n"
+	iptForeignPrinted = "-A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT"
+	iptTwoCopies      = iptEmpty + iptLegacyRule + iptLegacyRule
+	iptCopiesFix      = "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time"
+	iptCopiesNote     = "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
 )
 
 // tsInputDefault is tailscaled's ts-input chain as `iptables -S ts-input`
@@ -114,7 +122,7 @@ const (
 const (
 	ufwHostAdded  = ufwAddedHeader + "ufw allow 22/tcp\n"
 	ufwHostInput  = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -j ufw-before-logging-input\n-A INPUT -j ufw-before-input\n-A INPUT -j ufw-after-input\n-A INPUT -j ufw-after-logging-input\n-A INPUT -j ufw-reject-input\n-A INPUT -j ufw-track-input\n"
-	ufwHostCopies = ufwHostInput + iptSetupRule + iptSetupRule
+	ufwHostCopies = ufwHostInput + iptLegacyRule + iptLegacyRule
 )
 
 // ufwIpt is a ufw host: ufw manages the rules, iptables is the binary under it.
@@ -328,14 +336,14 @@ func TestSetupForLinux(t *testing.T) {
 		},
 		{
 			name:     "ufw, one leftover copy beside a ufw allow: still manual (#576)",
-			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault})},
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
 			message:  "1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
 		},
 		{
 			name:     "ufw unreadable, a leftover copy: setup names it as check does, no write (#576)",
-			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
 			message:  "it also holds 1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
@@ -454,11 +462,54 @@ func TestSetupForLinux(t *testing.T) {
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 		},
 		{
-			name:     "iptables, two copies of the setup rule: the same manual step as check (#576)",
+			name:     "iptables, two legacy copies and nothing else admits: scoped rule first, then both deleted (#631)",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptTwoCopies, iptChain: tsInputNoAccept})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "run "+iptDelete, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+			message:  "replaced",
+		},
+		{
+			name:     "iptables, a legacy copy beside a scoped allow: deleted, nothing added (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptScoped + iptLegacyRule, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
+			name:     "iptables, a legacy copy while ts-input admits the tailnet: deleted, nothing added (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptTwoCopies, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptDelete, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
+			name:     "iptables, an unscoped rule setup did not write: scoped rule added, nothing deleted, manual (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + iptForeignRule, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
-			message:  "but holds 2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+			message:  "legacy unscoped rule: " + iptForeignPrinted,
+			fix:      "setup does not delete",
+		},
+		{
+			name:     "iptables, a legacy copy and a foreign rule: the copy replaced, the foreign one reported (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + iptLegacyRule + iptForeignRule, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "legacy unscoped rule: " + iptForeignPrinted,
+			fix:      "setup does not delete",
+		},
+		{
+			name:     "iptables, adding the scoped rule fails: the legacy copy stays (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + iptLegacyRule, iptChain: tsInputNoAccept}), fail: map[string]bool{iptAppend: true}},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			fix:      "tailscale0",
+		},
+		{
+			name:     "iptables, deleting the legacy copy fails (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + iptLegacyRule, iptChain: tsInputNoAccept}), fail: map[string]bool{iptDelete: true}},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			message:  "legacy",
+			fix:      iptDelete,
 		},
 		{
 			name:     "iptables, no ts-input jump and no chain: appended",
@@ -624,7 +675,7 @@ func TestCheckForLinux(t *testing.T) {
 		},
 		{
 			name:     "ufw host, one leftover copy beside a ufw allow: still reported (#530)",
-			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault})},
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
@@ -676,8 +727,17 @@ func TestCheckForLinux(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
 		},
 		{
+			// What the e2e shim does: a systemctl that exits 1 and prints nothing is unread, not off (#638).
+			name:     "systemctl present, answers nothing, ufw unreadable",
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isEnabled: "", isActive: ""}), exit: map[string]int{isEnabled: 1, isActive: 1}, fail: map[string]bool{ufwAdded: true}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables"),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Unread: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
+		},
+		{
 			name:     "ufw host, ufw unreadable, a leftover copy: still reported (#530)",
-			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
@@ -754,46 +814,58 @@ func TestCheckForLinux(t *testing.T) {
 			fix:      "-A INPUT -i tailscale0 -j ts-input",
 		},
 		{
-			name:     "iptables, two copies of the setup rule",
+			name:     "iptables, two legacy copies: setup would replace them (#631)",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTwoCopies, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
-			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
-			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
-			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
-			message:  iptCopiesNote,
-			fix:      iptCopiesFix,
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "legacy unscoped rule: " + iptCopiesNote,
+			fix:      "ts-bridge host setup",
 		},
 		{
-			name:     "iptables, two copies behind tailscaled's ts-input",
+			name:     "iptables, two legacy copies behind tailscaled's ts-input (#631)",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTwoCopies, iptChain: tsInputDefault})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
-			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
-			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
-			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 			message:  iptCopiesNote,
-			fix:      iptCopiesFix,
+			fix:      "ts-bridge host setup",
 		},
 		{
-			name:     "iptables, three copies: two to delete",
-			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTwoCopies + iptSetupRule, iptChain: tsInputNoAccept})},
+			name:     "iptables, three legacy copies (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptTwoCopies + iptLegacyRule, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "3 copies",
+			fix:      "ts-bridge host setup",
+		},
+		{
+			name:     "iptables, a legacy copy beside a scoped allow (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + iptLegacyRule, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "1 copy of ",
+			fix:      "ts-bridge host setup",
+		},
+		{
+			name:     "iptables, an unscoped rule setup did not write: manual (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + iptForeignRule, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
-			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
-			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
-			message:  "3 copies",
-			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 2 time",
-		},
-		{
-			name:     "iptables, one copy beside a scoped allow",
-			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + iptSetupRule, iptChain: tsInputNoAccept})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
-			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
-			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
-			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "legacy unscoped rule: " + iptForeignPrinted,
+			fix:      "setup does not delete",
 		},
 		{
 			name:     "iptables, a drop before two copies",
-			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptDropFirst + iptSetupRule + iptSetupRule, iptChain: tsInputNoAccept})},
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptDropFirst + iptLegacyRule + iptLegacyRule, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
@@ -983,19 +1055,19 @@ func TestIptablesSetupCopies(t *testing.T) {
 		want  int
 	}{
 		{"none", iptEmpty, 0},
-		{"one", iptEmpty + iptSetupRule, 1},
+		{"one", iptEmpty + iptLegacyRule, 1},
 		{"two", iptTwoCopies, 2},
-		{"three, with a rule between", iptTwoCopies + "-A INPUT -i lo -j ACCEPT\n" + iptSetupRule, 3},
-		{"a scoped allow is not a copy", iptScoped + iptSetupRule, 1},
-		{"another port is not a copy", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n" + iptSetupRule, 1},
-		{"a drop on the port is not a copy", iptDropFirst + iptSetupRule, 1},
+		{"three, with a rule between", iptTwoCopies + "-A INPUT -i lo -j ACCEPT\n" + iptLegacyRule, 3},
+		{"a scoped allow is not a copy", iptScoped + iptLegacyRule, 1},
+		{"another port is not a copy", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n" + iptLegacyRule, 1},
+		{"a drop on the port is not a copy", iptDropFirst + iptLegacyRule, 1},
 		{"ts-input rules are not copies", iptInlineChain(iptTwoCopies, tsInputDefault), 2},
-		{"the same rule inside ts-input is not a copy", iptInlineChain(iptEmpty+iptSetupRule, tsInputDefault+"-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT\n"), 1},
+		{"the same rule inside ts-input is not a copy", iptInlineChain(iptEmpty+iptLegacyRule, tsInputDefault+"-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT\n"), 1},
 		{"setup's own command line is not the printed form", iptEmpty + "-A INPUT -p tcp --dport 3389 -j ACCEPT\n", 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := iptSetupCopies(tt.rules, 3389); got != tt.want {
+			if got := iptLegacyCopies(tt.rules, 3389); got != tt.want {
 				t.Errorf("got %d, want %d", got, tt.want)
 			}
 		})
@@ -1121,7 +1193,7 @@ func TestReadIptablesQualifiedJump(t *testing.T) {
 // limits what decides, not what is counted: copies of setup's rule behind the
 // jump are still copies (#480, #532).
 func TestReadIptablesQualifiedJumpCopies(t *testing.T) {
-	input := iptSetupRule + "-A INPUT -i tailscale0 -j ts-input\n" + iptSetupRule
+	input := iptLegacyRule + "-A INPUT -i tailscale0 -j ts-input\n" + iptLegacyRule
 	r := &recordingRunner{output: map[string]string{iptRead: input, iptChain: tsInputDefault}}
 	if got := readIptables(r, 3389); got.state != rulePresent || got.copies != 2 {
 		t.Fatalf("got state %v copies %d, want present with 2 copies", got.state, got.copies)
@@ -1183,7 +1255,6 @@ func TestCopiesFixKeepsThePortOpen(t *testing.T) {
 	}{
 		{"ufw, the copies alone admit the port", firewallRead{backend: backendUFW, copies: 2, copiesAdmit: true}, true},
 		{"ufw, ts-input admits the port too", firewallRead{backend: backendUFW, copies: 2}, false},
-		{"iptables, one copy is kept", firewallRead{backend: backendIPT, copies: 2, copiesAdmit: true}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1449,5 +1520,89 @@ func TestUFWStatusUnrecognized(t *testing.T) {
 				t.Errorf("setup wrote on an unread status: %v", runner.calls)
 			}
 		})
+	}
+}
+
+// TestIptablesPrintedForm pins that what setup appends is what `iptables -S`
+// prints, for the scoped rule and the legacy one it replaces. A disagreement
+// makes every setup read its own rule as absent and append it again (#480).
+func TestIptablesPrintedForm(t *testing.T) {
+	tests := []struct {
+		name string
+		rule []string
+		want string
+	}{
+		{"scoped rule", iptablesAppend(3389), iptSetupRule},
+		{"legacy rule", iptablesLegacy(3389), iptLegacyRule},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := strings.Join(iptPrinted(tt.rule), " "); got != strings.TrimSpace(tt.want) {
+				t.Errorf("printed %q, want %q", got, strings.TrimSpace(tt.want))
+			}
+		})
+	}
+	if got := strings.Join(iptablesAppend(3389), " "); got != strings.TrimPrefix(iptAppend, "iptables ") {
+		t.Errorf("append = %q, want %q", got, iptAppend)
+	}
+}
+
+// TestReadIptablesUnscoped pins which allows for the port are legacy: those with
+// no interface, source or destination, and a port in them (#631).
+func TestReadIptablesUnscoped(t *testing.T) {
+	tests := []struct {
+		name    string
+		rules   string
+		copies  int
+		foreign int
+		scoped  bool
+	}{
+		{"scoped rule only", iptScoped, 0, 0, true},
+		{"legacy copy only", iptEmpty + iptLegacyRule, 1, 0, false},
+		{"legacy copy beside a scoped rule", iptScoped + iptLegacyRule, 1, 0, true},
+		{"two copies", iptTwoCopies, 2, 0, false},
+		{"multiport allow", iptEmpty + iptForeignRule, 0, 1, false},
+		{"a comment on the legacy rule makes it foreign", iptEmpty + `-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "rdp" -j ACCEPT` + "\n", 0, 1, false},
+		{"a source address does not admit the tailnet", iptEmpty + "-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"another interface does not admit the tailnet", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"a legacy copy beside an eth1 rule is not scoped", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n" + iptLegacyRule, 1, 0, false},
+		{"a port-less accept is the operator's posture", iptEmpty + "-A INPUT -p tcp -j ACCEPT\n", 0, 0, true},
+		{"another port", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n", 0, 0, false},
+		{"a drop is not an allow", iptDropFirst, 0, 0, false},
+		{"ts-input admits the tailnet", iptEmpty + iptLegacyRule, 1, 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chain := tsInputNoAccept
+			if tt.name == "ts-input admits the tailnet" {
+				chain = tsInputDefault
+			}
+			r := &recordingRunner{elevated: true, output: map[string]string{iptRead: tt.rules, iptChain: chain}}
+			got := readIptables(r, 3389)
+			if got.copies != tt.copies || len(got.foreign) != tt.foreign || got.scoped != tt.scoped {
+				t.Errorf("copies %d foreign %q scoped %v, want %d, %d, %v", got.copies, got.foreign, got.scoped, tt.copies, tt.foreign, tt.scoped)
+			}
+		})
+	}
+}
+
+// The RDP line of check points at "the steps below for the cause" when a
+// service is unread (#638), so the fix of every unread step names that cause
+// and never falls back to blaming privilege.
+func TestUnreadStepFixesDoNotBlamePrivilege(t *testing.T) {
+	privilege := regexp.MustCompile(`(?i)\b(root|sudo|administrator|elevat)`)
+	steps := map[string]SetupStep{}
+	for name, x := range map[string]xrdpState{
+		"no systemd reading": {installed: true},
+		"undecided answer":   {installed: true, readable: true, undecided: "indirect"},
+	} {
+		step, _ := xrdpUnmet(x, OutcomeUnverified)
+		steps["xrdp: "+name] = step
+	}
+	steps["windows: RDP port unread"] = actRead("RDP configuration", errors.New("read failed"), "", "Could not read the RDP port from the registry", rdpEnableFix)
+	for name, step := range steps {
+		if step.Fix == "" || privilege.MatchString(step.Fix) {
+			t.Errorf("%s: fix %q should name the cause, not privilege", name, step.Fix)
+		}
 	}
 }

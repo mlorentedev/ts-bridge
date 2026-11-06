@@ -203,6 +203,19 @@ reuse an unidentified listener. Abrupt parent termination can still leave an SSH
 child holding its port (#376); identify its owner and resolve that specific
 connection, or configure distinct addresses.
 
+## Profile Store Busy
+
+`auth set`, `auth remove`, `import` and `init --profile` change the profile store under one lock,
+`locks/store.lock` beside `profiles.yaml`. A second command waits up to ten seconds and then fails
+with `another ts-bridge command is updating the profile store; retry in a moment`. Wait for the
+other command to finish and retry. `auth status`, `auth list` and `connect` only read the store, so
+they work meanwhile. The operating system releases the lock when its holder exits, so after a crash
+there is nothing to clear; do not delete the lock file.
+
+If `auth set` or `auth remove` was interrupted, `auth list` shows the damage: a credential with no
+profile is an unreferenced key (remove it with `auth remove NAME`), and `auth status --profile NAME`
+fails for a reference whose key is gone (run `auth remove --profile NAME` to clear it).
+
 ## Verify the Destination, Not Just Startup
 
 `READY`, the bridge's health endpoint and `status` output do not prove that the

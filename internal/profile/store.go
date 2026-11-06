@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"ts-bridge/internal/credential"
+	"ts-bridge/internal/secretfile"
 )
 
 // ErrNotFound marks a lookup of a profile that is not in the store. It reads as
@@ -54,13 +54,14 @@ type Runtime struct {
 
 // Store is a persistent, file-backed named-profile store.
 type Store struct {
-	path string
+	path   string
+	rename func(string, string) error
 }
 
 // NewStore returns a Store backed by the given YAML file path.
 // The file need not exist yet; it is created on the first Import.
 func NewStore(path string) *Store {
-	return &Store{path: path}
+	return &Store{path: path, rename: renameWithRetry}
 }
 
 // ControlPlaneChangeError reports an update that would move a credentialed
@@ -105,6 +106,14 @@ func bindCredential(name string, existing profileEntry, controlURL string, force
 // Changing the control URL of a credentialed profile refuses unless force is
 // set; force clears the credential reference and reports it through cleared.
 func (s *Store) Import(name string, d Descriptor, force bool) (cleared bool, err error) {
+	err = s.Update(func(*Tx) error {
+		cleared, err = s.importEntry(name, d, force)
+		return err
+	})
+	return cleared, err
+}
+
+func (s *Store) importEntry(name string, d Descriptor, force bool) (cleared bool, err error) {
 	data, err := s.load()
 	if err != nil {
 		return false, err
@@ -158,7 +167,15 @@ func (s *Store) Configure(name string, selected Profile, force bool) (cleared bo
 	return s.set(name, selected.Target, selected.ControlURL, &selected.Runtime, force)
 }
 
-func (s *Store) set(name, target, controlURL string, settings *Runtime, force bool) (bool, error) {
+func (s *Store) set(name, target, controlURL string, settings *Runtime, force bool) (cleared bool, err error) {
+	err = s.Update(func(*Tx) error {
+		cleared, err = s.setEntry(name, target, controlURL, settings, force)
+		return err
+	})
+	return cleared, err
+}
+
+func (s *Store) setEntry(name, target, controlURL string, settings *Runtime, force bool) (bool, error) {
 	if strings.TrimSpace(name) == "" {
 		return false, fmt.Errorf("profile name must not be empty")
 	}
@@ -233,16 +250,14 @@ func (s *Store) ListProfiles() (map[string]Profile, error) {
 }
 
 // SetCredential associates a managed credential name with an existing profile.
+// It refuses a name another profile references on a different control plane.
 func (s *Store) SetCredential(profileName, credentialName string) error {
-	if err := credential.ValidateName(credentialName); err != nil {
-		return fmt.Errorf("invalid credential reference: %w", err)
-	}
-	return s.updateCredential(profileName, credentialName)
+	return s.Update(func(tx *Tx) error { return tx.SetCredential(profileName, credentialName) })
 }
 
 // ClearCredential removes the managed credential reference from a profile.
 func (s *Store) ClearCredential(profileName string) error {
-	return s.updateCredential(profileName, "")
+	return s.Update(func(tx *Tx) error { return tx.ClearCredential(profileName) })
 }
 
 func (s *Store) updateCredential(profileName, credentialName string) error {
@@ -271,7 +286,7 @@ func profileFromEntry(entry profileEntry) Profile {
 func (s *Store) load() (storeFile, error) {
 	f := storeFile{Profiles: make(map[string]profileEntry)}
 
-	// #nosec G304 -- path is supplied by the caller (config or default); not user-controlled input.
+	// #nosec G304 G703 -- path is supplied by the caller (config or default); not user-controlled input.
 	raw, err := os.ReadFile(s.path)
 	if os.IsNotExist(err) {
 		return f, nil
@@ -290,6 +305,7 @@ func (s *Store) load() (storeFile, error) {
 }
 
 func (s *Store) save(data storeFile) error {
+	// #nosec G703 -- path is the configured profile store, as in load.
 	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
 		return fmt.Errorf("create profile store directory: %w", err)
 	}
@@ -299,8 +315,9 @@ func (s *Store) save(data storeFile) error {
 		return fmt.Errorf("marshal profile store: %w", err)
 	}
 
-	// #nosec G306 -- profile store is user-readable config, not secrets.
-	if err := os.WriteFile(s.path, raw, 0600); err != nil {
+	// Replaced whole, so a reader or a crash sees the old store or the new one,
+	// never a truncated file.
+	if err := secretfile.WriteFileWith(s.path, raw, s.rename); err != nil {
 		return fmt.Errorf("write profile store %s: %w", s.path, err)
 	}
 	return nil

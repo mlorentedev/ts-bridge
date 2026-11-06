@@ -22,8 +22,8 @@ func TestProfileLockLifecycle(t *testing.T) {
 	if duplicate, err := store.Lock("office"); err == nil {
 		_ = duplicate.Close()
 		t.Fatal("same-profile ownership was granted twice")
-	} else if !strings.Contains(err.Error(), "already connected") {
-		t.Fatalf("duplicate error is not actionable: %v", err)
+	} else if !strings.Contains(err.Error(), "already connected") || !strings.Contains(err.Error(), `"office"`) {
+		t.Fatalf("duplicate error is not actionable or does not name the profile: %v", err)
 	}
 	for _, name := range []string{"other", "../office"} {
 		independent, err := store.Lock(name)
