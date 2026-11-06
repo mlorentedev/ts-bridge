@@ -290,7 +290,8 @@ decorative banner — the `READY` and `ERROR` lines still print.
 | `TS_CONTROL_URL` | — | Custom control plane URL for Headscale. |
 | `TS_BOOTSTRAP_SSH` | — | OpenSSH endpoint (`user@host[:port]`) used to reach a blocked custom control plane. |
 | `TS_BOOTSTRAP_SOCKS_ADDR` | `127.0.0.1:1055` | Loopback SOCKS listener created by the SSH bootstrap. |
-| `TS_HEALTH_ADDR` | — | Enable health/metrics HTTP server. |
+| `TS_HEALTH_ADDR` | — | Enable health/metrics HTTP server. Loopback only unless `TS_HEALTH_ALLOW_REMOTE` is set. |
+| `TS_HEALTH_ALLOW_REMOTE` | `false` | Accept a non-loopback `TS_HEALTH_ADDR` (`--health-allow-remote`). Exposes `/metrics` and the readiness reason to the network, unauthenticated. |
 | `TS_VERBOSE` | `false` | Debug logging. |
 | `TS_LOG_FORMAT` | `text` | `text` (console) or `json` (file). |
 

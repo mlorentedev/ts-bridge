@@ -230,7 +230,7 @@ func validateControlURL(raw *string) error {
 var (
 	topKeys      = []string{"version", "host"}
 	hostKeys     = []string{"services", "firewall", "power", "control_url", "mesh"}
-	serviceKeys  = []string{"kind", "port"}
+	serviceKeys  = []string{"kind", keyPort}
 	firewallKeys = []string{"rule"}
 	powerKeys    = []string{"prevent_sleep"}
 	meshKeys     = []string{"bootstrap_ssh", "bootstrap_socks_addr", "hostname", keyStateDir, keyAuthKeyFile, "health_addr"}

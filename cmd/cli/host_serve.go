@@ -174,7 +174,7 @@ func startServeBootstrap(ctx context.Context, plan servePlan, stderr io.Writer, 
 	if err != nil {
 		return nil, fmt.Errorf("start SSH control-plane bootstrap: %w", err)
 	}
-	if err := controlProxyConfigurer(ctx, plan.node.ControlURL, socks); err != nil {
+	if err := controlProxyConfigurer(ctx, plan.node.ControlURL, socks, plan.logger); err != nil {
 		_ = tunnel.Close()
 		return nil, fmt.Errorf("configure SSH control-plane bootstrap: %w", err)
 	}
