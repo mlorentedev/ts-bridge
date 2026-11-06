@@ -205,6 +205,12 @@ func parseDiscoverFlags(cmd *cobra.Command) (discoverFlags, error) {
 	f.Tailnet, _ = cmd.Flags().GetString("tailnet")
 	f.Profile, _ = cmd.Flags().GetString("profile")
 
+	if cmd.Flags().Changed("profile") && f.Profile == "" {
+		return f, fmt.Errorf("--profile needs a name")
+	}
+	if f.JSON && f.Profile != "" {
+		return f, fmt.Errorf("--json saves nothing: drop --json to save the host as profile %q", f.Profile)
+	}
 	if f.Port < 1 || f.Port > 65535 {
 		return f, fmt.Errorf("invalid port %d (must be 1-65535)", f.Port)
 	}

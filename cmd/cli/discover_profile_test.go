@@ -114,3 +114,28 @@ func TestDiscoverHelpDescribesProfileInteraction(t *testing.T) {
 		}
 	}
 }
+
+// --profile with an empty name would fall through to the .env write it exists to
+// replace, and --json returns before anything is saved, so both are refused.
+func TestDiscoverRefusesAProfileItCannotSave(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"empty name", []string{"--auto", "--profile", ""}, "--profile needs a name"},
+		{"with --json", []string{"--json", "--profile", "office"}, "--json saves nothing"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newDiscoverCmd()
+			if err := cmd.ParseFlags(tt.args); err != nil {
+				t.Fatalf("ParseFlags: %v", err)
+			}
+			_, err := parseDiscoverFlags(cmd)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("parseDiscoverFlags(%q) error = %v, want it to contain %q", tt.args, err, tt.want)
+			}
+		})
+	}
+}
