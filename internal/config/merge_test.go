@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -1053,6 +1054,51 @@ func TestMergeLocalAddrDefaultNeverWildcard(t *testing.T) {
 			}
 		})
 	}
+}
+
+// An exhausted --port-range must fail Merge the way the env path does. Dropping
+// the error left LocalAddr empty, and net.Listen("tcp", "") binds every
+// interface (#589, #620).
+func TestMergeFailsWhenPortRangeIsExhausted(t *testing.T) {
+	for _, key := range stateEnvKeys {
+		t.Setenv(key, "")
+	}
+	t.Setenv("TS_TARGET", "")
+	t.Setenv("TS_AUTHKEY", "")
+	t.Setenv("TS_PORT_RANGE", "")
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	flags := FlagSet{
+		Target:    "100.64.0.1:3389",
+		AuthKey:   "tskey-auth-test-secret",
+		PortRange: strconv.Itoa(port) + "-" + strconv.Itoa(port),
+	}
+
+	t.Run("real selector with the only port occupied", func(t *testing.T) {
+		_, err := Merge(PartialConfig{}, flags)
+		if err == nil || !strings.Contains(err.Error(), "TS_PORT_RANGE has no free ports") {
+			t.Fatalf("error = %v, want one containing %q", err, "TS_PORT_RANGE has no free ports")
+		}
+	})
+
+	t.Run("selector seam reporting exhaustion", func(t *testing.T) {
+		original := selectAvailablePort
+		t.Cleanup(func() { selectAvailablePort = original })
+		selectAvailablePort = func(_ string, start, end int) (int, error) {
+			return 0, fmt.Errorf("TS_PORT_RANGE has no free ports in %d-%d", start, end)
+		}
+
+		cfg, err := Merge(PartialConfig{}, flags)
+		if err == nil || !strings.Contains(err.Error(), "TS_PORT_RANGE has no free ports") {
+			t.Fatalf("error = %v (LocalAddr %q), want the exhaustion error", err, cfg.LocalAddr)
+		}
+	})
 }
 
 func boolPtr(b bool) *bool {
