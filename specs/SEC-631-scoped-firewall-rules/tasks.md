@@ -44,7 +44,7 @@ the last says `Closes #631`.
 - [ ] The ufw inactive path writes the scoped allow and replaces ufw's legacy allow
 - [ ] `scripts/e2e/linux.sh`: the drift and cleanup cases use the scoped form; a hand-added
   `ufw allow 3389/tcp` is reported by check and replaced by setup
-- [x] `make e2e-linux` green (56 pass, 0 fail)
+- [ ] `make e2e-linux` green
 
 ## PR 4 - Windows
 
