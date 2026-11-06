@@ -49,7 +49,7 @@ PR 3 (Linux ufw):
 
 ## Decisions made during implementation
 
-See the proposal: two-tier replacement, Windows built-in group left as is, fixed `tailscale0`.
+See the proposal: two-tier replacement, Windows built-in group reported but not disabled, fixed `tailscale0`.
 
 - PR 2 changes the copies machinery's meaning (#480, #530, #576): a "copy" is now a copy of the
   legacy unscoped rule. On an iptables host setup deletes all of them (before, one was setup's own
