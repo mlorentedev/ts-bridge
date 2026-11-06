@@ -53,11 +53,11 @@ func TestAclWriters(t *testing.T) {
 		{"owner only", aclBytes(2, base...), nil, ""},
 		{"named user with write", aclBytes(2, with(aclEnt{tagUser, 7, 1000}, aclEnt{tagMask, 7, noID})...), []string{"user 1000"}, ""},
 		{"named user read only", aclBytes(2, with(aclEnt{tagUser, 5, 1000}, aclEnt{tagMask, 7, noID})...), nil, ""},
-		{"named user write masked out", aclBytes(2, with(aclEnt{tagUser, 7, 1000}, aclEnt{tagMask, 5, noID})...), nil, ""},
+		// Ineffective today, one chmod g+w from effective: refused all the same.
+		{"named user write masked out", aclBytes(2, with(aclEnt{tagUser, 7, 1000}, aclEnt{tagMask, 5, noID})...), []string{"user 1000"}, ""},
 		{"named group with write", aclBytes(2, with(aclEnt{tagGroup, 2, 1000}, aclEnt{tagMask, 7, noID})...), []string{"group 1000"}, ""},
 		{"named root user with write", aclBytes(2, with(aclEnt{tagUser, 7, 0}, aclEnt{tagMask, 7, noID})...), nil, ""},
 		{"named root group with write", aclBytes(2, with(aclEnt{tagGroup, 7, 0}, aclEnt{tagMask, 7, noID})...), nil, ""},
-		{"write with no mask to limit it", aclBytes(2, with(aclEnt{tagUser, 2, 1000})...), []string{"user 1000"}, ""},
 		{"every writer is named", aclBytes(2, with(aclEnt{tagUser, 6, 7}, aclEnt{tagGroup, 3, 9}, aclEnt{tagUser, 4, 8}, aclEnt{tagMask, 7, noID})...), []string{"user 7", "group 9"}, ""},
 		{"empty", nil, nil, "malformed"},
 		{"header only", aclBytes(2), nil, ""},
@@ -92,11 +92,11 @@ func TestAncestorAt_ACL(t *testing.T) {
 		acl     func(string) ([]byte, error)
 		wantErr string
 	}{
-		{"named user write refused", dir, func(string) ([]byte, error) { return writeACL, nil }, "ancestor /srv: its ACL lets user 1000 write"},
+		{"named user write refused", dir, func(string) ([]byte, error) { return writeACL, nil }, "ancestor /srv: its ACL grants write to user 1000"},
 		{"no ACL as today", dir, func(string) ([]byte, error) { return nil, nil }, ""},
-		{"masked out write passes", dir, func(string) ([]byte, error) {
+		{"masked out write refused", dir, func(string) ([]byte, error) {
 			return aclBytes(2, with(aclEnt{tagUser, 7, 1000}, aclEnt{tagMask, 5, noID})...), nil
-		}, ""},
+		}, "ancestor /srv: its ACL grants write to user 1000"},
 		{"unreadable ACL refused", dir, func(string) ([]byte, error) { return nil, fs.ErrPermission }, "ancestor /srv: read its ACL"},
 		{"malformed ACL refused", dir, func(string) ([]byte, error) { return []byte{1, 2, 3}, nil }, "ancestor /srv: malformed POSIX ACL"},
 		{"ACLs not read", dir, nil, ""},
@@ -119,5 +119,17 @@ func TestAncestorAt_ACL(t *testing.T) {
 				t.Fatalf("ancestorAt() = %v, want %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+// A directory root does not own fails on its owner, and its ACL is not read.
+func TestAncestorAt_ACLNotReadForForeignOwner(t *testing.T) {
+	afs := ancestorFS{
+		lstat: func(string) (fs.FileInfo, uint32, error) { return fakeInfo{fs.ModeDir | 0o755}, 1000, nil },
+		acl:   func(string) ([]byte, error) { t.Error("read the ACL of a directory root does not own"); return nil, nil },
+	}
+	_, err := ancestorAt("state_dir", "/srv/state", "/srv", afs)
+	if err == nil || !strings.Contains(err.Error(), "owned by uid 1000") {
+		t.Fatalf("ancestorAt() = %v, want the owner refusal", err)
 	}
 }

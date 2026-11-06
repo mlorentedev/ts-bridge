@@ -160,15 +160,21 @@ func ancestorAt(label, path, dir string, afs ancestorFS) (fs.FileInfo, error) {
 	case err != nil:
 		return nil, fmt.Errorf("%s %s: ancestor %s: %w", label, path, dir, err)
 	}
-	if err := checkAncestor(label, path, dir, info, uid); err != nil {
-		return info, err
+	// The ACL first: it names the principal, where the group bits setfacl raises
+	// say only that someone may write. A directory root does not own fails on its
+	// owner in checkAncestor, whatever its ACL.
+	if uid == 0 {
+		if err := checkAncestorACL(label, path, dir, info, afs); err != nil {
+			return info, err
+		}
 	}
-	return info, checkAncestorACL(label, path, dir, info, afs)
+	return info, checkAncestor(label, path, dir, info, uid)
 }
 
-// checkAncestorACL refuses a directory whose access ACL lets a user or group
-// other than root write (#598). st_mode does not show a named entry as such, and
-// a link has no ACL of its own: the walk reads its target.
+// checkAncestorACL refuses a directory whose access ACL names a user or group
+// other than root with write (#598). st_mode shows a named entry only as the
+// group bits, through the mask. A link has no ACL of its own: the walk reads
+// its target.
 func checkAncestorACL(label, path, dir string, info fs.FileInfo, afs ancestorFS) error {
 	if afs.acl == nil || !info.IsDir() {
 		return nil
@@ -185,7 +191,7 @@ func checkAncestorACL(label, path, dir string, info fs.FileInfo, afs ancestorFS)
 		return fmt.Errorf("%s %s: ancestor %s: %w", label, path, dir, err)
 	}
 	if len(writers) > 0 {
-		return fmt.Errorf("%s %s: ancestor %s: its ACL lets %s write", label, path, dir, strings.Join(writers, ", "))
+		return fmt.Errorf("%s %s: ancestor %s: its ACL grants write to %s", label, path, dir, strings.Join(writers, ", "))
 	}
 	return nil
 }
