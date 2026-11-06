@@ -43,6 +43,32 @@ var loggingInstance *logging.Logger
 
 var errSSHBootstrapExited = errors.New("SSH bootstrap exited")
 
+// tailnetNode is the part of the tsnet server runBridge uses: it dials mesh
+// targets for the proxy and is closed on the way out.
+type tailnetNode interface {
+	proxy.Dialer
+	Close() error
+}
+
+// tailnetNodeStarter brings the node up. Tests replace it so runBridge's
+// lifecycle (listen, drain, close) runs without a control plane.
+var tailnetNodeStarter = func(ctx context.Context, cfg config.Config) (tailnetNode, error) {
+	server, err := initTailscale(ctx, cfg)
+	if err != nil {
+		// Return an untyped nil: a nil *tsnet.Server in the interface would
+		// read as a live node.
+		return nil, err
+	}
+	return server, nil
+}
+
+// removeAllFn and cleanupSleep are the filesystem and clock the ephemeral
+// state cleanup uses; tests replace them to exercise the retry loop.
+var (
+	removeAllFn  = os.RemoveAll
+	cleanupSleep = time.Sleep
+)
+
 type controlBootstrap interface {
 	Done() <-chan struct{}
 	Err() error
@@ -103,7 +129,7 @@ func ensureStateDir(dir string) error {
 //nolint:unused // wired into Runner = run
 func cleanupEphemeralStateDir(dir string) {
 	for attempt := 1; attempt <= cleanupMaxAttempts; attempt++ {
-		err := os.RemoveAll(dir)
+		err := removeAllFn(dir)
 		if err == nil || os.IsNotExist(err) {
 			if logger != nil {
 				logger.Debug("cleaned up ephemeral state directory", "path", dir, "attempt", attempt)
@@ -121,7 +147,7 @@ func cleanupEphemeralStateDir(dir string) {
 			return
 		}
 
-		time.Sleep(time.Duration(attempt) * cleanupRetryDelay)
+		cleanupSleep(time.Duration(attempt) * cleanupRetryDelay)
 	}
 }
 
@@ -193,7 +219,7 @@ func runBridge(
 	cfg config.Config,
 	onReady func() error,
 ) error {
-	server, err := initTailscale(ctx, cfg)
+	server, err := tailnetNodeStarter(ctx, cfg)
 	if err != nil {
 		if runErr := emitRunCause(ctx, os.Stderr); runErr != nil {
 			return runErr

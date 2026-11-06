@@ -4,7 +4,6 @@ package logging
 
 import (
 	"compress/gzip"
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -89,7 +88,7 @@ func (l *Logger) File() *slog.Logger {
 // Use this for logs that should appear in both places.
 func (l *Logger) Combined() *slog.Logger {
 	if l.file != nil {
-		return slog.New(NewMultiHandler(l.console.Handler(), l.file.Handler()))
+		return slog.New(slog.NewMultiHandler(l.console.Handler(), l.file.Handler()))
 	}
 	return l.console
 }
@@ -108,55 +107,6 @@ func (l *Logger) LogPath() string {
 		return ""
 	}
 	return l.fileRot.CurrentPath()
-}
-
-// --- MultiHandler: writes to multiple slog handlers ---
-
-type multiHandler struct {
-	handlers []slog.Handler
-}
-
-func NewMultiHandler(hs ...slog.Handler) slog.Handler {
-	return &multiHandler{handlers: hs}
-}
-
-//nolint:contextcheck // slog.Handler interface requires context but we don't need one here.
-func (m *multiHandler) Enabled(_ context.Context, level slog.Level) bool {
-	for _, h := range m.handlers {
-		if h.Enabled(context.TODO(), level) {
-			return true
-		}
-	}
-	return false
-}
-
-//nolint:contextcheck // slog.Handler interface requires context but we don't need one here.
-func (m *multiHandler) Handle(_ context.Context, r slog.Record) error {
-	var firstErr error
-	for _, h := range m.handlers {
-		if h.Enabled(context.TODO(), r.Level) {
-			if err := h.Handle(context.TODO(), r); err != nil && firstErr == nil {
-				firstErr = err
-			}
-		}
-	}
-	return firstErr
-}
-
-func (m *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	handlers := make([]slog.Handler, len(m.handlers))
-	for i, h := range m.handlers {
-		handlers[i] = h.WithAttrs(attrs)
-	}
-	return &multiHandler{handlers: handlers}
-}
-
-func (m *multiHandler) WithGroup(name string) slog.Handler {
-	handlers := make([]slog.Handler, len(m.handlers))
-	for i, h := range m.handlers {
-		handlers[i] = h.WithGroup(name)
-	}
-	return &multiHandler{handlers: handlers}
 }
 
 // --- File Rotator: daily rotation with gzip compression ---
