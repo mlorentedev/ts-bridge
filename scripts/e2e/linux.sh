@@ -124,6 +124,25 @@ mesh /var/lib/ts-bridge-e2e /tmp/e2e-key >"$W/key.yaml"
 run timeout 20 "$B" host serve --config "$W/key.yaml"
 ok "serve: auth_key_file under /tmp refused" -- 'code 1 && has "/tmp"'
 
+# POSIX ACLs on a state_dir ancestor (#598). A named user with write makes the setfacl mask rwx, which
+# the group bits mirror: the cases pin what serve answers, not which layer notices.
+install -d -m 0755 /var/lib/acl-e2e && install -d -m 0755 /etc/ts-bridge && echo k >/etc/ts-bridge/e2e-key && chmod 600 /etc/ts-bridge/e2e-key
+mesh /var/lib/acl-e2e/state /etc/ts-bridge/e2e-key >"$W/acl.yaml"
+setfacl -m u:nobody:rwx /var/lib/acl-e2e
+ok "acl: setfacl raises the mask, and stat shows it as the group bits (0775)" -- '[ "$(stat -c %a /var/lib/acl-e2e)" = 775 ]'
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a named-user write ACL refused, naming it and the ACL" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL"'
+setfacl -b /var/lib/acl-e2e && setfacl -m u:nobody:r-x /var/lib/acl-e2e
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a read-only named-user ACL is not refused" -- '! has "ancestor"'
+setfacl -b /var/lib/acl-e2e && setfacl -n -m u:nobody:rwx,m::r-x /var/lib/acl-e2e
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: a named-user write the ACL mask removes is not refused" -- '! has "ancestor"'
+setfacl -b /var/lib/acl-e2e && setfacl -m g:nogroup:rwx /var/lib/acl-e2e
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a named-group write ACL refused, naming it and the ACL" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL"'
+setfacl -b /var/lib/acl-e2e
+
 run "$B" import e2e "tsb://host-e2e:3389?cp=saas"
 ok "client: import a tsb:// descriptor" -- 'code 0'
 run "$B" import bad "http://nope"

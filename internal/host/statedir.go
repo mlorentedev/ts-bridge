@@ -35,8 +35,8 @@ func checkUnixAncestor(path, dir string, info fs.FileInfo, uid uint32) error {
 // checkAncestor accepts an ancestor dir of path, the setting label names, that
 // only root can change: a root-owned directory no group or other may write (a
 // sticky world-writable /tmp included), or a root-owned symlink, whose target
-// the walk then checks the same way (#561, #595). Only st_mode is read: a POSIX
-// ACL granting write on an ancestor is not seen.
+// the walk then checks the same way (#561, #595). Only st_mode is read here; a
+// POSIX ACL is read by checkAncestorACL (#598).
 func checkAncestor(label, path, dir string, info fs.FileInfo, uid uint32) error {
 	switch {
 	case info.Mode()&fs.ModeSymlink != 0:
