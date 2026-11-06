@@ -43,7 +43,7 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 	fw := readLinuxFirewall(r, port)
 	xrdp := xrdpCheckStep(x)
 	result.Steps = append(result.Steps, xrdp, firewallCheckStep(fw, port))
-	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent, Unread: xrdp.Outcome == OutcomeUnverified}
+	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent && !fw.ufwInactive, Unread: xrdp.Outcome == OutcomeUnverified}
 	if x.readable {
 		active := x.active
 		svc.Active = &active
@@ -163,6 +163,10 @@ type firewallRead struct {
 	decidedBy string // the tool whose rules decided state, when not backend: iptables on a ufw host (#530)
 	// copiesAdmit means the copies are the only allow: without them the port is closed (#576).
 	copiesAdmit bool
+	// ufwInactive means `ufw status` says inactive: ufw enforces none of its
+	// rules, so its allow admits nothing and its absence closes nothing (#608).
+	ufwInactive bool
+	ufwAllows   bool // ufw's own rules allow the port, whatever iptables decided
 }
 
 // source names the tool whose rules decided the read, for messages; backend
@@ -202,11 +206,15 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 // only ufw's "absent" defers to the iptables read, whose unknown answer stands.
 func readUFW(r Runner, port int) firewallRead {
 	read := firewallRead{backend: backendUFW}
-	out, ufwErr := r.Output(backendUFW, "show", "added")
-	if ufwErr != nil {
+	active, reason := readUFWStatus(r)
+	read.ufwInactive = reason == "" && !active
+	if reason != "" {
+		read.reason = reason
+	} else if out, ufwErr := r.Output(backendUFW, "show", "added"); ufwErr != nil {
 		read.reason = fmt.Sprintf("ufw show added: %v", ufwErr)
 	} else {
 		read.state, read.blockedBy = ufwDecide(string(out), port)
+		read.ufwAllows = read.state == rulePresent
 	}
 	if _, err := r.LookPath(backendIPT); err != nil {
 		return read
@@ -222,6 +230,24 @@ func readUFW(r Runner, port int) firewallRead {
 		read.decidedBy = backendIPT
 	}
 	return read
+}
+
+// readUFWStatus reads whether ufw is active from the first line of `ufw
+// status`, which execRunner runs under LC_ALL=C so the words are ufw's own.
+// An answer that is neither is no read: reason says why.
+func readUFWStatus(r Runner) (active bool, reason string) {
+	out, err := r.Output(backendUFW, "status")
+	if err != nil {
+		return false, fmt.Sprintf("ufw status: %v", err)
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	switch strings.TrimSpace(first) {
+	case "Status: active":
+		return true, ""
+	case "Status: inactive":
+		return false, ""
+	}
+	return false, fmt.Sprintf("ufw status printed %q, neither active nor inactive", first)
 }
 
 // tsInputChain is the chain tailscaled fills with `-i tailscale0 -j ACCEPT`;
@@ -668,6 +694,9 @@ func portListHas(list string, port int) bool {
 
 func firewallSetupStep(r Runner, port int) SetupStep {
 	read := readLinuxFirewall(r, port)
+	if read.ufwInactive && read.state != ruleUnknown {
+		return ufwInactiveSetupStep(r, read, port)
+	}
 	switch read.state {
 	case rulePresent:
 		// Setup read the same copies check reports, so it reports them the same way (#576).
@@ -706,10 +735,37 @@ func firewallUnreadable(read firewallRead, port int, command string) (message, f
 	return message, fix
 }
 
+// ufwInactiveSetupStep adds ufw's allow when it has none, so the port stays
+// open once ufw is enabled, and reports that nothing enforces it until then.
+func ufwInactiveSetupStep(r Runner, read firewallRead, port int) SetupStep {
+	if read.ufwAllows {
+		return ufwInactiveStep(port, "its allow is in place for when ufw is enabled")
+	}
+	if err := r.Run(backendUFW, "allow", fmt.Sprintf("%d/tcp", port)); err != nil {
+		return newStep(linuxFwName, OutcomeFailed, fmt.Sprintf("ufw is inactive, and adding its allow failed: %v", err),
+			fmt.Sprintf("run `ufw allow %d/tcp` as root, then enable ufw with `ufw enable`", port))
+	}
+	return ufwInactiveStep(port, "allow added (ufw) for when ufw is enabled")
+}
+
+// ufwInactiveStep is manual: enabling a firewall can cut the operator's own
+// access, so setup never runs `ufw enable` itself.
+func ufwInactiveStep(port int, state string) SetupStep {
+	return newStep(linuxFwName, OutcomeManual,
+		fmt.Sprintf("ufw is inactive, so it filters nothing: TCP %d is reachable on every interface unless another firewall stops it; %s", port, state),
+		"enable ufw with `ufw enable`, as root, after allowing any port you reach this host through (SSH), or confirm another firewall filters this host")
+}
+
 func firewallCheckStep(read firewallRead, port int) SetupStep {
 	if read.state == ruleUnknown {
 		message, fix := firewallUnreadable(read, port, "check")
 		return newStep(linuxFwName, OutcomeUnverified, message, fix)
+	}
+	if read.ufwInactive {
+		if read.ufwAllows {
+			return ufwInactiveStep(port, "its allow is in place for when ufw is enabled")
+		}
+		return ufwInactiveStep(port, fmt.Sprintf("it holds no allow for TCP %d yet, which ts-bridge host setup adds", port))
 	}
 	if read.state == ruleBlocked {
 		return firewallBlockedStep(read, port)
