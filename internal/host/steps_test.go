@@ -2,6 +2,7 @@ package host
 
 import (
 	"errors"
+	"io/fs"
 	"os/exec"
 	"reflect"
 	"strconv"
@@ -20,6 +21,7 @@ type recordingRunner struct {
 	onPath map[string]bool   // LookPath hits
 	exit   map[string]int    // joined command -> Run/Output fails with this exit status
 	stderr map[string]string // joined command -> stderr an exit failure carries, as *exec.ExitError does
+	files  map[string]string // path -> contents; ReadFile records no call, WriteFile does
 	// elevated is what Elevated reports; it records no call.
 	elevated bool
 }
@@ -31,6 +33,26 @@ func (e exitError) Error() string { return "exit status " + strconv.Itoa(int(e))
 func (e exitError) ExitCode() int { return int(e) }
 
 func (r *recordingRunner) Elevated() bool { return r.elevated }
+
+func (r *recordingRunner) ReadFile(path string) ([]byte, error) {
+	data, ok := r.files[path]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	return []byte(data), nil
+}
+
+func (r *recordingRunner) WriteFile(path string, data []byte) error {
+	r.calls = append(r.calls, "writefile "+path)
+	if r.fail["writefile "+path] {
+		return errors.New("permission denied")
+	}
+	if r.files == nil {
+		r.files = map[string]string{}
+	}
+	r.files[path] = string(data)
+	return nil
+}
 
 func (r *recordingRunner) record(kind, name string, args []string) string {
 	cmd := strings.Join(append([]string{name}, args...), " ")
