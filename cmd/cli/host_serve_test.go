@@ -77,11 +77,12 @@ func runHostServeOn(t *testing.T, node *fakeServeNode, goos string, args []strin
 	if ensure == nil {
 		ensure = func(string) error { return nil }
 	}
-	c := cmdpkg.HostServeCmdForTest(t, goos, start, ensure)
+	cmdpkg.HostServeCmdForTest(t, goos, start, ensure)
+	c := cmdpkg.NewRootCmd()
 	var out, errOut bytes.Buffer
 	c.SetOut(&out)
 	c.SetErr(&errOut)
-	c.SetArgs(args)
+	c.SetArgs(append([]string{"host", "serve"}, args...))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	run.err = c.ExecuteContext(ctx)
@@ -308,6 +309,39 @@ func TestHostServeCmd_Ready(t *testing.T) {
 		if len(run.node.addrs) != 1 || run.node.addrs[0] != ":3390" || !run.node.closed {
 			t.Errorf("node listened on %v (closed %v), want only :3390 and closed on exit", run.node.addrs, run.node.closed)
 		}
+	}
+}
+
+func TestHostServeCmd_ExistingSSHAndRDP(t *testing.T) {
+	tests := []struct {
+		name, services, ready string
+		addrs                 []string
+	}{
+		{"ssh first", "    - kind: ssh\n      port: 22\n    - kind: rdp\n      port: 45000\n",
+			"services=ssh:22,rdp:45000", []string{":22", ":45000"}},
+		{"rdp first", "    - kind: rdp\n      port: 45000\n    - kind: ssh\n      port: 22\n",
+			"services=rdp:45000,ssh:22", []string{":45000", ":22"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path, _ := serveFile(t, "")
+			body, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeTestFile(t, path, strings.Replace(string(body),
+				"    - kind: rdp\n      port: 3390\n", tc.services, 1))
+			run := runHostServe(t, serveGOOS(), []string{"--config", path}, []string{"tag:lab"}, nil)
+			if run.err != nil {
+				t.Fatalf("host serve rejected existing services: %v", run.err)
+			}
+			if !strings.Contains(run.stdout, "READY node=lab-01 "+tc.ready+" enrolled=true\n") {
+				t.Errorf("stdout = %q, want both declared services in READY", run.stdout)
+			}
+			if !slices.Equal(run.node.addrs, tc.addrs) || !run.node.closed {
+				t.Errorf("listen addresses = %v, closed = %v; want %v and closed", run.node.addrs, run.node.closed, tc.addrs)
+			}
+		})
 	}
 }
 

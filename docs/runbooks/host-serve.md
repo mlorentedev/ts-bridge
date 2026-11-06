@@ -28,6 +28,11 @@ recipes below register it.
   `known_hosts` readable by the account serve runs as. See
   [SSH Control Bootstrap](guide-control-bootstrap.md).
 - Windows and Linux. macOS refuses `host.mesh` until #459.
+- SSH and RDP must already be provisioned and listening locally. Serve can publish
+  both on Windows and Linux, but does not install or configure either service.
+  `host setup` and `host check` retain their stricter OS-step contract and reject
+  SSH declarations until #521 adds those convergence steps. `host init` still
+  generates an RDP-only file.
 
 ## 1. Write the host file
 
@@ -39,6 +44,8 @@ host:
   services:
     - kind: rdp
       port: 3389
+    - kind: ssh
+      port: 22
   mesh:
     hostname: lab-pc-01
     state_dir: 'C:\ProgramData\ts-bridge\serve'      # /var/lib/ts-bridge/serve on Linux
@@ -131,8 +138,13 @@ With `health_addr` declared:
 
 ```sh
 curl -s http://127.0.0.1:9099/health/ready
-ts-bridge host check --json --config /etc/ts-bridge/host.yaml   # services[].published
 ```
+
+The response lists each declared service and its `published` diagnostic. For an
+RDP-only file, `host check --json --config <path>` can read the same diagnostic.
+It still rejects a combined SSH/RDP file until #521 supplies the SSH OS steps;
+read serve's health endpoint directly for that file instead. Do not remove SSH
+from the file and count the RDP-only result as combined-service acceptance.
 
 `published` is a diagnostic: it trusts a responder that names the file's node,
 which proves the contract, not the process. The tailnet ACL governs who can
