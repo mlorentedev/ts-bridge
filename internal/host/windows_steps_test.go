@@ -398,7 +398,7 @@ func TestWindowsDeclaredRDPPort(t *testing.T) {
 			var res CheckResult
 			checkWindows(tt.cfg, denyRunner("", "0", false), &res)
 			setup := setupWindows(tt.cfg, denyRunner("", "0", false))
-			for which, s := range map[string]SetupStep{"check": res.Steps[0], "setup": stepNamed(setup.Steps, "RDP configuration")} {
+			for which, s := range map[string]SetupStep{"check": res.Steps[0], "setup": stepNamedIn(setup.Steps, "RDP configuration")} {
 				if s.Outcome != tt.want {
 					t.Errorf("%s: %s %q, want %s", which, s.Outcome, s.Message, tt.want)
 				}
@@ -410,7 +410,53 @@ func TestWindowsDeclaredRDPPort(t *testing.T) {
 	}
 }
 
-func stepNamed(steps []SetupStep, name string) SetupStep {
+// check reads the power timeouts setup converges, and never writes them (#652).
+// A non-zero AC timeout is drift ("changed": setup would change it, ADR-017
+// §2); an unreadable one is "failed", since check cannot tell.
+func TestWindowsPowerCheckStep(t *testing.T) {
+	const standby, hibernate, monitor = "powercfg /query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE",
+		"powercfg /query SCHEME_CURRENT SUB_SLEEP HIBERNATEIDLE", "powercfg /query SCHEME_CURRENT SUB_VIDEO VIDEOIDLE"
+	zero, on := powercfgQuery("0x00000000", "0x00000384"), powercfgQuery("0x00000384", "0x00000384")
+	tests := []struct {
+		name    string
+		output  map[string]string
+		fail    map[string]bool
+		outcome Outcome
+		message string
+	}{
+		{"all zero", map[string]string{standby: zero, hibernate: zero, monitor: zero}, nil, OutcomeOK, ""},
+		{"standby on", map[string]string{standby: on, hibernate: zero, monitor: zero}, nil, OutcomeChanged, "standby-timeout-ac"},
+		{"standby and monitor on", map[string]string{standby: on, hibernate: zero, monitor: on}, nil, OutcomeChanged, "standby-timeout-ac, monitor-timeout-ac"},
+		{"monitor unreadable", map[string]string{standby: zero, hibernate: zero}, nil, OutcomeFailed, "monitor-timeout-ac"},
+		{"powercfg fails", map[string]string{standby: zero, monitor: zero}, map[string]bool{hibernate: true}, OutcomeFailed, "hibernate-timeout-ac"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{output: tt.output, fail: tt.fail}
+			got := powerCheckStep(r)
+			if got.Outcome != tt.outcome || !strings.Contains(got.Message, tt.message) || (tt.outcome != OutcomeOK && got.Fix == "") {
+				t.Errorf("= %s %q (fix %q), want %s naming %q with a fix", got.Outcome, got.Message, got.Fix, tt.outcome, tt.message)
+			}
+			for _, c := range r.calls {
+				if strings.HasPrefix(c, "run ") {
+					t.Errorf("check ran %q", c)
+				}
+			}
+		})
+	}
+	var res CheckResult
+	checkWindows(Config{FirewallRule: "Rule"}, &recordingRunner{output: map[string]string{standby: on, hibernate: zero, monitor: zero}}, &res)
+	if s := stepNamedIn(res.Steps, "Power settings"); s.Outcome != OutcomeChanged {
+		t.Errorf("checkWindows power step = %+v, want changed", s)
+	}
+	res = CheckResult{}
+	checkWindows(Config{FirewallRule: "Rule", NoSleep: true}, &recordingRunner{}, &res)
+	if s := stepNamedIn(res.Steps, "Power settings"); s.Name != "" {
+		t.Errorf("prevent_sleep false still checks power: %+v", s)
+	}
+}
+
+func stepNamedIn(steps []SetupStep, name string) SetupStep {
 	for _, s := range steps {
 		if s.Name == name {
 			return s

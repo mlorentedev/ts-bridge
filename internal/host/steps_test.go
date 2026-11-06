@@ -213,7 +213,7 @@ func TestCheckFor(t *testing.T) {
 		legacy   CheckResult // only the pre-HOST-004 fields
 	}{
 		{
-			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule"},
+			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psDeny: "policy=\r\nlocal=0", psPrefix + psFwCheck: "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck},
 			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=ok"},
@@ -221,7 +221,7 @@ func TestCheckFor(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.9", TailscaleUp: true, RDPPort: 3390, RDPEnabled: true, FirewallOK: true},
 		},
 		{
-			name: "windows, registry unreadable and no rule", goos: "windows", cfg: Config{FirewallRule: "Rule"},
+			name: "windows, registry unreadable and no rule", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{fail: map[string]bool{"tailscale ip -4": true, psPrefix + psPort: true}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
 			steps:    []string{"Tailscale IP=failed", "RDP configuration=failed", "Firewall rule=changed"},
@@ -231,7 +231,7 @@ func TestCheckFor(t *testing.T) {
 		{
 			// readPortPS maps a read below 1 to 3389, so a successful read
 			// never yields an enabled service on port 0.
-			name: "windows, registry reads 0", goos: "windows", cfg: Config{FirewallRule: "Rule"},
+			name: "windows, registry reads 0", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "0", psPrefix + psDeny: "local=0"}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck},
 			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=changed"},
