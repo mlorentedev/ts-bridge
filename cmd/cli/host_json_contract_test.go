@@ -74,6 +74,10 @@ func TestCheckJSON_ListsADeclaredServiceItCouldNotRead(t *testing.T) {
 	if svc["kind"] != "rdp" || svc["port"] != float64(3389) || svc["unread"] != true {
 		t.Errorf("service = %v, want rdp on 3389 with unread true", svc)
 	}
+	// The zero values are not readings: unread is the only thing that marks them.
+	if svc["enabled"] != false || svc["firewall_ok"] != false || svc["active"] != nil {
+		t.Errorf("service = %v, want enabled false, firewall_ok false, active null alongside unread", svc)
+	}
 }
 
 func TestCheckJSON_EmptyListsAreArraysNotNull(t *testing.T) {

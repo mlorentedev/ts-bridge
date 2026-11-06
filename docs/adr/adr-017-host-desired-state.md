@@ -142,8 +142,10 @@ host check`. Before this amendment `setup` exited 0 even when a step failed.
 
 `host check --json` gains a `services` array
 (`kind`, `port`, `enabled`, `active`, `firewall_ok`, `unread`) and `steps[].outcome` /
-`steps[].fix`. `unread` is true when a step could not read the service, so its other fields
-are unknown rather than off; the step's `fix` names the cause.
+`steps[].fix`. `unread` is true when a step could not read the service. Its `enabled` and
+`firewall_ok` then keep their zero value (`false`) and `active` stays `null`; they are
+unreliable, not a reading of "off", and `unread` is what tells the two apart. The step's `fix`
+names the cause.
 The existing keys stay and are derived (C2): `rdp_port` / `rdp_enabled` from the `rdp`
 service (zero/false when absent), `firewall_ok` true only when at least one service is
 declared and every declared service has `firewall_ok == true` (an `unverified` firewall
