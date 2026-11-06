@@ -53,5 +53,5 @@ Seven queue items were worked: land-open-prs, 631, 391, 607, plus the #686, #687
 ### Lessons for the operator
 
 - Serial landing converges at about one PR per 25 minutes. Every update-branch starts a new PR-Agent review, and that review often raises a new finding. The trigger configuration lives in `.github/`, which is yours to change.
-- PR-Agent "succeeded but published no review" about six times today, and its log suspects NaN concurrency exhaustion. `dotf pr triage-queue` does not treat a failed review on the head as pending, so a script that trusts it can merge an unreviewed commit (#687). The fix belongs in dotf, the owner of triage-queue; land.sh is now stricter locally.
+- PR-Agent "succeeded but published no review" about six times today, and its log suspects NaN concurrency exhaustion. `dotf pr triage-queue` does not treat a failed review on the head as pending, so a script that trusts it can merge an unreviewed commit (#687). The fix belongs in dotf, the owner of triage-queue; it is filed as dotfiles#3243, and land.sh is now stricter locally.
 - A worktree under /private/tmp is not shared into the Docker VM. Headscale then starts with an empty config and fails with "no config file found". Keep e2e worktrees under ~/Projects.
