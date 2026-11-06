@@ -39,6 +39,28 @@ func TestAuthSetRefusesToShareACredentialAcrossControlPlanes(t *testing.T) {
 	}
 }
 
+// A control URL rewritten between the read and the association must not be
+// adopted: runAuthSet associates against the URL it read first (#653, scenario 2).
+func TestAuthSetRefusesWhenTheControlURLChangesMidWrite(t *testing.T) {
+	profilePath, _ := setupAuthCommandTest(t)
+	profiles := profile.NewStore(profilePath)
+	if err := profiles.Set("a", "host-a:22", "https://p.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	authSecretReader = func(string) (string, error) {
+		if err := profiles.Set("a", "host-a:22", "https://q.example.com"); err != nil {
+			t.Fatal(err)
+		}
+		return "tskey-auth-race-1", nil // #nosec G101 -- synthetic test credential
+	}
+	if _, _, err := executeAuthCommand(t, "set", "k", "--profile", "a", "--force"); err == nil {
+		t.Fatal("auth set k --profile a succeeded after the control URL changed, want a refusal")
+	}
+	if a, _ := profiles.Get("a"); a.Credential != "" {
+		t.Fatalf("profile a references %q after the refusal, want no reference", a.Credential)
+	}
+}
+
 func TestAuthSetSharesACredentialOnOneControlPlane(t *testing.T) {
 	profilePath, _ := setupAuthCommandTest(t)
 	profiles := profile.NewStore(profilePath)
