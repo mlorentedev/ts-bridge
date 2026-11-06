@@ -1,0 +1,72 @@
+[
+  {
+    "id": "QA-607-headscale-e2e-f1",
+    "behavior": "AC1: headscale-up and headscale-down are idempotent, the container carries the e2e label and is gone after down, and a machine with no default route stops in preflight naming the cause",
+    "verification": "bash scripts/tests/test-e2e-headscale.sh && scripts/e2e/run.sh headscale-up && scripts/e2e/run.sh headscale-up && scripts/e2e/run.sh headscale-down && scripts/e2e/run.sh headscale-down && [ -z \"$(docker ps -aq --filter label=tsb-e2e=headscale)\" ]",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "QA-607-headscale-e2e-f2",
+    "behavior": "AC2: a mesh scenario refuses to run when the pinned tailscale module no longer registers TS_DEBUG_USE_DERP_HTTP or a guest cannot reach the control plane, naming the failing check",
+    "verification": "bash scripts/tests/test-e2e-headscale.sh && grep -q 'TS_DEBUG_USE_DERP_HTTP' \"$(go list -m -f '{{.Dir}}' tailscale.com)/derp/derphttp/derphttp_client.go\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "QA-607-headscale-e2e-f3",
+    "behavior": "AC3: the Linux guest's xrdp answers an X.224 Connection Request with a Connection Confirm through connect from the host, over the mesh",
+    "verification": "make e2e-mesh-linux && grep -q '^PASS mesh rdp: X.224 confirm through connect' \"$(ls -t scripts/e2e/out/mesh-linux-*.log | head -1)\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "QA-607-headscale-e2e-f4",
+    "behavior": "AC4: the Linux guest's sshd answers through connect (banner) and through connect --socks5 (key login), and the kind ssh case is XFAIL #521",
+    "verification": "l=\"$(ls -t scripts/e2e/out/mesh-linux-*.log | head -1)\" && grep -q '^PASS mesh ssh: banner through connect' \"$l\" && grep -q '^PASS mesh ssh: key login through connect --socks5' \"$l\" && grep -q '^XFAIL #521 mesh ssh: kind ssh is published' \"$l\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "QA-607-headscale-e2e-f5",
+    "behavior": "AC5: the Windows guest's TermService answers an X.224 Connection Request through connect from the host, served by the documented Scheduled Task",
+    "verification": "make e2e-mesh-windows && grep -q '^PASS mesh rdp: X.224 confirm through connect' \"$(ls -t scripts/e2e/out/mesh-windows-*.log | head -1)\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "QA-607-headscale-e2e-f6",
+    "behavior": "AC6: a port listening in the guest but not declared in host.services refuses a connection through the mesh, on both guests",
+    "verification": "grep -q '^PASS mesh refuses an undeclared port' \"$(ls -t scripts/e2e/out/mesh-linux-*.log | head -1)\" && grep -q '^PASS mesh refuses an undeclared port' \"$(ls -t scripts/e2e/out/mesh-windows-*.log | head -1)\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "QA-607-headscale-e2e-f7",
+    "behavior": "AC7: after a restart without the key file serve prints enrolled=false and the control plane keeps one node with the same id; an untagged node is refused with node_not_tagged",
+    "verification": "l=\"$(ls -t scripts/e2e/out/mesh-linux-*.log | head -1)\" && grep -q '^PASS mesh restart without the key: enrolled=false, one node, same id' \"$l\" && grep -q '^PASS mesh untagged key: node_not_tagged' \"$l\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "QA-607-headscale-e2e-f8",
+    "behavior": "AC8: ts-bridge discover against the local Headscale API with a per-run API key lists the registered guest nodes",
+    "verification": "grep -q '^PASS mesh discover lists the registered nodes' \"$(ls -t scripts/e2e/out/mesh-linux-*.log | head -1)\"",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "QA-607-headscale-e2e-f9",
+    "behavior": "AC9: no mesh log holds key material, a run leaves no Headscale container and no tsb-e2e session, and nothing under .github references the mesh targets",
+    "verification": "bash scripts/tests/test-e2e-report.sh && make e2e-clean && [ -z \"$(docker ps -aq --filter label=tsb-e2e=headscale)\" ] && ! grep -rEq 'e2e-mesh|scripts/e2e' .github",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "QA-607-headscale-e2e-f10",
+    "behavior": "AC10: the e2e runbook documents the mesh targets, preconditions, the harness-only environment variables, the #183 and HOST-008 mapping and what stays manual",
+    "verification": "grep -q 'e2e-mesh' docs/runbooks/e2e-vm.md && grep -q 'TS_DEBUG_USE_DERP_HTTP' docs/runbooks/e2e-vm.md && grep -q '#183' docs/runbooks/e2e-vm.md && ! grep -q 'Not covered: the tailnet data path' docs/runbooks/e2e-vm.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
