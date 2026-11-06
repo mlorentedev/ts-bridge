@@ -5,5 +5,40 @@
     "verification": "f=docs/adr/adr-017-host-desired-state.md; grep -q 'Amendment B (Accepted, 2026-11-06)' $f && grep -q 'iptables: `-i tailscale0`' $f && grep -q 'RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48' $f && grep -q 'Disable-NetFirewallRule -DisplayGroup \"Remote Desktop\"' $f",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f2",
+    "behavior": "On an iptables host setup appends the rule scoped to tailscale0, in exactly the form iptables -S prints it",
+    "verification": "go test ./internal/host -run 'TestIptablesPrintedForm' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f3",
+    "behavior": "An unscoped allow for the port is legacy; a scoped, source-limited or port-less one is not",
+    "verification": "go test ./internal/host -run 'TestReadIptablesUnscoped' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f4",
+    "behavior": "Setup replaces the exact legacy copies (scoped rule first, delete after), reports any other unscoped allow as manual, and deletes nothing when the add fails",
+    "verification": "go test ./internal/host -run 'TestSetupForLinux' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f5",
+    "behavior": "Check reports a legacy unscoped iptables rule and firewall_ok is false until it is gone",
+    "verification": "go test ./internal/host -run 'TestCheckForLinux' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f6",
+    "behavior": "On a real iptables host setup converges, a second run changes nothing, and a hand-added legacy rule is reported then replaced",
+    "verification": "make e2e-linux",
+    "state": "pending",
+    "evidence": ""
   }
 ]

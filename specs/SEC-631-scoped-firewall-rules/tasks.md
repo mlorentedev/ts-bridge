@@ -20,19 +20,19 @@ the last says `Closes #631`.
 
 ## PR 2 - Linux iptables: scoped write and legacy replacement
 
-- [ ] [AC2] Failing test: the iptables append is `-A INPUT -i tailscale0 -p tcp --dport N -j ACCEPT`
+- [x] [AC2] Failing test: the iptables append is `-A INPUT -i tailscale0 -p tcp --dport N -j ACCEPT`
   and its printed form equals what `iptables -S` prints (`-i` before `-p`)
-- [ ] [AC4] Failing tests: an unscoped port ACCEPT is legacy; exact copies are replaced (scoped
+- [x] [AC4] Failing tests: an unscoped port ACCEPT is legacy; exact copies are replaced (scoped
   added first, then `-D` once per copy); a foreign unscoped rule is `manual` and nothing is
   deleted; a failed add deletes nothing; a failed delete is `failed`
-- [ ] [AC4] `check`: legacy exact is `changed` (setup would act), foreign is `manual`, both
+- [x] [AC4] `check`: legacy exact is `changed` (setup would act), foreign is `manual`, both
   `firewall_ok` false
-- [ ] The copies machinery (#480, #530, #576) follows the legacy form; on an iptables host every
+- [x] The copies machinery (#480, #530, #576) follows the legacy form; on an iptables host every
   exact copy is now extra
-- [ ] [AC2] [AC4] `scripts/e2e/linux.sh`: iptables host (ufw removed) setup twice, `-S` prints the
+- [x] [AC2] [AC4] `scripts/e2e/linux.sh`: iptables host (ufw removed) setup twice, `-S` prints the
   exact form, second run `ok`; a hand-added legacy rule is replaced
-- [ ] `features.json` for the Linux features; the two Linux runbooks print the new commands
-- [ ] `make e2e-linux` green
+- [x] `features.json` for the Linux features; `docs/design/host-client-parity.md` rows updated (the Linux runbooks print no firewall command, so they need none)
+- [x] `make e2e-linux` green (56 pass, 0 fail)
 
 ## PR 3 - Linux ufw: scoped write and legacy replacement
 

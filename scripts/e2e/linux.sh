@@ -140,6 +140,28 @@ mesh /var/lib/ts-bridge-e2e /tmp/e2e-key >"$W/key.yaml"
 run timeout 20 "$B" host serve --config "$W/key.yaml"
 ok "serve: auth_key_file under /tmp refused" -- 'code 1 && has "/tmp"'
 
+# Firewall scope (#631) on an iptables host: ufw is removed, so setup writes through iptables.
+ufw --force disable >/dev/null 2>&1
+apt-get -qq remove -y ufw >/dev/null 2>&1
+SCOPED='-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT'
+LEGACY='-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT'
+FOREIGN='-A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT'
+fwstep() { json "{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"Firewall configuration\")==\"$1\""; }
+ok "iptables host: ufw is gone" -- '[ ! -e /usr/sbin/ufw ]'
+ok "iptables host: setup #1 appends the rule" -- 'outcomes setup "$C" | fwstep changed'
+ok "iptables host: the rule is scoped to tailscale0, as printed" -- 'iptables -S INPUT | grep -qx -- "$SCOPED"'
+ok "iptables host: setup #2 changes nothing (the printed form agrees)" -- 'outcomes setup "$C" | fwstep ok'
+ok "iptables host: check reports firewall_ok" -- "outcomes check $C | json 'j[\"services\"][0][\"firewall_ok\"]'"
+iptables -A INPUT -p tcp --dport 3389 -j ACCEPT
+ok "legacy unscoped rule: check says setup would change it" -- 'outcomes check "$C" | fwstep changed'
+ok "legacy unscoped rule: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "legacy unscoped rule: setup replaces it" -- 'outcomes setup "$C" | fwstep changed && ! iptables -S INPUT | grep -qx -- "$LEGACY" && iptables -S INPUT | grep -qx -- "$SCOPED"'
+ok "legacy unscoped rule: check is ok afterwards" -- 'outcomes check "$C" | fwstep ok'
+iptables -A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT
+ok "foreign unscoped rule: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "foreign unscoped rule: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "$FOREIGN"'
+iptables -D INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT
+ok "foreign rule removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
 # POSIX ACLs on a state_dir ancestor (#598). setfacl raises the mask with a named entry and the group
 # bits mirror it, so the mode check alone already refuses that; the ACL read names the principal, and is
 # the only layer that sees an entry the mask hides (setfacl -n).
