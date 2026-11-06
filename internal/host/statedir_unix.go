@@ -57,23 +57,24 @@ func EnsureStateDir(path string) error {
 // stateDirAncestors is the ancestor walk with the real filesystem; tests that
 // exercise the leaf checks on a t.TempDir stub it.
 var stateDirAncestors = func(path string) error {
-	return walkStateDirAncestors(path, ancestorFS{lstatOwner, os.Readlink})
+	return walkStateDirAncestors(path, ancestorFS{lstatOwner, os.Readlink, readAccessACL})
 }
 
 // secretFileAncestors is the same walk for the auth key file (#595); a test
 // that exercises the leaf checks on a t.TempDir stubs it.
 var secretFileAncestors = func(path string) error {
-	return walkAncestors("auth_key_file", path, ancestorFS{lstatOwner, os.Readlink})
+	return walkAncestors("auth_key_file", path, ancestorFS{lstatOwner, os.Readlink, readAccessACL})
 }
 
 // maxLinkHops bounds how many links one walk follows in all, as the kernel does.
 const maxLinkHops = 40
 
-// ancestorFS is the filesystem the walk reads: lstat plus the owner's uid, and
-// readlink.
+// ancestorFS is the filesystem the walk reads: lstat plus the owner's uid,
+// readlink, and the raw access ACL of a directory (nil: ACLs are not read).
 type ancestorFS struct {
 	lstat    func(string) (fs.FileInfo, uint32, error)
 	readlink func(string) (string, error)
+	acl      func(string) ([]byte, error)
 }
 
 // lstatOwner is os.Lstat plus the owner's uid.
@@ -159,7 +160,40 @@ func ancestorAt(label, path, dir string, afs ancestorFS) (fs.FileInfo, error) {
 	case err != nil:
 		return nil, fmt.Errorf("%s %s: ancestor %s: %w", label, path, dir, err)
 	}
+	// The ACL first: it names the principal, where the group bits setfacl raises
+	// say only that someone may write. A directory root does not own fails on its
+	// owner in checkAncestor, whatever its ACL.
+	if uid == 0 {
+		if err := checkAncestorACL(label, path, dir, info, afs); err != nil {
+			return info, err
+		}
+	}
 	return info, checkAncestor(label, path, dir, info, uid)
+}
+
+// checkAncestorACL refuses a directory whose access ACL names a user or group
+// other than root with write (#598). st_mode shows a named entry only as the
+// group bits, through the mask. A link has no ACL of its own: the walk reads
+// its target.
+func checkAncestorACL(label, path, dir string, info fs.FileInfo, afs ancestorFS) error {
+	if afs.acl == nil || !info.IsDir() {
+		return nil
+	}
+	raw, err := afs.acl(dir)
+	if err != nil {
+		return fmt.Errorf("%s %s: ancestor %s: read its ACL: %w", label, path, dir, err)
+	}
+	if raw == nil {
+		return nil
+	}
+	writers, err := aclWriters(raw)
+	if err != nil {
+		return fmt.Errorf("%s %s: ancestor %s: %w", label, path, dir, err)
+	}
+	if len(writers) > 0 {
+		return fmt.Errorf("%s %s: ancestor %s: its ACL grants write to %s", label, path, dir, strings.Join(writers, ", "))
+	}
+	return nil
 }
 
 // refuseDotDot refuses a .. in the declared path: Clean drops it lexically,
