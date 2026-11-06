@@ -1,0 +1,9 @@
+[
+  {
+    "id": "SEC-631-scoped-firewall-rules-f1",
+    "behavior": "ADR-017 records the scoped firewall decision as Amendment B",
+    "verification": "f=docs/adr/adr-017-host-desired-state.md; grep -q 'Amendment B (Accepted, 2026-11-06)' $f && grep -q 'iptables: `-i tailscale0`' $f && grep -q 'RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48' $f && grep -q 'Disable-NetFirewallRule -DisplayGroup \"Remote Desktop\"' $f",
+    "state": "pending",
+    "evidence": ""
+  }
+]
