@@ -112,6 +112,7 @@ Case 'drift: RDP denied seen by check' { $s = (Json check $C).services; $s.Count
 Json setup $C | Out-Null
 Case 'drift: RDP denied repaired by setup' { (Get-ItemProperty $TS).fDenyTSConnections -eq 0 }
 powercfg /change standby-timeout-ac 30
+Case 'drift: power reset seen by check' { (Steps (Json check $C) 'Power')[0].outcome -eq 'changed' }
 Case 'drift: power reset is changed, then ok' {
     (Steps (Json setup $C) 'Power')[0].outcome -eq 'changed' -and (Steps (Json setup $C) 'Power')[0].outcome -eq 'ok' -and (AcZero)
 }
