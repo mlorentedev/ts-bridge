@@ -15,6 +15,7 @@ created: "2026-10-20"
 
 Accepted by the operator on 2026-10-20. Implementation is tracked by #450 and its
 sub-tickets. Amendment A below (HOST-008, #522) was accepted by the operator on 2026-11-01 in #525.
+Amendment B (SEC-631, #631) was decided by the operator on 2026-11-06 in #631.
 
 ## Context
 
@@ -164,8 +165,8 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 
 | OS | Services | Automated | Verified and guided only |
 | --- | --- | --- | --- |
-| Windows | `rdp` (+ `ssh` via OpenSSH Server when declared) | RDP enable honouring Group Policy precedence, firewall rule (state-first), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
-| Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule (ufw `allow` / iptables `-C` then `-A`) | none |
+| Windows | `rdp` (+ `ssh` via OpenSSH Server when declared) | RDP enable honouring Group Policy precedence, firewall rule scoped to the tailnet ranges (state-first, Amendment B), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
+| Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule scoped to `tailscale0` (ufw `allow in on` / iptables `-i`, Amendment B) | none |
 | macOS | `ssh` (Remote Login), `vnc` (Screen Sharing) | Remote Login when elevated and Full Disk Access is granted | Screen Sharing; Remote Login without Full Disk Access; application-firewall "block all" |
 
 A declared RDP port is applied where the OS lets a CLI move the listener and reported
@@ -264,9 +265,45 @@ Rejected for this amendment: an OS service inside ts-bridge (Windows SCM or syst
 integration in the binary), which is #451's question and would add a supervisor before
 that architecture is decided.
 
+## Amendment B (Accepted, 2026-11-06): firewall rules are scoped to the tailnet
+
+Status: decided by the operator on 2026-11-06 in #631; the spec is `specs/SEC-631-scoped-firewall-rules/`.
+
+Context: `setup` wrote the service port as open to every interface (iptables `-A INPUT -p tcp
+--dport N -j ACCEPT`, `ufw allow N/tcp`, a Windows rule with `-Profile Any` and no
+`RemoteAddress`). #530 named that as the root cause of a tailnet-admitted port being re-opened on
+every interface and left it for an ADR decision. A host joins the tailnet to be reached over it,
+not from its LAN.
+
+Decision, a hybrid because the two OSes name the tailnet differently:
+
+- **Linux scopes by interface.** iptables: `-i tailscale0`. ufw: `ufw allow in on tailscale0 to
+  any port <port> proto tcp`. The interface name is fixed at `tailscale0`; a tailscaled started
+  with another `--tun` name gets a rule that matches nothing, which fails closed.
+- **Windows scopes by address.** `-RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48`: Windows has
+  no interface name to rely on. Setup also stops enabling the built-in `Remote Desktop` rule
+  group, whose rules allow any address and would void the scope. It does not disable the group,
+  which it did not write.
+- **`check` reports a legacy unscoped rule**: an allow for the port with no interface, source or
+  destination address. `firewall_ok` is `false` while one remains. `setup` replaces it.
+
+Replacement narrows "setup does not delete firewall rules" (§3) and no further. Setup deletes
+only the exact rule earlier releases wrote (`ufw allow <port>/tcp`, `-A INPUT -p tcp -m tcp --dport
+<port> -j ACCEPT` as `iptables -S` prints it), after the scoped rule is in place, so the port is
+never closed in between. Any other unscoped allow that names the port is reported `manual`: setup
+cannot know it wrote it. An allow with no port in it is the operator's posture and is left alone.
+
+Rejected: scoping Linux by the CGNAT range instead (an interface follows the tailnet whatever
+addresses it assigns, and a range would admit any local network that uses `100.64.0.0/10`);
+scoping Windows by interface alias (the alias is localised and changes with the adapter); keeping
+the unscoped rule and only reporting it (leaves the exposure in place after the next `setup`).
+
+Reopen when: tailscaled's interface name stops being `tailscale0` by default, or ts-bridge reads
+it from the node instead of fixing it.
+
 ## References
 
-- #450 (epic), #457, #458, #459, #453, #454, #455, #307, #408, #451.
+- #450 (epic), #457, #458, #459, #453, #454, #455, #307, #408, #451, #530, #631.
 - [`docs/design/host-client-parity.md`](../design/host-client-parity.md).
 - [ADR-005](adr-005-headscale-compat.md), [ADR-011](adr-011-shareable-connection-profile.md),
   [ADR-012](adr-012-config-profiles-model.md), [ADR-013](adr-013-cli-tests-in-go.md).

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "SEC-631-scoped-firewall-rules-f1",
+    "behavior": "ADR-017 records the scoped firewall decision as Amendment B",
+    "verification": "grep -q 'Amendment B (Accepted, 2026-11-06)' docs/adr/adr-017-host-desired-state.md",
+    "state": "pending",
+    "evidence": ""
+  }
+]
