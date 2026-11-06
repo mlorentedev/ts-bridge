@@ -83,19 +83,43 @@ case "$1" in
   run) touch "$WORK/state/up" ;;
   rm) rm -f "$WORK/state/up" ;;
   ps) [ ! -f "$WORK/state/up" ] || echo cafe01 ;;
-  exec) case "$*" in *"users list"*) echo "[{\"id\": 4, \"name\": \"e2e\"}]" ;; *preauthkeys*) echo "{\"key\": \"hskey-auth-FAKE\"}" ;; esac ;;
+  exec) case "$*" in *" health"*) [ ! -f "$WORK/unhealthy" ] || exit 1 ;; *"users create"*) [ ! -f "$WORK/no-user" ] || exit 1 ;; *"users list"*) echo "[{\"id\": 4, \"name\": \"e2e\"}]" ;; *preauthkeys*) echo "{\"key\": \"hskey-auth-FAKE\"}" ;; esac ;;
 esac'
 : >"$SHIM_LOG"
 check up-first hs_up
 check up-second hs_up
 check up-one-container test "$(grep -c '^run ' "$SHIM_LOG")" = 1
 check up-label logged '^run .*--label tsb-e2e=headscale'
-check up-ports-on-all-interfaces test "$(grep '^run ' "$SHIM_LOG" | grep -oE -- '-p [^ ]+' | grep -cvE -- '-p [0-9]+:[0-9]+(/udp)?$')" = 0
-check up-publishes-control-plane logged '^run .*-p 8080:8080'
+published="$(grep '^run ' "$SHIM_LOG" | grep -oE -- '-p [^ ]+' | sort | tr '\n' ' ')"
+check up-publishes-exactly-the-two-ports-on-all-interfaces test "$published" = "-p 3478:3478/udp -p 8080:8080 "
 check up-mounts-only-out-dir test "$(grep '^run ' "$SHIM_LOG" | grep -oE -- '-v [^: ]+' | grep -cv -- "-v $HS_DIR/")" = 0
 check up-mounts-something logged '^run .*-v '
 check up-user-once test "$(grep -c 'users create e2e' "$SHIM_LOG")" = 1
 check up-writes-config grep -qx 'server_url: http://10.9.8.7:8080' "$HS_DIR/conf/config.yaml"
+
+# The host moved to another network: a running control plane still advertising the old address
+# is replaced, not reported as up.
+shim ipconfig '[ "$2" = en7 ] && echo 10.9.8.8 || echo 10.0.0.1'
+: >"$SHIM_LOG"
+check up-after-address-change hs_up
+check up-after-address-change-recreates test "$(grep -c '^run ' "$SHIM_LOG")" = 1
+check up-after-address-change-renders grep -qx 'server_url: http://10.9.8.8:8080' "$HS_DIR/conf/config.yaml"
+shim ipconfig '[ "$2" = en7 ] && echo 10.9.8.7 || echo 10.0.0.1'
+
+# A start that never gets healthy, or cannot create its user, must not leave a container the next
+# hs_up would take for a working one.
+HS_HEALTH_TRIES=1
+for row in unhealthy:1 no-user:2; do # the user is created once in the first, twice in the second
+  broken="${row%%:*}" creates="${row##*:}"
+  hs_down >/dev/null 2>&1
+  touch "$WORK/$broken"
+  : >"$SHIM_LOG"
+  check "$broken-fails" refuses hs_up
+  check "$broken-leaves-no-container" test ! -f "$WORK/state/up"
+  rm "$WORK/$broken"
+  check "$broken-then-recovers" hs_up
+  check "$broken-recovered-has-user" test "$(grep -c 'users create e2e' "$SHIM_LOG")" = "$creates"
+done
 
 # A stopped container left its database behind: the next start must not inherit it.
 rm -f "$WORK/state/up"
@@ -114,6 +138,7 @@ check down-removes-state test ! -e "$HS_DIR"
 hs_up >/dev/null 2>&1
 : >"$SHIM_LOG"
 key="$(hs_mint_key tag:e2e-host)"
+check mint-prints-the-key test "$key" = hskey-auth-FAKE
 check mint-targets-the-user logged 'preauthkeys create .*(-u|--user) 4( |$)'
 check mint-tagged logged 'preauthkeys create .*--tags tag:e2e-host'
 check mint-one-hour logged 'preauthkeys create .*--expiration 1h'

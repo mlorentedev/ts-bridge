@@ -141,9 +141,13 @@ host check`. Before this amendment `setup` exited 0 even when a step failed.
 ### 3. Services, not RDP fields
 
 `host check --json` gains a `services` array
-(`kind`, `port`, `enabled`, `active`, `firewall_ok`) and `steps[].outcome` / `steps[].fix`.
+(`kind`, `port`, `enabled`, `active`, `firewall_ok`, `unread`) and `steps[].outcome` /
+`steps[].fix`. `unread` is true when a step could not read the service. Its `enabled` and
+`firewall_ok` then keep their zero value (`false`) and `active` stays `null`; they are
+unreliable, not a reading of "off", and `unread` is what tells the two apart. The step's `fix`
+names the cause.
 The existing keys stay and are derived (C2): `rdp_port` / `rdp_enabled` from the `rdp`
-service (zero/false when absent), `firewall_ok` true only when at least one service is
+service (zero/false when absent or `unread`), `firewall_ok` true only when at least one service is
 declared and every declared service has `firewall_ok == true` (an `unverified` firewall
 read counts as false). `steps[].success` stays as `outcome in {ok, changed}`.
 
@@ -165,8 +169,17 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 | OS | Services | Automated | Verified and guided only |
 | --- | --- | --- | --- |
 | Windows | `rdp` (+ `ssh` via OpenSSH Server when declared) | RDP enable honouring Group Policy precedence, firewall rule (state-first), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
-| Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, firewall INPUT rule (ufw `allow` / iptables `-C` then `-A`) | none |
+| Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule (ufw `allow` / iptables `-C` then `-A`) | none |
 | macOS | `ssh` (Remote Login), `vnc` (Screen Sharing) | Remote Login when elevated and Full Disk Access is granted | Screen Sharing; Remote Login without Full Disk Access; application-firewall "block all" |
+
+A declared RDP port is applied where the OS lets a CLI move the listener and reported
+where it does not (#557, amended 2026-11-06). Linux rewrites xrdp's `port=` and restarts
+xrdp; the step appears only when a port is declared and it or xrdp's is not the default
+3389, so a stock host keeps its step list, and an `xrdp.ini` with no `[Globals]` section is
+`failed` rather than rewritten. Windows never writes `PortNumber`: a declared port the
+registry does not listen on makes the RDP step `manual` in `setup` and `check`, naming both
+ports. On both, a port no layer declares is left to the OS (the registry's, or a hand-set
+`port=`), with nothing to compare.
 
 On macOS, `check` reads Remote Login without root from the launchd override for
 `com.openssh.sshd` and, when no override exists, from the `Disabled` key of its launch

@@ -33,7 +33,14 @@ func linuxPort(cfg Config) int {
 // run on a converged host changes nothing (#454, ADR-017).
 func setupLinux(cfg Config, r Runner) SetupResult {
 	port := linuxPort(cfg)
-	steps := []SetupStep{xrdpSetupStep(r), firewallSetupStep(r, port), tailscaleIPStep(r)}
+	steps := []SetupStep{xrdpSetupStep(r)}
+	// Only a declared port moves xrdp; an undeclared one is the operator's (#557).
+	if cfg.PortDeclared {
+		if s, ok := xrdpPortSetupStep(r, port); ok {
+			steps = append(steps, s)
+		}
+	}
+	steps = append(steps, firewallSetupStep(r, port), tailscaleIPStep(r))
 	return SetupResult{RDPPort: port, Steps: steps}
 }
 
@@ -42,7 +49,13 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 	x := readXRDP(r)
 	fw := readLinuxFirewall(r, port)
 	xrdp := xrdpCheckStep(x)
-	result.Steps = append(result.Steps, xrdp, firewallCheckStep(fw, port))
+	result.Steps = append(result.Steps, xrdp)
+	if cfg.PortDeclared {
+		if s, ok := xrdpPortCheckStep(r, port); ok {
+			result.Steps = append(result.Steps, s)
+		}
+	}
+	result.Steps = append(result.Steps, firewallCheckStep(fw, port))
 	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent && !fw.ufwInactive, Unread: xrdp.Outcome == OutcomeUnverified}
 	if x.readable {
 		active := x.active

@@ -31,11 +31,6 @@ func AddActiveConnection(n int64) {
 	atomic.AddInt64(&globalMetrics.ActiveConnections, n)
 }
 
-// GetActiveConnections returns the active connection count.
-func GetActiveConnections() int64 {
-	return atomic.LoadInt64(&globalMetrics.ActiveConnections)
-}
-
 // TryClaimConnection atomically increments ActiveConnections only if the
 // resulting value would not exceed maxConns. Returns true on successful
 // claim. Callers MUST call AddActiveConnection(-1) when the work tied to

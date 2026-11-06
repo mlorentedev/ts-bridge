@@ -44,11 +44,15 @@ hs_premise_ok() {
 
 hs_cli() { docker exec "$HS_NAME" /ko-app/headscale "$@"; }
 
-# hs_up starts the control plane and creates its one user. A second call changes nothing.
+# hs_up starts the control plane and creates its one user. A second call changes nothing,
+# unless the host address changed: a running one still advertising the old address is replaced.
 hs_up() {
   local ip
   ip="$(hs_host_ip)" || return 1
-  [ -z "$(docker ps -q --filter "label=$HS_LABEL")" ] || return 0
+  if [ -n "$(docker ps -q --filter "label=$HS_LABEL")" ] &&
+    grep -qx "server_url: http://$ip:$HS_PORT" "$HS_DIR/conf/config.yaml" 2>/dev/null; then
+    return 0
+  fi
   # A stopped leftover keeps the name and its database: the old user would fail the new one.
   docker rm -f "$HS_NAME" >/dev/null 2>&1 || true
   rm -rf "$HS_DIR"
@@ -57,12 +61,16 @@ hs_up() {
   cp "${HERE:?}/headscale/policy.hujson" "$HS_DIR/conf/policy.hujson"
   docker run -d --name "$HS_NAME" --label "$HS_LABEL" -p "$HS_PORT:8080" -p 3478:3478/udp \
     -v "$HS_DIR/conf:/etc/headscale:ro" -v "$HS_DIR/data:/var/lib/headscale" "$HS_IMAGE" serve >/dev/null
-  for _ in $(seq 1 30); do
-    hs_cli health >/dev/null 2>&1 && { hs_create_user; return; }
+  for _ in $(seq 1 "${HS_HEALTH_TRIES:-30}"); do
+    if hs_cli health >/dev/null 2>&1; then
+      hs_create_user || { hs_down; echo "e2e: could not create the headscale user" >&2; return 1; }
+      return 0
+    fi
     sleep 1
   done
   docker logs --tail 20 "$HS_NAME" >&2 || true
-  echo "e2e: headscale did not become healthy in 30s" >&2
+  hs_down # a container left running would read as a working one on the next hs_up
+  echo "e2e: headscale did not become healthy in ${HS_HEALTH_TRIES:-30}s" >&2
   return 1
 }
 

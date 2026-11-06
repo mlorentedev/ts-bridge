@@ -57,6 +57,12 @@ cover-check: ## Run the suite with coverage, then assert the coverage floor.
 	go test -coverprofile=$(COVERAGE) ./...
 	@$(MAKE) --no-print-directory cover-assert
 
+# Not wired into CI yet: the hygiene job lives under .github/ and is the maintainer's change (#575).
+.PHONY: specs-check
+specs-check: ## Check that every active spec's go test -run selector still names a test, then that guard's own suite.
+	bash scripts/check-features-selectors.sh
+	bash scripts/tests/test-features-selectors.sh
+
 .PHONY: mutation-install
 mutation-install: ## Install the pinned gremlins binary (does not touch go.mod).
 	go install $(GREMLINS_PKG)@$(GREMLINS_VERSION)
