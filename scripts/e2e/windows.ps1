@@ -158,4 +158,21 @@ Case 'client: status with no bridge prints running false, hint on stderr' {
     $j = $o | ConvertFrom-Json
     $c -eq 0 -and $j.running -eq $false -and $j.addr -eq '127.0.0.1:1' -and (Get-Content "$W\err" -Raw) -match 'not running'
 }
+
+# OwnerOnly PATH: the ACL is protected and grants only the token's user SID (#632).
+function OwnerOnly($path) {
+    if (-not $path) { return $false } # Get-Acl without a path reads the current directory
+    $acl = Get-Acl -LiteralPath $path
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    $acl.AreAccessRulesProtected -and $rules.Count -eq 1 -and $rules[0].IdentityReference -eq $me
+}
+# USERNAME names another account, as a renamed or domain user would see it.
+$user = $env:USERNAME; $env:USERNAME = 'Guest'
+'tskey-auth-e2e-notreal' | & $B auth set --stdin --profile e2e 2>&1 | Out-Null; $authCode = $LASTEXITCODE
+$env:USERNAME = $user
+$key = Get-ChildItem "$env:LOCALAPPDATA\ts-bridge" -Recurse -Filter *.key -ErrorAction SilentlyContinue | Select-Object -First 1
+Case 'auth set: stores the credential' { $authCode -eq 0 -and $key }
+Case 'auth set: key file grants only the token user' { $key -and (OwnerOnly $key.FullName) }
+Case 'auth set: store directory grants only the token user' { $key -and (OwnerOnly $key.DirectoryName) }
 exit 0
