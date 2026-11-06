@@ -110,9 +110,11 @@ func TestStartConfiguredBootstrapConfiguresControlProxy(t *testing.T) {
 		return tunnel, nil
 	}
 	var gotControlURL, gotSOCKSAddr string
-	controlProxyConfigurer = func(_ context.Context, controlURL, socksAddr string) error {
+	var gotLogger *slog.Logger
+	controlProxyConfigurer = func(_ context.Context, controlURL, socksAddr string, proxyLogger *slog.Logger) error {
 		gotControlURL = controlURL
 		gotSOCKSAddr = socksAddr
+		gotLogger = proxyLogger
 		return nil
 	}
 	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -131,6 +133,10 @@ func TestStartConfiguredBootstrapConfiguresControlProxy(t *testing.T) {
 	}
 	if gotControlURL != "https://vpn.example.com" || gotSOCKSAddr != "127.0.0.1:1055" {
 		t.Fatalf("proxy config = (%q, %q)", gotControlURL, gotSOCKSAddr)
+	}
+	// The proxy's dial records must reach the configured logger, not Go's default one (#572).
+	if gotLogger != logger {
+		t.Fatal("the control proxy was not given the command's logger")
 	}
 }
 
