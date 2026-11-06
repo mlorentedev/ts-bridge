@@ -147,7 +147,7 @@ host check`. Before this amendment `setup` exited 0 even when a step failed.
 unreliable, not a reading of "off", and `unread` is what tells the two apart. The step's `fix`
 names the cause.
 The existing keys stay and are derived (C2): `rdp_port` / `rdp_enabled` from the `rdp`
-service (zero/false when absent), `firewall_ok` true only when at least one service is
+service (zero/false when absent or `unread`), `firewall_ok` true only when at least one service is
 declared and every declared service has `firewall_ok == true` (an `unverified` firewall
 read counts as false). `steps[].success` stays as `outcome in {ok, changed}`.
 

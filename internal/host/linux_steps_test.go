@@ -2,7 +2,9 @@ package host
 
 import (
 	"cmp"
+	"errors"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -1458,5 +1460,26 @@ func TestUFWStatusUnrecognized(t *testing.T) {
 				t.Errorf("setup wrote on an unread status: %v", runner.calls)
 			}
 		})
+	}
+}
+
+// The RDP line of check points at "the steps below for the cause" when a
+// service is unread (#638), so the fix of every unread step names that cause
+// and never falls back to blaming privilege.
+func TestUnreadStepFixesDoNotBlamePrivilege(t *testing.T) {
+	privilege := regexp.MustCompile(`(?i)\b(root|sudo|administrator|elevat)`)
+	steps := map[string]SetupStep{}
+	for name, x := range map[string]xrdpState{
+		"no systemd reading": {installed: true},
+		"undecided answer":   {installed: true, readable: true, undecided: "indirect"},
+	} {
+		step, _ := xrdpUnmet(x, OutcomeUnverified)
+		steps["xrdp: "+name] = step
+	}
+	steps["windows: RDP port unread"] = actRead("RDP configuration", errors.New("read failed"), "", "Could not read the RDP port from the registry", rdpEnableFix)
+	for name, step := range steps {
+		if step.Fix == "" || privilege.MatchString(step.Fix) {
+			t.Errorf("%s: fix %q should name the cause, not privilege", name, step.Fix)
+		}
 	}
 }
