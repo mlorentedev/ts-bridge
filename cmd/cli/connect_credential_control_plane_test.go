@@ -62,6 +62,39 @@ func TestManagedCredentialIsBoundToTheProfileControlPlane(t *testing.T) {
 				if tt.authKey == "" && len(tt.flags) == 0 && got.AuthKey != managedKey {
 					t.Fatalf("managed credential not loaded: AuthKey = %q", got.AuthKey)
 				}
+				// An explicit key goes to the override; the managed one must not.
+				if (tt.authKey != "" || len(tt.flags) > 0) && (got.AuthKey != "tskey-auth-test-secret" || got.ControlURL != plantedURL) {
+					t.Fatalf("explicit key case: AuthKey = %q, ControlURL = %q; want the explicit key sent to %q", got.AuthKey, got.ControlURL, plantedURL)
+				}
+			})
+		}
+	}
+}
+
+// A blank override is still an override: Merge keeps it, trims it to empty
+// and so selects Tailscale SaaS, which is not the profile's control plane.
+func TestBlankControlURLOverrideDoesNotReceiveTheManagedCredential(t *testing.T) {
+	tests := []struct {
+		name  string
+		env   string
+		flags []string
+		layer string
+	}{
+		{name: "flag", flags: []string{"--control-url", " "}, layer: "--control-url"},
+		{name: "environment", env: " ", layer: "TS_CONTROL_URL"},
+	}
+	for _, kind := range []string{"connect", "browser"} {
+		for _, tt := range tests {
+			t.Run(kind+"/"+tt.name, func(t *testing.T) {
+				path := setupProfileRuntimeTest(t)
+				bindOfficeCredential(t, path, boundControlURL)
+				got, err := runBoundProfile(t, kind, "", tt.env, "", "", tt.flags)
+				if err == nil || !strings.Contains(err.Error(), tt.layer) || !strings.Contains(err.Error(), boundControlURL) {
+					t.Fatalf("err = %v; want a refusal naming %q and %q", err, tt.layer, boundControlURL)
+				}
+				if got.AuthKey != "" {
+					t.Errorf("runner reached with AuthKey %q after a refusal", got.AuthKey)
+				}
 			})
 		}
 	}

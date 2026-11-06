@@ -328,6 +328,9 @@ func normalizeControlURL(raw string) string {
 		return raw
 	}
 	u.Scheme, u.Host = strings.ToLower(u.Scheme), strings.ToLower(u.Host)
+	if p := u.Port(); (u.Scheme == "https" && p == "443") || (u.Scheme == "http" && p == "80") {
+		u.Host = strings.TrimSuffix(u.Host, ":"+p)
+	}
 	if u.Scheme == "https" && saasHosts[u.Host] && u.Path == "" && u.RawQuery == "" {
 		return "" // the empty form means SaaS
 	}

@@ -120,7 +120,7 @@ func loadBoundProfileCredential(name string, selected profile.Profile, flags con
 	}
 	if resolved, layer := overridingControlURL(flags, yamlCfg); layer != "" && !profile.SameControlURL(resolved, selected.ControlURL) {
 		return "", fmt.Errorf("profile %q has managed credential %q bound to control URL %q, but %s sets control URL %q; refusing to send the credential there (pass --auth-key-file to use another key, or remove that override)",
-			name, selected.Credential, displayControlURL(selected.ControlURL), layer, resolved)
+			name, selected.Credential, displayControlURL(selected.ControlURL), layer, displayControlURL(resolved))
 	}
 	key, err := loadManagedProfileCredential(selected)
 	if err != nil {
@@ -132,7 +132,8 @@ func loadBoundProfileCredential(name string, selected profile.Profile, flags con
 
 // overridingControlURL returns the control URL a layer above the profile will
 // impose and that layer's name, in Merge's precedence order; layer is empty
-// when none sets one.
+// when none sets one. A layer counts by Merge's own test, a non-empty raw
+// value: a blank one still wins there, and trims to Tailscale SaaS.
 func overridingControlURL(flags config.FlagSet, yamlCfg config.PartialConfig) (resolved, layer string) {
 	candidates := []struct{ value, layer string }{
 		{flags.ControlURL, "--control-url"},
@@ -140,7 +141,7 @@ func overridingControlURL(flags config.FlagSet, yamlCfg config.PartialConfig) (r
 		{yamlCfg.ControlURL, "the YAML config"},
 	}
 	for _, c := range candidates {
-		if strings.TrimSpace(c.value) != "" {
+		if c.value != "" {
 			return strings.TrimSpace(c.value), c.layer
 		}
 	}

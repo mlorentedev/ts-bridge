@@ -112,6 +112,13 @@ func TestControlURLChangeOfUncredentialedProfile(t *testing.T) {
 	if err != nil || cleared {
 		t.Fatalf("Import = (%v, %v), want (false, nil)", cleared, err)
 	}
+	got, err := store.Get("office")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ControlURL != "https://other.example" {
+		t.Fatalf("ControlURL = %q, want %q", got.ControlURL, "https://other.example")
+	}
 }
 
 func TestSameControlURL(t *testing.T) {
@@ -126,6 +133,12 @@ func TestSameControlURL(t *testing.T) {
 		{"https://hs.example", "http://hs.example", false},
 		{"https://hs.example/a", "https://hs.example/A", false},
 		{"https://hs.example", "https://hs.example:8443", false},
+		// A default port names the same plane as no port.
+		{"https://hs.example", "https://hs.example:443", true},
+		{"http://hs.example", "http://hs.example:80", true},
+		{"https://hs.example", "https://hs.example:80", false},
+		{"https://[::1]:443", "https://[::1]", true},
+		{"", "https://controlplane.tailscale.com:443", true},
 		// Empty means Tailscale SaaS, so its own URLs name the same plane.
 		{"", "https://controlplane.tailscale.com", true},
 		{"", "https://Login.Tailscale.com/", true},
