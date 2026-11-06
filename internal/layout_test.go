@@ -3,6 +3,7 @@ package internal
 import (
 	"go/build"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -11,10 +12,13 @@ import (
 )
 
 // projectImports returns the sorted internal packages dir imports, relative to
-// ts-bridge/internal, ignoring test files.
+// ts-bridge/internal, ignoring test files. Build constraints are ignored, so an
+// edge that exists only behind a GOOS suffix or tag counts on every platform.
 func projectImports(t *testing.T, dir string) []string {
 	t.Helper()
-	pkg, err := build.ImportDir(dir, 0)
+	ctx := build.Default
+	ctx.UseAllFiles = true
+	pkg, err := ctx.ImportDir(dir, 0)
 	if err != nil {
 		t.Fatalf("import %s: %v", dir, err)
 	}
@@ -28,32 +32,60 @@ func projectImports(t *testing.T, dir string) []string {
 	return got
 }
 
-// TestPackageDependencies pins the import edges that ADR-007 records. A new
-// edge fails here until the ADR's dependency table and this one change
-// together; a stale table is how the ADR claimed "config depends on nothing
-// project-local" long after config imported credential (#630).
-func TestPackageDependencies(t *testing.T) {
-	want := map[string][]string{
-		"bootstrapssh":   nil,
-		"browser":        nil,
-		"config":         {"controlurl", "credential"},
-		"config/envfile": nil,
-		"controlurl":     nil,
-		"credential":     {"secretfile"},
-		"discover":       {"secretfile"},
-		"health":         {"telemetry"},
-		"host":           {"bootstrapssh", "controlurl"},
-		"logging":        nil,
-		"profile":        {"controlurl", "credential"},
-		"proxy":          {"config", "telemetry"},
-		"secretfile":     nil,
-		"serve":          {"config", "health", "host", "proxy"},
-		"telemetry":      nil,
+// codeSpans returns the `code spans` of a markdown table cell, in order.
+func codeSpans(cell string) []string {
+	var spans []string
+	parts := strings.Split(cell, "`")
+	for i := 1; i < len(parts); i += 2 {
+		spans = append(spans, parts[i])
 	}
+	return spans
+}
+
+// adrTable reads the dependency table of the ADR-007 amendment: each row names
+// a group of packages and the project-local packages they import.
+func adrTable(t *testing.T) map[string][]string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.FromSlash("../docs/adr/adr-007-multi-package-split.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, amendment, found := strings.Cut(string(data), "\n## Amendment")
+	if !found {
+		t.Fatal("ADR-007 has no Amendment section")
+	}
+	table := map[string][]string{}
+	for _, line := range strings.Split(amendment, "\n") {
+		cells := strings.Split(line, "|")
+		if len(cells) != 4 || !strings.HasPrefix(strings.TrimSpace(cells[1]), "`") {
+			continue
+		}
+		deps := codeSpans(cells[2])
+		slices.Sort(deps)
+		for _, name := range codeSpans(cells[1]) {
+			table[name] = deps
+		}
+	}
+	if len(table) == 0 {
+		t.Fatal("ADR-007 amendment has no dependency table")
+	}
+	return table
+}
+
+// TestPackageDependencies checks the import edges against the table in ADR-007's
+// amendment, which it reads. A new edge, a new package or a stale row fails here
+// until the ADR and the code agree, which is how the ADR claimed "config depends
+// on nothing project-local" long after config imported credential (#630).
+func TestPackageDependencies(t *testing.T) {
+	want := adrTable(t)
 	for name, deps := range want {
+		if !hasGo(filepath.FromSlash(name)) {
+			t.Errorf("ADR-007 lists internal/%s, which has no Go files", name)
+			continue
+		}
 		got := projectImports(t, filepath.FromSlash(name))
 		if !reflect.DeepEqual(got, deps) && (len(got) != 0 || len(deps) != 0) {
-			t.Errorf("internal/%s imports %v, want %v (update ADR-007 with this table)", name, got, deps)
+			t.Errorf("internal/%s imports %v, ADR-007 says %v", name, got, deps)
 		}
 	}
 
@@ -63,7 +95,7 @@ func TestPackageDependencies(t *testing.T) {
 		}
 		name := filepath.ToSlash(path)
 		if _, ok := want[name]; !ok && hasGo(path) {
-			t.Errorf("internal/%s is not in the dependency table", name)
+			t.Errorf("internal/%s is not in the ADR-007 dependency table", name)
 		}
 		return nil
 	})

@@ -96,7 +96,7 @@ The four-package split above grew to fifteen packages under `internal/`. The bou
 | `proxy` | `config`, `telemetry` |
 | `serve` | `config`, `health`, `host`, `proxy` |
 
-`TestPackageDependencies` in `internal/layout_test.go` pins this table: a new edge or a new package fails the test until the table and the test change together, so the ADR cannot drift silently again. Go forbids import cycles at build time; the table records that the graph stays shallow, with `serve` as the only package that composes others.
+`TestPackageDependencies` in `internal/layout_test.go` reads this table and compares it with the imports of every package, ignoring build tags: a new edge, a new package or a stale row fails the test until the ADR and the code agree, so the ADR cannot drift silently again. Go forbids import cycles at build time; the table records that the graph stays shallow, with `serve` as the only package that composes others.
 
 ## Validation
 
