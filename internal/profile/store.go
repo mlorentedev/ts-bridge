@@ -9,8 +9,6 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
-
-	"ts-bridge/internal/credential"
 )
 
 // ErrNotFound marks a lookup of a profile that is not in the store. It reads as
@@ -233,11 +231,9 @@ func (s *Store) ListProfiles() (map[string]Profile, error) {
 }
 
 // SetCredential associates a managed credential name with an existing profile.
+// It refuses a name another profile references on a different control plane.
 func (s *Store) SetCredential(profileName, credentialName string) error {
-	if err := credential.ValidateName(credentialName); err != nil {
-		return fmt.Errorf("invalid credential reference: %w", err)
-	}
-	return s.updateCredential(profileName, credentialName)
+	return s.associate(profileName, credentialName, nil)
 }
 
 // ClearCredential removes the managed credential reference from a profile.
