@@ -227,8 +227,12 @@ var (
 	fwProfile   = psField{"profile", "$($x.Profile)"}
 	fwRemote    = psField{"remote", "$(($x | Get-NetFirewallAddressFilter).RemoteAddress)"}
 	fwProtocol  = psField{"protocol", "$($f.Protocol)"}
-	fwPort      = psField{"port", "$($f.LocalPort)"}
+	fwPort      = psField{keyPort, "$($f.LocalPort)"}
 )
+
+// keyPort is the key a port is read and declared under: the firewall read's
+// key=value line, the host file's services[] entry and xrdp.ini's [Globals].
+const keyPort = "port"
 
 const (
 	psNetworkProfilePrivate = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
