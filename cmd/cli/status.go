@@ -249,11 +249,6 @@ func formatBytes(n int64) string {
 	return fmt.Sprintf("%.1f GiB", float64(n)/(unit*unit*unit))
 }
 
-// formatDuration formats a duration for display.
-func formatDuration(d time.Duration) string {
-	return d.String()
-}
-
 // supportsClearScreen returns true if ANSI escape codes should be emitted.
 // On Windows, VT processing must be enabled for ANSI codes to work correctly.
 // Without VT, escape sequences produce garbage output. We conservatively skip
