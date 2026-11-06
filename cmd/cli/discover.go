@@ -44,9 +44,9 @@ Non-interactive mode (--json): outputs a JSON array of devices for scripting.
 Flags:
   --json          Output devices as JSON (no interactive prompt)
   --filter TEXT   Filter by hostname or IP substring
-  --auto          Auto-select first matching host and update .env (no prompt)
+  --auto          Auto-select first matching host and update .env (--profile saves a profile instead)
   --profile NAME  Save the chosen host as profile NAME instead of updating .env
-  --port PORT     RDP port to use with --auto (default 3389)
+  --port PORT     RDP port to use with --auto or --profile (default 3389)
   --api-key KEY   Control-plane API key (overrides the environment)
   --api-key-file FILE  Read the API key from FILE (preferred over --api-key)
   --tailnet NAME  Tailscale tailnet name (e.g. "mycompany.ts.net")
@@ -66,8 +66,8 @@ Examples:
 
 	cmd.Flags().Bool("json", false, "Output devices as JSON")
 	cmd.Flags().String("filter", "", "Filter by hostname or IP substring")
-	cmd.Flags().Bool("auto", false, "Auto-select first matching host and update .env")
-	cmd.Flags().Int("port", 3389, "RDP port to use with --auto")
+	cmd.Flags().Bool("auto", false, "Auto-select first matching host and update .env (--profile saves a profile instead)")
+	cmd.Flags().Int("port", 3389, "RDP port to use with --auto or --profile")
 	cmd.Flags().String("api-key", "", "Control-plane API key (overrides TS_API_KEY / TS_HEADSCALE_API_KEY) — WARNING: visible in process list")
 	cmd.Flags().String("api-key-file", "", "Read the control-plane API key from a file (secure alternative to --api-key)")
 	cmd.Flags().String("auth-key", "", "Deprecated alias of --api-key — WARNING: visible in process list")
