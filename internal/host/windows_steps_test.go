@@ -389,16 +389,19 @@ func TestWindowsPowerCheckStep(t *testing.T) {
 	tests := []struct {
 		name    string
 		output  map[string]string
+		fail    map[string]bool
 		outcome Outcome
 		message string
 	}{
-		{"all zero", map[string]string{standby: zero, hibernate: zero, monitor: zero}, OutcomeOK, ""},
-		{"standby on", map[string]string{standby: on, hibernate: zero, monitor: zero}, OutcomeChanged, "standby-timeout-ac"},
-		{"monitor unreadable", map[string]string{standby: zero, hibernate: zero}, OutcomeFailed, "monitor-timeout-ac"},
+		{"all zero", map[string]string{standby: zero, hibernate: zero, monitor: zero}, nil, OutcomeOK, ""},
+		{"standby on", map[string]string{standby: on, hibernate: zero, monitor: zero}, nil, OutcomeChanged, "standby-timeout-ac"},
+		{"standby and monitor on", map[string]string{standby: on, hibernate: zero, monitor: on}, nil, OutcomeChanged, "standby-timeout-ac, monitor-timeout-ac"},
+		{"monitor unreadable", map[string]string{standby: zero, hibernate: zero}, nil, OutcomeFailed, "monitor-timeout-ac"},
+		{"powercfg fails", map[string]string{standby: zero, monitor: zero}, map[string]bool{hibernate: true}, OutcomeFailed, "hibernate-timeout-ac"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &recordingRunner{output: tt.output}
+			r := &recordingRunner{output: tt.output, fail: tt.fail}
 			got := powerCheckStep(r)
 			if got.Outcome != tt.outcome || !strings.Contains(got.Message, tt.message) || (tt.outcome != OutcomeOK && got.Fix == "") {
 				t.Errorf("= %s %q (fix %q), want %s naming %q with a fix", got.Outcome, got.Message, got.Fix, tt.outcome, tt.message)
