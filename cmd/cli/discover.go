@@ -36,7 +36,8 @@ A Headscale control URL without its API key is an error; it never falls back
 to the Tailscale SaaS API.
 
 Interactive mode (default): shows a numbered list, type a number or hostname
-to select, then optionally update .env with the chosen target.
+to select. With --profile NAME the chosen host is saved as profile NAME, as
+import does; without it, discover offers to write TS_TARGET to ./.env.
 
 Non-interactive mode (--json): outputs a JSON array of devices for scripting.
 
@@ -44,6 +45,7 @@ Flags:
   --json          Output devices as JSON (no interactive prompt)
   --filter TEXT   Filter by hostname or IP substring
   --auto          Auto-select first matching host and update .env (no prompt)
+  --profile NAME  Save the chosen host as profile NAME instead of updating .env
   --port PORT     RDP port to use with --auto (default 3389)
   --api-key KEY   Control-plane API key (overrides the environment)
   --api-key-file FILE  Read the API key from FILE (preferred over --api-key)
@@ -54,6 +56,7 @@ Without a terminal on stdin, discover does not offer to update .env; pass
 
 Examples:
   ts-bridge discover
+  ts-bridge discover --profile office
   ts-bridge discover --json
   ts-bridge discover --filter "desktop"
   ts-bridge discover --auto --port 3389
@@ -70,6 +73,7 @@ Examples:
 	cmd.Flags().String("auth-key", "", "Deprecated alias of --api-key — WARNING: visible in process list")
 	_ = cmd.Flags().MarkDeprecated("auth-key", "use --api-key or --api-key-file: discover calls the control-plane API, which takes an API key, not a node auth key")
 	cmd.Flags().String("tailnet", "", "Tailscale tailnet name (e.g. mycompany.ts.net)")
+	cmd.Flags().String("profile", "", "Save the chosen host as this profile instead of updating .env")
 	return cmd
 }
 
@@ -82,6 +86,7 @@ type discoverFlags struct {
 	APIKey     string
 	APIKeyFile string
 	Tailnet    string
+	Profile    string
 }
 
 func runDiscover(cmd *cobra.Command, args []string) error {
@@ -143,17 +148,23 @@ func runDiscover(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\nSelected: %s\n", target)
 
 	// Read controlURL from env so the descriptor reflects the active control plane.
-	controlURL := os.Getenv("TS_CONTROL_URL")
+	return persistSelection(cmd, flags, target, os.Getenv("TS_CONTROL_URL"))
+}
 
+// persistSelection keeps the chosen host: as a named profile with --profile,
+// through import's own path, otherwise in ./.env, which stays for setups that
+// still read it (#646).
+func persistSelection(cmd *cobra.Command, flags discoverFlags, target, controlURL string) error {
+	if flags.Profile != "" {
+		return runImportDirect(flags.Profile, buildDescriptorLine(target, flags.Port, controlURL), defaultProfileStorePath, false)
+	}
 	if flags.Auto {
 		return updateEnvFile(".env", target, flags.Port, controlURL)
 	}
-
 	if !promptEnvUpdate(cmd, target, flags.Port) {
 		fmt.Println("Skipped.")
 		return nil
 	}
-
 	return updateEnvFile(".env", target, flags.Port, controlURL)
 }
 
@@ -192,6 +203,7 @@ func parseDiscoverFlags(cmd *cobra.Command) (discoverFlags, error) {
 	}
 	f.APIKeyFile, _ = cmd.Flags().GetString("api-key-file")
 	f.Tailnet, _ = cmd.Flags().GetString("tailnet")
+	f.Profile, _ = cmd.Flags().GetString("profile")
 
 	if f.Port < 1 || f.Port > 65535 {
 		return f, fmt.Errorf("invalid port %d (must be 1-65535)", f.Port)
