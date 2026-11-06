@@ -30,8 +30,6 @@ func StateDirForPlatform() string {
 
 // stateDirFor is the pure core of StateDirForPlatform. goos and getenv are
 // injected so the per-OS branches can be exercised deterministically in tests.
-//
-//nolint:unparam // goos is parameterized for cross-platform table tests; the sole production caller passes runtime.GOOS (test callers are excluded from unparam).
 func stateDirFor(goos string, getenv func(string) string) string {
 	dir := platformStateBase(goos, getenv)
 	if !filepath.IsAbs(dir) {

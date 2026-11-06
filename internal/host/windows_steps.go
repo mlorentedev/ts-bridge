@@ -425,7 +425,7 @@ const (
 // exactly one rule by that name exists, enabled, allowing inbound TCP from any
 // address on every profile on port, as the recreate sets it; port 0 (unknown)
 // skips the port comparison. found reports whether any rule has the name.
-func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found bool, err error) {
+func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found bool, err error) { //nolint:gocyclo // baseline #629
 	out, err := outputPS(r, fmt.Sprintf(psReadFirewallRule, rule))
 	if err != nil {
 		return false, false, err

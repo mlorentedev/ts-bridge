@@ -24,7 +24,7 @@ import (
 )
 
 // newInitCmd constructs the "ts-bridge init" subcommand.
-func newInitCmd() *cobra.Command {
+func newInitCmd() *cobra.Command { //nolint:funlen // baseline #629
 	cmd := &cobra.Command{
 		Use:   "init [flags]",
 		Short: "Interactive setup wizard to create a ts-bridge configuration file",
@@ -110,7 +110,7 @@ const (
 )
 
 // runInit is the entry point for "ts-bridge init".
-func runInit(cmd *cobra.Command, args []string) error {
+func runInit(cmd *cobra.Command, args []string) error { //nolint:funlen,gocyclo // baseline #629
 	// Parse flags.
 	f, err := parseInitFlags(cmd)
 	if err != nil {
@@ -181,7 +181,7 @@ func validateProfileModeFlags(cmd *cobra.Command, f initFlags) error {
 
 // runInitProfile writes a named profile to the profile store.
 // storePath is injected so tests can pass a temp path without touching the real store.
-func runInitProfile(storePath string, f initFlags) error {
+func runInitProfile(storePath string, f initFlags) error { //nolint:gocyclo // baseline #629
 	s := profile.NewStore(storePath)
 	profiles, err := s.ListProfiles()
 	if err != nil {
@@ -279,7 +279,7 @@ func runInitInteractive(cmd *cobra.Command, f initFlags) error {
 }
 
 // collectInteractiveInputs prompts the user for all required values.
-func collectInteractiveInputs(reader *bufio.Reader, f *initFlags) error {
+func collectInteractiveInputs(reader *bufio.Reader, f *initFlags) error { //nolint:funlen,gocyclo // baseline #629
 	// 1. Auth key (masked).
 	authKey, err := readMaskedInput("Auth key (tskey-… or hskey-…): ")
 	if err != nil {
