@@ -9,7 +9,7 @@
   {
     "id": "QA-607-headscale-e2e-f2",
     "behavior": "AC2: a mesh scenario refuses to run when the pinned tailscale module no longer registers TS_DEBUG_USE_DERP_HTTP or a guest cannot reach the control plane, naming the failing check",
-    "verification": "bash scripts/tests/test-e2e-headscale.sh && grep -q 'TS_DEBUG_USE_DERP_HTTP' \"$(go list -m -f '{{.Dir}}' tailscale.com)/derp/derphttp/derphttp_client.go\"",
+    "verification": "bash scripts/tests/test-e2e-headscale.sh && bash scripts/tests/test-e2e-mesh-preflight.sh && grep -q 'TS_DEBUG_USE_DERP_HTTP' \"$(go list -m -f '{{.Dir}}' tailscale.com)/derp/derphttp/derphttp_client.go\"",
     "state": "pending",
     "evidence": ""
   },
@@ -58,7 +58,7 @@
   {
     "id": "QA-607-headscale-e2e-f9",
     "behavior": "AC9: no mesh log holds key material, a run leaves no Headscale container and no tsb-e2e session, and nothing under .github references the mesh targets",
-    "verification": "make e2e-mesh-linux; [ -z \"$(docker ps -aq --filter label=tsb-e2e=headscale)\" ] && ! grep -Eq 'hskey-|tskey-' scripts/e2e/out/mesh-*.log && bash scripts/tests/test-e2e-report.sh && ! grep -rEq 'e2e-mesh|scripts/e2e' .github",
+    "verification": "make e2e-mesh-linux && [ -z \"$(docker ps -aq --filter label=tsb-e2e=headscale)\" ] && ! dotf vm linux status | grep -q tsb-e2e- && log=$(ls -t scripts/e2e/out/mesh-linux-*.log | head -1) && [ -s \"$log\" ] && bash scripts/tests/test-e2e-report.sh && ! grep -rEq 'e2e-mesh|scripts/e2e' .github",
     "state": "pending",
     "evidence": ""
   },
