@@ -134,7 +134,12 @@ func TestAclWriters(t *testing.T) {
 		{"named root group with write", aclBytes(2, with(aclEnt{tagGroup, 7, 0}, aclEnt{tagMask, 7, noID})...), nil, ""},
 		{"every writer is named", aclBytes(2, with(aclEnt{tagUser, 6, 7}, aclEnt{tagGroup, 3, 9}, aclEnt{tagUser, 4, 8}, aclEnt{tagMask, 7, noID})...), []string{"user 7", "group 9"}, ""},
 		{"empty", nil, nil, "malformed"},
-		{"header only", aclBytes(2), nil, ""},
+		// posix_acl_valid's shape: USER_OBJ, GROUP_OBJ and OTHER, plus a MASK once a
+		// named entry exists. A value that breaks it is not one this read understands.
+		{"header only", aclBytes(2), nil, "malformed"},
+		{"mask only", aclBytes(2, aclEnt{tagMask, 7, noID}), nil, "malformed"},
+		{"no other entry", aclBytes(2, aclEnt{tagUserObj, 7, noID}, aclEnt{tagGroupObj, 5, noID}), nil, "malformed"},
+		{"named entry without a mask", aclBytes(2, with(aclEnt{tagUser, 7, 1000})...), nil, "malformed"},
 		{"truncated entry", aclBytes(2, base...)[:10], nil, "malformed"},
 		{"version 1", aclBytes(1, base...), nil, "version 1"},
 	}

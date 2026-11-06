@@ -15,8 +15,12 @@ const (
 	aclHeaderSize   = 4
 	aclEntrySize    = 8
 
-	aclUser  = 0x02
-	aclGroup = 0x08
+	aclUserObj  = 0x01
+	aclUser     = 0x02
+	aclGroupObj = 0x04
+	aclGroup    = 0x08
+	aclMask     = 0x10
+	aclOther    = 0x20
 
 	aclWrite = 0x02
 )
@@ -35,6 +39,9 @@ func aclWriters(raw []byte) ([]string, error) {
 	if v := binary.LittleEndian.Uint32(raw); v != aclXattrVersion {
 		return nil, fmt.Errorf("unsupported POSIX ACL version %d, want %d", v, aclXattrVersion)
 	}
+	if err := aclShapeValid(raw); err != nil {
+		return nil, err
+	}
 	var out []string
 	for off := aclHeaderSize; off < len(raw); off += aclEntrySize {
 		tag := binary.LittleEndian.Uint16(raw[off:])
@@ -50,4 +57,24 @@ func aclWriters(raw []byte) ([]string, error) {
 		out = append(out, fmt.Sprintf("%s %d", kind, id))
 	}
 	return out, nil
+}
+
+// aclShapeValid applies the kernel's posix_acl_valid shape: exactly one
+// USER_OBJ, GROUP_OBJ and OTHER, and a MASK once a named entry exists. A value
+// a conforming kernel never stores (a FUSE or network filesystem's) is refused
+// rather than read as an ACL that names no writer.
+func aclShapeValid(raw []byte) error {
+	seen := map[uint16]int{}
+	for off := aclHeaderSize; off < len(raw); off += aclEntrySize {
+		seen[binary.LittleEndian.Uint16(raw[off:])]++
+	}
+	for _, tag := range []uint16{aclUserObj, aclGroupObj, aclOther} {
+		if seen[tag] != 1 {
+			return fmt.Errorf("malformed POSIX ACL: want one entry with tag %#x, found %d", tag, seen[tag])
+		}
+	}
+	if seen[aclUser]+seen[aclGroup] > 0 && seen[aclMask] != 1 {
+		return fmt.Errorf("malformed POSIX ACL: named entries without one mask entry")
+	}
+	return nil
 }
