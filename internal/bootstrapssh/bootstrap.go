@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -327,8 +328,8 @@ func controlHostname(controlURL string) (string, error) {
 	return control.Hostname(), nil
 }
 
-func ConfigureControlProxy(ctx context.Context, controlURL, socksAddr string) error {
-	proxyURL, closeProxy, err := startControlProxy(ctx, controlURL, socksAddr)
+func ConfigureControlProxy(ctx context.Context, controlURL, socksAddr string, logger *slog.Logger) error {
+	proxyURL, closeProxy, err := startControlProxy(ctx, controlURL, socksAddr, logger)
 	if err != nil {
 		return err
 	}

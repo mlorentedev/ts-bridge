@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -224,10 +225,14 @@ func TestConnectTargetOverrideProductionLogger(t *testing.T) {
 
 func assertTargetOverrideLogFile(t *testing.T) {
 	t.Helper()
-	if loggingInstance == nil || loggingInstance.LogPath() == "" {
+	if loggingInstance == nil || logDir == "" {
 		t.Fatal("production logger did not initialize a log file")
 	}
-	data, err := os.ReadFile(loggingInstance.LogPath())
+	files, err := filepath.Glob(filepath.Join(logDir, "ts-bridge-*.log"))
+	if err != nil || len(files) != 1 {
+		t.Fatalf("want one log file in %s, got %v (err %v)", logDir, files, err)
+	}
+	data, err := os.ReadFile(files[0])
 	if err != nil {
 		t.Fatal(err)
 	}
