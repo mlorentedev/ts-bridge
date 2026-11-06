@@ -129,11 +129,12 @@ Case 'unknown key warned by name, check still runs' { Tsb host check --config "$
 Yaml "$W\v2.yaml" "version: 2`nhost: {}"
 Case 'unsupported version refused' { Tsb host check --config "$W\v2.yaml"; $Code -eq 1 -and $Out -match 'version' }
 Yaml "$W\p.yaml" "version: 1`nhost:`n  services:`n    - kind: rdp`n      port: 3390"
-# The command itself must work, unmarked, so an exception is a FAIL and not #557.
+# Windows does not move the RDP listener: a declared port it does not listen on is manual (#557).
 Case 'declared port 3390: check prints its steps as JSON' { @((Json check "$W\p.yaml").steps).Count -gt 0 }
-Case 'check: declared port differs from the registry port' 557 {
-    @((Json check "$W\p.yaml").steps | Where-Object { $_.outcome -in 'manual', 'failed' -and $_.message -match '3390' }).Count -gt 0
+Case 'check: declared port differs from the registry port' {
+    @((Json check "$W\p.yaml").steps | Where-Object { $_.name -eq 'RDP configuration' -and $_.outcome -eq 'manual' -and $_.message -match '3390' -and $_.message -match '3389' }).Count -eq 1
 }
+Case 'check: a declared port mismatch exits 2' { Tsb host check --config "$W\p.yaml"; $Code -eq 2 }
 
 # Upgrade: the previous release's .env still applies from its directory.
 New-Item -ItemType Directory -Force "$W\up" | Out-Null; Set-Location "$W\up"; Remove-Item .env -ErrorAction SilentlyContinue
@@ -159,4 +160,21 @@ Case 'client: status with no bridge prints running false, hint on stderr' {
     $j = $o | ConvertFrom-Json
     $c -eq 0 -and $j.running -eq $false -and $j.addr -eq '127.0.0.1:1' -and (Get-Content "$W\err" -Raw) -match 'not running'
 }
+
+# OwnerOnly PATH: the ACL is protected and grants only the token's user SID (#632).
+function OwnerOnly($path) {
+    if (-not $path) { return $false } # Get-Acl without a path reads the current directory
+    $acl = Get-Acl -LiteralPath $path
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    $acl.AreAccessRulesProtected -and $rules.Count -eq 1 -and $rules[0].IdentityReference -eq $me
+}
+# USERNAME names another account, as a renamed or domain user would see it.
+$user = $env:USERNAME; $env:USERNAME = 'Guest'
+'tskey-auth-e2e-notreal' | & $B auth set --stdin --profile e2e 2>&1 | Out-Null; $authCode = $LASTEXITCODE
+$env:USERNAME = $user
+$key = Get-ChildItem "$env:LOCALAPPDATA\ts-bridge" -Recurse -Filter *.key -ErrorAction SilentlyContinue | Select-Object -First 1
+Case 'auth set: stores the credential' { $authCode -eq 0 -and $key }
+Case 'auth set: key file grants only the token user' { $key -and (OwnerOnly $key.FullName) }
+Case 'auth set: store directory grants only the token user' { $key -and (OwnerOnly $key.DirectoryName) }
 exit 0

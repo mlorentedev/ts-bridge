@@ -24,7 +24,7 @@ func setupWindows(cfg Config, r Runner) SetupResult {
 
 	// The RDP port lives in the registry; the firewall must open that exact port.
 	rdpStep, rdpPort := rdpSetupStep(r)
-	steps = append(steps, rdpStep)
+	steps = append(steps, declaredRDPPort(rdpStep, cfg, rdpPort))
 
 	steps = append(steps, windowsFirewallSetupStep(r, cfg.FirewallRule, rdpPort))
 
@@ -166,6 +166,7 @@ func checkWindows(cfg Config, r Runner, result *CheckResult) {
 	if err == nil {
 		svc.Port = port
 		step, svc.Enabled = rdpCheckStep(r, port)
+		step = declaredRDPPort(step, cfg, port)
 	}
 	result.Steps = append(result.Steps, step)
 	fwStep, fwOK := windowsFirewallCheckStep(r, cfg.FirewallRule, svc.Port)
@@ -175,6 +176,18 @@ func checkWindows(cfg Config, r Runner, result *CheckResult) {
 		result.Steps = append(result.Steps, powerCheckStep(r))
 	}
 	result.Services = []Service{svc}
+}
+
+// declaredRDPPort turns a converged RDP step manual when the host declares a
+// port the registry does not listen on (#557). ts-bridge does not move the RDP
+// listener on Windows, so the operator changes it or the declaration.
+func declaredRDPPort(step SetupStep, cfg Config, port int) SetupStep {
+	if !cfg.PortDeclared || port == cfg.Port || !step.Outcome.Succeeded() {
+		return step
+	}
+	return newStep(step.Name, OutcomeManual,
+		fmt.Sprintf("RDP listens on port %d (set in the registry), not the declared %d", port, cfg.Port),
+		fmt.Sprintf(`declare port %d, or change PortNumber under HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp to %d and restart the TermService service`, port, cfg.Port))
 }
 
 // actRead maps a read's error to "ok" or "failed".
