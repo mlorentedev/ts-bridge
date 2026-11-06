@@ -73,11 +73,6 @@ func InitLogger(cfg config.Config) {
 	config.SetLogger(logger)
 }
 
-// LogFile returns the current log file path for banner display.
-func LogFile() string {
-	return logDir
-}
-
 func ensureStateDir(dir string) error {
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
@@ -306,7 +301,7 @@ func startConfiguredBootstrap(ctx context.Context, cfg config.Config) (controlBo
 	if err != nil {
 		return nil, fmt.Errorf("start SSH control-plane bootstrap: %w", err)
 	}
-	if err := controlProxyConfigurer(ctx, cfg.ControlURL, cfg.BootstrapSOCKSAddr); err != nil {
+	if err := controlProxyConfigurer(ctx, cfg.ControlURL, cfg.BootstrapSOCKSAddr, logger); err != nil {
 		_ = tunnel.Close()
 		return nil, fmt.Errorf("configure SSH control-plane bootstrap: %w", err)
 	}
