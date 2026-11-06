@@ -152,11 +152,49 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("host setup requires elevated privileges")
 	}
 
+	cfg, err := resolveHostSetupConfig(cmd, file)
+	if err != nil {
+		return err
+	}
+
+	result, err := runHostSetupSteps(cfg)
+	if err != nil {
+		return err
+	}
+
+	warnRDPPortNotApplied(cmd, file, cfg, result)
+	return printSetupResult(cmd, result)
+}
+
+// runHostSetupSteps applies the resolved configuration, logging through a logger
+// built from it so --log-format / --verbose (and their TS_HOST_* env
+// equivalents) actually take effect.
+func runHostSetupSteps(cfg host.Config) (host.SetupResult, error) {
+	logger := hostInitLogger(cfg)
+
+	logger.Info("starting host setup",
+		"firewall_rule", cfg.FirewallRule,
+		"rdp_port", cfg.Port,
+		"no_sleep", cfg.NoSleep,
+	)
+
+	result, err := hostSetup(cfg, logger)
+	if err != nil {
+		logger.Error("host setup failed", "error", err)
+		return host.SetupResult{}, fmt.Errorf("host setup failed: %w", err)
+	}
+	return result, nil
+}
+
+// resolveHostSetupConfig merges the .env file, the CLI flags, the host file and
+// the per-OS defaults into the setup configuration, and rejects an invalid
+// firewall rule before any side effect.
+func resolveHostSetupConfig(cmd *cobra.Command, file host.File) (host.Config, error) {
 	// Auto-load .env from CWD so the TS_HOST_* values written by
 	// "ts-bridge host init" are honored here, mirroring "ts-bridge connect".
 	// Explicit env vars and CLI flags still win over .env (merge precedence).
 	if err := envfile.Load(".env"); err != nil {
-		return fmt.Errorf("load .env: %w", err)
+		return host.Config{}, fmt.Errorf("load .env: %w", err)
 	}
 
 	// Collect CLI flags. The *Set fields record whether each bool flag was
@@ -175,36 +213,28 @@ func runHostSetup(cmd *cobra.Command, args []string) error {
 
 	// Validate firewall rule early (before any side effects).
 	if _, err := host.SanitizeFirewallRule(cfg.FirewallRule); err != nil {
-		return fmt.Errorf("invalid firewall rule: %w", err)
+		return host.Config{}, fmt.Errorf("invalid firewall rule: %w", err)
 	}
+	return cfg, nil
+}
 
-	// Build the logger from the resolved config so --log-format / --verbose
-	// (and their TS_HOST_* env equivalents) actually take effect.
-	logger := hostInitLogger(cfg)
-
-	logger.Info("starting host setup",
-		"firewall_rule", cfg.FirewallRule,
-		"rdp_port", cfg.Port,
-		"no_sleep", cfg.NoSleep,
-	)
-
-	result, err := hostSetup(cfg, logger)
-	if err != nil {
-		logger.Error("host setup failed", "error", err)
-		return fmt.Errorf("host setup failed: %w", err)
-	}
-
-	// On Windows the RDP listening port is read from the registry, not set by
-	// ts-bridge; the firewall opens the actual (registry) port. If a port was
-	// declared (--port, TS_HOST_RDP_PORT or the file) and differs, say so
-	// rather than leaving the declaration silently ineffective.
+// warnRDPPortNotApplied tells the operator when a declared RDP port was not
+// used. On Windows the RDP listening port is read from the registry, not set by
+// ts-bridge; the firewall opens the actual (registry) port. If a port was
+// declared (--port, TS_HOST_RDP_PORT or the file) and differs, say so rather
+// than leaving the declaration silently ineffective.
+func warnRDPPortNotApplied(cmd *cobra.Command, file host.File, cfg host.Config, result host.SetupResult) {
 	if hostGOOS == windowsOS && rdpPortDeclared(cmd, file) && cfg.Port != result.RDPPort {
 		printWarn(cmd.ErrOrStderr(), fmt.Sprintf(
 			"RDP port %d not applied: Windows RDP listens on port %d (set in the registry). "+
 				"Change the RDP port in Windows, then re-run host setup.",
 			cfg.Port, result.RDPPort))
 	}
+}
 
+// printSetupResult prints the setup outcome, as JSON with --json or step by
+// step, and returns the convergence verdict (the exit status).
+func printSetupResult(cmd *cobra.Command, result host.SetupResult) error {
 	jsonOut, _ := cmd.Flags().GetBool("json")
 	if jsonOut {
 		if err := printSetupJSON(cmd.OutOrStdout(), hostTailscaleIP(), result); err != nil {
