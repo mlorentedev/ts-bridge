@@ -141,7 +141,7 @@ type ControlBootstrapForTest = controlBootstrap
 func SetServeBootstrapForTest(
 	t interface{ Cleanup(func()) },
 	start func(context.Context, bootstrapssh.Config) (ControlBootstrapForTest, error),
-	configure func(context.Context, string, string) error,
+	configure func(context.Context, string, string, *slog.Logger) error,
 ) {
 	prevStart, prevConfigure := sshTunnelStarter, controlProxyConfigurer
 	sshTunnelStarter, controlProxyConfigurer = start, configure
