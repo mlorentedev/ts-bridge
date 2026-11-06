@@ -148,9 +148,13 @@ ok "serve: a named-user write the mask hides is still refused" -- 'code 1 && has
 setfacl -b /var/lib/acl-e2e && setfacl -m g:nogroup:rwx /var/lib/acl-e2e
 run timeout 20 "$B" host serve --config "$W/acl.yaml"
 ok "serve: ancestor with a named-group write ACL refused, naming it and the group" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to group"'
+# A refusal creates nothing; a pass creates state_dir (EnsureStateDir walks the ancestors first). That
+# makes the directory the positive half of the next case, so it cannot go green on an unrelated error.
+ok "acl: the refused runs created no state_dir" -- '[ ! -e /var/lib/acl-e2e/state ]'
 setfacl -b /var/lib/acl-e2e && setfacl -m u:nobody:r-x /var/lib/acl-e2e
 run timeout 20 "$B" host serve --config "$W/acl.yaml"
-ok "serve: ancestor with a read-only named-user ACL is not refused" -- '! has "ancestor"'
+ok "serve: ancestor with a read-only named-user ACL is not refused, and the walk lets state_dir be created" -- '! has "ancestor" && [ -d /var/lib/acl-e2e/state ]'
+rm -rf /var/lib/acl-e2e/state
 setfacl -b /var/lib/acl-e2e
 
 run "$B" import e2e "tsb://host-e2e:3389?cp=saas"

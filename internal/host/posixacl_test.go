@@ -4,8 +4,11 @@ package host
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io/fs"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -41,7 +44,78 @@ func aclBytes(version uint32, entries ...aclEnt) []byte {
 // base is the three entries an ACL with no named principal holds.
 var base = []aclEnt{{tagUserObj, 7, noID}, {tagGroupObj, 5, noID}, {tagOther, 5, noID}}
 
-func with(extra ...aclEnt) []aclEnt { return append(append([]aclEnt{}, base...), extra...) }
+// with is base plus the named entries, in the order the kernel stores and
+// accepts them (kernelValid): USER_OBJ, USER*, GROUP_OBJ, GROUP*, MASK, OTHER.
+func with(extra ...aclEnt) []aclEnt {
+	rank := map[uint16]int{tagUserObj: 0, tagUser: 1, tagGroupObj: 2, tagGroup: 3, tagMask: 4, tagOther: 5}
+	all := append(append([]aclEnt{}, base...), extra...)
+	slices.SortStableFunc(all, func(a, b aclEnt) int { return rank[a.tag] - rank[b.tag] })
+	return all
+}
+
+// kernelValid mirrors posix_acl_valid (fs/posix_acl.c), which setxattr runs on
+// system.posix_acl_access: USER_OBJ, USER*, GROUP_OBJ, GROUP*, MASK, OTHER in
+// that order, and a MASK once a named entry exists. The parser reads any order,
+// so a hand-built fixture has to be checked against the kernel's, or the test
+// that hands it to the real xattr fails with EINVAL where the parser test stays
+// green.
+func kernelValid(entries []aclEnt) error {
+	const (
+		wantUser  = iota // USER_OBJ seen, USER* and GROUP_OBJ next
+		wantGroup        // GROUP_OBJ seen, GROUP* and MASK next
+		wantOther        // MASK seen, OTHER next
+		done
+	)
+	state, named := 0, false
+	for i, e := range entries {
+		ok := false
+		switch {
+		case e.tag == tagUserObj && i == 0:
+			ok = true
+		case e.tag == tagUser && state == wantUser && i > 0:
+			named, ok = true, true
+		case e.tag == tagGroupObj && state == wantUser && i > 0:
+			state, ok = wantGroup, true
+		case e.tag == tagGroup && state == wantGroup:
+			named, ok = true, true
+		case e.tag == tagMask && state == wantGroup:
+			state, ok = wantOther, true
+		case e.tag == tagOther && (state == wantOther || state == wantGroup && !named):
+			state, ok = done, true
+		}
+		if !ok {
+			return fmt.Errorf("entry %d (tag %#x) is not valid at that place", i, e.tag)
+		}
+	}
+	if state != done {
+		return errors.New("ACL ends before OTHER")
+	}
+	return nil
+}
+
+// The fixtures with() builds are what the real xattr is handed, so the kernel
+// must accept them.
+func TestWithBuildsKernelValidACLs(t *testing.T) {
+	tests := map[string][]aclEnt{
+		"owner only":       with(),
+		"named user":       with(aclEnt{tagUser, 7, 1000}, aclEnt{tagMask, 7, noID}),
+		"named group":      with(aclEnt{tagGroup, 2, 1000}, aclEnt{tagMask, 7, noID}),
+		"users and groups": with(aclEnt{tagUser, 6, 7}, aclEnt{tagGroup, 3, 9}, aclEnt{tagUser, 4, 8}, aclEnt{tagMask, 7, noID}),
+	}
+	for name, entries := range tests {
+		t.Run(name, func(t *testing.T) {
+			if err := kernelValid(entries); err != nil {
+				t.Fatalf("with() = %v: %v", entries, err)
+			}
+		})
+	}
+	if err := kernelValid(append(append([]aclEnt{}, base...), aclEnt{tagUser, 7, 1000}, aclEnt{tagMask, 7, noID})); err == nil {
+		t.Fatal("kernelValid accepted USER after OTHER, which setxattr answers with EINVAL")
+	}
+	if err := kernelValid(append([]aclEnt{base[0], {tagUser, 7, 1000}}, base[1:]...)); err == nil {
+		t.Fatal("kernelValid accepted a named entry with no MASK")
+	}
+}
 
 func TestAclWriters(t *testing.T) {
 	tests := []struct {

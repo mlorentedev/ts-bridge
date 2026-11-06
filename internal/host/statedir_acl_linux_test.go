@@ -14,7 +14,11 @@ func TestReadAccessACL(t *testing.T) {
 	if raw, err := readAccessACL(dir); err != nil || raw != nil {
 		t.Fatalf("readAccessACL(plain dir) = %v, %v, want nil, nil", raw, err)
 	}
-	acl := aclBytes(2, with(aclEnt{tagUser, 7, 1000}, aclEnt{tagMask, 7, noID})...)
+	entries := with(aclEnt{tagUser, 7, 1000}, aclEnt{tagMask, 7, noID})
+	if err := kernelValid(entries); err != nil {
+		t.Fatalf("fixture the kernel would refuse with EINVAL: %v", err)
+	}
+	acl := aclBytes(2, entries...)
 	if err := unix.Setxattr(dir, "system.posix_acl_access", acl, 0); err != nil {
 		if errors.Is(err, unix.ENOTSUP) || errors.Is(err, unix.EPERM) {
 			t.Skipf("filesystem keeps no POSIX ACLs here: %v", err)
