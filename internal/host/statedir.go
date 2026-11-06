@@ -27,7 +27,10 @@ func checkUnixStateDir(path string, info fs.FileInfo, uid uint32) error {
 	return nil
 }
 
-// checkUnixAncestor is checkAncestor for a state_dir (#561).
+// checkUnixAncestor is checkAncestor for a state_dir (#561). The walk adds a
+// POSIX ACL read (checkAncestorACL, #598) on Linux only: on macOS no ACL is
+// read, so an extended ACL granting write on an ancestor is not seen there
+// (readAccessACL is nil, statedir_acl_other.go; docs/runbooks/host-serve.md).
 func checkUnixAncestor(path, dir string, info fs.FileInfo, uid uint32) error {
 	return checkAncestor("state_dir", path, dir, info, uid)
 }
@@ -35,8 +38,8 @@ func checkUnixAncestor(path, dir string, info fs.FileInfo, uid uint32) error {
 // checkAncestor accepts an ancestor dir of path, the setting label names, that
 // only root can change: a root-owned directory no group or other may write (a
 // sticky world-writable /tmp included), or a root-owned symlink, whose target
-// the walk then checks the same way (#561, #595). Only st_mode is read: a POSIX
-// ACL granting write on an ancestor is not seen.
+// the walk then checks the same way (#561, #595). Only st_mode is read here; the
+// walk reads the ACL separately, and on Linux only (see checkUnixAncestor).
 func checkAncestor(label, path, dir string, info fs.FileInfo, uid uint32) error {
 	switch {
 	case info.Mode()&fs.ModeSymlink != 0:
