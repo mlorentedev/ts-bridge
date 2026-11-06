@@ -190,7 +190,8 @@ func runHostSetupSteps(cfg host.Config) (host.SetupResult, error) {
 
 // resolveHostSetupConfig merges the .env file, the CLI flags, the host file and
 // the per-OS defaults into the setup configuration, and rejects an invalid
-// firewall rule before any side effect.
+// firewall rule before host setup touches the machine. Loading the .env file is
+// the one effect that precedes the check: it sets the process environment.
 func resolveHostSetupConfig(cmd *cobra.Command, file host.File) (host.Config, error) {
 	// Auto-load .env from CWD so the TS_HOST_* values written by
 	// "ts-bridge host init" are honored here, mirroring "ts-bridge connect".
