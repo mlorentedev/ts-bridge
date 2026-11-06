@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"ts-bridge/internal/config"
 	"ts-bridge/internal/host"
+	"ts-bridge/internal/profile"
 )
 
 // TestHostDescriptor_RoundTrip: the descriptor host setup and host check
@@ -43,12 +43,12 @@ func TestHostDescriptor_RoundTrip(t *testing.T) {
 				if err := runImportDirect("host", out.Descriptor, store, false); err != nil {
 					t.Fatalf("%s: import %q: %v", name, out.Descriptor, err)
 				}
-				cfg := config.Config{}
-				if err := applyProfile(&cfg, "host", store); err != nil {
-					t.Fatalf("%s: applyProfile: %v", name, err)
+				got, err := profile.NewStore(store).Get("host")
+				if err != nil {
+					t.Fatalf("%s: load imported profile: %v", name, err)
 				}
-				if cfg.ControlURL != tt.want || cfg.Target != "100.64.0.1:3389" {
-					t.Errorf("%s: imported ControlURL %q Target %q, want %q and 100.64.0.1:3389", name, cfg.ControlURL, cfg.Target, tt.want)
+				if got.ControlURL != tt.want || got.Target != "100.64.0.1:3389" {
+					t.Errorf("%s: imported ControlURL %q Target %q, want %q and 100.64.0.1:3389", name, got.ControlURL, got.Target, tt.want)
 				}
 			}
 		})
