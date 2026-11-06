@@ -34,6 +34,10 @@ func TestXRDPPortStep(t *testing.T) {
 		{name: "tcp:// form keeps its address", files: xrdpWith("tcp://.:3389"), declared: 3390, setup: OutcomeChanged, check: OutcomeChanged, included: true, written: "port=tcp://.:3390", message: "3390"},
 		{name: "vsock is not a TCP port", files: xrdpWith("vsock://-1:3389"), declared: 3390, setup: OutcomeFailed, check: OutcomeFailed, included: true, message: "vsock://-1:3389"},
 		{name: "no ini, 3390 declared", declared: 3390, setup: OutcomeFailed, check: OutcomeFailed, included: true, message: xrdpINIPath},
+		// With no [Globals] header there is nowhere to put port=: refuse rather
+		// than rewrite the same bytes and report the port applied.
+		{name: "no [Globals] section, 3390 declared", files: map[string]string{xrdpINIPath: "[Xorg]\nname=Xorg\nport=-1\n"}, declared: 3390, setup: OutcomeFailed, check: OutcomeFailed, included: true, message: "[Globals]"},
+		{name: "no [Globals] section, default declared", files: map[string]string{xrdpINIPath: "[Xorg]\nname=Xorg\nport=-1\n"}, declared: 3389},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -90,7 +94,7 @@ func cloneMap(m map[string]string) map[string]string {
 func TestLinuxStepsCarryTheXRDPPort(t *testing.T) {
 	r := &recordingRunner{elevated: true, onPath: map[string]bool{"systemctl": true, "ufw": true}, files: xrdpWith("3389"),
 		output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3390/tcp\n"})}
-	got := setupLinux(Config{Port: 3390}, r)
+	got := setupLinux(Config{Port: 3390, PortDeclared: true}, r)
 	names := make([]string, 0, len(got.Steps))
 	for _, s := range got.Steps {
 		names = append(names, s.Name)
@@ -99,9 +103,33 @@ func TestLinuxStepsCarryTheXRDPPort(t *testing.T) {
 		t.Errorf("setup steps = %v", names)
 	}
 	var result CheckResult
-	checkLinux(Config{Port: 3390}, &recordingRunner{elevated: true, onPath: map[string]bool{"systemctl": true, "ufw": true}, files: xrdpWith("3389"),
+	checkLinux(Config{Port: 3390, PortDeclared: true}, &recordingRunner{elevated: true, onPath: map[string]bool{"systemctl": true, "ufw": true}, files: xrdpWith("3389"),
 		output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3390/tcp\n"})}, &result)
 	if len(result.Steps) != 3 || result.Steps[1].Name != xrdpPortName || result.Steps[1].Outcome != OutcomeChanged {
 		t.Errorf("check steps = %+v, want the xrdp port drift second", result.Steps)
+	}
+}
+
+// Only a declared port moves xrdp: with nothing declared, a hand-set port= is
+// the operator's, so setup neither rewrites it nor restarts xrdp, and check
+// reports no drift (Windows likewise adopts the registry's port).
+func TestLinuxLeavesAnUndeclaredXRDPPortAlone(t *testing.T) {
+	ufwHost := map[string]bool{"systemctl": true, "ufw": true}
+	r := &recordingRunner{elevated: true, onPath: ufwHost, files: xrdpWith("3390"), output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})}
+	got := setupLinux(Config{Port: 3389}, r)
+	for _, s := range got.Steps {
+		if s.Name == xrdpPortName {
+			t.Errorf("setup reported %s %q with no port declared", s.Outcome, s.Message)
+		}
+	}
+	if slices.Contains(r.calls, "writefile "+xrdpINIPath) || slices.Contains(r.calls, "run systemctl restart xrdp") {
+		t.Errorf("setup moved an undeclared xrdp port: %v", r.calls)
+	}
+	var result CheckResult
+	checkLinux(Config{Port: 3389}, &recordingRunner{elevated: true, onPath: ufwHost, files: xrdpWith("3390"), output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})}, &result)
+	for _, s := range result.Steps {
+		if s.Name == xrdpPortName {
+			t.Errorf("check reported %s %q with no port declared", s.Outcome, s.Message)
+		}
 	}
 }

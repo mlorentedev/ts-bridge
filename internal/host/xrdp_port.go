@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -21,13 +22,15 @@ var xrdpPortValue = regexp.MustCompile(`^((?:tcp6?://[^\s]*:)?)(\d+)$`)
 
 // xrdpListener is where xrdp.ini makes xrdp listen. line is the index of the
 // [Globals] `port=` line, -1 when there is none and xrdp uses its built-in
-// 3389. value is that line's raw value, for messages.
+// 3389. globals is the [Globals] header's index, -1 when the file has none.
+// value is the port line's raw value, for messages.
 type xrdpListener struct {
-	lines  []string
-	line   int
-	value  string
-	prefix string
-	port   int
+	lines   []string
+	line    int
+	globals int
+	value   string
+	prefix  string
+	port    int
 }
 
 // readXRDPListener parses xrdp.ini's [Globals] section. A value that is not a
@@ -38,12 +41,15 @@ func readXRDPListener(r Runner) (xrdpListener, error) {
 	if err != nil {
 		return xrdpListener{}, err
 	}
-	l := xrdpListener{lines: strings.Split(string(data), "\n"), line: -1, port: defaultRDPPort}
+	l := xrdpListener{lines: strings.Split(string(data), "\n"), line: -1, globals: -1, port: defaultRDPPort}
 	section := ""
 	for i, raw := range l.lines {
 		line := strings.TrimSpace(raw)
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
 			section = line
+			if section == "[Globals]" && l.globals < 0 {
+				l.globals = i
+			}
 			continue
 		}
 		key, value, ok := strings.Cut(line, "=")
@@ -61,20 +67,16 @@ func readXRDPListener(r Runner) (xrdpListener, error) {
 	return l, nil
 }
 
-// withPort is xrdp.ini with [Globals] listening on port, appending a `port=`
-// line right after the [Globals] header when the file had none.
+// withPort is xrdp.ini with [Globals] listening on port, inserting a `port=`
+// line right after the [Globals] header when the file had none. The read
+// refuses a file with neither, so there is always a place to write.
 func (l xrdpListener) withPort(port int) []byte {
 	lines := append([]string(nil), l.lines...)
 	entry := fmt.Sprintf("port=%s%d", l.prefix, port)
 	if l.line >= 0 {
 		lines[l.line] = entry
 	} else {
-		for i, raw := range lines {
-			if strings.TrimSpace(raw) == "[Globals]" {
-				lines = append(lines[:i+1], append([]string{entry}, lines[i+1:]...)...)
-				break
-			}
-		}
+		lines = slices.Insert(lines, l.globals+1, entry)
 	}
 	return []byte(strings.Join(lines, "\n"))
 }
@@ -96,6 +98,9 @@ func xrdpPortRead(r Runner, declared int) (xrdpListener, SetupStep, bool) {
 			fmt.Sprintf("set port=%d in the [Globals] section of %s and restart xrdp", declared, xrdpINIPath)), true
 	case l.port == declared:
 		return l, newStep(xrdpPortName, OutcomeOK, fmt.Sprintf("xrdp listens on TCP %d", declared), ""), declared != defaultRDPPort
+	case l.line < 0 && l.globals < 0:
+		return l, newStep(xrdpPortName, OutcomeFailed, fmt.Sprintf("Cannot apply RDP port %d: %s has no [Globals] section", declared, xrdpINIPath),
+			fmt.Sprintf("add a [Globals] section with port=%d to %s and restart xrdp", declared, xrdpINIPath)), true
 	}
 	return l, newStep(xrdpPortName, OutcomeChanged, fmt.Sprintf("xrdp listens on TCP %d, not the declared %d", l.port, declared),
 		"run ts-bridge host setup as root"), true

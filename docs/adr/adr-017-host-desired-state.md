@@ -170,10 +170,12 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 
 A declared RDP port is applied where the OS lets a CLI move the listener and reported
 where it does not (#557, amended 2026-11-06). Linux rewrites xrdp's `port=` and restarts
-xrdp; the step appears only when the declared port or xrdp's is not the default 3389, so a
-stock host keeps its step list. Windows never writes `PortNumber`: a declared port the
+xrdp; the step appears only when a port is declared and it or xrdp's is not the default
+3389, so a stock host keeps its step list, and an `xrdp.ini` with no `[Globals]` section is
+`failed` rather than rewritten. Windows never writes `PortNumber`: a declared port the
 registry does not listen on makes the RDP step `manual` in `setup` and `check`, naming both
-ports. A port no layer declares takes the registry's, with nothing to compare.
+ports. On both, a port no layer declares is left to the OS (the registry's, or a hand-set
+`port=`), with nothing to compare.
 
 On macOS, `check` reads Remote Login without root from the launchd override for
 `com.openssh.sshd` and, when no override exists, from the `Disabled` key of its launch
