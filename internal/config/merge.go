@@ -408,40 +408,35 @@ func applyEnvString(dst *string, key string) {
 	}
 }
 
-func applyEnvDuration(dst *time.Duration, key string, validate func(time.Duration) bool) {
-	if v := os.Getenv(key); v != "" {
-		if d, err := time.ParseDuration(v); err != nil {
-			warnEnvVar(key, v, err.Error())
-		} else if validate != nil && !validate(d) {
-			warnEnvVar(key, v, "failed validation")
-		} else {
-			*dst = d
-		}
+// applyEnvParsed sets *dst from the env var key when it parses and passes
+// validate; otherwise it warns and leaves *dst alone.
+func applyEnvParsed[T any](dst *T, key string, parse func(string) (T, error), validate func(T) bool) {
+	v := os.Getenv(key)
+	if v == "" {
+		return
 	}
+	n, err := parse(v)
+	if err != nil {
+		warnEnvVar(key, v, err.Error())
+		return
+	}
+	if validate != nil && !validate(n) {
+		warnEnvVar(key, v, "failed validation")
+		return
+	}
+	*dst = n
+}
+
+func applyEnvDuration(dst *time.Duration, key string, validate func(time.Duration) bool) {
+	applyEnvParsed(dst, key, time.ParseDuration, validate)
 }
 
 func applyEnvInt(dst *int, key string, validate func(int) bool) {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err != nil {
-			warnEnvVar(key, v, err.Error())
-		} else if validate != nil && !validate(n) {
-			warnEnvVar(key, v, "failed validation")
-		} else {
-			*dst = n
-		}
-	}
+	applyEnvParsed(dst, key, strconv.Atoi, validate)
 }
 
 func applyEnvInt64(dst *int64, key string, validate func(int64) bool) {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err != nil {
-			warnEnvVar(key, v, err.Error())
-		} else if validate != nil && !validate(n) {
-			warnEnvVar(key, v, "failed validation")
-		} else {
-			*dst = n
-		}
-	}
+	applyEnvParsed(dst, key, func(v string) (int64, error) { return strconv.ParseInt(v, 10, 64) }, validate)
 }
 
 func nonNegativeDuration(d time.Duration) bool { return d >= 0 }
