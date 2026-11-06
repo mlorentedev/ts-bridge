@@ -42,6 +42,26 @@ The local SOCKS and HTTP listeners are unauthenticated. Loopback binding prevent
 remote access, not access by other local users/processes. Use a trusted client host;
 never expose these listeners through port forwarding.
 
+## Restricting the SSH account with PermitOpen
+
+The adapter forwards any port on the control hostname, not only the port in the
+control URL. An account limited with `PermitOpen <control-host>:443` therefore
+refuses every other port the SDK dials, and ssh prints one
+`channel N: open failed: administratively prohibited` line on stderr per refusal.
+The bridge can still reach READY over the permitted port.
+
+ssh does not name the refused destination, but ts-bridge does. Every dial through
+the bootstrap SOCKS listener is logged before it is made as
+`SSH bootstrap SOCKS dial target=<host:port>`, at debug level. The console shows it
+with `--verbose`; the JSON log file under the platform log directory always keeps
+it, so a start without `--verbose` can be inspected afterwards. Match the refused
+channel to the `target` logged just before it and add that `host:port` to
+`PermitOpen`, or accept the refusal if the start still reaches READY.
+
+Which extra destination the SDK dials (#572) is not confirmed. A live start with
+`--verbose` against a restricted account is what names it; this runbook declares
+the destination once that start has been recorded.
+
 ## Verification
 
 `READY` and `/health/ready` prove startup, not destination reachability. Check a
