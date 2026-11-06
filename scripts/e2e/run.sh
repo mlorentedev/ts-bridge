@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Local e2e harness for `ts-bridge host` on throwaway VMs (QA-606, #606).
 #
-# Usage: scripts/e2e/run.sh linux|windows|clean
+# Usage: scripts/e2e/run.sh linux|windows|clean|headscale-up|headscale-down
 #
 # Brings a fresh `dotf vm` session up, runs the guest scenario elevated, and
 # always tears the session down. Not run in CI: the runners cannot nest a VM.
-# See docs/runbooks/e2e-vm.md.
+# See docs/runbooks/e2e-vm.md. headscale-up and headscale-down run the local control plane the
+# mesh scenarios use (QA-607); clean removes it too.
 set -euo pipefail
 
 OS="${1:-}"
@@ -16,6 +17,9 @@ SESSION="tsb-e2e-${OS}"
 PREV="${E2E_PREV:-}"        # previous release for the upgrade case; default: latest
 KEEP="${E2E_KEEP:-0}"       # 1 keeps the guest for debugging
 dir=""
+
+# shellcheck source-path=SCRIPTDIR source=headscale.sh
+. "$HERE/headscale.sh"
 
 die() { echo "e2e: $*" >&2; exit 2; }
 
@@ -94,11 +98,14 @@ main() {
       local rc=0
       down linux || rc=1
       down windows || rc=1
-      [ "$rc" -eq 0 ] && echo "e2e: no session left"
+      hs_down || rc=1
+      [ "$rc" -eq 0 ] && echo "e2e: no session left, no headscale container"
       exit "$rc"
       ;;
+    headscale-up) hs_up; exit ;;
+    headscale-down) hs_down; exit ;;
     linux | windows) ;;
-    *) die "usage: $0 linux|windows|clean" ;;
+    *) die "usage: $0 linux|windows|clean|headscale-up|headscale-down" ;;
   esac
   preflight
   local log
