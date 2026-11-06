@@ -358,7 +358,7 @@ func TestControlProxySelectsOnlyControlHostname(t *testing.T) {
 }
 
 func TestConfigureControlProxyInstallsHook(t *testing.T) {
-	if err := ConfigureControlProxy(t.Context(), "https://vpn.example.com", "127.0.0.1:1055"); err != nil {
+	if err := ConfigureControlProxy(t.Context(), "https://vpn.example.com", "127.0.0.1:1055", nil); err != nil {
 		t.Fatalf("ConfigureControlProxy() error = %v", err)
 	}
 
@@ -370,7 +370,7 @@ func TestConfigureControlProxyInstallsHook(t *testing.T) {
 	if got == nil || got.Scheme != "http" || got.Hostname() != "127.0.0.1" || got.Port() == "" {
 		t.Fatalf("control proxy = %v, want an ephemeral loopback HTTP proxy", got)
 	}
-	if err := ConfigureControlProxy(t.Context(), "https://other.example.com", "127.0.0.1:1055"); err == nil {
+	if err := ConfigureControlProxy(t.Context(), "https://other.example.com", "127.0.0.1:1055", nil); err == nil {
 		t.Fatal("replacing an initialized SDK proxy hook must fail")
 	}
 	unchanged, err := tshttpproxy.ProxyFromEnvironment(&http.Request{URL: requestURL})
@@ -399,7 +399,7 @@ func TestControlProxyPreservesHostnameThroughSOCKS(t *testing.T) {
 	hostSeen := make(chan string, 1)
 	go serveOneSOCKSHandshake(t, listener, hostSeen)
 
-	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://vpn.example.com", listener.Addr().String())
+	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://vpn.example.com", listener.Addr().String(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

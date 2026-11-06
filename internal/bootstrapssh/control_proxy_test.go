@@ -2,12 +2,14 @@ package bootstrapssh
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +17,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,7 +54,7 @@ func TestControlProxySDKConsumersHelper(t *testing.T) {
 	}
 	target := net.JoinHostPort(hostname, portText)
 	controlURL := "https://" + target
-	if err := ConfigureControlProxy(t.Context(), controlURL, socksAddr); err != nil {
+	if err := ConfigureControlProxy(t.Context(), controlURL, socksAddr, nil); err != nil {
 		t.Fatal(err)
 	}
 	roots := x509.NewCertPool()
@@ -171,7 +174,7 @@ func TestControlProxyHTTP(t *testing.T) {
 		}
 		return new(net.Dialer).DialContext(ctx, network, upstream.Listener.Addr().String())
 	})
-	proxyURL, closeProxy, err := startControlProxy(t.Context(), "http://control.test:8080", socksAddr)
+	proxyURL, closeProxy, err := startControlProxy(t.Context(), "http://control.test:8080", socksAddr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +199,7 @@ func TestControlProxyRejectsUnrelatedDestinations(t *testing.T) {
 		calls.Add(1)
 		return nil, fmt.Errorf("must not dial a denied destination")
 	})
-	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://control.test", socksAddr)
+	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://control.test", socksAddr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +227,7 @@ func TestControlProxyUpstreamFailure(t *testing.T) {
 	socksAddr := startTestSOCKS(t, func(context.Context, string, string) (net.Conn, error) {
 		return nil, fmt.Errorf("synthetic upstream failure")
 	})
-	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://control.test", socksAddr)
+	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://control.test", socksAddr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +251,7 @@ func TestControlProxyCleanupActiveTunnel(t *testing.T) {
 func TestControlProxyCleanupCanceledStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	proxyURL, closeProxy, err := startControlProxy(ctx, "https://control.test", "127.0.0.1:1")
+	proxyURL, closeProxy, err := startControlProxy(ctx, "https://control.test", "127.0.0.1:1", nil)
 	if closeProxy != nil {
 		t.Cleanup(closeProxy)
 	}
@@ -265,7 +268,7 @@ func testControlProxyShutdown(t *testing.T, cancelParent bool) {
 	})
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	proxyURL, closeProxy, err := startControlProxy(ctx, "https://control.test", socksAddr)
+	proxyURL, closeProxy, err := startControlProxy(ctx, "https://control.test", socksAddr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +305,7 @@ func TestControlProxyBufferedCONNECT(t *testing.T) {
 	socksAddr := startTestSOCKS(t, func(ctx context.Context, network, _ string) (net.Conn, error) {
 		return new(net.Dialer).DialContext(ctx, network, echoAddr)
 	})
-	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://control.test", socksAddr)
+	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://control.test", socksAddr, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,4 +374,59 @@ func sendProxyRequest(t *testing.T, proxyAddr, requestLine string) (net.Conn, *h
 		t.Fatal(err)
 	}
 	return conn, response
+}
+
+// syncBuffer is a log sink the proxy goroutines and the test can share.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// An operator who restricts PermitOpen needs the destination of every channel
+// the bridge asks ssh for: a refused one shows up only as "channel N: open
+// failed" on ssh's stderr (#572). The dial is logged at debug level before it
+// is made, for the plain-HTTP path as well as CONNECT, and a refusal keeps the
+// destination.
+func TestControlProxyLogsEveryDialDestination(t *testing.T) {
+	socksAddr := startTestSOCKS(t, func(_ context.Context, _, address string) (net.Conn, error) {
+		return nil, fmt.Errorf("refused %s", address)
+	})
+	var logs syncBuffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	proxyURL, closeProxy, err := startControlProxy(t.Context(), "https://control.test", socksAddr, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closeProxy)
+
+	for _, requestLine := range []string{
+		"CONNECT control.test:443 HTTP/1.1",
+		"CONNECT control.test:8443 HTTP/1.1",
+		"GET http://control.test:8080/key HTTP/1.1",
+	} {
+		conn, response := sendProxyRequest(t, proxyURL.Host, requestLine)
+		_ = response.Body.Close()
+		_ = conn.Close()
+	}
+	for _, target := range []string{"control.test:443", "control.test:8443", "control.test:8080"} {
+		want := "level=DEBUG msg=\"SSH bootstrap SOCKS dial\" target=" + target
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("no debug record %q in:\n%s", want, logs.String())
+		}
+	}
+	if !strings.Contains(logs.String(), "level=WARN msg=\"SSH bootstrap CONNECT failed\" target=control.test:443") {
+		t.Errorf("a refused dial lost its destination in the configured logger:\n%s", logs.String())
+	}
 }

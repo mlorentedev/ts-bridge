@@ -80,6 +80,24 @@ ts-bridge/
 
 - The four-package boundary is **stable**: nothing since the original refactor has wanted to cross a boundary or merge two packages. The slicing matches the natural seams of the code.
 
+## Amendment (2026-11): current package layout and dependency edges
+
+The four-package split above grew to fifteen packages under `internal/`. The boundary claim held, but two statements in this ADR no longer do: `config` is not free of project-local imports (it imports `controlurl` and `credential`, for control-URL validation and credential references), and `main.go` is a ~40-line entry point over the `cmd/cli` Cobra tree (see [adr-010-cli-package-layout.md](adr-010-cli-package-layout.md)).
+
+| Package | Imports (project-local) |
+|---------|-------------------------|
+| `bootstrapssh`, `browser`, `config/envfile`, `controlurl`, `logging`, `secretfile`, `telemetry` | none |
+| `config` | `controlurl`, `credential` |
+| `credential` | `secretfile` |
+| `discover` | `secretfile` |
+| `health` | `telemetry` |
+| `host` | `bootstrapssh`, `controlurl` |
+| `profile` | `controlurl`, `credential` |
+| `proxy` | `config`, `telemetry` |
+| `serve` | `config`, `health`, `host`, `proxy` |
+
+`TestPackageDependencies` in `internal/layout_test.go` reads this table and compares it with the imports of every package, ignoring build tags: a new edge, a new package or a stale row fails the test until the ADR and the code agree, so the ADR cannot drift silently again. Go forbids import cycles at build time; the table records that the graph stays shallow, with `serve` as the only package that composes others.
+
 ## Validation
 
 - `go test ./...` after refactor: passing, with 35+ unit tests across the four packages (was ~15 in monolithic main).
