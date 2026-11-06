@@ -83,6 +83,24 @@ curl http://127.0.0.1:8080/health/ready  # {"status":"ok"} (readiness: tsnet tun
 curl http://127.0.0.1:8080/metrics       # Connection stats (JSON)
 ```
 
+The health address must be loopback (`127.0.0.1`, `[::1]` or `localhost`). Nothing
+is resolved: a hostname, `0.0.0.0`, `[::]` or a bare `:8080` is refused at startup,
+whether it comes from `--health-addr`, `TS_HEALTH_ADDR`, `health_addr` in the YAML
+or a profile, with an error that names the address.
+
+A container probe or an external scraper may need a non-loopback bind. Opt in with
+`--health-allow-remote` (or `TS_HEALTH_ALLOW_REMOTE=1`):
+
+```bash
+TS_HEALTH_ADDR=0.0.0.0:8080 TS_HEALTH_ALLOW_REMOTE=1 ts-bridge connect --auth-key-file /run/secrets/authkey
+```
+
+With the opt-in the bridge logs a startup warning naming the address and what it
+exposes: `/health/live`, `/health/ready` (including the readiness reason) and
+`/metrics` (connection counters). The endpoint has no authentication, so restrict
+it with a firewall or a private container network. `host serve` keeps its own rule:
+`host.mesh.health_addr` is loopback only, with no opt-in.
+
 ### Key Metrics
 
 | Metric | Description | Alert Threshold |
@@ -143,7 +161,7 @@ export TS_TIMEOUT=60s
 ### Network
 - Bind to localhost only (default): `TS_LOCAL_ADDR=127.0.0.1:33389`
 - Use firewall rules to restrict access
-- Enable health endpoint on internal interface only
+- Keep the health endpoint on loopback; a non-loopback bind needs `--health-allow-remote` and a firewall (see Health Endpoint)
 
 ### Auth Keys
 - Use short-lived keys (30 days recommended)

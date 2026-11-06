@@ -576,6 +576,10 @@ type serviceJSON struct {
 	Enabled    bool   `json:"enabled"`
 	Active     *bool  `json:"active"`
 	FirewallOK bool   `json:"firewall_ok"`
+	// Unread is true when a step could not read the service: enabled and
+	// firewall_ok keep their zero value and active stays null, none of them a
+	// reading of "off". The steps name the cause.
+	Unread bool `json:"unread"`
 	// Published is whether host serve publishes it; absent without health_addr.
 	Published *bool `json:"published,omitempty"`
 }
@@ -654,10 +658,13 @@ func rdpLine(r host.CheckResult) string {
 		port = strconv.Itoa(p)
 	}
 	if svc := r.Services[i]; svc.Unread {
+		// The cause can be a missing systemctl or a failed port read, which
+		// elevation does not fix; it is only offered as one possibility.
+		line := fmt.Sprintf("unread (rdp, port %s): see the steps below for the cause", port)
 		if !r.Elevated {
-			return fmt.Sprintf("unread (rdp, port %s): its state needs root/administrator to read", port)
+			line += "; running as root/administrator may help"
 		}
-		return fmt.Sprintf("unread (rdp, port %s): see the steps below", port)
+		return line
 	}
 	return fmt.Sprintf("%s (rdp, port %s)", statusStr(false), port)
 }
@@ -687,7 +694,7 @@ func checkJSON(r host.CheckResult) ([]byte, error) {
 		Steps:       stepsJSON(r.Steps),
 	}
 	for _, svc := range r.Services {
-		sj := serviceJSON{Kind: svc.Kind, Port: svc.Port, Enabled: svc.Enabled, Active: svc.Active, FirewallOK: svc.FirewallOK}
+		sj := serviceJSON{Kind: svc.Kind, Port: svc.Port, Enabled: svc.Enabled, Active: svc.Active, FirewallOK: svc.FirewallOK, Unread: svc.Unread}
 		if r.Published != nil {
 			p := r.Published[serviceKey(svc.Kind, svc.Port)]
 			sj.Published = &p

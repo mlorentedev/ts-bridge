@@ -42,7 +42,7 @@ func TestCheckJSON_AddsServicesAndSteps(t *testing.T) {
 			t.Errorf("missing key %q", key)
 		}
 	}
-	wantSvc := []any{map[string]any{"kind": "rdp", "port": float64(3389), "enabled": true, "active": nil, "firewall_ok": false}}
+	wantSvc := []any{map[string]any{"kind": "rdp", "port": float64(3389), "enabled": true, "active": nil, "firewall_ok": false, "unread": false}}
 	if !reflect.DeepEqual(m["services"], wantSvc) {
 		t.Errorf("services = %v, want %v (active is null until a step reads it)", m["services"], wantSvc)
 	}
@@ -50,6 +50,33 @@ func TestCheckJSON_AddsServicesAndSteps(t *testing.T) {
 	last := steps[1].(map[string]any)
 	if last["outcome"] != "changed" || last["fix"] != "run ts-bridge host setup as an administrator" || last["success"] != true {
 		t.Errorf("step = %v, want outcome changed, its fix, and the derived success", last)
+	}
+}
+
+// An unprivileged check with rdp declared used to report rdp_port 0 and nothing
+// else. The declared service and its unread state must be visible in services[].
+func TestCheckJSON_ListsADeclaredServiceItCouldNotRead(t *testing.T) {
+	r := host.CheckResult{
+		Services: []host.Service{{Kind: host.ServiceRDP, Port: 3389, Unread: true}},
+		Steps:    []host.SetupStep{{Name: "xrdp service", Outcome: host.OutcomeUnverified, Fix: "sudo ts-bridge host check"}},
+	}
+	data, err := cmdpkg.CheckJSONForTest(r)
+	m := decode(t, data, err)
+
+	if m["rdp_port"] != float64(0) {
+		t.Errorf("rdp_port = %v, want the legacy 0 kept", m["rdp_port"])
+	}
+	svcs, _ := m["services"].([]any)
+	if len(svcs) != 1 {
+		t.Fatalf("services = %v, want the declared rdp service", m["services"])
+	}
+	svc := svcs[0].(map[string]any)
+	if svc["kind"] != "rdp" || svc["port"] != float64(3389) || svc["unread"] != true {
+		t.Errorf("service = %v, want rdp on 3389 with unread true", svc)
+	}
+	// The zero values are not readings: unread is the only thing that marks them.
+	if svc["enabled"] != false || svc["firewall_ok"] != false || svc["active"] != nil {
+		t.Errorf("service = %v, want enabled false, firewall_ok false, active null alongside unread", svc)
 	}
 }
 

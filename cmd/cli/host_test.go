@@ -562,8 +562,18 @@ func TestPrintCheckText_Service(t *testing.T) {
 			result: host.CheckResult{Services: []host.Service{
 				{Kind: host.ServiceRDP, Port: 3389, Unread: true},
 			}},
-			want:    "needs root/administrator",
+			want:    "unread (rdp, port 3389): see the steps below for the cause; running as root/administrator may help",
 			notWant: "no service declared",
+		},
+		{
+			// Unread also means systemctl is missing or the port read failed,
+			// which elevation cannot fix: the line must not claim it needs it.
+			name: "unread without elevation does not claim privilege is the cause",
+			result: host.CheckResult{Services: []host.Service{
+				{Kind: host.ServiceRDP, Port: 3389, Unread: true},
+			}},
+			want:    "see the steps below for the cause",
+			notWant: "needs root/administrator",
 		},
 		{
 			name: "declared and read as off without elevation",
@@ -586,8 +596,8 @@ func TestPrintCheckText_Service(t *testing.T) {
 			result: host.CheckResult{Elevated: true, Services: []host.Service{
 				{Kind: host.ServiceRDP, Port: 3389, Unread: true},
 			}},
-			want:    "unread (rdp, port 3389): see the steps below",
-			notWant: "NOT OK (rdp",
+			want:    "unread (rdp, port 3389): see the steps below for the cause",
+			notWant: "running as root/administrator may help",
 		},
 		{
 			name:    "declared with the port unread",
