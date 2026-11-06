@@ -154,7 +154,7 @@ Boundaries to defend (in order of blast radius):
 | `TS_LOCAL_ADDR` | env var | `net.Listen` rejects malformed addresses. **Operator can bind to `0.0.0.0`** — that's a config error, not an injection. Document as a known risk. |
 | `TS_STATE_DIR` | env var | Path is used in `os.MkdirAll` — no input sanitization. Operator is trusted not to point it at a system dir. |
 | `TS_PORT_RANGE` | env var | Validated `START-END`, bounds-checked. |
-| Other numeric env vars (`TS_*_TIMEOUT`, `TS_DIAL_*`, etc.) | env var | All validated via `parseDurationEnv` / `parseInt64Env` / `parseDialConfig` with negative-value rejection. |
+| Other numeric env vars (`TS_*_TIMEOUT`, `TS_DIAL_*`, etc.) | env var | Validated in `Merge` (`applyEnvDuration` / `applyEnvInt` / `applyEnvInt64`): a negative, zero-where-positive or unparseable value is ignored with a warning naming the variable, and the lower layer stands. A negative `TS_DIAL_RETRIES` is a hard error. |
 | Incoming TCP connections | local listener | No per-conn auth — the bridge is a transparent proxy. Authentication is delegated to the target service (RDP NLA, SSH, etc.). |
 
 ### Egress vectors
