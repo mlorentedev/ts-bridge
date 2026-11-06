@@ -53,17 +53,32 @@ rule" narrows that, and the narrowing is as small as the decision allows:
    `-m multiport`, a rule with a comment) is reported as legacy unscoped and stays `manual`:
    setup cannot know it is its own. It does not count as the scoped rule, so setup still adds one.
 
-Windows needs no tier: the rule is recreated by name (`Remove-NetFirewallRule` then
-`New-NetFirewallRule`), so recreating it scoped is already the replacement.
+Windows needs no tier: the rule is recreated by name, so recreating it scoped is already the
+replacement. The order matches the other OSes: the scoped rule is created first (under the same
+display name, which Windows allows to repeat) and the rules that were there are removed after, so
+RDP is never left without an allow rule. A failed create is terminating and removes nothing.
+Removing first would lock out an operator running `host setup` over the RDP session it is
+configuring.
 
 ### Windows: the built-in "Remote Desktop" group
 
-Decision: **setup stops enabling `-DisplayGroup "Remote Desktop"`** and does not disable it
-either. Why: those rules allow any remote address, so enabling them voids the scope the named
-rule just set. Setup's own rule opens the port by itself, so RDP keeps working. It does not
-disable the group, because setup edits only the rules it wrote; an operator who enabled them
-chose that, and `check` flagging them is a separate question (filed as #685, see Out of
-scope).
+Decision: **setup stops enabling `-DisplayGroup "Remote Desktop"`**, does not disable it, and
+`check` and `setup` report an enabled group as `manual`. Why:
+
+- Those rules allow any remote address, so enabling them voids the scope the named rule just set.
+  Setup's own rule opens the port by itself, so RDP keeps working without them.
+- **Upgrade impact.** Earlier releases ran `Enable-NetFirewallRule -DisplayGroup "Remote Desktop"`
+  on every recreate, so on an upgraded host the group is usually enabled *by setup*, not by the
+  operator. Stopping the enabling does not turn it off: the group's any-address rules keep inbound
+  RDP open to the LAN and void the new scope until someone disables it. The fix is therefore not
+  complete on those hosts without the report below, and the report is part of #631, not a later
+  ticket (#685 is folded in).
+- **Setup still does not disable the group.** It cannot tell whether setup or the operator
+  enabled it, and the group is Microsoft's own: the operator may use it for another profile.
+  Instead `check` reports it (`manual`, `firewall_ok` false) with the exact command as the fix:
+  `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`. Disabling it automatically, with a
+  flag or when the group's rules are provably setup's, is a larger decision and stays an option
+  for the owner (see Risks).
 
 ## Out of scope
 
@@ -71,7 +86,6 @@ scope).
 - A tailscaled started with `--tun=<name>`: the interface name is fixed at `tailscale0`. A custom
   name makes the scoped rule match nothing, which fails closed (the port is unreachable until the
   operator allows it by hand), and `check` says so because it reads the rule it expects.
-- Reporting Windows' built-in "Remote Desktop" rules as exposure in `check` (#685).
 - macOS: `socketfilterfw` is per application and has no port rules (§5).
 - `ssh` on Linux, which is refused today (#521).
 
@@ -87,10 +101,21 @@ scope).
 - **Windows address normalisation.** The read must treat `RemoteAddress` as a set: the order and
   the textual form Windows returns for the two ranges are not verified here. The Windows guest is
   shared with another session, so PR 4 says its e2e is pending.
+- **Windows CGNAT residual.** The Windows scope is a range, not an interface, so a local network
+  addressed inside `100.64.0.0/10` (managed or carrier-style networks) is admitted as if it were
+  the tailnet. Linux does not have this residual, which is why Linux scopes by interface. Accepted:
+  Windows has no stable interface name to match (the alias is localised and changes with the
+  adapter), and the range is what Tailscale itself assigns from. Operators on such a LAN need an
+  additional block rule or a different scope.
+- **Windows upgrade, group left enabled.** See the group decision: the report is the mitigation,
+  and the group stays on until the operator runs the printed command. An automatic disable is an
+  open option for the owner.
+- **Windows ordering.** The create-before-remove order and the terminating-error behaviour are
+  unit-tested as command text, not run on a host (the Windows e2e is pending).
 - **ufw inactive.** Setup still adds the scoped allow "for when ufw is enabled" and replaces ufw's
   own legacy allow, but deletes no iptables copies, which are the only live rules (PR 3).
 - **Decision forks taken conservatively** (the owner decision does not cover them): the two tiers
-  above; the Windows group left as is; `firewall_ok` is `false` while any unscoped allow remains;
+  above; the Windows group not disabled but reported; `firewall_ok` is `false` while any unscoped allow remains;
   an unscoped allow with no port in it (`-A INPUT -p tcp -j ACCEPT`) is the operator's posture, not
   "a rule for the port", and is neither reported nor replaced.
 
@@ -104,7 +129,8 @@ scope).
 - [ ] AC4: A legacy unscoped rule is reported by `check` (`firewall_ok` false, message names the
   rule); `setup` replaces the exact legacy forms and reports the others `manual`.
 - [ ] AC5: On Windows, the rule carries the tailnet ranges, `check` reports a rule with
-  `RemoteAddress Any` as differing, and setup no longer enables the built-in group.
+  `RemoteAddress Any` as differing, setup no longer enables the built-in group, and `check` reports an enabled group as `manual`
+  (`firewall_ok` false).
 - [ ] AC6: The e2e harness covers both OSes (Linux on a real VM; Windows case added, run pending).
 
 ## References

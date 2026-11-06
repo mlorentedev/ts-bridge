@@ -52,6 +52,10 @@ the last says `Closes #631`.
   100.64.0.0/10,fd7a:115c:a1e0::/48` and no `Enable-NetFirewallRule`
 - [x] [AC5] `windowsFirewallRuleOK` compares `RemoteAddress` as a set; `Any` is a legacy rule, and
   check says so
+- [ ] [AC5] Failing test: the recreate creates the scoped rule before it removes the old ones,
+  and a failed create is terminating (no remove runs)
+- [ ] [AC5] Failing test: `check` and `setup` report an enabled built-in `Remote Desktop` group as
+  `manual` with the disable command, and `firewall_ok` is false (folds in #685)
 - [x] [AC6] `scripts/e2e/windows.ps1` cases written; the run is pending (the guest is shared), not run
 - [x] `features.json`, the Windows runbook, `Closes #631`
 

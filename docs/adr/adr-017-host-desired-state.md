@@ -282,8 +282,12 @@ Decision, a hybrid because the two OSes name the tailnet differently:
   with another `--tun` name gets a rule that matches nothing, which fails closed.
 - **Windows scopes by address.** `-RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48`: Windows has
   no interface name to rely on. Setup also stops enabling the built-in `Remote Desktop` rule
-  group, whose rules allow any address and would void the scope. It does not disable the group,
-  which it did not write.
+  group, whose rules allow any address and would void the scope. It does not disable the group:
+  on an upgraded host an earlier setup enabled it, but setup cannot tell that from an operator's
+  choice and the group is Microsoft's own. `check` and `setup` report an enabled group as `manual`
+  with `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"` as the fix, and `firewall_ok` stays
+  `false` until it is off. The rule is recreated scoped before the old one is removed, so RDP is
+  never left without an allow rule.
 - **`check` reports a legacy unscoped rule**: an allow for the port with no interface, source or
   destination address. `firewall_ok` is `false` while one remains. `setup` replaces it.
 
@@ -292,6 +296,11 @@ only the exact rule earlier releases wrote (`ufw allow <port>/tcp`, `-A INPUT -p
 <port> -j ACCEPT` as `iptables -S` prints it), after the scoped rule is in place, so the port is
 never closed in between. Any other unscoped allow that names the port is reported `manual`: setup
 cannot know it wrote it. An allow with no port in it is the operator's posture and is left alone.
+
+Residual, accepted: the Windows scope is a range, so a local network addressed inside
+`100.64.0.0/10` is admitted as if it were the tailnet. Linux has no such residual because it
+scopes by interface. Windows has no stable interface name (the alias is localised and changes with
+the adapter), so the range stands and the operator on such a LAN adds a block rule.
 
 Rejected: scoping Linux by the CGNAT range instead (an interface follows the tailnet whatever
 addresses it assigns, and a range would admit any local network that uses `100.64.0.0/10`);
