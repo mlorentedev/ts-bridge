@@ -35,7 +35,8 @@ That is 16 PRs. Every closed issue is moved to Done on the board.
 
 ### Open, with the next step
 
-- **#690** (#391 store lock): REAL findings were applied (the #664 fold in 758fba0; the unreadable-key refusal in 9357777). Its review job failed to publish three times. The next step is the result of land run 12. If that run does not merge it, re-run the `review` job, triage what it finds, and then land.
+- **#690** (#391 store lock): REAL findings were applied (the #664 fold in 758fba0; the unreadable-key refusal in 9357777). Its review job failed to publish four times; the last was land run 12 (14:06Z), on 817a03a: `review=completed/failure`, so the stricter land.sh skipped it, and 817a03a is unreviewed. Next: re-run the `review` job on 817a03a, triage what it finds, then land.
+- **Worktrees:** 23 merged worktrees removed with `dotf worktree done` at 14:05Z. Kept: the open-PR branches, `test/issue-607-mesh-linux` (local PR 3), the `run/*` branches, and the launch worktree.
 - **#688** (#631 PR 3, ufw) is a draft, now based on master. Next: merge origin/master (expect the same spec conflicts as #687), run `make e2e-linux`, mark it ready, triage, land.
 - **#689** (#631 PR 4, Windows) is a draft based on #688. After #688 lands: retarget it, merge master, re-run the Windows e2e on the new head (message the VM peer first), triage, then land. It must keep `Closes #631` and `Closes #685`.
 - **#607 PR 3**: commit cf83d90 is local on `test/issue-607-mesh-linux`. It needs its live Lima run and mutants before it gets a PR. PR 4 (Windows mesh) and PR 5 (runbook) follow the spec.
