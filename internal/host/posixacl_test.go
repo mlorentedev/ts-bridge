@@ -126,7 +126,10 @@ func TestAncestorAt_ACL(t *testing.T) {
 func TestAncestorAt_ACLNotReadForForeignOwner(t *testing.T) {
 	afs := ancestorFS{
 		lstat: func(string) (fs.FileInfo, uint32, error) { return fakeInfo{fs.ModeDir | 0o755}, 1000, nil },
-		acl:   func(string) ([]byte, error) { t.Error("read the ACL of a directory root does not own"); return nil, nil },
+		acl: func(string) ([]byte, error) {
+			t.Error("read the ACL of a directory root does not own")
+			return nil, nil
+		},
 	}
 	_, err := ancestorAt("state_dir", "/srv/state", "/srv", afs)
 	if err == nil || !strings.Contains(err.Error(), "owned by uid 1000") {
