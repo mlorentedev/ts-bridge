@@ -204,6 +204,7 @@ const (
 	psNetworkProfilePrivate = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
 	psReadRDPPort           = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
 	psReadRDPDeny           = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; Write-Output "policy=$p"; Write-Output "local=$l"`
+	psReadRDGroup           = `Write-Output "exposed=$(@(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -Enabled True -Direction Inbound -Action Allow -ErrorAction SilentlyContinue | Where-Object { ($_ | Get-NetFirewallAddressFilter).RemoteAddress -eq 'Any' }).Count)"`
 	psReadFirewallRule      = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; Write-Output "remote=$(($x | Get-NetFirewallAddressFilter).RemoteAddress -join ',')"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
 	psEnableRDP             = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; ` + psReadRDPPort
 )
@@ -378,6 +379,7 @@ var hexValue = regexp.MustCompile(`0x[0-9a-fA-F]{8}`)
 
 const (
 	windowsFirewallFix     = "allow TCP %d inbound from the tailnet addresses in Windows Defender Firewall"
+	windowsGroupFix        = `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`
 	windowsFirewallNameFix = "set host.firewall.rule (or --firewall-rule) to a name of A-Z, a-z, 0-9, - and _"
 )
 
@@ -458,11 +460,37 @@ func windowsFirewallSetupStep(r Runner, ruleName string, port int) SetupStep {
 		return newStep(name, OutcomeFailed, fmt.Sprintf("Failed to configure firewall: validate firewall rule: %v", err), windowsFirewallNameFix)
 	}
 	if ok, _, _, err := windowsFirewallRuleOK(r, rule, port); err == nil && ok {
-		return newStep(name, OutcomeOK, fmt.Sprintf("Rule '%s' already active (port %d)", rule, port), "")
+		step, _ := builtinGroupStep(r, newStep(name, OutcomeOK, fmt.Sprintf("Rule '%s' already active (port %d)", rule, port), ""))
+		return step
 	}
-	err = runPS(r, fmt.Sprintf(`Remove-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName %q -Direction Inbound -Action Allow -Protocol TCP -LocalPort %d -Profile Any -RemoteAddress %s -Enabled True | Out-Null`, rule, rule, port, tailnetRemoteAddress))
-	return actStep(name, err, fmt.Sprintf("Rule '%s' active (port %d)", rule, port),
+	// The scoped rule is created before the old ones go, and errors terminate,
+	// so a failed create removes nothing and RDP is never left without a rule.
+	err = runPS(r, fmt.Sprintf(`$ErrorActionPreference = 'Stop'; $old = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); New-NetFirewallRule -DisplayName %q -Direction Inbound -Action Allow -Protocol TCP -LocalPort %d -Profile Any -RemoteAddress %s -Enabled True | Out-Null; $old | Remove-NetFirewallRule`, rule, rule, port, tailnetRemoteAddress))
+	step := actStep(name, err, fmt.Sprintf("Rule '%s' active (port %d)", rule, port),
 		fmt.Sprintf("Failed to configure firewall: %v", err), fix)
+	if err != nil {
+		return step
+	}
+	step, _ = builtinGroupStep(r, step)
+	return step
+}
+
+// builtinGroupStep turns a converged firewall step manual while an enabled
+// rule of the built-in "Remote Desktop" group allows any address: earlier
+// setups enabled the group, and its rules void the tailnet scope. It does not
+// disable the group (ADR-017 Amendment B); the operator runs the printed fix.
+func builtinGroupStep(r Runner, step SetupStep) (SetupStep, bool) {
+	out, err := outputPS(r, psReadRDGroup)
+	if err != nil {
+		return newStep(step.Name, OutcomeUnverified, "Could not read the built-in Remote Desktop rule group",
+			"run Get-NetFirewallRule -DisplayGroup \"Remote Desktop\" to see why the read fails"), false
+	}
+	exposed, _ := strconv.Atoi(parseKeyValues(out)["exposed"])
+	if exposed == 0 {
+		return step, true
+	}
+	return newStep(step.Name, OutcomeManual, fmt.Sprintf("%d enabled rule(s) of the built-in Remote Desktop group allow inbound RDP from any address, which voids the tailnet scope", exposed),
+		windowsGroupFix), false
 }
 
 // windowsFirewallCheckStep is the read half of windowsFirewallSetupStep.
@@ -485,5 +513,9 @@ func windowsFirewallCheckStep(r Runner, ruleName string, port int) (SetupStep, b
 		return newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' differs from what setup creates (inbound TCP %d, tailnet addresses only, every profile, enabled, one rule)", rule, port),
 			"run ts-bridge host setup as an administrator"), false
 	}
-	return firewallReadStep(name, ok, port), ok
+	step := firewallReadStep(name, ok, port)
+	if !ok {
+		return step, false
+	}
+	return builtinGroupStep(r, step)
 }

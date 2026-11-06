@@ -82,5 +82,19 @@
     "verification": "pwsh scripts/e2e/windows.ps1",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f13",
+    "behavior": "The Windows recreate creates the scoped rule before removing the old ones and a failed create is terminating",
+    "verification": "go test ./internal/host -run 'TestWindowsFirewallRecreateOrder' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f14",
+    "behavior": "Check and setup report an enabled built-in Remote Desktop group as manual with the disable command, and never disable it",
+    "verification": "go test ./internal/host -run 'TestWindowsBuiltinGroup' -count=1",
+    "state": "pending",
+    "evidence": ""
   }
 ]

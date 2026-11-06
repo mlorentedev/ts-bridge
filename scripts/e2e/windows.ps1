@@ -93,12 +93,18 @@ Case 'firewall rule: scoped to the tailnet addresses' {
     # Windows may print the IPv4 range with a dotted mask; compare the normalized set.
     $ra.Count -eq 2 -and ($ra | Where-Object { $_ -match '^100\.64\.0\.0/(10|255\.192\.0\.0)$' }) -and ($ra | Where-Object { $_ -ieq 'fd7a:115c:a1e0::/48' })
 }
-Case 'setup: the built-in Remote Desktop group is left as it was' {
-    # setup must not enable it; an operator-enabled group is the operator's to disable (#685)
-    $before = (Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count
+# The built-in group's rules allow any address. setup does not enable or disable it; check reports
+# it (firewall_ok false) until the operator disables it (#685, folded into #631).
+function RdGroupOn { @(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count }
+Case 'built-in Remote Desktop group enabled: check reports it, setup leaves it on' {
+    Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+    $seen = -not (Json check $C).services[0].firewall_ok
     Json setup $C | Out-Null
-    $after = (Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count
-    $before -eq $after
+    $seen -and (RdGroupOn) -gt 0 -and -not (Json check $C).services[0].firewall_ok
+}
+Case 'built-in Remote Desktop group disabled by the operator: firewall ok again' {
+    Disable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+    (Json check $C).services[0].firewall_ok
 }
 Case 'power: AC sleep, hibernate and monitor timeouts are 0' { AcZero }
 Case 'check --json: rdp 3389 enabled, firewall ok' {

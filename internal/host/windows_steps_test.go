@@ -495,3 +495,78 @@ func TestWindowsFirewallRecreateScoped(t *testing.T) {
 		t.Errorf("recreate %q enables the built-in Remote Desktop group", recreate)
 	}
 }
+
+// TestWindowsFirewallRecreateOrder pins the order of the recreate: the scoped
+// rule is created first and the rules that were there are removed after, with
+// errors terminating, so a failed create removes nothing and RDP is never left
+// without an allow rule.
+func TestWindowsFirewallRecreateOrder(t *testing.T) {
+	r := &recordingRunner{output: map[string]string{psPrefix + psFwCheck: "count=0\r\n"}}
+	windowsFirewallSetupStep(r, "Rule", 3390)
+	var recreate string
+	for _, c := range r.calls {
+		if strings.HasPrefix(c, "run ") {
+			recreate = c
+		}
+	}
+	stop := strings.Index(recreate, "$ErrorActionPreference = 'Stop'")
+	read := strings.Index(recreate, "$old = @(Get-NetFirewallRule")
+	create := strings.Index(recreate, "New-NetFirewallRule")
+	remove := strings.Index(recreate, "Remove-NetFirewallRule")
+	if stop < 0 || stop > read || read > create || create > remove {
+		t.Errorf("recreate %q: want errors terminating, then the old rules read, the new one created, the old removed", recreate)
+	}
+}
+
+// TestWindowsBuiltinGroup pins the report folded in from #685: an enabled
+// any-address rule in the built-in "Remote Desktop" group voids the tailnet
+// scope, so a converged named rule is not enough. Setup reports it and leaves
+// the group alone; check says the same and firewall_ok is false.
+func TestWindowsBuiltinGroup(t *testing.T) {
+	good := "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")
+	tests := []struct {
+		name      string
+		rule      string
+		group     string
+		groupFail bool
+		want      Outcome
+		ok        bool
+	}{
+		{name: "none enabled", rule: good, group: "exposed=0\r\n", want: OutcomeOK, ok: true},
+		{name: "unreadable output counts as none", rule: good, group: "", want: OutcomeOK, ok: true},
+		{name: "two enabled", rule: good, group: "exposed=2\r\n", want: OutcomeManual},
+		{name: "read fails", rule: good, groupFail: true, want: OutcomeUnverified},
+		{name: "named rule drifted, group not read", rule: "count=0\r\n", group: "exposed=2\r\n", want: OutcomeChanged},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{
+					output: map[string]string{psPrefix + psFwCheck: tt.rule, psPrefix + psReadRDGroup: tt.group},
+					fail:   map[string]bool{psPrefix + psReadRDGroup: tt.groupFail},
+				}
+			}
+			step, ok := windowsFirewallCheckStep(newRunner(), "Rule", 3390)
+			if step.Outcome != tt.want || ok != tt.ok {
+				t.Errorf("check: outcome %q ok %v, want %q ok %v (%s)", step.Outcome, ok, tt.want, tt.ok, step.Message)
+			}
+			if tt.want == OutcomeManual && !strings.Contains(step.Fix, `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`) {
+				t.Errorf("check: fix %q lacks the disable command", step.Fix)
+			}
+			r := newRunner()
+			step = windowsFirewallSetupStep(r, "Rule", 3390)
+			wantSetup := tt.want
+			if tt.name == "named rule drifted, group not read" {
+				wantSetup = OutcomeManual // the recreate converges, then the group is read
+			}
+			if step.Outcome != wantSetup {
+				t.Errorf("setup: outcome %q, want %q (%s)", step.Outcome, wantSetup, step.Message)
+			}
+			for _, c := range r.calls {
+				if strings.HasPrefix(c, "run ") && strings.Contains(c, "Disable-NetFirewallRule") {
+					t.Errorf("setup ran %q; it must not disable the built-in group", c)
+				}
+			}
+		})
+	}
+}
