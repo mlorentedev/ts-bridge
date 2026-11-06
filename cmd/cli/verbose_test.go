@@ -72,6 +72,10 @@ func TestBrowserVerboseReachesTheConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// browser runs the real logger init: keep its log file out of the real profile.
+			logRoot := t.TempDir()
+			t.Setenv("HOME", logRoot)
+			t.Setenv("LOCALAPPDATA", logRoot)
 			t.Setenv("TS_VERBOSE", tt.env)
 			t.Setenv("TS_TARGET", "")
 			t.Setenv("TS_AUTHKEY", "")
