@@ -59,7 +59,9 @@ On Linux:
   - Enables and starts xrdp (systemctl enable --now) when it is not already
   - Points xrdp at a declared non-default RDP port (port= in [Globals] of
     /etc/xrdp/xrdp.ini) and restarts it, when it listens elsewhere
-  - Allows the RDP port inbound with ufw (or iptables) when no rule allows it yet
+  - Allows the RDP port inbound on the Tailscale interface (tailscale0) with
+    ufw (or iptables) when no rule allows it yet, and replaces an older rule
+    that opened the port on every interface
   - Prints Tailscale IP
 
 On macOS:

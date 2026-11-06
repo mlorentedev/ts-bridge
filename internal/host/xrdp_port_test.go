@@ -115,7 +115,7 @@ func TestLinuxStepsCarryTheXRDPPort(t *testing.T) {
 // reports no drift (Windows likewise adopts the registry's port).
 func TestLinuxLeavesAnUndeclaredXRDPPortAlone(t *testing.T) {
 	ufwHost := map[string]bool{"systemctl": true, "ufw": true}
-	r := &recordingRunner{elevated: true, onPath: ufwHost, files: xrdpWith("3390"), output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})}
+	r := &recordingRunner{elevated: true, onPath: ufwHost, files: xrdpWith("3390"), output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow})}
 	got := setupLinux(Config{Port: 3389}, r)
 	for _, s := range got.Steps {
 		if s.Name == xrdpPortName {
@@ -126,7 +126,7 @@ func TestLinuxLeavesAnUndeclaredXRDPPortAlone(t *testing.T) {
 		t.Errorf("setup moved an undeclared xrdp port: %v", r.calls)
 	}
 	var result CheckResult
-	checkLinux(Config{Port: 3389}, &recordingRunner{elevated: true, onPath: ufwHost, files: xrdpWith("3390"), output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})}, &result)
+	checkLinux(Config{Port: 3389}, &recordingRunner{elevated: true, onPath: ufwHost, files: xrdpWith("3390"), output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow})}, &result)
 	for _, s := range result.Steps {
 		if s.Name == xrdpPortName {
 			t.Errorf("check reported %s %q with no port declared", s.Outcome, s.Message)

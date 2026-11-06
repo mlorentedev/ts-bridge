@@ -40,5 +40,26 @@
     "verification": "make e2e-linux",
     "state": "pending",
     "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f7",
+    "behavior": "Every ufw write is `allow in on tailscale0 to any port N proto tcp`, from one helper",
+    "verification": "go test ./internal/host -run 'TestUFWAllowArgs' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f8",
+    "behavior": "An unscoped ufw allow for the port is legacy; a scoped, commented or multi-port one is not exact",
+    "verification": "go test ./internal/host -run 'TestReadUFWUnscoped' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f9",
+    "behavior": "On a ufw host setup replaces the legacy allow (scoped first, delete after) and reports other unscoped allows as manual",
+    "verification": "go test ./internal/host -run 'TestSetupForLinux|TestUFWInactive' -count=1",
+    "state": "pending",
+    "evidence": ""
   }
 ]

@@ -75,9 +75,9 @@ outcomes check "$C" >"$W/jc"
 ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True}]' <$W/jc"
 ok "xrdp listens on 3389" -- "ss -ltn | grep -q ':3389 '"
 
-ufw delete allow 3389/tcp >/dev/null 2>&1
+ufw delete allow in on tailscale0 to any port 3389 proto tcp >/dev/null 2>&1
 ok "drift: removed ufw rule seen by check" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
-ok "drift: setup restores the ufw rule" -- "outcomes setup $C >/dev/null; ufw status | grep -q '^3389/tcp'"
+ok "drift: setup restores the ufw rule" -- "outcomes setup $C >/dev/null; ufw status | grep -q '^3389/tcp *on tailscale0 '"
 systemctl stop xrdp
 ok "drift: stopped xrdp seen by check" -- "outcomes check $C | json 'not j[\"services\"][0][\"active\"]'"
 ok "drift: setup starts xrdp" -- "outcomes setup $C >/dev/null; systemctl is-active -q xrdp"
@@ -115,7 +115,7 @@ mkdir -p "$W/up" && cd "$W/up" && rm -f .env
 ok "upgrade: previous init wrote TS_HOST_RDP_PORT" -- "grep -q '^TS_HOST_RDP_PORT=3390' .env"
 ok "upgrade: .env beats the file in check" -- "$B host check --config $C --json 2>/dev/null | json 'j[\"rdp_port\"]==3390'"
 ok "upgrade: init without --config fails" -- "! $B host init </dev/null"
-cd "$W" && ufw delete allow 3390/tcp >/dev/null 2>&1
+cd "$W" && ufw delete allow in on tailscale0 to any port 3390 proto tcp >/dev/null 2>&1
 
 # host serve preflight refusals; nothing may start or reach the network.
 printf 'version: 1\nhost:\n  control_url: https://hs.invalid\n  services:\n    - kind: rdp\n      port: 3389\n' >"$W/nomesh.yaml"
@@ -130,13 +130,29 @@ mesh /var/lib/ts-bridge-e2e /tmp/e2e-key >"$W/key.yaml"
 run timeout 20 "$B" host serve --config "$W/key.yaml"
 ok "serve: auth_key_file under /tmp refused" -- 'code 1 && has "/tmp"'
 
-# Firewall scope (#631) on an iptables host: ufw is removed, so setup writes through iptables.
-ufw --force disable >/dev/null 2>&1
-apt-get -qq remove -y ufw >/dev/null 2>&1
 SCOPED='-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT'
 LEGACY='-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT'
 FOREIGN='-A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT'
 fwstep() { json "{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"Firewall configuration\")==\"$1\""; }
+# Firewall scope (#631) on a ufw host: setup writes the rule on tailscale0 only.
+ok "ufw host: setup wrote the allow on tailscale0" -- "ufw status | grep -q '^3389/tcp *on tailscale0 '"
+ok "ufw host: no unscoped 3389 allow beside it" -- '! ufw show added | grep -qx "ufw allow 3389/tcp"'
+ufw allow 3389/tcp >/dev/null 2>&1
+ok "legacy ufw allow: check says setup would change it" -- 'outcomes check "$C" | fwstep changed'
+ok "legacy ufw allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "legacy ufw allow: setup replaces it" -- 'outcomes setup "$C" | fwstep changed && ! ufw show added | grep -qx "ufw allow 3389/tcp" && ufw show added | grep -qx "ufw allow in on tailscale0 to any port 3389 proto tcp"'
+ok "legacy ufw allow: check is ok afterwards" -- 'outcomes check "$C" | fwstep ok'
+ufw allow 22,3389/tcp >/dev/null 2>&1
+ok "foreign ufw allow: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "foreign ufw allow: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && ufw show added | grep -qx "ufw allow 22,3389/tcp"'
+ufw delete allow 22,3389/tcp >/dev/null 2>&1
+iptables -A INPUT -p tcp --dport 3389 -j ACCEPT
+ok "legacy iptables copy on a ufw host: check says setup would change it" -- 'outcomes check "$C" | fwstep changed'
+ok "legacy iptables copy on a ufw host: setup deletes it" -- 'outcomes setup "$C" | fwstep changed && ! iptables -S INPUT | grep -qx -- "$LEGACY" && outcomes check "$C" | fwstep ok'
+
+# Firewall scope (#631) on an iptables host: ufw is removed, so setup writes through iptables.
+ufw --force disable >/dev/null 2>&1
+apt-get -qq remove -y ufw >/dev/null 2>&1
 ok "iptables host: ufw is gone" -- '[ ! -e /usr/sbin/ufw ]'
 ok "iptables host: setup #1 appends the rule" -- 'outcomes setup "$C" | fwstep changed'
 ok "iptables host: the rule is scoped to tailscale0, as printed" -- 'iptables -S INPUT | grep -qx -- "$SCOPED"'
