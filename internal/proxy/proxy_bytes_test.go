@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,43 @@ func exchangeLive(t *testing.T, client, remotePeer net.Conn, done <-chan struct{
 	return int64(len(reply)), int64(len(request))
 }
 
+// logFieldHasValue reports whether a text-handler record carries key=value as a
+// whole field. A substring match would accept bytes_tx=160 for a want of 16.
+func logFieldHasValue(logs, key string, value int64) bool {
+	field := regexp.MustCompile(`(?m)(^|\s)` + regexp.QuoteMeta(fmt.Sprintf("%s=%d", key, value)) + `(\s|$)`)
+	return field.MatchString(logs)
+}
+
+func assertLogField(t *testing.T, logs, key string, value int64) {
+	t.Helper()
+	if !logFieldHasValue(logs, key, value) {
+		t.Errorf("close log lacks %s=%d: %s", key, value, logs)
+	}
+}
+
+func TestLogFieldHasValue_RejectsPrefixMatches(t *testing.T) {
+	const logs = `level=INFO msg="connection closed" bytes_tx=160 bytes_rx=420`
+	tests := []struct {
+		name  string
+		key   string
+		value int64
+		want  bool
+	}{
+		{"exact tx", "bytes_tx", 160, true},
+		{"exact rx at end of record", "bytes_rx", 420, true},
+		{"tx prefix of a longer count", "bytes_tx", 16, false},
+		{"rx prefix of a longer count", "bytes_rx", 42, false},
+		{"key suffix of another key", "tx", 160, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := logFieldHasValue(logs, tt.key, tt.value); got != tt.want {
+				t.Errorf("logFieldHasValue(%s=%d) = %v, want %v", tt.key, tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestHandleConn_PublishesBytesWhileOpen(t *testing.T) {
 	telemetry.ResetMetrics()
 	client, server := net.Pipe()
@@ -82,11 +120,8 @@ func TestHandleConn_PublishesBytesWhileOpen(t *testing.T) {
 	tx, rx := exchangeLive(t, client, remotePeer, done)
 	// The per-connection totals still reach the close log, read after the
 	// handler returned.
-	for _, want := range []string{fmt.Sprintf("bytes_tx=%d", tx), fmt.Sprintf("bytes_rx=%d", rx)} {
-		if !strings.Contains(logs.String(), want) {
-			t.Errorf("close log lacks %s: %s", want, logs.String())
-		}
-	}
+	assertLogField(t, logs.String(), "bytes_tx", tx)
+	assertLogField(t, logs.String(), "bytes_rx", rx)
 }
 
 func TestHandleSOCKS5Conn_PublishesBytesWhileOpen(t *testing.T) {
@@ -97,11 +132,12 @@ func TestHandleSOCKS5Conn_PublishesBytesWhileOpen(t *testing.T) {
 		return remote, nil
 	}}
 
+	var logs bytes.Buffer
 	done := make(chan struct{})
 	go func() {
 		_ = handleSOCKS5Conn(server, dialer, directSOCKSTarget,
 			config.Config{DialTimeout: time.Second, IdleTimeout: 10 * time.Second},
-			nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			nil, slog.New(slog.NewTextHandler(&logs, nil)))
 		close(done)
 	}()
 
@@ -111,7 +147,15 @@ func TestHandleSOCKS5Conn_PublishesBytesWhileOpen(t *testing.T) {
 	assertBytes(t, client, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
 	// The handshake is not tunnel traffic: the counters start at the CONNECT reply.
-	_, _ = exchangeLive(t, client, remotePeer, done)
+	tx, rx := exchangeLive(t, client, remotePeer, done)
+	// Same close record as the TCP tunnel, with the SOCKS5 target on it (#630).
+	for _, want := range []string{"connection closed", "target=forge.example.internal:443", "duration="} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("close log lacks %s: %s", want, logs.String())
+		}
+	}
+	assertLogField(t, logs.String(), "bytes_tx", tx)
+	assertLogField(t, logs.String(), "bytes_rx", rx)
 }
 
 // shortWriter accepts only the first n bytes of each write and reports err.

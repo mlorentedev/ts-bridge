@@ -16,7 +16,10 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-func startControlProxy(ctx context.Context, controlURL, socksAddr string) (*url.URL, func(), error) {
+func startControlProxy(ctx context.Context, controlURL, socksAddr string, logger *slog.Logger) (*url.URL, func(), error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, nil, fmt.Errorf("start bootstrap HTTP proxy: %w", err)
 	}
@@ -28,6 +31,7 @@ func startControlProxy(ctx context.Context, controlURL, socksAddr string) (*url.
 	if err != nil {
 		return nil, nil, err
 	}
+	dialer = loggingDialer{dialer: dialer, logger: logger}
 	transport := &http.Transport{DialContext: dialer.DialContext}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -35,7 +39,7 @@ func startControlProxy(ctx context.Context, controlURL, socksAddr string) (*url.
 	}
 	proxyCtx, cancel := context.WithCancel(ctx)
 	server := &http.Server{
-		Handler:           controlProxyHandler(proxyCtx, hostname, dialer, transport),
+		Handler:           controlProxyHandler(proxyCtx, hostname, dialer, transport, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return proxyCtx },
 	}
@@ -46,7 +50,7 @@ func startControlProxy(ctx context.Context, controlURL, socksAddr string) (*url.
 		transport.CloseIdleConnections()
 	}
 	stop := context.AfterFunc(ctx, closeProxy)
-	go serveControlProxy(server, listener, stop, closeProxy)
+	go serveControlProxy(server, listener, stop, closeProxy, logger)
 	return &url.URL{Scheme: schemeHTTP, Host: listener.Addr().String()}, closeProxy, nil
 }
 
@@ -64,32 +68,45 @@ func bootstrapSOCKSDialer(socksAddr string) (proxy.ContextDialer, error) {
 	return contextDialer, nil
 }
 
-func serveControlProxy(server *http.Server, listener net.Listener, stop func() bool, closeProxy func()) {
+// loggingDialer records the destination of each dial before it is made. Every
+// dial is one SSH channel, and sshd's PermitOpen refusal reaches ssh's stderr
+// as "channel N: open failed" without a destination (#572).
+type loggingDialer struct {
+	dialer proxy.ContextDialer
+	logger *slog.Logger
+}
+
+func (d loggingDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	d.logger.Debug("SSH bootstrap SOCKS dial", "target", address)
+	return d.dialer.DialContext(ctx, network, address)
+}
+
+func serveControlProxy(server *http.Server, listener net.Listener, stop func() bool, closeProxy func(), logger *slog.Logger) {
 	defer closeProxy()
 	defer stop()
 	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
-		slog.Error("SSH bootstrap HTTP proxy stopped", "error", err)
+		logger.Error("SSH bootstrap HTTP proxy stopped", "error", err)
 	}
 }
 
-func controlProxyHandler(ctx context.Context, hostname string, dialer proxy.ContextDialer, transport *http.Transport) http.Handler {
+func controlProxyHandler(ctx context.Context, hostname string, dialer proxy.ContextDialer, transport *http.Transport, logger *slog.Logger) http.Handler {
 	forward := &httputil.ReverseProxy{
 		Rewrite:   func(*httputil.ProxyRequest) {},
 		Transport: transport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			slog.Warn("SSH bootstrap HTTP request failed", "target", r.URL.Host, "error", err)
+			logger.Warn("SSH bootstrap HTTP request failed", "target", r.URL.Host, "error", err)
 			http.Error(w, "bootstrap SOCKS forwarding failed", http.StatusBadGateway)
 		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.EqualFold(r.URL.Hostname(), hostname) {
-			slog.Warn("SSH bootstrap proxy denied destination", "target", r.URL.Host, "remote", r.RemoteAddr)
+			logger.Warn("SSH bootstrap proxy denied destination", "target", r.URL.Host, "remote", r.RemoteAddr)
 			http.Error(w, "bootstrap proxy destination denied", http.StatusForbidden)
 			return
 		}
 		if r.Method == http.MethodConnect {
 			if err := controlProxyConnect(ctx, dialer, w, r); err != nil && ctx.Err() == nil {
-				slog.Warn("SSH bootstrap CONNECT failed", "target", r.URL.Host, "error", err)
+				logger.Warn("SSH bootstrap CONNECT failed", "target", r.URL.Host, "error", err)
 			}
 			return
 		}
