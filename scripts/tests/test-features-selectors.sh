@@ -89,6 +89,10 @@ func TestOnlyWindows(t *testing.T) {}"
       gopkg "$c" two TestB
       spec "$c" A "go test ./one -run '^TestGone\$'
 go test ./two -run '^TestB\$'" ;;
+    continuation)
+      gopkg "$c" pkg TestA
+      spec "$c" A "go test ./pkg \\
+  -run '^TestGone\$'" ;;
     method-is-not-a-test)
       put "$c" pkg/p_test.go "package p
 func (s *S) TestMethod(t *testing.T) {}"
@@ -107,6 +111,7 @@ func (s *S) TestMethod(t *testing.T) {}"
       spec "$c" good "go test ./pkg -run 'TestA'"
       spec "$c" bad "go test ./pkg -run 'TestGone'" ;;
     invalid-json) put "$c" specs/A/features.json '[{"id":' ;;
+    not-an-object) put "$c" specs/A/features.json '["x"]' ;;
     bad-regexp) gopkg "$c" pkg TestA; spec "$c" A "go test ./pkg -run 'Test(A'" ;;
     not-a-dir) rmdir "$WORK/$c/specs"; : >"$WORK/$c/specs" ;;
   esac
@@ -134,6 +139,7 @@ other-os-file:0:OK (1 go test
 kinds:0:OK (1 go test
 benchmark-is-not-run:1:matches no test: ^BenchmarkB$
 multi-line:1:matches no test: ^TestGone$ (in ./one)
+continuation:1:matches no test: ^TestGone$ (in ./pkg)
 method-is-not-a-test:1:matches no test: TestMethod
 missing-package:1:no such package: ./nope
 tree-wildcard:0:OK (1 go test
@@ -141,6 +147,7 @@ two-packages:0:OK (1 go test
 archived-bad:0:OK (0 go test
 only-bad-named:1:bad/features.json
 invalid-json:2:cannot read
+not-an-object:2:cannot read
 bad-regexp:2:cannot evaluate
 not-a-dir:2:not a directory'
 

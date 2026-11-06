@@ -160,6 +160,10 @@ check_alternative() { # check_alternative <file> <id> <pkgs> <alt>
 while IFS= read -r -d '' f; do
   jq -e -s 'length == 1 and (.[0] | type) == "array"' "$f" >/dev/null 2>&1 ||
     { echo "check-features-selectors: cannot read $f: not one JSON array of features" >&2; exit 2; }
+  # Captured first: a substitution inside the here-doc would drop jq's exit status. A
+  # backslash-newline is a continuation, so it joins; any other newline separates commands.
+  rows=$(jq -r '.[] | select((.verification | type) == "string") | [.id, (.verification | gsub("\\\\\n"; " ") | gsub("\n"; " ; "))] | @tsv' "$f" 2>/dev/null) ||
+    { echo "check-features-selectors: cannot read $f: a feature is not an object" >&2; exit 2; }
   while IFS=$'\t' read -r id cmd; do
     [ -n "$cmd" ] || continue
     while IFS=$'\t' read -r new pkgs alt; do
@@ -170,7 +174,7 @@ while IFS= read -r -d '' f; do
 $(printf '%s\n' "$cmd" | awk -v sq="'" "$SELECTORS")
 EOF
   done <<EOF
-$(jq -r '.[] | select((.verification | type) == "string") | [.id, (.verification | gsub("\n"; " ; "))] | @tsv' "$f")
+$rows
 EOF
 done <"$list"
 
