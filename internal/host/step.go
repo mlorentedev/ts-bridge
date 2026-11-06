@@ -3,7 +3,10 @@ package host
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -31,22 +34,67 @@ type Runner interface {
 	LookPath(name string) (string, error)
 	// Elevated reports whether the process runs as root or Administrator.
 	Elevated() bool
+	// ReadFile and WriteFile reach the service configuration files a step
+	// converges (xrdp.ini, #557); WriteFile keeps the file's mode.
+	ReadFile(path string) ([]byte, error)
+	WriteFile(path string, data []byte) error
 }
 
 type execRunner struct{}
 
-func (execRunner) Run(name string, args ...string) error {
+// command runs under the C locale: the reads match the tools' own English
+// words, which ufw, iptables and systemctl translate (#608). LANGUAGE goes too,
+// since gettext lets it outrank the locale.
+func command(name string, args ...string) *exec.Cmd {
 	// #nosec G204 -- every caller passes a fixed system binary and generated arguments.
-	return exec.Command(name, args...).Run()
+	cmd := exec.Command(name, args...)
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		return strings.HasPrefix(kv, "LC_ALL=") || strings.HasPrefix(kv, "LANGUAGE=")
+	})
+	cmd.Env = append(env, "LC_ALL=C")
+	return cmd
+}
+
+func (execRunner) Run(name string, args ...string) error {
+	return command(name, args...).Run()
 }
 
 func (execRunner) Output(name string, args ...string) ([]byte, error) {
-	// #nosec G204 -- every caller passes a fixed system binary and generated arguments.
-	return exec.Command(name, args...).Output()
+	return command(name, args...).Output()
 }
 
 func (execRunner) LookPath(name string) (string, error) {
 	return exec.LookPath(name)
+}
+
+func (execRunner) ReadFile(path string) ([]byte, error) {
+	// #nosec G304 -- callers pass a fixed system configuration path.
+	return os.ReadFile(path)
+}
+
+// WriteFile replaces path through a sibling temporary file and a rename, so a
+// failed write never leaves the service with half a configuration.
+func (execRunner) WriteFile(path string, data []byte) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }() // gone after a successful rename
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close() // the write error is the one to report
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), info.Mode().Perm()); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 func (execRunner) Elevated() bool {
