@@ -57,9 +57,10 @@ ok "setup without xrdp: exit 2, xrdp step names the fix" -- 'code 2 && has "apt 
 ok "setup not converged: no HOST READY banner" -- '! has "HOST READY"'
 ok "setup without IP: no empty TS_TARGET" -- '! has "TS_TARGET=:"'
 outcomes setup "$C" >"$W/j"
-# Unmarked, so a missing or broken document is a FAIL and not #608.
+# The step must exist, so all() over no step at all cannot pass.
 ok "ufw inactive: setup prints its Firewall step" -- "json '[s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"]' <$W/j"
-ok "ufw inactive: firewall step says so" 608 -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Firewall\") and \"inactive\" in s[\"message\"]]' <$W/j"
+ok "ufw inactive: firewall step says so" -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Firewall\") and \"inactive\" in s[\"message\"]]' <$W/j"
+ok "ufw inactive: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
 
 apt-get -qq update >/dev/null 2>&1 && apt-get -qq install -y xrdp >/dev/null 2>&1
 ufw --force enable >/dev/null
