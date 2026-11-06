@@ -26,10 +26,8 @@ func TestValidateHealthListener(t *testing.T) {
 		{"private address", "10.0.0.5:9090", false, true},
 		{"hostname is not resolved", "health.internal:9090", false, true},
 		{"localhost lookalike", "localhost.example.com:9090", false, true},
-		{"malformed", "garbage", false, true},
 		{"wildcard with opt-in", "0.0.0.0:9090", true, false},
 		{"hostname with opt-in", "health.internal:9090", true, false},
-		{"malformed with opt-in", "garbage", true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -49,6 +47,22 @@ func TestValidateHealthListener(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// An address that is not host:port is an input error, not an exposure: the
+// refusal names the missing port, not the remote opt-in, with or without it.
+func TestValidateHealthListenerMalformed(t *testing.T) {
+	for _, addr := range []string{"127.0.0.1", "garbage"} {
+		for _, allow := range []bool{false, true} {
+			err := ValidateHealthListener(Config{HealthAddr: addr, HealthAllowRemote: allow})
+			if err == nil {
+				t.Fatalf("ValidateHealthListener(%q, allowRemote=%v) = nil, want a refusal", addr, allow)
+			}
+			if !strings.Contains(err.Error(), "host:port") || strings.Contains(err.Error(), "loopback") {
+				t.Errorf("error %q should ask for host:port and not call %q non-loopback", err, addr)
+			}
+		}
 	}
 }
 

@@ -12,6 +12,11 @@ import (
 // (#633). It applies to every layer that can supply the address (flag, env,
 // YAML, profile) because it checks the merged Config.
 func ValidateHealthListener(cfg Config) error {
+	if cfg.HealthAddr != "" {
+		if _, _, err := net.SplitHostPort(cfg.HealthAddr); err != nil {
+			return fmt.Errorf("health address %q (--health-addr, TS_HEALTH_ADDR, or health_addr in the config file or profile) is not host:port, e.g. 127.0.0.1:9090: %w", cfg.HealthAddr, err)
+		}
+	}
 	if !HealthExposed(cfg) || cfg.HealthAllowRemote {
 		return nil
 	}
