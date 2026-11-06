@@ -16,7 +16,7 @@ var defaultProfileStorePath = config.ProfileStorePath()
 
 // newImportCmd constructs the "ts-bridge import" subcommand.
 func newImportCmd() *cobra.Command {
-	return &cobra.Command{
+	command := &cobra.Command{
 		Use:   "import <name> <descriptor>",
 		Short: "Import a named connection profile from a tsb:// descriptor",
 		Long: `Import a named connection profile from a tsb:// descriptor string.
@@ -27,12 +27,19 @@ in a portable, shareable format. After importing, use the profile by name with
 
 Examples:
   ts-bridge import home "tsb://acemagic-office:45000?cp=saas"
-  ts-bridge import work "tsb://rdp.corp.example.com:3389?cp=https://vpn.corp.example.com"`,
+  ts-bridge import work "tsb://rdp.corp.example.com:3389?cp=https://vpn.corp.example.com"
+
+A managed credential stays bound to the control URL it was issued for. Importing
+a descriptor that changes the control URL of a credentialed profile is refused
+unless --force is given, which drops the profile's credential reference.`,
 		Args: exactArgsWithUsage(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runImportDirect(args[0], args[1], defaultProfileStorePath)
+			force, _ := cmd.Flags().GetBool("force")
+			return runImportDirect(args[0], args[1], defaultProfileStorePath, force)
 		},
 	}
+	command.Flags().Bool("force", false, "Move a credentialed profile to another control URL, dropping its credential reference")
+	return command
 }
 
 // exactArgsWithUsage is cobra.ExactArgs(n) whose error also carries the usage
@@ -49,7 +56,7 @@ func exactArgsWithUsage(n int) cobra.PositionalArgs {
 
 // runImportDirect is the pure, testable core of the import command.
 // It parses the descriptor and writes it to the store at storePath.
-func runImportDirect(name, rawDescriptor, storePath string) error {
+func runImportDirect(name, rawDescriptor, storePath string, force bool) error {
 	// Parse errors already read "invalid descriptor ...".
 	d, err := profile.Parse(rawDescriptor)
 	if err != nil {
@@ -57,8 +64,12 @@ func runImportDirect(name, rawDescriptor, storePath string) error {
 	}
 
 	s := profile.NewStore(storePath)
-	if err := s.Import(name, d); err != nil {
+	cleared, err := s.Import(name, d, force)
+	if err != nil {
 		return fmt.Errorf("import profile %q: %w", name, err)
+	}
+	if cleared {
+		fmt.Printf("Credential reference of profile %q cleared: its control URL changed. Run \"ts-bridge auth set\" to bind a credential for the new control plane.\n", name)
 	}
 
 	fmt.Printf("Profile %q imported (%s)\n", name, d.String())

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -107,6 +108,51 @@ func loadCommandProfile(name string) (profile.Profile, error) {
 		return profile.Profile{}, profileLoadError(name, err)
 	}
 	return selected, nil
+}
+
+// loadBoundProfileCredential loads selected's managed credential only when the
+// control URL the merge will resolve is the one the profile declares (#617).
+// A layer above the profile (flag, environment, ./.env, YAML) that names another
+// control plane would otherwise receive the key.
+func loadBoundProfileCredential(name string, selected profile.Profile, flags config.FlagSet, yamlCfg config.PartialConfig) (string, error) {
+	if selected.Credential == "" {
+		return "", nil
+	}
+	if resolved, layer := overridingControlURL(flags, yamlCfg); layer != "" && !profile.SameControlURL(resolved, selected.ControlURL) {
+		return "", fmt.Errorf("profile %q has managed credential %q bound to control URL %q, but %s sets control URL %q; refusing to send the credential there (pass --auth-key-file to use another key, or remove that override)",
+			name, selected.Credential, displayControlURL(selected.ControlURL), layer, displayControlURL(resolved))
+	}
+	key, err := loadManagedProfileCredential(selected)
+	if err != nil {
+		// A deleted or corrupted managed key is fixed by storing it again.
+		return "", fmt.Errorf("%w\nstore it again: ts-bridge auth set --profile %s", err, name)
+	}
+	return key, nil
+}
+
+// overridingControlURL returns the control URL a layer above the profile will
+// impose and that layer's name, in Merge's precedence order; layer is empty
+// when none sets one. A layer counts by Merge's own test, a non-empty raw
+// value: a blank one still wins there, and trims to Tailscale SaaS.
+func overridingControlURL(flags config.FlagSet, yamlCfg config.PartialConfig) (resolved, layer string) {
+	candidates := []struct{ value, layer string }{
+		{flags.ControlURL, "--control-url"},
+		{os.Getenv("TS_CONTROL_URL"), "TS_CONTROL_URL (environment or ./.env)"},
+		{yamlCfg.ControlURL, "the YAML config"},
+	}
+	for _, c := range candidates {
+		if c.value != "" {
+			return strings.TrimSpace(c.value), c.layer
+		}
+	}
+	return "", ""
+}
+
+func displayControlURL(raw string) string {
+	if raw == "" {
+		return "(Tailscale SaaS)"
+	}
+	return raw
 }
 
 // profileLoadError wraps a profile lookup failure; for a profile that does not

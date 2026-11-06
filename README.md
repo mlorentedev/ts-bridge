@@ -113,6 +113,13 @@ ts-bridge connect --profile home    # resolves target+port automatically
 `--profile` is additive: if `TS_TARGET` or `--target` is also set, it wins over the profile.
 When the profile has a managed `credential` reference, `connect --profile`
 loads it automatically; explicit key sources keep higher precedence.
+The credential is bound to the profile's control URL: if a flag, `TS_CONTROL_URL`
+(including a `./.env`) or a YAML config resolves another control URL, `connect`
+and `browser` refuse and name both URLs and the layer that set the other one.
+Likewise, `import` that changes the control URL of a credentialed profile is
+refused, naming both URLs, unless `--force` is given. `import --force` and
+`init --profile --force` clear the credential reference instead; run
+`ts-bridge auth set` again for the new control plane.
 
 To store non-secret bootstrap, bind, hostname, state and health settings in an
 existing profile, import its local runtime YAML once:

@@ -264,6 +264,22 @@ func TestBrowserAuthKeyFileOverridesProfileCredential(t *testing.T) {
 	}
 }
 
+// bindOfficeCredential re-binds profile "office" and its credential to controlURL
+// through the store, the way a profile issued for that control plane would be.
+func bindOfficeCredential(t *testing.T, storePath, controlURL string) {
+	t.Helper()
+	store := profile.NewStore(storePath)
+	if err := store.ClearCredential("office"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("office", "acemagic-office:45000", controlURL); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetCredential("office", "office-key"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A profile's managed credential that cannot be read (deleted, or corrupted on
 // disk) is fixed by storing it again, so the error names auth set. A malformed
 // key from TS_AUTHKEY is not: auth set cannot outrank the env var, so the hint

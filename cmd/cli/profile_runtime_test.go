@@ -93,6 +93,9 @@ func TestProfileRuntimeConnectPrecedence(t *testing.T) {
 
 func TestProfileRuntimeImportPreservesExistingTargetAndCredential(t *testing.T) {
 	path := setupProfileRuntimeTest(t)
+	// The credential is bound to the control plane the runtime file names, so
+	// importing that file keeps it (a different URL is refused, see #617).
+	bindOfficeCredential(t, path, "https://vpn.example.com")
 	configPath := filepath.Join(t.TempDir(), "runtime.yaml")
 	stateDir := filepath.Join(t.TempDir(), "state")
 	source := "version: 1\ncontrol_url: https://vpn.example.com\nbootstrap_ssh: imported-bastion\n" +

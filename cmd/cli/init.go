@@ -207,8 +207,13 @@ func runInitProfile(storePath string, f initFlags) error {
 		return fmt.Errorf("init --profile %q: %w", f.Profile, err)
 	}
 
-	if err := s.Configure(f.Profile, selected); err != nil {
+	cleared, err := s.Configure(f.Profile, selected, f.Force)
+	if err != nil {
 		return fmt.Errorf("write profile %q: %w", f.Profile, err)
+	}
+	if cleared {
+		fmt.Printf("Credential reference of profile %q cleared: its control URL changed. Run \"ts-bridge auth set\" to bind a credential for the new control plane.\n", f.Profile)
+		selected.Credential = ""
 	}
 
 	fmt.Printf("\nProfile %q written to %s\n", f.Profile, storePath)

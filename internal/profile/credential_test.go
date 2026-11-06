@@ -56,7 +56,7 @@ func TestStoreCredentialReferenceIsBackwardCompatibleAndPreserved(t *testing.T) 
 	if err := store.SetCredential("office", "shared"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Set("office", "new-host:45000", "https://vpn.example.com"); err != nil {
+	if err := store.Set("office", "new-host:45000", ""); err != nil {
 		t.Fatal(err)
 	}
 	got, err = store.Get("office")
@@ -66,7 +66,7 @@ func TestStoreCredentialReferenceIsBackwardCompatibleAndPreserved(t *testing.T) 
 	if got.Credential != "shared" {
 		t.Fatalf("Set() discarded Credential: %#v", got)
 	}
-	if err := store.Import("office", Descriptor{Host: "imported", Port: 22}); err != nil {
+	if _, err := store.Import("office", Descriptor{Host: "imported", Port: 22}, false); err != nil {
 		t.Fatal(err)
 	}
 	got, err = store.Get("office")

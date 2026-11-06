@@ -185,6 +185,14 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 	if err != nil {
 		return "", err
 	}
+	// Bind the credential before the profile fills the YAML layer, which would
+	// hide which layer set the control URL.
+	if flags.AuthKey == "" && flags.AuthKeyFile == "" && os.Getenv("TS_AUTHKEY") == "" {
+		flags.ProfileAuthKey, err = loadBoundProfileCredential(profileName, selectedProfile, *flags, *yamlCfg)
+		if err != nil {
+			return selectedProfile.Target, err
+		}
+	}
 	if yamlCfg.Target == "" {
 		yamlCfg.Target = selectedProfile.Target
 	}
@@ -192,15 +200,6 @@ func applyConnectProfile(yamlCfg *config.PartialConfig, flags *config.FlagSet, p
 		yamlCfg.ControlURL = selectedProfile.ControlURL
 	}
 	applyProfileRuntime(yamlCfg, selectedProfile)
-	if flags.AuthKey != "" || flags.AuthKeyFile != "" || os.Getenv("TS_AUTHKEY") != "" {
-		return selectedProfile.Target, nil
-	}
-	key, err := loadManagedProfileCredential(selectedProfile)
-	if err != nil {
-		// A deleted or corrupted managed key is fixed by storing it again.
-		return "", fmt.Errorf("%w\nstore it again: ts-bridge auth set --profile %s", err, profileName)
-	}
-	flags.ProfileAuthKey = key
 	return selectedProfile.Target, nil
 }
 
