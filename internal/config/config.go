@@ -110,6 +110,7 @@ type Config struct {
 	DialBackoffMax     time.Duration
 	MaxConnections     int64
 	HealthAddr         string
+	HealthAllowRemote  bool
 	Verbose            bool
 	Quiet              bool
 	LogFormat          string

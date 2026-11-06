@@ -73,6 +73,9 @@ type FlagSet struct {
 	PortRange       string
 	Config          string
 	Reset           bool
+	// HealthAllowRemote is a pointer so --health-allow-remote=false can override
+	// TS_HEALTH_ALLOW_REMOTE; nil means the user did not pass the flag.
+	HealthAllowRemote *bool
 }
 
 // Merge applies the precedence chain: flags > env > yaml > defaults.
@@ -359,6 +362,9 @@ func applyEnv(cfg *Config) {
 	applyEnvString(&cfg.BootstrapSSH, "TS_BOOTSTRAP_SSH")
 	applyEnvString(&cfg.BootstrapSOCKSAddr, "TS_BOOTSTRAP_SOCKS_ADDR")
 	applyEnvString(&cfg.HealthAddr, "TS_HEALTH_ADDR")
+	if v := os.Getenv("TS_HEALTH_ALLOW_REMOTE"); v != "" {
+		cfg.HealthAllowRemote = parseBoolEnv(v)
+	}
 	applyEnvString(&cfg.LogFormat, "TS_LOG_FORMAT")
 
 	// AutoInstance from env (TS_AUTO_INSTANCE / TS_MANUAL_MODE).
@@ -489,6 +495,9 @@ func applyFlags(cfg *Config, flags FlagSet) {
 	}
 	if flags.DialRetries != nil {
 		cfg.DialRetries = *flags.DialRetries
+	}
+	if flags.HealthAllowRemote != nil {
+		cfg.HealthAllowRemote = *flags.HealthAllowRemote
 	}
 }
 
