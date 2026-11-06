@@ -1,0 +1,53 @@
+# Arming envelope for the overnight unattended run. Committed on the run branch,
+# never merged; the run reads the committed copy and halts if the working tree differs.
+version: 1
+run_id: "ts-bridge-autopilot-2026-11-06"
+armed_by: manu
+armed_at: 2026-11-06T06:55:00Z
+expires_at: 2026-11-06T14:55:00Z
+objective: "Land the open, triaged 2.0.0 PRs, then work the remaining no-decision 2.0.0 scope items below to merged PRs, one at a time, leaving every PR triaged and every park answerable."
+scope:
+  write_paths:
+    - "cmd/**"
+    - "internal/**"
+    - "scripts/**"
+    - "docs/**"
+    - "specs/**"
+    - "Makefile"
+    - ".env.example"
+    - "README.md"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - ".agent/**"
+    - "**/AGENTS.md"
+    - "site/**"
+    - "go.mod"
+    - "go.sum"
+    - "mise.toml"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, go, golangci-lint, gosec, bats, shellcheck, bash, zsh, make, mise, jq, python3, docker]
+queue:
+  source: bitacora
+  # The 2.0.0 debt inventory, minus what is merged, owner-only or needs a real mesh.
+  filter: "open PRs first, then issues #607 #631 #391 #684 #526 #565"
+  order: ["land-open-prs", 607, 631, 391, 684, 526, 565]
+  notes:
+    land-open-prs: "Open PRs #667 #664 #679 #672 #670 #659 #668 #669 #682 #665 #662 #678 #681 #676. Triage every re-review on the current head, then land with the scratchpad land.sh or `dotf pr land`. #676 last, then adjust #670's baseline note if needed. Move each closed issue to Done over REST (board-rest-api memory)."
+    607: "Continue the local branch test/issue-607-mesh-linux (PR 2) once #682 merges: merge origin/master, push as draft, triage, land. Then PR 3 (local commits on the same branch) needs its live Lima run and mutants before its PR. PR 4 (Windows mesh) and PR 5 (runbook) per specs/QA-607-headscale-e2e/tasks.md."
+    631: "Owner decided 2026-11-06 (issue comment): hybrid scope. Linux by interface (iptables -i tailscale0, ufw allow in on tailscale0), Windows by RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48; check reports an unscoped legacy rule and setup replaces it. ADR-017 amendment first (docs/adr), then the implementation; e2e on the VMs."
+    391: "SEC-002 store lock. SDD spec first (proposal/tasks/verification), TDD, include the #664 review scenario (control_url change between share check and association). Merge only with the review triaged."
+  exclude_note: "Not mine: #523 release, #583, #584, #639 #642 #651 (owner), #675 #677 #674 (owner merges), #183 (needs a real mesh). VMs are shared with session feat-vm-linux-exec-16: message it before taking the Windows guest."
+  max_items: 7
+budget:
+  max_iterations: 10
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant          # .github/merge-grant.yml on master; excludes .github/, harness/, .agent/, release-please
+  push: true
+  open_pr: true
+  advisor_tier: top
+host:
+  wake_lock: "caffeinate -dimsu while the run is armed; on AC power, lid must stay open"
