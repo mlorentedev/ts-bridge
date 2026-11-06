@@ -92,7 +92,7 @@ The four-package split above grew to fifteen packages under `internal/`. The bou
 | `discover` | `secretfile` |
 | `health` | `telemetry` |
 | `host` | `bootstrapssh`, `controlurl` |
-| `profile` | `controlurl`, `credential` |
+| `profile` | `controlurl`, `credential`, `secretfile` |
 | `proxy` | `config`, `telemetry` |
 | `serve` | `config`, `health`, `host`, `proxy` |
 
