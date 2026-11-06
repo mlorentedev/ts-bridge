@@ -99,10 +99,18 @@ func TestDiscoverHelpDescribesProfileInteraction(t *testing.T) {
 		}
 	}
 	for _, line := range []string{"  --port PORT", "  --auto "} {
+		found := false
 		for _, text := range strings.Split(cmd.Long, "\n") {
-			if strings.HasPrefix(text, line) && !strings.Contains(text, "profile") {
+			if !strings.HasPrefix(text, line) {
+				continue
+			}
+			found = true
+			if !strings.Contains(text, "profile") {
 				t.Errorf("Long help line %q does not mention the profile", text)
 			}
+		}
+		if !found {
+			t.Errorf("Long help has no line starting %q", line)
 		}
 	}
 }
