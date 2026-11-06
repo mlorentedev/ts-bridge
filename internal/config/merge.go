@@ -73,6 +73,9 @@ type FlagSet struct {
 	PortRange       string
 	Config          string
 	Reset           bool
+	// Verbose is a pointer so --verbose=false can override TS_VERBOSE; nil
+	// means the user did not pass the flag.
+	Verbose *bool
 }
 
 // Merge applies the precedence chain: flags > env > yaml > defaults.
@@ -370,6 +373,10 @@ func applyEnv(cfg *Config) {
 		cfg.AutoInstance = parseBoolEnv(v)
 	}
 
+	if v := os.Getenv("TS_VERBOSE"); v != "" {
+		cfg.Verbose = parseBoolEnv(v)
+	}
+
 	// Duration fields.
 	applyEnvDuration(&cfg.ConnectTimeout, "TS_TIMEOUT", nil)
 	applyEnvDuration(&cfg.DrainTimeout, "TS_DRAIN_TIMEOUT", nil)
@@ -489,6 +496,9 @@ func applyFlags(cfg *Config, flags FlagSet) {
 	}
 	if flags.DialRetries != nil {
 		cfg.DialRetries = *flags.DialRetries
+	}
+	if flags.Verbose != nil {
+		cfg.Verbose = *flags.Verbose
 	}
 }
 

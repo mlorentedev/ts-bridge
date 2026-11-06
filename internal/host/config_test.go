@@ -432,3 +432,31 @@ func TestParseBoolEnv(t *testing.T) {
 		})
 	}
 }
+
+// PortDeclared says whether any layer named the RDP port, so a step can tell a
+// declaration from the 3389 default (#557).
+func TestResolvePortDeclared(t *testing.T) {
+	port := 3390
+	tests := []struct {
+		name  string
+		env   string
+		file  File
+		flags Flags
+		want  bool
+	}{
+		{name: "default"},
+		{name: "rdp service without a port", file: File{Host: FileHost{Services: []FileService{{Kind: ServiceRDP}}}}},
+		{name: "file port", file: File{Host: FileHost{Services: []FileService{{Kind: ServiceRDP, Port: &port}}}}, want: true},
+		{name: "env", env: "3390", want: true},
+		{name: "invalid env", env: "abc"},
+		{name: "flag", flags: Flags{Port: 3390}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("TS_HOST_RDP_PORT", tt.env)
+			if got := Resolve("windows", tt.file, tt.flags).PortDeclared; got != tt.want {
+				t.Errorf("PortDeclared = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
