@@ -8,7 +8,7 @@ import (
 )
 
 // emittedLine matches a key=value line a PowerShell read prints.
-var emittedLine = regexp.MustCompile(`Write-Output "([a-z]+)=`)
+var emittedLine = regexp.MustCompile(`Write-Output "([A-Za-z0-9_]+)=`)
 
 // scriptRunner stands in for PowerShell: it answers a script with one key=value
 // line for every line the script itself prints, taking the value from values.
