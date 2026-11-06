@@ -43,7 +43,8 @@ check() { # check <case> <probe> <fake mode> <want exit>
   local name="$1" kind="$2" mode="$3" want="$4" port got=0
   python3 -I "$WORK/fake.py" "$mode" >"$WORK/port" &
   pids+=("$!")
-  until [ -s "$WORK/port" ]; do :; done
+  for _ in $(seq 1 100); do [ -s "$WORK/port" ] && break; sleep 0.05; done
+  if [ ! -s "$WORK/port" ]; then echo "FAIL $name: the fake server printed no port in 5s"; fails=$((fails + 1)); return; fi
   port="$(cat "$WORK/port")"
   rm "$WORK/port"
   timeout 5 python3 -I "$PROBE" "$kind" "127.0.0.1:$port" >/dev/null 2>&1 || got=$?

@@ -66,6 +66,7 @@ check premise-boots-no-guest never dotf 'vm linux up --session'
 
 reset
 touch "$WORK/blocked"
+rc=0
 mesh linux || rc=$?
 check guest-exits-nonzero test "${rc:-0}" -ne 0
 check guest-says-why said 'guest linux cannot reach the control plane at http://10.9.8.7:8080/health'
@@ -73,6 +74,7 @@ check guest-runs-no-scenario never dotf '--script'
 check guest-run-leaves-nothing nothing_left
 
 reset
+rc=0
 mesh windows || rc=$?
 check windows-refused test "${rc:-0}" -ne 0
 check windows-starts-nothing never docker '^run '
