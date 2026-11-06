@@ -57,12 +57,16 @@ hs_up() {
   cp "${HERE:?}/headscale/policy.hujson" "$HS_DIR/conf/policy.hujson"
   docker run -d --name "$HS_NAME" --label "$HS_LABEL" -p "$HS_PORT:8080" -p 3478:3478/udp \
     -v "$HS_DIR/conf:/etc/headscale:ro" -v "$HS_DIR/data:/var/lib/headscale" "$HS_IMAGE" serve >/dev/null
-  for _ in $(seq 1 30); do
-    hs_cli health >/dev/null 2>&1 && { hs_create_user; return; }
+  for _ in $(seq 1 "${HS_HEALTH_TRIES:-30}"); do
+    if hs_cli health >/dev/null 2>&1; then
+      hs_create_user || { hs_down; echo "e2e: could not create the headscale user" >&2; return 1; }
+      return 0
+    fi
     sleep 1
   done
   docker logs --tail 20 "$HS_NAME" >&2 || true
-  echo "e2e: headscale did not become healthy in 30s" >&2
+  hs_down # a container left running would read as a working one on the next hs_up
+  echo "e2e: headscale did not become healthy in ${HS_HEALTH_TRIES:-30}s" >&2
   return 1
 }
 
