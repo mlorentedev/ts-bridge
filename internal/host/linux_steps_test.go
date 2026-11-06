@@ -1,6 +1,7 @@
 package host
 
 import (
+	"cmp"
 	"reflect"
 	"slices"
 	"strings"
@@ -62,6 +63,8 @@ func TestUFWAllows(t *testing.T) {
 
 const (
 	ufwAdded   = "ufw show added"
+	ufwStatus  = "ufw status"
+	ufwActive  = "Status: active\n"
 	iptRead    = "iptables -S INPUT"
 	iptChain   = "iptables -S ts-input"
 	iptAppend  = "iptables -A INPUT -p tcp --dport 3389 -j ACCEPT"
@@ -211,12 +214,12 @@ func TestIptablesRule(t *testing.T) {
 		{"no backend", &recordingRunner{elevated: true}, ruleUnknown, ""},
 		{"not root", &recordingRunner{onPath: map[string]bool{"iptables": true}}, ruleUnknown, ""},
 		// #530: ufw does not list tailscaled's rules, so a ufw host reads iptables too.
-		{"ufw host, present inside ts-input", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputDefault}}, rulePresent, ""},
-		{"ufw host, nothing covers", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept}}, ruleAbsent, ""},
-		{"ufw host, iptables unreadable", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded}, exit: map[string]int{iptRead: 4}}, ruleUnknown, iptRead},
-		{"ufw host, a qualified jump", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: iptQualified}}, ruleUnknown, "ts-input"},
-		{"ufw host, a ufw allow decides first", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}, exit: map[string]int{iptRead: 4}}, rulePresent, ""},
-		{"ufw host, a ufw deny decides first", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwAddedHeader + "ufw deny 3389/tcp\n", iptRead: ufwHostInput, iptChain: tsInputDefault}}, ruleBlocked, ""},
+		{"ufw host, present inside ts-input", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputDefault}}, rulePresent, ""},
+		{"ufw host, nothing covers", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept}}, ruleAbsent, ""},
+		{"ufw host, iptables unreadable", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded}, exit: map[string]int{iptRead: 4}}, ruleUnknown, iptRead},
+		{"ufw host, a qualified jump", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded, iptRead: iptQualified}}, ruleUnknown, "ts-input"},
+		{"ufw host, a ufw allow decides first", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}, exit: map[string]int{iptRead: 4}}, rulePresent, ""},
+		{"ufw host, a ufw deny decides first", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + "ufw deny 3389/tcp\n", iptRead: ufwHostInput, iptChain: tsInputDefault}}, ruleBlocked, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -281,7 +284,7 @@ func TestXRDP(t *testing.T) {
 }
 
 func linuxUp(extra map[string]string) map[string]string {
-	out := map[string]string{"tailscale ip -4": "100.64.0.5\n", isEnabled: "enabled\n", isActive: "active\n"}
+	out := map[string]string{"tailscale ip -4": "100.64.0.5\n", isEnabled: "enabled\n", isActive: "active\n", ufwStatus: ufwActive}
 	for k, v := range extra {
 		out[k] = v
 	}
@@ -306,34 +309,34 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "ufw, converged",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 		},
 		{
 			name:     "ufw, tailscaled's ts-input admits the tailnet: no ufw allow (#530)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputDefault})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 			message:  "Firewall allows TCP 3389 (iptables)",
 		},
 		{
 			name:     "ufw, a leftover setup copy: the same manual step as check, no write (#576)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputDefault})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
 			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
 		},
 		{
 			name:     "ufw, one leftover copy beside a ufw allow: still manual (#576)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
 			message:  "1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
 		},
 		{
 			name:     "ufw unreadable, a leftover copy: setup names it as check does, no write (#576)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
 			message:  "it also holds 1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
 			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time",
@@ -341,7 +344,7 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "ufw, only the leftover copies admit the port: add a ufw allow before deleting them (#576)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputNoAccept})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
 			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
 			fix:      "run `ufw allow 3389/tcp` first",
@@ -349,20 +352,20 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "ufw, nothing covers in either: ufw allow as before",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run ufw allow 3389/tcp", "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run ufw allow 3389/tcp", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
 			name:     "ufw, iptables unreadable: no write on a guess",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded}), exit: map[string]int{iptRead: 4}},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
 			message:  iptRead,
 		},
 		{
 			name:     "ufw, a qualified ts-input jump: no write on a guess",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: iptQualified})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
 			message:  "-A INPUT -i tailscale0 -j ts-input",
 		},
@@ -371,20 +374,20 @@ func TestSetupForLinux(t *testing.T) {
 			runner: &recordingRunner{elevated: true, onPath: ufw,
 				output: linuxUp(map[string]string{isEnabled: "disabled\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw route allow in on tailscale0 to any port 3389 proto tcp\n"}),
 				exit:   map[string]int{isEnabled: 1, isActive: 3}},
-			calls: append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwAdded, "lookpath iptables",
+			calls: append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables",
 				"run ufw allow 3389/tcp", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeOK},
 		},
 		{
 			name:     "xrdp enabled, not running",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isActive: 3}},
-			calls:    append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeChanged, OutcomeOK, OutcomeOK},
 		},
 		{
 			name:     "xrdp masked: no enable, fix names unmask",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isEnabled: "masked\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isEnabled: 1, isActive: 3}},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeFailed, OutcomeOK, OutcomeOK},
 		},
 		{
@@ -420,7 +423,7 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "ufw, a deny decides the port first",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw deny 3389\nufw allow 3389/tcp\n"})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
 			blocked:  "ufw deny 3389",
 		},
@@ -492,7 +495,7 @@ func TestSetupForLinux(t *testing.T) {
 		{
 			name:     "no systemctl",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(map[string]string{ufwAdded: "ufw allow 3389/tcp"})},
-			calls:    []string{"lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded, "lookpath iptables", "output tailscale ip -4"},
+			calls:    []string{"lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwStatus, "output " + ufwAdded, "lookpath iptables", "output tailscale ip -4"},
 			outcomes: []Outcome{OutcomeFailed, OutcomeOK, OutcomeOK},
 		},
 	}
@@ -577,7 +580,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "converged",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables"),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
@@ -585,7 +588,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "ufw host, iptables unreadable: unverified (#530 review)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded}), exit: map[string]int{iptRead: 4}},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
@@ -594,7 +597,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "ufw host, an iptables DROP decides: credited to iptables (#530 review)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput + "-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n", iptChain: tsInputNoAccept})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
@@ -604,7 +607,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "ufw host, tailscaled's ts-input admits the tailnet (#530)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputDefault})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
@@ -612,7 +615,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "ufw host, two leftover copies in INPUT: delete both (#530)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputDefault})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
@@ -622,7 +625,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "ufw host, one leftover copy beside a ufw allow: still reported (#530)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
@@ -632,7 +635,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "ufw host, a qualified ts-input jump: unverified",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: iptQualified})},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
@@ -643,7 +646,7 @@ func TestCheckForLinux(t *testing.T) {
 			runner: &recordingRunner{elevated: true, onPath: ufw,
 				output: linuxUp(map[string]string{isEnabled: "disabled\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw allow 33890/tcp\n"}),
 				exit:   map[string]int{isEnabled: 1, isActive: 3}},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables"),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=changed", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Active: &no}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
@@ -651,7 +654,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "xrdp enabled, not running",
 			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isActive: 3}},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables"),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=changed", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &no, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
@@ -667,7 +670,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "no systemctl, ufw unreadable",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(nil), fail: map[string]bool{ufwAdded: true}},
-			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwAdded, "lookpath iptables"},
+			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwStatus, "output " + ufwAdded, "lookpath iptables"},
 			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389, Unread: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
@@ -675,7 +678,7 @@ func TestCheckForLinux(t *testing.T) {
 		{
 			name:     "ufw host, ufw unreadable, a leftover copy: still reported (#530)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptSetupRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
-			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
@@ -1223,9 +1226,10 @@ func TestReadUFWCopiesAdmit(t *testing.T) {
 		runner *recordingRunner
 		want   bool
 	}{
-		{"ufw unreadable, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{iptRead: ufwHostCopies, iptChain: tsInputNoAccept}, fail: map[string]bool{ufwAdded: true}}, true},
-		{"ufw absent, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, true},
-		{"ufw allows the port itself", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, false},
+		{"ufw unreadable, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, iptRead: ufwHostCopies, iptChain: tsInputNoAccept}, fail: map[string]bool{ufwAdded: true}}, true},
+		{"ufw status unreadable, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{iptRead: ufwHostCopies, iptChain: tsInputNoAccept}, fail: map[string]bool{ufwStatus: true}}, true},
+		{"ufw absent, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, true},
+		{"ufw allows the port itself", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1281,7 +1285,7 @@ func TestReadIptablesTailscaledModes(t *testing.T) {
 		{"nft exit 1 for a refused read", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 1}, stderr: map[string]string{iptChain: noIptChain[iptChain], nftTSInputRead: "Error: Operation not permitted\n"}}, ruleUnknown, nftTSInputRead},
 		{"nft exit 1 with no message", &recordingRunner{elevated: true, onPath: nft, output: map[string]string{iptRead: iptNoJump}, exit: map[string]int{iptChain: 1, nftTSInputRead: 1}, stderr: map[string]string{iptChain: noIptChain[iptChain], nftTSInputRead: ""}}, ruleUnknown, nftTSInputRead},
 		{"no iptables, nft holds ts-input", &recordingRunner{elevated: true, onPath: map[string]bool{"nft": true}, output: map[string]string{nftTSInputRead: nftTSInput}}, ruleUnknown, "nftables"},
-		{"ufw host, nodivert", &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true}, output: map[string]string{ufwAdded: ufwHostAdded, iptRead: iptNoJump, iptChain: tsInputDefault}}, ruleUnknown, "ts-input exists but INPUT does not jump to it"},
+		{"ufw host, nodivert", &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true}, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded, iptRead: iptNoJump, iptChain: tsInputDefault}}, ruleUnknown, "ts-input exists but INPUT does not jump to it"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1345,5 +1349,105 @@ func TestNoBackendKeepsTheNFTFix(t *testing.T) {
 	}
 	if fix := firewallFix(read, 3389, "setup"); !strings.Contains(fix, nftTSInputRead) {
 		t.Errorf("fix = %q, want the nft read hint", fix)
+	}
+}
+
+// An inactive ufw enforces none of its rules, so the port is open because no
+// firewall runs, not because of an allow (#608). `ufw status` is verbatim from
+// ufw 0.36.2 on Ubuntu 24.04 (Lima), read under LC_ALL=C.
+func TestUFWInactive(t *testing.T) {
+	ufwOnly := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true}
+	withIPT := map[string]bool{"xrdp": true, "systemctl": true, "ufw": true, "iptables": true}
+	inactive := func(added, input, chain string) *recordingRunner {
+		out := map[string]string{ufwStatus: "Status: inactive\n", ufwAdded: ufwAddedHeader + added}
+		path := ufwOnly
+		if input != "" {
+			out[iptRead], out[iptChain], path = input, cmp.Or(chain, tsInputDefault), withIPT
+		}
+		return &recordingRunner{elevated: true, onPath: path, output: linuxUp(out)}
+	}
+	tests := []struct {
+		name    string
+		added   string
+		input   string // iptables INPUT; empty means iptables is not installed
+		chain   string // ts-input; empty means tailscaled's default, which admits the tailnet
+		writes  bool   // setup adds the allow, so it holds once ufw is enabled
+		message string
+		check   string // what check's message names, when not just "inactive"
+		fix     string // what both fixes must also name
+	}{
+		{name: "no allow yet", writes: true, message: "allow added"},
+		{name: "allow already added", added: "ufw allow 3389/tcp\n", message: "allow is in place"},
+		// A ufw deny decides the port once ufw is enabled: name it, add nothing.
+		{name: "a ufw deny", added: "ufw deny 3389/tcp\n", message: "ufw deny 3389/tcp", check: "ufw deny 3389/tcp"},
+		// tailscaled's ts-input admits the tailnet whatever ufw's state: an
+		// unscoped ufw allow would open the port on every interface (#530).
+		{name: "ts-input admits the tailnet", input: ufwHostInput, message: "iptables admits TCP 3389", check: "iptables admits TCP 3389"},
+		// The copies are live iptables rules, so both commands name them (#576).
+		{name: "leftover copies", input: ufwHostCopies, message: "2 copies of", check: "2 copies of"},
+		// With no ts-input accept the copies are the only allow: deleting them
+		// before adding ufw's would close the port once ufw is enabled.
+		{name: "only the copies admit the port", input: ufwHostCopies, chain: tsInputNoAccept, message: "2 copies of", check: "2 copies of", fix: "run `ufw allow 3389/tcp` first"},
+	}
+	for _, tt := range tests {
+		t.Run("setup/"+tt.name, func(t *testing.T) {
+			r := inactive(tt.added, tt.input, tt.chain)
+			s := firewallSetupStep(r, 3389)
+			assertUFWInactiveStep(t, s, tt.message)
+			if !strings.Contains(s.Fix, tt.fix) {
+				t.Errorf("fix %q does not name %q", s.Fix, tt.fix)
+			}
+			if got := slices.Contains(r.calls, "run ufw allow 3389/tcp"); got != tt.writes {
+				t.Errorf("ufw allow ran = %v, want %v: %v", got, tt.writes, r.calls)
+			}
+		})
+		t.Run("check/"+tt.name, func(t *testing.T) {
+			r := inactive(tt.added, tt.input, tt.chain)
+			var result CheckResult
+			checkLinux(Config{Port: 3389}, r, &result)
+			assertUFWInactiveStep(t, result.Steps[1], cmp.Or(tt.check, "inactive"))
+			if !strings.Contains(result.Steps[1].Fix, tt.fix) {
+				t.Errorf("fix %q does not name %q", result.Steps[1].Fix, tt.fix)
+			}
+			deriveLegacy(&result)
+			if result.Services[0].FirewallOK || result.FirewallOK {
+				t.Error("check reports firewall_ok for a port no firewall filters")
+			}
+			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") }) {
+				t.Errorf("check ran a mutating command: %v", r.calls)
+			}
+		})
+	}
+}
+
+func assertUFWInactiveStep(t *testing.T, s SetupStep, message string) {
+	t.Helper()
+	if s.Outcome != OutcomeManual || !strings.Contains(s.Message, "ufw is inactive") || !strings.Contains(s.Message, message) {
+		t.Errorf("step = %s %q, want manual saying ufw is inactive and %q", s.Outcome, s.Message, message)
+	}
+	if strings.Contains(s.Message, "Firewall allows") || strings.Contains(s.Message, "rule added") {
+		t.Errorf("message %q claims a rule admits the port", s.Message)
+	}
+	if !strings.Contains(s.Fix, "ufw enable") {
+		t.Errorf("fix %q does not name `ufw enable`", s.Fix)
+	}
+}
+
+// A `ufw status` that says neither active nor inactive is not a read: setup
+// must not write on it, and check must not report the port as allowed.
+func TestUFWStatusUnrecognized(t *testing.T) {
+	for name, runner := range map[string]*recordingRunner{
+		"unrecognized": {elevated: true, onPath: map[string]bool{"ufw": true}, output: map[string]string{ufwStatus: "ERROR: problem running\n", ufwAdded: ufwAddedHeader}},
+		"failed":       {elevated: true, onPath: map[string]bool{"ufw": true}, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader}, fail: map[string]bool{ufwStatus: true}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := firewallSetupStep(runner, 3389)
+			if s.Outcome != OutcomeFailed || !strings.Contains(s.Message, "ufw status") {
+				t.Errorf("setup = %s %q, want failed naming `ufw status`", s.Outcome, s.Message)
+			}
+			if slices.Contains(runner.calls, "run ufw allow 3389/tcp") {
+				t.Errorf("setup wrote on an unread status: %v", runner.calls)
+			}
+		})
 	}
 }
