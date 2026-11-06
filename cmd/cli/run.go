@@ -397,6 +397,11 @@ func readyTarget(cfg config.Config) string {
 
 //nolint:unused // wired into Runner = Run
 func initTailscale(parentCtx context.Context, cfg config.Config) (*tsnet.Server, error) {
+	// tsnet starts its control client before it looks at the context, so a run
+	// that is already over must not reach Up at all.
+	if cause := context.Cause(parentCtx); cause != nil {
+		return nil, cause
+	}
 	var tsnetLogf func(string, ...any)
 	if loggingInstance != nil {
 		tsnetLogf = func(format string, args ...any) {

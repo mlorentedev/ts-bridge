@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -327,8 +328,13 @@ func TestHandleShutdown_RecordsTheCauseAndClosesTheListener(t *testing.T) {
 			if ready, reason := status.Load(); ready || reason != tt.wantReason {
 				t.Errorf("status = ready %v, reason %q; want not ready, reason %q", ready, reason, tt.wantReason)
 			}
+			// A deadline turns a listener left open into a failed assertion rather
+			// than an Accept that blocks until the package timeout.
+			_ = listener.(*net.TCPListener).SetDeadline(time.Now().Add(time.Second))
 			if _, err := listener.Accept(); err == nil {
 				t.Error("listener still accepts after shutdown")
+			} else if errors.Is(err, os.ErrDeadlineExceeded) {
+				t.Error("listener was not closed by shutdown")
 			}
 		})
 	}
@@ -386,12 +392,28 @@ func TestAnnounceReady(t *testing.T) {
 }
 
 // A run canceled before the node is up must report its own cause, not a
-// misleading tsnet timeout. The control URL is never contacted: the parent
-// context is already dead when Up starts.
+// misleading tsnet timeout. The control URL is never contacted either, which
+// the test observes by pointing it at a listener that counts connections: tsnet
+// reaches the control plane from Up even when its context is already dead.
 func TestInitTailscale_ReturnsTheRunCauseWhenCancelled(t *testing.T) {
 	oldLogger := logger
 	t.Cleanup(func() { logger = oldLogger })
 	logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	control, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contacts atomic.Int32
+	go func() {
+		for {
+			conn, err := control.Accept()
+			if err != nil {
+				return
+			}
+			contacts.Add(1)
+			_ = conn.Close()
+		}
+	}()
 	cause := errors.New("ssh bootstrap died")
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(cause)
@@ -400,9 +422,13 @@ func TestInitTailscale_ReturnsTheRunCauseWhenCancelled(t *testing.T) {
 		Hostname:       "lifecycle-test",
 		AuthKey:        "tskey-auth-test123-secret",
 		StateDir:       t.TempDir(),
-		ControlURL:     "http://127.0.0.1:1",
+		ControlURL:     "http://" + control.Addr().String(),
 		ConnectTimeout: 5 * time.Second,
 	})
+	_ = control.Close()
+	if n := contacts.Load(); n != 0 {
+		t.Errorf("control URL contacted %d times, want 0", n)
+	}
 
 	if server != nil {
 		t.Errorf("server = %v, want nil", server)
