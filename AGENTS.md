@@ -18,7 +18,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `cmd/ts-bridge/main.go` | Thin entry point — wires flags/logger/signals and delegates to `cmd/cli` (ADR-010). No business logic. |
 | `cmd/cli/` | Cobra command tree (`root`, `auth`, `browser`, `connect`, `init`, `status`, `host` with `setup`/`check`/`init`/`serve`, `discover`, `import`, `version`) + `args`/`run`/`signal` helpers, with per-command `*_test.go`. |
 | `internal/config/` | Env-var parsing + `Config` struct + validation |
-| `internal/controlurl/` | The one control-plane URL validator, shared by `connect`, `init` and the profile store (#634) |
+| `internal/controlurl/` | The one control-plane URL validator, shared by config, the host file and the `tsb://` descriptor (#634) |
 | `internal/credential/` | Profile-scoped auth key store behind `auth set` (ADR-015) |
 | `internal/secretfile/` | Atomic, owner-only writer for any file that holds a credential (0600 on Unix, one-ACE DACL for the token user on Windows). Use it instead of `os.WriteFile` for secrets (#635, #632) |
 | `internal/bootstrapssh/` | OpenSSH `-D` control-plane bootstrap for sinkholed or TLS-inspected networks: the SOCKS control proxy and process containment (CLI-363, ADR-005 amendment) |
