@@ -148,5 +148,5 @@ Experiments are resolved by the task named; none blocks freezing `tasks.md`.
 - ADR-005 (Headscale compatibility), ADR-014 (SOCKS5), ADR-017 and Amendment A (host file, `host serve`).
 - Runbooks: `docs/runbooks/host-serve.md`, `docs/runbooks/e2e-vm.md`, `docs/runbooks/guide-control-bootstrap.md`.
 - Lessons: lesson-014, lesson-054.
-- Sources checked: tailscale.com v1.104.4 from the module cache (`control/ts2021/client.go`, `derp/derphttp/derphttp_client.go`, `wgengine/magicsock/debugknobs.go`, `envknob/envknob.go`, `tailcfg/derpmap.go`); Headscale v0.29.7 and `main` (`hscontrol/derp/server/derp_server.go`, `hscontrol/types/config.go`); dotfiles (`cli/internal/vm/qemu.go`, `linux.yaml`, `build.go`).
+- Sources checked: tailscale.com v1.104.4 from the module cache (`control/ts2021/client.go`, `derp/derphttp/derphttp_client.go`, `wgengine/magicsock/debugknobs.go`, `envknob/envknob.go`, `tailcfg/derpmap.go`); Headscale v0.29.7 and `main` (`hscontrol/derp/server/derp_server.go`, `hscontrol/types/config.go`); dotfiles (`cli/internal/vm/qemu.go`, `linux.yaml`, `build.go`); `ts-bridge connect --help` at this branch, which registers `--control-url`, `--auth-key-file`, `--state-dir`, `--target`, `--local-addr` and `--socks5`.
 - Dependency: none on the dotfiles repo. `dotf` >= 0.79, as QA-606.

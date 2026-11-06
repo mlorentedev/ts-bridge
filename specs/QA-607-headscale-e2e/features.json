@@ -58,7 +58,7 @@
   {
     "id": "QA-607-headscale-e2e-f9",
     "behavior": "AC9: no mesh log holds key material, a run leaves no Headscale container and no tsb-e2e session, and nothing under .github references the mesh targets",
-    "verification": "bash scripts/tests/test-e2e-report.sh && make e2e-clean && [ -z \"$(docker ps -aq --filter label=tsb-e2e=headscale)\" ] && ! grep -rEq 'e2e-mesh|scripts/e2e' .github",
+    "verification": "make e2e-mesh-linux; [ -z \"$(docker ps -aq --filter label=tsb-e2e=headscale)\" ] && ! grep -Eq 'hskey-|tskey-' scripts/e2e/out/mesh-*.log && bash scripts/tests/test-e2e-report.sh && ! grep -rEq 'e2e-mesh|scripts/e2e' .github",
     "state": "pending",
     "evidence": ""
   },
