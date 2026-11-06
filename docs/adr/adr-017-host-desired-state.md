@@ -165,7 +165,7 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 
 | OS | Services | Automated | Verified and guided only |
 | --- | --- | --- | --- |
-| Windows | `rdp` (+ `ssh` via OpenSSH Server when declared) | RDP enable honouring Group Policy precedence, firewall rule scoped to the tailnet ranges (state-first, Amendment B), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
+| Windows | `rdp` (`ssh` via OpenSSH Server is planned, #521; its firewall rule must be scoped or reported like the RDP group) | RDP enable honouring Group Policy precedence, firewall rule scoped to the tailnet ranges (state-first, Amendment B), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
 | Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule scoped to `tailscale0` (ufw `allow in on` / iptables `-i`, Amendment B) | none |
 | macOS | `ssh` (Remote Login), `vnc` (Screen Sharing) | Remote Login when elevated and Full Disk Access is granted | Screen Sharing; Remote Login without Full Disk Access; application-firewall "block all" |
 
@@ -279,7 +279,9 @@ Decision, a hybrid because the two OSes name the tailnet differently:
 
 - **Linux scopes by interface.** iptables: `-i tailscale0`. ufw: `ufw allow in on tailscale0 to
   any port <port> proto tcp`. The interface name is fixed at `tailscale0`; a tailscaled started
-  with another `--tun` name gets a rule that matches nothing, which fails closed.
+  with another `--tun` name gets a rule that matches nothing. That fails closed under a
+  restrictive INPUT policy (default DROP, or active ufw); under `iptables -P INPUT ACCEPT` the scope
+  restricts nothing and `check` does not say so (#691).
 - **Windows scopes by address.** `-RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48`: Windows has
   no interface name to rely on. Setup also stops enabling the built-in `Remote Desktop` rule
   group, whose rules allow any address and would void the scope. It does not disable the group:
@@ -287,7 +289,8 @@ Decision, a hybrid because the two OSes name the tailnet differently:
   choice and the group is Microsoft's own. `check` and `setup` report an enabled group as `manual`
   with `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"` as the fix, and `firewall_ok` stays
   `false` until it is off. The rule is recreated scoped before the old one is removed, so RDP is
-  never left without an allow rule.
+  never left without an allow rule; the old rules are removed by the identity captured before the
+  create, never by display name, which the new rule repeats.
 - **`check` reports a legacy unscoped rule**: an allow for the port with no interface, source or
   destination address. `firewall_ok` is `false` while one remains. `setup` replaces it.
 
