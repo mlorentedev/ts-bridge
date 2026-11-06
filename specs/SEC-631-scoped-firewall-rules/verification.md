@@ -45,5 +45,6 @@ See the proposal: two-tier replacement, Windows built-in group left as is, fixed
 - A rule is "unscoped" when it names the port and carries no `-i`, `-s`, `-d` or `!`. A conntrack or
   comment qualifier is not read as scope, so such a rule is listed as foreign and reported rather
   than deleted.
-- The e2e check for "ufw is gone" tests `/usr/sbin/ufw`, not `command -v`: dash kept the hashed path
-  of the binary it had run earlier, and the first VM run failed on it.
+- The e2e check for "ufw is gone" tests `/usr/sbin/ufw`, not `command -v`: the first VM run failed on
+  `! command -v ufw` after the package was removed, most likely the shell's command hash for a binary
+  it had run earlier (not confirmed), and the file test passed on the rerun.
