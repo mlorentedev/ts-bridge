@@ -72,7 +72,7 @@ outcomes setup "$C" >"$W/j2"
 ok "setup #2: nothing changed" -- "json '{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"xrdp service\")==\"ok\" and {s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"Firewall configuration\")==\"ok\" and all(s[\"outcome\"]==\"ok\" for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j2"
 ok "setup: Tailscale step fails without a node" -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Tailscale\") and s[\"outcome\"]==\"failed\" and s[\"fix\"]]' <$W/j2"
 outcomes check "$C" >"$W/jc"
-ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True}]' <$W/jc"
+ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True,\"unread\":False}]' <$W/jc"
 ok "xrdp listens on 3389" -- "ss -ltn | grep -q ':3389 '"
 
 ufw delete allow 3389/tcp >/dev/null 2>&1
@@ -84,6 +84,16 @@ ok "drift: setup starts xrdp" -- "outcomes setup $C >/dev/null; systemctl is-act
 
 U="${SUDO_USER:-nobody}"
 ok "unprivileged check names the declared service" -- 'su -s /bin/sh "$U" -c "$B host check --config $C" 2>&1 | grep -q "RDP:.*3389"'
+# #638: a systemctl that answers nothing leaves the unit unread, whoever runs the
+# check, and elevation cannot fix that. The declared service must still be
+# listed, flagged unread, and the wording must offer elevation only to a non-root
+# run.
+mkdir -p "$W/shim" && printf '#!/bin/sh\nexit 1\n' >"$W/shim/systemctl" && chmod 755 "$W/shim/systemctl"
+as_user() { su -s /bin/sh "$U" -c "PATH=$W/shim $B host check --config $C $1" 2>/dev/null; }
+ok "unprivileged unread: check --json lists rdp 3389 with unread true" -- "as_user --json | json 'j[\"rdp_port\"]==0 and [(s[\"kind\"],s[\"port\"],s[\"unread\"]) for s in j[\"services\"]]==[(\"rdp\",3389,True)]'"
+ok "unprivileged unread: line names the steps, elevation only as a maybe" -- 'as_user "" | grep -q "RDP:.*unread (rdp, port 3389): see the steps below for the cause; running as root/administrator may help"'
+run env PATH="$W/shim" "$B" host check --config "$C"
+ok "root unread: line names the steps and does not suggest elevation" -- 'has "RDP:.*unread (rdp, port 3389): see the steps below for the cause" && ! has "may help"'
 systemctl disable --now xrdp >/dev/null 2>&1
 run "$B" host check --config "$C"
 ok "disabled xrdp: check names it NOT OK, not undeclared" -- '! has "no service declared" && has "RDP:.*NOT OK.*3389"'
@@ -152,6 +162,32 @@ ok "foreign unscoped rule: check says manual" -- 'outcomes check "$C" | fwstep m
 ok "foreign unscoped rule: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "$FOREIGN"'
 iptables -D INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT
 ok "foreign rule removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+# POSIX ACLs on a state_dir ancestor (#598). setfacl raises the mask with a named entry and the group
+# bits mirror it, so the mode check alone already refuses that; the ACL read names the principal, and is
+# the only layer that sees an entry the mask hides (setfacl -n).
+apt-get -qq install -y acl >/dev/null 2>&1
+ok "acl: setfacl is installed" -- 'command -v setfacl'
+install -d -m 0755 /var/lib/acl-e2e && install -d -m 0755 /etc/ts-bridge && echo k >/etc/ts-bridge/e2e-key && chmod 600 /etc/ts-bridge/e2e-key
+mesh /var/lib/acl-e2e/state /etc/ts-bridge/e2e-key >"$W/acl.yaml"
+setfacl -m u:nobody:rwx /var/lib/acl-e2e
+ok "acl: setfacl raises the mask, and stat shows it as the group bits (0775)" -- '[ "$(stat -c %a /var/lib/acl-e2e)" = 775 ]'
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a named-user write ACL refused, naming it and the user" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to user"'
+setfacl -b /var/lib/acl-e2e && setfacl -n -m u:nobody:rwx /var/lib/acl-e2e
+ok "acl: setfacl -n leaves the mask at r-x, so the mode stays 0755" -- '[ "$(stat -c %a /var/lib/acl-e2e)" = 755 ]'
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: a named-user write the mask hides is still refused" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to user"'
+setfacl -b /var/lib/acl-e2e && setfacl -m g:nogroup:rwx /var/lib/acl-e2e
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a named-group write ACL refused, naming it and the group" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to group"'
+# A refusal creates nothing; a pass creates state_dir (EnsureStateDir walks the ancestors first). That
+# makes the directory the positive half of the next case, so it cannot go green on an unrelated error.
+ok "acl: the refused runs created no state_dir" -- '[ ! -e /var/lib/acl-e2e/state ]'
+setfacl -b /var/lib/acl-e2e && setfacl -m u:nobody:r-x /var/lib/acl-e2e
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a read-only named-user ACL is not refused, and the walk lets state_dir be created" -- '! has "ancestor" && [ -d /var/lib/acl-e2e/state ]'
+rm -rf /var/lib/acl-e2e/state
+setfacl -b /var/lib/acl-e2e
 
 run "$B" import e2e "tsb://host-e2e:3389?cp=saas"
 ok "client: import a tsb:// descriptor" -- 'code 0'

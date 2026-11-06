@@ -34,7 +34,7 @@ It does not run in CI: GitHub runners cannot nest a VM. Run it:
 make e2e-linux      # ~6 min
 make e2e-windows    # ~15 min
 make e2e            # both, one after the other
-make e2e-clean      # delete any leftover tsb-e2e-* session; safe to repeat
+make e2e-clean      # delete any leftover tsb-e2e-* session and the local Headscale container and state; safe to repeat
 ```
 
 Each run builds the working tree as the candidate (`tsb-new`), downloads the

@@ -73,7 +73,8 @@ Examples:
 	cmd.Flags().Duration("dial-backoff-max", 0, "Dial backoff max")
 
 	// Health.
-	cmd.Flags().String("health-addr", "", "Health server address")
+	cmd.Flags().String("health-addr", "", "Health server address (loopback unless --health-allow-remote)")
+	cmd.Flags().Bool("health-allow-remote", false, "Allow --health-addr to bind a non-loopback address (exposes /metrics and the readiness reason)")
 
 	// Logging.
 	cmd.Flags().String("log-format", "", "Log format (text|json)")
@@ -144,6 +145,9 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Merge(yamlCfg, flags)
 	if err != nil {
 		return withAuthSetHint(err, profileName)
+	}
+	if err := config.ValidateHealthListener(cfg); err != nil {
+		return err
 	}
 
 	// --quiet is a console-output concern (like --profile, resolved
@@ -259,6 +263,7 @@ func collectFlags(cmd *cobra.Command) config.FlagSet {
 	fs.BootstrapSSH, _ = cmd.Flags().GetString("bootstrap-ssh")
 	fs.BootstrapSOCKSAddr, _ = cmd.Flags().GetString("bootstrap-socks-addr")
 	fs.HealthAddr, _ = cmd.Flags().GetString("health-addr")
+	fs.HealthAllowRemote = collectChangedBool(cmd, "health-allow-remote")
 	fs.LogFormat, _ = cmd.Flags().GetString("log-format")
 	fs.PortRange, _ = cmd.Flags().GetString("port-range")
 	fs.Config, _ = cmd.Flags().GetString("config")
@@ -302,15 +307,20 @@ func collectOptionalNumericFlags(cmd *cobra.Command, fs *config.FlagSet) {
 	}
 }
 
-// collectVerboseFlag returns the persistent --verbose flag only when the user
-// passed it, so an unset flag does not override TS_VERBOSE and an explicit
-// --verbose=false does.
-func collectVerboseFlag(cmd *cobra.Command) *bool {
-	if !cmd.Flags().Changed("verbose") {
+// collectChangedBool returns a boolean flag only when the user passed it, so an
+// unset flag does not override the environment and an explicit =false does.
+func collectChangedBool(cmd *cobra.Command, name string) *bool {
+	if !cmd.Flags().Changed(name) {
 		return nil
 	}
-	v, _ := cmd.Flags().GetBool("verbose")
+	v, _ := cmd.Flags().GetBool(name)
 	return &v
+}
+
+// collectVerboseFlag returns the persistent --verbose flag only when the user
+// passed it, so an unset flag does not override TS_VERBOSE.
+func collectVerboseFlag(cmd *cobra.Command) *bool {
+	return collectChangedBool(cmd, "verbose")
 }
 
 // readAuthKeyFile reads an auth key from a file with permission checks.

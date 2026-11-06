@@ -2,7 +2,9 @@ package host
 
 import (
 	"cmp"
+	"errors"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -720,6 +722,15 @@ func TestCheckForLinux(t *testing.T) {
 			name:     "no systemctl, ufw unreadable",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(nil), fail: map[string]bool{ufwAdded: true}},
 			calls:    []string{"output tailscale ip -4", "lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwStatus, "output " + ufwAdded, "lookpath iptables"},
+			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Unread: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
+		},
+		{
+			// What the e2e shim does: a systemctl that exits 1 and prints nothing is unread, not off (#638).
+			name:     "systemctl present, answers nothing, ufw unreadable",
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isEnabled: "", isActive: ""}), exit: map[string]int{isEnabled: 1, isActive: 1}, fail: map[string]bool{ufwAdded: true}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
 			services: []Service{{Kind: "rdp", Port: 3389, Unread: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
@@ -1571,5 +1582,26 @@ func TestReadIptablesUnscoped(t *testing.T) {
 				t.Errorf("copies %d foreign %q scoped %v, want %d, %d, %v", got.copies, got.foreign, got.scoped, tt.copies, tt.foreign, tt.scoped)
 			}
 		})
+	}
+}
+
+// The RDP line of check points at "the steps below for the cause" when a
+// service is unread (#638), so the fix of every unread step names that cause
+// and never falls back to blaming privilege.
+func TestUnreadStepFixesDoNotBlamePrivilege(t *testing.T) {
+	privilege := regexp.MustCompile(`(?i)\b(root|sudo|administrator|elevat)`)
+	steps := map[string]SetupStep{}
+	for name, x := range map[string]xrdpState{
+		"no systemd reading": {installed: true},
+		"undecided answer":   {installed: true, readable: true, undecided: "indirect"},
+	} {
+		step, _ := xrdpUnmet(x, OutcomeUnverified)
+		steps["xrdp: "+name] = step
+	}
+	steps["windows: RDP port unread"] = actRead("RDP configuration", errors.New("read failed"), "", "Could not read the RDP port from the registry", rdpEnableFix)
+	for name, step := range steps {
+		if step.Fix == "" || privilege.MatchString(step.Fix) {
+			t.Errorf("%s: fix %q should name the cause, not privilege", name, step.Fix)
+		}
 	}
 }

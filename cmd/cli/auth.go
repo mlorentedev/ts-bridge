@@ -101,11 +101,15 @@ func runAuthSet(command *cobra.Command, args []string) error {
 	if strings.HasPrefix(key, "hskey-") && selectedProfile.ControlURL == "" {
 		return fmt.Errorf("Headscale credential requires a profile with a custom control URL")
 	}
+	// Refuse a shared name before the key is replaced, not after (#653).
+	if err := profileStore.CheckCredentialShare(profileName, credentialName); err != nil {
+		return err
+	}
 	force, _ := command.Flags().GetBool("force")
 	if err := credential.NewStore(defaultCredentialStoreDir).Set(credentialName, key, force); err != nil {
 		return fmt.Errorf("store credential %q: %w", credentialName, err)
 	}
-	if err := profileStore.SetCredential(profileName, credentialName); err != nil {
+	if err := profileStore.AssociateCredential(profileName, credentialName, selectedProfile.ControlURL); err != nil {
 		return fmt.Errorf("credential stored but profile association failed: %w", err)
 	}
 	_, _ = fmt.Fprintf(command.OutOrStdout(), "Credential %q stored for profile %q\n", credentialName, profileName)

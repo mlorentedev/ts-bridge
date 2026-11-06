@@ -1,0 +1,9 @@
+{
+  "tagOwners": {
+    "tag:e2e-host": ["e2e@"],
+    "tag:e2e-client": ["e2e@"]
+  },
+  "acls": [
+    {"action": "accept", "src": ["tag:e2e-client"], "dst": ["tag:e2e-host:22,3389"]}
+  ]
+}
