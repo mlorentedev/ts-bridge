@@ -14,8 +14,8 @@ owner: manu
 - [ ] AC1 -> `docs/adr/adr-017-host-desired-state.md`, Amendment B (PR 1).
 - [x] AC2 -> PR 2: unit tests on the iptables append and the printed form; e2e on a real VM with
   ufw removed, setup twice, `iptables -S INPUT` holds the scoped line, the second run is `ok`.
-- [ ] AC3 -> PR 3: unit tests on the ufw write; e2e: `ufw show added` holds the scoped line.
-- [ ] AC4 -> PR 2 (iptables, done) and PR 3 (ufw): unit tests per tier; e2e: a hand-added unscoped rule is reported by
+- [x] AC3 -> PR 3: unit tests on the ufw write; e2e: `ufw show added` holds the scoped line.
+- [x] AC4 -> PR 2 (iptables) and PR 3 (ufw): unit tests per tier; e2e: a hand-added unscoped rule is reported by
   `check` and replaced by `setup`.
 - [ ] AC5 -> PR 4: unit tests on the recreate command and the read. Windows e2e is pending.
 - [ ] AC6 -> `scripts/e2e/linux.sh` (run), `scripts/e2e/windows.ps1` (written, run pending).
@@ -35,6 +35,20 @@ PR 2 (Linux iptables):
 - Mutants, each killed by the unit tests: no `-i` in the append (12 failures), never add the scoped
   rule (6), leave one legacy copy (6), count a scoped rule as legacy (12).
 
+PR 3 (Linux ufw):
+
+- `go test -race ./...` exit 0. `golangci-lint run` (host, `GOOS=linux`, `GOOS=windows`) 0 issues.
+  `gosec ./...` exit 0.
+- `make e2e-linux` on a throwaway Ubuntu 24.04 VM: 77 pass, 0 fail, at 66f28d6 (after the merge from master). New cases: setup writes the allow on tailscale0 and
+  no bare 3389 allow beside it; a hand-added `ufw allow 3389/tcp` is `changed` in check with
+  `firewall_ok` false, replaced by setup, `ok` after; a foreign `ufw allow 22,3389/tcp` is `manual`
+  and left in place; a legacy iptables copy on a ufw host is `changed`, then deleted by setup.
+- Mutants, each killed by the unit tests: wrong interface in the ufw write (16 failures), legacy ufw
+  allow ignored (13), scoped rule never added (11), scoped ts-input rule ignored (3), delete any
+  unscoped allow (9). An allow off the tailnet (another interface, a source or a destination) is not
+  the scoped rule, so setup still adds the tailscale0 allow before it deletes a legacy one; each of
+  the three conditions in `ufwAllowOffTailnet`, removed, fails `TestReadUFWUnscoped`.
+
 ## Decisions made during implementation
 
 See the proposal: two-tier replacement, Windows built-in group reported but not disabled, fixed `tailscale0`.
@@ -48,3 +62,6 @@ See the proposal: two-tier replacement, Windows built-in group reported but not 
 - The e2e check for "ufw is gone" tests `/usr/sbin/ufw`, not `command -v`: the first VM run failed on
   `! command -v ufw` after the package was removed, most likely the shell's command hash for a binary
   it had run earlier (not confirmed), and the file test passed on the rerun.
+- PR 3: iptables copies on a ufw host are deleted only when ufw is active and a scoped rule is in
+  place. On inactive ufw only ufw's own list is replaced. A commented ufw rule is foreign, never
+  exact, so a rule someone annotated is reported rather than deleted.

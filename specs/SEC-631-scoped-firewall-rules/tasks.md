@@ -36,15 +36,15 @@ the last says `Closes #631`.
 
 ## PR 3 - Linux ufw: scoped write and legacy replacement
 
-- [ ] [AC3] Failing test: every ufw write is `allow in on tailscale0 to any port N proto tcp`, from
+- [x] [AC3] Failing test: every ufw write is `allow in on tailscale0 to any port N proto tcp`, from
   one helper (`firewallSetupStep`, the inactive path and the fix strings)
-- [ ] [AC4] ufw legacy `allow N/tcp` is replaced (scoped first, then `ufw delete allow N/tcp`);
+- [x] [AC4] ufw legacy `allow N/tcp` is replaced (scoped first, then `ufw delete allow N/tcp`);
   other unscoped allows are `manual`; iptables copies on a ufw host are deleted only when ufw is
   active and a scoped rule is in place
-- [ ] The ufw inactive path writes the scoped allow and replaces ufw's legacy allow
-- [ ] `scripts/e2e/linux.sh`: the drift and cleanup cases use the scoped form; a hand-added
+- [x] The ufw inactive path writes the scoped allow and replaces ufw's legacy allow
+- [x] `scripts/e2e/linux.sh`: the drift and cleanup cases use the scoped form; a hand-added
   `ufw allow 3389/tcp` is reported by check and replaced by setup
-- [ ] `make e2e-linux` green
+- [x] `make e2e-linux` green (77 pass, 0 fail, at 66f28d6 after the merge from master)
 
 ## PR 4 - Windows
 
