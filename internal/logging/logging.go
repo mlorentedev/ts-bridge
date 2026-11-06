@@ -75,11 +75,6 @@ func New(cfg Config) *Logger {
 	}
 }
 
-// Console returns the console logger.
-func (l *Logger) Console() *slog.Logger {
-	return l.console
-}
-
 // File returns the file logger.
 func (l *Logger) File() *slog.Logger {
 	return l.file
@@ -100,14 +95,6 @@ func (l *Logger) Close() error {
 		return l.fileRot.Close()
 	}
 	return nil
-}
-
-// LogPath returns the current log file path, or empty string if file logging is disabled.
-func (l *Logger) LogPath() string {
-	if l.fileRot == nil {
-		return ""
-	}
-	return l.fileRot.CurrentPath()
 }
 
 // --- MultiHandler: writes to multiple slog handlers ---
@@ -382,23 +369,5 @@ func logDirFor(goos, home, appData string) string {
 	default:
 		// Linux and others
 		return filepath.Join(home, ".local", "share", "ts-bridge", "logs")
-	}
-}
-
-// --- slog Level string helpers ---
-
-// LevelString returns the slog level as a short string.
-func LevelString(level slog.Level) string {
-	switch level {
-	case slog.LevelDebug:
-		return "DBG"
-	case slog.LevelInfo:
-		return "INF"
-	case slog.LevelWarn:
-		return "WRN"
-	case slog.LevelError:
-		return "ERR"
-	default:
-		return "???"
 	}
 }
