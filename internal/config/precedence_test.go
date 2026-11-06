@@ -586,6 +586,66 @@ func TestInvalidEnvValueLeavesLowerLayerIntact(t *testing.T) {
 	})
 }
 
+// Invalid env values are a warning, never an error: Merge ignores the value, so
+// the lower layer survives and the user still reaches a working bridge, and a
+// flag that supplies a good value is not blocked by a stale variable. The
+// retired LoadConfig refused them instead; its cases are ported here against
+// the path that actually runs (#627). A negative TS_DIAL_RETRIES stays an error
+// (validateDialRetries), covered by TestMergeDialRetriesValidation.
+func TestInvalidEnvValuesWarnAndKeepLowerLayer(t *testing.T) {
+	yaml := PartialConfig{
+		DrainTimeout:    11 * time.Second,
+		IdleTimeout:     5 * time.Minute,
+		DialTimeout:     7 * time.Second,
+		DialBackoffBase: 2 * time.Second,
+		DialBackoffMax:  40 * time.Second,
+		MaxConnections:  77,
+		DialRetries:     4,
+	}
+	tests := []struct {
+		name  string
+		key   string
+		value string
+		got   func(Config) any
+		want  any
+	}{
+		{"drain timeout unparseable", "TS_DRAIN_TIMEOUT", "soon", func(c Config) any { return c.DrainTimeout }, 11 * time.Second},
+		{"idle timeout unparseable", "TS_IDLE_TIMEOUT", "garbage", func(c Config) any { return c.IdleTimeout }, 5 * time.Minute},
+		{"idle timeout negative", "TS_IDLE_TIMEOUT", "-1m", func(c Config) any { return c.IdleTimeout }, 5 * time.Minute},
+		{"dial timeout unparseable", "TS_DIAL_TIMEOUT", "5", func(c Config) any { return c.DialTimeout }, 7 * time.Second},
+		{"dial timeout negative", "TS_DIAL_TIMEOUT", "-1s", func(c Config) any { return c.DialTimeout }, 7 * time.Second},
+		{"dial retries unparseable", "TS_DIAL_RETRIES", "abc", func(c Config) any { return c.DialRetries }, 4},
+		{"backoff base unparseable", "TS_DIAL_BACKOFF_BASE", "fast", func(c Config) any { return c.DialBackoffBase }, 2 * time.Second},
+		{"backoff max negative", "TS_DIAL_BACKOFF_MAX", "-1s", func(c Config) any { return c.DialBackoffMax }, 40 * time.Second},
+		{"max connections negative", "TS_MAX_CONNECTIONS", "-5", func(c Config) any { return c.MaxConnections }, int64(77)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := captureWarnings(t)
+
+			cfg := mergePrecedence(t, yaml, map[string]string{tt.key: tt.value}, FlagSet{})
+
+			if got := tt.got(cfg); got != tt.want {
+				t.Errorf("%s=%q: got %v, want the yaml value %v to survive", tt.key, tt.value, got, tt.want)
+			}
+			if !strings.Contains(buf.String(), tt.key) {
+				t.Errorf("expected a warning naming %s, got: %s", tt.key, buf.String())
+			}
+		})
+	}
+}
+
+// A MagicDNS name is a valid target, not only a literal IP.
+func TestValidateTargetAcceptsMagicDNSNames(t *testing.T) {
+	for _, target := range []string{"my-desktop:3389", "my-desktop.tailnet.ts.net:22"} {
+		t.Run(target, func(t *testing.T) {
+			if err := validateTarget(target); err != nil {
+				t.Errorf("expected %q to be valid, got error: %v", target, err)
+			}
+		})
+	}
+}
+
 func TestLoadYAMLConfigPermissionWarning(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission bits are not enforced the same way on Windows")
