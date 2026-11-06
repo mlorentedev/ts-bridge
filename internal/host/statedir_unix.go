@@ -102,7 +102,7 @@ func walkStateDirAncestors(path string, afs ancestorFS) error {
 // nothing about who can write where it points (macOS /tmp -> /private/tmp is
 // 1777). One link budget covers the whole walk, as in the kernel. An absent
 // component ends it; for a state_dir, createStateDir makes the rest 0700.
-func walkAncestors(label, path string, afs ancestorFS) error {
+func walkAncestors(label, path string, afs ancestorFS) error { //nolint:gocyclo // baseline #629
 	if _, err := ancestorAt(label, path, "/", afs); err != nil {
 		return err
 	}

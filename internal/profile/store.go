@@ -321,7 +321,7 @@ var saasHosts = map[string]bool{
 	"control.tailscale.com":      true,
 }
 
-func normalizeControlURL(raw string) string {
+func normalizeControlURL(raw string) string { //nolint:gocyclo // baseline #629
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {

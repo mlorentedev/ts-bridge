@@ -234,7 +234,7 @@ var tsInputJump = []string{"-A", "INPUT", "-j", tsInputChain}
 // ts-input chain. A failed read of either is an unknown state, and so is a
 // qualified jump into ts-input that the walk reaches with nothing decided:
 // setup never appends an open rule on a guess (#532).
-func readIptables(r Runner, port int) firewallRead {
+func readIptables(r Runner, port int) firewallRead { //nolint:gocyclo // baseline #629
 	out, err := r.Output(backendIPT, "-S", "INPUT")
 	if err != nil {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
@@ -386,7 +386,7 @@ func iptBeforeQualifiedJump(input string) (string, string) {
 // it would read as a rule of its own; here it becomes a space. An unterminated
 // quote is not iptables' output: it is returned as printed, so the rules after
 // it are not swallowed into one line.
-func iptRules(out string) string {
+func iptRules(out string) string { //nolint:gocyclo // baseline #629
 	b := []byte(out)
 	quoted, escaped := false, false
 	for i, c := range b {
@@ -496,7 +496,7 @@ func iptPortlessCovers(f []string) bool {
 
 // iptPortlessToken returns how many fields the qualifier at the start of f
 // spans when it keeps a rule open to every TCP port, or 0 when it narrows it.
-func iptPortlessToken(f []string) int {
+func iptPortlessToken(f []string) int { //nolint:gocyclo // baseline #629
 	if len(f) < 2 {
 		return 0
 	}
@@ -572,7 +572,7 @@ func ufwAllows(added string, port int) bool {
 // `to <address>`),
 // together with that rule. route, out and limit rules never decide, and the
 // port must match exactly: 33890 is not 3389.
-func ufwDecide(added string, port int) (ruleState, string) {
+func ufwDecide(added string, port int) (ruleState, string) { //nolint:gocyclo // baseline #629
 	for _, line := range strings.Split(added, "\n") {
 		f := strings.Fields(line)
 		if i := slices.Index(f, "comment"); i >= 0 {
@@ -607,7 +607,7 @@ func ufwScoped(f []string) bool {
 // ufwRuleMatchesPort matches the short form (`3389/tcp`, `3389`, `in 3389/tcp`)
 // and the full form (`... port 3389 [proto tcp]`). A trailing `comment '...'` is
 // ignored, as is a `log`/`log-all` modifier, and the port may sit in a list or range (`22,3389/tcp`, `3380:3390/tcp`).
-func ufwRuleMatchesPort(f []string, port int) bool {
+func ufwRuleMatchesPort(f []string, port int) bool { //nolint:gocyclo // baseline #629
 	if i := slices.Index(f, "comment"); i >= 0 {
 		f = f[:i]
 	}

@@ -17,7 +17,7 @@ import (
 )
 
 // newDiscoverCmd constructs the "ts-bridge discover" subcommand.
-func newDiscoverCmd() *cobra.Command {
+func newDiscoverCmd() *cobra.Command { //nolint:funlen // baseline #629
 	cmd := &cobra.Command{
 		Use:   "discover [flags]",
 		Short: "Discover tailnet hosts and select one interactively",
@@ -84,7 +84,7 @@ type discoverFlags struct {
 	Tailnet    string
 }
 
-func runDiscover(cmd *cobra.Command, args []string) error {
+func runDiscover(cmd *cobra.Command, args []string) error { //nolint:funlen,gocyclo // baseline #629
 	flags, err := parseDiscoverFlags(cmd)
 	if err != nil {
 		return err

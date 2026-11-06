@@ -101,7 +101,7 @@ func runHostInit(cmd *cobra.Command, _ []string) error {
 
 // parseHostInitFlags reads and validates the host init flags. --config is
 // required and checked before anything is prompted or written.
-func parseHostInitFlags(cmd *cobra.Command) (hostInitFlags, error) {
+func parseHostInitFlags(cmd *cobra.Command) (hostInitFlags, error) { //nolint:gocyclo // baseline #629
 	var f hostInitFlags
 	f.Port, _ = cmd.Flags().GetInt("port")
 	f.FirewallRule, _ = cmd.Flags().GetString("firewall-rule")
@@ -173,7 +173,7 @@ func confirmHostOverwrite(reader *bufio.Reader, out io.Writer, path string) bool
 
 // promptHostInit asks for the RDP port and, on Windows, the firewall rule and
 // sleep setting.
-func promptHostInit(reader *bufio.Reader, f *hostInitFlags) error {
+func promptHostInit(reader *bufio.Reader, f *hostInitFlags) error { //nolint:gocyclo // baseline #629
 	portStr, err := readOptionalInput(reader, fmt.Sprintf("RDP port (default: %d): ", host.DefaultRDPPort()))
 	if err != nil {
 		return fmt.Errorf("read RDP port: %w", err)

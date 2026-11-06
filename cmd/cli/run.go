@@ -100,7 +100,6 @@ func ensureStateDir(dir string) error {
 	return nil
 }
 
-//nolint:unused // wired into Runner = run
 func cleanupEphemeralStateDir(dir string) {
 	for attempt := 1; attempt <= cleanupMaxAttempts; attempt++ {
 		err := os.RemoveAll(dir)
@@ -125,7 +124,6 @@ func cleanupEphemeralStateDir(dir string) {
 	}
 }
 
-//nolint:unused // helper for cleanupEphemeralStateDir (called via Runner)
 func isRetryableCleanupError(err error) bool {
 	if err == nil {
 		return false
@@ -139,7 +137,6 @@ func isRetryableCleanupError(err error) bool {
 		strings.Contains(errStr, "device or resource busy")
 }
 
-//nolint:unused // wired into Runner = Run
 func Run(cfg config.Config) error {
 	return run(cfg, nil)
 }
@@ -187,7 +184,7 @@ func withBootstrapLifecycle(
 	return runBridge()
 }
 
-func runBridge(
+func runBridge( //nolint:funlen,gocyclo // baseline #629
 	ctx context.Context,
 	cancelWithCause context.CancelCauseFunc,
 	cfg config.Config,
@@ -369,8 +366,7 @@ func readyTarget(cfg config.Config) string {
 	return cfg.Target
 }
 
-//nolint:unused // wired into Runner = Run
-func initTailscale(parentCtx context.Context, cfg config.Config) (*tsnet.Server, error) {
+func initTailscale(parentCtx context.Context, cfg config.Config) (*tsnet.Server, error) { //nolint:funlen // baseline #629
 	var tsnetLogf func(string, ...any)
 	if loggingInstance != nil {
 		tsnetLogf = func(format string, args ...any) {
@@ -450,7 +446,6 @@ func diagnoseTailscaleInitError(err error) (reason, hint, remediation string) {
 	return reasonUnknown, "", ""
 }
 
-//nolint:unused // wired into Runner = Run
 func handleShutdown(ctx context.Context, status *health.TunnelStatus, listener net.Listener, healthServer *http.Server) {
 	<-ctx.Done()
 	logger.Info("shutting down")
@@ -473,7 +468,6 @@ func handleShutdown(ctx context.Context, status *health.TunnelStatus, listener n
 	}
 }
 
-//nolint:unused // wired into Runner = Run
 func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 	if cfg.DrainTimeout <= 0 {
 		return
@@ -508,8 +502,6 @@ const bannerWidth = 22
 // no-op when cfg.Quiet is set (UX-004 / #203) — the machine-readable READY
 // line is emitted separately and always. Takes an io.Writer so it is unit
 // testable without capturing os.Stdout.
-//
-//nolint:unused // wired into Runner = Run
 func writeStartupBanner(w io.Writer, cfg config.Config) {
 	if cfg.Quiet {
 		return

@@ -29,7 +29,7 @@ type ReconnectDialer struct {
 
 var _ Dialer = (*ReconnectDialer)(nil)
 
-func (r *ReconnectDialer) Dial(ctx context.Context, network, address string) (net.Conn, error) {
+func (r *ReconnectDialer) Dial(ctx context.Context, network, address string) (net.Conn, error) { //nolint:funlen,gocyclo // baseline #629
 	var lastErr error
 	totalAttempts := r.MaxRetries + 1
 

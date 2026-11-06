@@ -53,7 +53,7 @@ func BuildPAC(proxyAddr string, routes map[string]string) (string, error) {
 		"}\n", nil
 }
 
-func EdgeArgs(cfg LaunchConfig) ([]string, error) {
+func EdgeArgs(cfg LaunchConfig) ([]string, error) { //nolint:gocyclo // baseline #629
 	if cfg.UserDataDir == "" {
 		return nil, fmt.Errorf("browser user-data directory is required")
 	}

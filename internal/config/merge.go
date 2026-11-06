@@ -77,7 +77,7 @@ type FlagSet struct {
 
 // Merge applies the precedence chain: flags > env > yaml > defaults.
 // Returns a fully-populated Config.
-func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
+func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) { //nolint:funlen,gocyclo // baseline #629
 	if err := validateYAMLAuthKey(yamlCfg); err != nil {
 		return Config{}, err
 	}
@@ -442,7 +442,7 @@ func positiveDuration(d time.Duration) bool    { return d > 0 }
 func nonNegativeInt(n int) bool                { return n >= 0 }
 func positiveInt64(n int64) bool               { return n > 0 }
 
-func applyFlags(cfg *Config, flags FlagSet) {
+func applyFlags(cfg *Config, flags FlagSet) { //nolint:funlen,gocyclo // baseline #629
 	// String fields.
 	applyFlagProxyMode(cfg, flags)
 	applyFlagString(&cfg.AuthKey, flags.AuthKey)
@@ -542,7 +542,7 @@ func resolveAutoInstance(cfg *Config, yamlCfg PartialConfig, flags FlagSet) {
 	// Default: auto-mode is on (already set by defaults()).
 }
 
-func applyAutoInstance(cfg *Config, flags FlagSet) error {
+func applyAutoInstance(cfg *Config, flags FlagSet) error { //nolint:gocyclo // baseline #629
 	if !cfg.AutoInstance {
 		return nil
 	}
@@ -673,7 +673,7 @@ func validateBootstrapListenerCollision(cfg Config) error {
 	return nil
 }
 
-func sameListenerEndpoint(left, right string) bool {
+func sameListenerEndpoint(left, right string) bool { //nolint:gocyclo // baseline #629
 	if left == "" || right == "" {
 		return false
 	}

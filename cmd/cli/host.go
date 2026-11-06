@@ -40,7 +40,7 @@ Examples:
 	return cmd
 }
 
-func newHostSetupCmd() *cobra.Command {
+func newHostSetupCmd() *cobra.Command { //nolint:funlen // baseline #629
 	cmd := &cobra.Command{
 		Use:   "setup [flags]",
 		Short: "Configure the host for RDP access over Tailscale",
@@ -133,7 +133,7 @@ Examples:
 
 // ─── Setup ───────────────────────────────────────────────────────
 
-func runHostSetup(cmd *cobra.Command, args []string) error {
+func runHostSetup(cmd *cobra.Command, args []string) error { //nolint:funlen,gocyclo // baseline #629
 	// The file is validated on every OS, so an invalid --config is an error
 	// even where setup has no steps.
 	file, err := loadHostFile(cmd)
