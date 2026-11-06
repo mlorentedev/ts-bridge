@@ -41,9 +41,14 @@ existing profile or rotated key. `.env` and `--auth-key-file` remain compatibili
 paths, not the preferred multi-device operating model. Never pass the key inline
 with `--auth-key`: it lands in the process table (`ps`, Task Manager), readable by
 every local user. If a Windows client still
-uses `--auth-key-file`, trim the file's inheritance with
-`icacls <file> /inheritance:r /grant:r "${env:USERNAME}:F"`; `chmod` has no effect
-on NTFS ACLs.
+uses `--auth-key-file`, drop the file's explicit entries with `icacls <file> /reset`,
+then trim its inheritance with
+`icacls <file> /inheritance:r /grant:r "*$([Security.Principal.WindowsIdentity]::GetCurrent().User.Value):F"`;
+`chmod` has no effect on NTFS ACLs. `/inheritance:r` alone keeps explicit grants
+(SYSTEM and Administrators often carry one), so skip `/reset` and the key stays
+readable by them. Grant the SID, not `$env:USERNAME`: the name
+can resolve to another account (a domain user with the same name, a value any
+process can set), which is how ts-bridge itself got this wrong (#632).
 
 When migrating an existing client, remove `TS_AUTHKEY` from its `.env` file and
 process environment before relying on the managed credential. Environment

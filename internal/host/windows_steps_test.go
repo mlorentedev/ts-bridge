@@ -379,6 +379,37 @@ func TestWindowsPowerStep(t *testing.T) {
 	}
 }
 
+// Windows RDP listens on the registry's port. A declared port that differs is
+// reported manual by setup and check, naming both, so check exits non-zero
+// (#557, AC1). An undeclared port takes the registry's: there is nothing to
+// compare it with.
+func TestWindowsDeclaredRDPPort(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  Config
+		want Outcome
+	}{
+		{"declared 3389, registry 3390", Config{FirewallRule: "Rule", Port: 3389, PortDeclared: true}, OutcomeManual},
+		{"declared 3390, registry 3390", Config{FirewallRule: "Rule", Port: 3390, PortDeclared: true}, OutcomeOK},
+		{"nothing declared, registry 3390", Config{FirewallRule: "Rule", Port: 3389}, OutcomeOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var res CheckResult
+			checkWindows(tt.cfg, denyRunner("", "0", false), &res)
+			setup := setupWindows(tt.cfg, denyRunner("", "0", false))
+			for which, s := range map[string]SetupStep{"check": res.Steps[0], "setup": stepNamedIn(setup.Steps, "RDP configuration")} {
+				if s.Outcome != tt.want {
+					t.Errorf("%s: %s %q, want %s", which, s.Outcome, s.Message, tt.want)
+				}
+				if tt.want == OutcomeManual && (!strings.Contains(s.Message, "3389") || !strings.Contains(s.Message, "3390") || s.Fix == "") {
+					t.Errorf("%s: %q (fix %q) must name both ports and a fix", which, s.Message, s.Fix)
+				}
+			}
+		})
+	}
+}
+
 // check reads the power timeouts setup converges, and never writes them (#652).
 // A non-zero AC timeout is drift ("changed": setup would change it, ADR-017
 // §2); an unreadable one is "failed", since check cannot tell.
