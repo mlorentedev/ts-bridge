@@ -97,11 +97,12 @@ func TestHandleSOCKS5Conn_PublishesBytesWhileOpen(t *testing.T) {
 		return remote, nil
 	}}
 
+	var logs bytes.Buffer
 	done := make(chan struct{})
 	go func() {
 		_ = handleSOCKS5Conn(server, dialer, directSOCKSTarget,
 			config.Config{DialTimeout: time.Second, IdleTimeout: 10 * time.Second},
-			nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			nil, slog.New(slog.NewTextHandler(&logs, nil)))
 		close(done)
 	}()
 
@@ -111,7 +112,16 @@ func TestHandleSOCKS5Conn_PublishesBytesWhileOpen(t *testing.T) {
 	assertBytes(t, client, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
 	// The handshake is not tunnel traffic: the counters start at the CONNECT reply.
-	_, _ = exchangeLive(t, client, remotePeer, done)
+	tx, rx := exchangeLive(t, client, remotePeer, done)
+	// Same close record as the TCP tunnel, with the SOCKS5 target on it (#630).
+	for _, want := range []string{
+		"connection closed", "target=forge.example.internal:443", "duration=",
+		fmt.Sprintf("bytes_tx=%d", tx), fmt.Sprintf("bytes_rx=%d", rx),
+	} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("close log lacks %s: %s", want, logs.String())
+		}
+	}
 }
 
 // shortWriter accepts only the first n bytes of each write and reports err.
