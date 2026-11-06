@@ -69,7 +69,8 @@ type Service struct {
 	Active     *bool
 	FirewallOK bool
 	// Unread is true when a step could not read the service and called the
-	// outcome unverified: reading it needs elevation.
+	// outcome unverified. Elevation is one possible cause; a missing systemctl or
+	// a failed port read are others, and the step's fix names the actual one.
 	Unread bool
 }
 

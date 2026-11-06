@@ -265,10 +265,28 @@ already created a key uses `auth set`.
 - This ADR narrows the credential architecture but does not select a permanent
   administrative-secret manager.
 
+## Amendment (2026-11): one store lock for credential and profile transitions
+
+`auth set` and `auth remove` change the credential directory and the profile store. Without a lock,
+concurrent commands lose profile updates and an interrupted `auth set` can lose a replaced key (#391).
+Every mutation of either store now runs under one per-user advisory lock, `locks/store.lock` beside
+the profile store (`flock` on Unix, `LockFileEx` on Windows, the helper the ownership lock uses). A
+command waits up to ten seconds for it and then fails with a retryable message. Readers do not take
+it: the profile store is replaced whole, so a reader sees the old file or the new one.
+
+- `auth set` reads the key before taking the lock, then re-reads the profile under it and refuses if
+  the control URL moved, before the stored key is touched. If the reference cannot be written, the
+  previous key is restored.
+- `auth remove` deletes the key before it clears references. A failed deletion changes nothing; an
+  interruption leaves a dangling reference that running the removal again clears.
+- Exclusive creation of a credential name rests on the lock, not on a filesystem primitive such as
+  `O_EXCL` or a hard link, which not every Windows filesystem offers.
+
 ## Implementation Tracking
 
 - #355: Phase 1 credential store and `auth set/status/list/remove`.
 - #368: profile-scoped credential reference and resolution.
+- #391: store lock and transition protocol (amendment above).
 - #383: Phase 2 Tailscale/Headscale `auth create/rotate` adapters.
 - #183: resume the ACEMAGIC E2E after Phase 1 can onboard the existing SaaS key.
 

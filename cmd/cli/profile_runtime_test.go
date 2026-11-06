@@ -32,6 +32,11 @@ func setupProfileRuntimeTest(t *testing.T) string {
 
 func writeProfileRuntimeFixture(t *testing.T, path string) {
 	t.Helper()
+	writeProfileRuntimeFixtureWithHealth(t, path, "127.0.0.1:9081")
+}
+
+func writeProfileRuntimeFixtureWithHealth(t *testing.T, path, healthAddr string) {
+	t.Helper()
 	source := `profiles:
   office:
     target: mesh:443
@@ -41,7 +46,7 @@ func writeProfileRuntimeFixture(t *testing.T, path string) {
     bootstrap_socks_addr: 127.0.0.1:1056
     hostname: profile-bridge
     local_addr: 127.0.0.1:34443
-    health_addr: 127.0.0.1:9081
+    health_addr: ` + healthAddr + `
 `
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatal(err)

@@ -56,7 +56,7 @@ func TestWalkAncestors_AuthKeyFile(t *testing.T) {
 				}
 				return "", fs.ErrInvalid
 			}
-			err := walkAncestors("auth_key_file", tc.path, ancestorFS{lstat, readlink})
+			err := walkAncestors("auth_key_file", tc.path, ancestorFS{lstat, readlink, nil})
 			if tc.wantErr == "" {
 				if err != nil {
 					t.Fatalf("walk(%s) = %v, want nil", tc.path, err)
