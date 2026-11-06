@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -1056,9 +1057,8 @@ func TestMergeLocalAddrDefaultNeverWildcard(t *testing.T) {
 	}
 }
 
-// An exhausted --port-range must fail Merge the way the env path does. Dropping
-// the error left LocalAddr empty, and net.Listen("tcp", "") binds every
-// interface (#589, #620).
+// An exhausted or invalid --port-range must fail Merge the way the env path
+// does, not fall back to a fixed loopback port (#589, #620).
 func TestMergeFailsWhenPortRangeIsExhausted(t *testing.T) {
 	for _, key := range stateEnvKeys {
 		t.Setenv(key, "")
@@ -1090,13 +1090,24 @@ func TestMergeFailsWhenPortRangeIsExhausted(t *testing.T) {
 	t.Run("selector seam reporting exhaustion", func(t *testing.T) {
 		original := selectAvailablePort
 		t.Cleanup(func() { selectAvailablePort = original })
+		var selectorErr error
 		selectAvailablePort = func(_ string, start, end int) (int, error) {
-			return 0, fmt.Errorf("TS_PORT_RANGE has no free ports in %d-%d", start, end)
+			selectorErr = fmt.Errorf("TS_PORT_RANGE has no free ports in %d-%d", start, end)
+			return 0, selectorErr
 		}
 
 		cfg, err := Merge(PartialConfig{}, flags)
-		if err == nil || !strings.Contains(err.Error(), "TS_PORT_RANGE has no free ports") {
-			t.Fatalf("error = %v (LocalAddr %q), want the exhaustion error", err, cfg.LocalAddr)
+		if selectorErr == nil || !errors.Is(err, selectorErr) {
+			t.Fatalf("error = %v (LocalAddr %q), want it to wrap %v", err, cfg.LocalAddr, selectorErr)
+		}
+	})
+
+	t.Run("invalid range", func(t *testing.T) {
+		bad := flags
+		bad.PortRange = "bad-range"
+		cfg, err := Merge(PartialConfig{}, bad)
+		if err == nil || !strings.Contains(err.Error(), "derive local address") {
+			t.Fatalf("error = %v (LocalAddr %q), want a derive local address error", err, cfg.LocalAddr)
 		}
 	})
 }
