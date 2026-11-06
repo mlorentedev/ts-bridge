@@ -97,6 +97,15 @@ check up-mounts-something logged '^run .*-v '
 check up-user-once test "$(grep -c 'users create e2e' "$SHIM_LOG")" = 1
 check up-writes-config grep -qx 'server_url: http://10.9.8.7:8080' "$HS_DIR/conf/config.yaml"
 
+# A stopped container left its database behind: the next start must not inherit it.
+rm -f "$WORK/state/up"
+echo stale >"$HS_DIR/data/db.sqlite"
+: >"$SHIM_LOG"
+check restart-after-stop hs_up
+check restart-starts-a-container test "$(grep -c '^run ' "$SHIM_LOG")" = 1
+check restart-drops-old-database test ! -e "$HS_DIR/data/db.sqlite"
+check restart-creates-user-again test "$(grep -c 'users create e2e' "$SHIM_LOG")" = 1
+
 check down-first hs_down
 check down-second hs_down
 check down-removes-container test ! -f "$WORK/state/up"

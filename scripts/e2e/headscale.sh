@@ -49,7 +49,9 @@ hs_up() {
   local ip
   ip="$(hs_host_ip)" || return 1
   [ -z "$(docker ps -q --filter "label=$HS_LABEL")" ] || return 0
-  docker rm -f "$HS_NAME" >/dev/null 2>&1 || true # a stopped leftover keeps the name
+  # A stopped leftover keeps the name and its database: the old user would fail the new one.
+  docker rm -f "$HS_NAME" >/dev/null 2>&1 || true
+  rm -rf "$HS_DIR"
   mkdir -p "$HS_DIR/conf" "$HS_DIR/data"
   hs_render_config "$ip" >"$HS_DIR/conf/config.yaml"
   cp "${HERE:?}/headscale/policy.hujson" "$HS_DIR/conf/policy.hujson"
