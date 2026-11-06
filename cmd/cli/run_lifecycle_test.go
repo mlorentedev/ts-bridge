@@ -404,7 +404,9 @@ func TestInitTailscale_ReturnsTheRunCauseWhenCancelled(t *testing.T) {
 		t.Fatal(err)
 	}
 	var contacts atomic.Int32
+	acceptDone := make(chan struct{})
 	go func() {
+		defer close(acceptDone)
 		for {
 			conn, err := control.Accept()
 			if err != nil {
@@ -426,6 +428,7 @@ func TestInitTailscale_ReturnsTheRunCauseWhenCancelled(t *testing.T) {
 		ConnectTimeout: 5 * time.Second,
 	})
 	_ = control.Close()
+	<-acceptDone // every accepted connection is counted before the load
 	if n := contacts.Load(); n != 0 {
 		t.Errorf("control URL contacted %d times, want 0", n)
 	}
