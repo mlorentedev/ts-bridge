@@ -771,6 +771,9 @@ func ufwUnscopedRead(added string, port int) (legacy bool, foreign []string, sco
 	var rest []string
 	for _, line := range strings.Split(added, "\n") {
 		f := strings.Fields(line)
+		if ufwAllowOffTailnet(f) {
+			continue
+		}
 		if !ufwUnscopedAllow(f, port) {
 			rest = append(rest, line)
 		} else if slices.Equal(f, []string{backendUFW, ufwAllow, ufwLegacyShort(port)}) {
@@ -781,6 +784,26 @@ func ufwUnscopedRead(added string, port int) (legacy bool, foreign []string, sco
 	}
 	state, _ := ufwDecide(strings.Join(rest, "\n"), port)
 	return legacy, foreign, state == rulePresent
+}
+
+// ufwAllowOffTailnet reports an allow scoped to something other than the
+// tailnet: another interface, or a source or destination address. Such a rule
+// admits the port, but not from the tailnet, so it is not the scoped rule and
+// setup must still add the tailscale0 allow before it deletes a legacy one.
+func ufwAllowOffTailnet(f []string) bool {
+	if i := slices.Index(f, "comment"); i >= 0 {
+		f = f[:i]
+	}
+	if len(f) < 3 || f[0] != backendUFW || f[1] != ufwAllow || slices.Contains(f, "out") {
+		return false
+	}
+	return ufwArgIsNot(f, "on", tailnetInterface) || ufwArgIsNot(f, "from", "any") || ufwArgIsNot(f, "to", "any")
+}
+
+// ufwArgIsNot reports whether keyword appears with a value other than want.
+func ufwArgIsNot(f []string, keyword, want string) bool {
+	i := slices.Index(f, keyword)
+	return i >= 0 && i+1 < len(f) && f[i+1] != want
 }
 
 // ufwUnscopedAllow reports whether a `ufw show added` line is an inbound allow
