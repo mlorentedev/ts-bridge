@@ -39,13 +39,15 @@ PR 3 (Linux ufw):
 
 - `go test -race ./...` exit 0. `golangci-lint run` (host, `GOOS=linux`, `GOOS=windows`) 0 issues.
   `gosec ./...` exit 0.
-- `make e2e-linux` on a throwaway Ubuntu 24.04 VM: 66 pass, 0 fail. New cases: setup writes the allow on tailscale0 and
+- `make e2e-linux` on a throwaway Ubuntu 24.04 VM: 77 pass, 0 fail, at 66f28d6 (after the merge from master). New cases: setup writes the allow on tailscale0 and
   no bare 3389 allow beside it; a hand-added `ufw allow 3389/tcp` is `changed` in check with
   `firewall_ok` false, replaced by setup, `ok` after; a foreign `ufw allow 22,3389/tcp` is `manual`
   and left in place; a legacy iptables copy on a ufw host is `changed`, then deleted by setup.
 - Mutants, each killed by the unit tests: wrong interface in the ufw write (16 failures), legacy ufw
   allow ignored (13), scoped rule never added (11), scoped ts-input rule ignored (3), delete any
-  unscoped allow (9).
+  unscoped allow (9). An allow off the tailnet (another interface, a source or a destination) is not
+  the scoped rule, so setup still adds the tailscale0 allow before it deletes a legacy one; each of
+  the three conditions in `ufwAllowOffTailnet`, removed, fails `TestReadUFWUnscoped`.
 
 ## Decisions made during implementation
 
