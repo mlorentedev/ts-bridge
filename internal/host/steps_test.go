@@ -2,6 +2,7 @@ package host
 
 import (
 	"errors"
+	"io/fs"
 	"os/exec"
 	"reflect"
 	"strconv"
@@ -20,6 +21,7 @@ type recordingRunner struct {
 	onPath map[string]bool   // LookPath hits
 	exit   map[string]int    // joined command -> Run/Output fails with this exit status
 	stderr map[string]string // joined command -> stderr an exit failure carries, as *exec.ExitError does
+	files  map[string]string // path -> contents; ReadFile records no call, WriteFile does
 	// elevated is what Elevated reports; it records no call.
 	elevated bool
 }
@@ -31,6 +33,26 @@ func (e exitError) Error() string { return "exit status " + strconv.Itoa(int(e))
 func (e exitError) ExitCode() int { return int(e) }
 
 func (r *recordingRunner) Elevated() bool { return r.elevated }
+
+func (r *recordingRunner) ReadFile(path string) ([]byte, error) {
+	data, ok := r.files[path]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	return []byte(data), nil
+}
+
+func (r *recordingRunner) WriteFile(path string, data []byte) error {
+	r.calls = append(r.calls, "writefile "+path)
+	if r.fail["writefile "+path] {
+		return errors.New("permission denied")
+	}
+	if r.files == nil {
+		r.files = map[string]string{}
+	}
+	r.files[path] = string(data)
+	return nil
+}
 
 func (r *recordingRunner) record(kind, name string, args []string) string {
 	cmd := strings.Join(append([]string{name}, args...), " ")
@@ -191,7 +213,7 @@ func TestCheckFor(t *testing.T) {
 		legacy   CheckResult // only the pre-HOST-004 fields
 	}{
 		{
-			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule"},
+			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psDeny: "policy=\r\nlocal=0", psPrefix + psFwCheck: "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck},
 			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=ok"},
@@ -199,7 +221,7 @@ func TestCheckFor(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.9", TailscaleUp: true, RDPPort: 3390, RDPEnabled: true, FirewallOK: true},
 		},
 		{
-			name: "windows, registry unreadable and no rule", goos: "windows", cfg: Config{FirewallRule: "Rule"},
+			name: "windows, registry unreadable and no rule", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{fail: map[string]bool{"tailscale ip -4": true, psPrefix + psPort: true}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
 			steps:    []string{"Tailscale IP=failed", "RDP configuration=failed", "Firewall rule=changed"},
@@ -209,7 +231,7 @@ func TestCheckFor(t *testing.T) {
 		{
 			// readPortPS maps a read below 1 to 3389, so a successful read
 			// never yields an enabled service on port 0.
-			name: "windows, registry reads 0", goos: "windows", cfg: Config{FirewallRule: "Rule"},
+			name: "windows, registry reads 0", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "0", psPrefix + psDeny: "local=0"}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck},
 			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=changed"},
