@@ -85,6 +85,19 @@ e2e-linux: ## Run the e2e scenario on a throwaway Ubuntu VM.
 e2e-windows: ## Run the e2e scenario on a throwaway Windows 11 VM.
 	scripts/e2e/run.sh windows
 
+# Mesh scenarios (QA-607, #607): the same guests, with a local Headscale (docker) between the
+# client on this host and the guest's `host serve`. Not run in CI either.
+.PHONY: e2e-mesh
+e2e-mesh: e2e-mesh-linux e2e-mesh-windows ## Run the mesh scenarios on the Linux, then the Windows VM.
+
+.PHONY: e2e-mesh-linux
+e2e-mesh-linux: ## Run the mesh scenario on a throwaway Ubuntu VM and a local Headscale.
+	scripts/e2e/run.sh mesh linux
+
+.PHONY: e2e-mesh-windows
+e2e-mesh-windows: ## Run the mesh scenario on a throwaway Windows 11 VM (not implemented yet).
+	scripts/e2e/run.sh mesh windows
+
 .PHONY: e2e-clean
 e2e-clean: ## Delete any e2e VM session left behind (idempotent).
 	scripts/e2e/run.sh clean
