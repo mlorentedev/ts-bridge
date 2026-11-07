@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -76,11 +77,12 @@ func runHostServeOn(t *testing.T, node *fakeServeNode, goos string, args []strin
 	if ensure == nil {
 		ensure = func(string) error { return nil }
 	}
-	c := cmdpkg.HostServeCmdForTest(t, goos, start, ensure)
+	cmdpkg.HostServeCmdForTest(t, goos, start, ensure)
+	c := cmdpkg.NewRootCmd()
 	var out, errOut bytes.Buffer
 	c.SetOut(&out)
 	c.SetErr(&errOut)
-	c.SetArgs(args)
+	c.SetArgs(append([]string{"host", "serve"}, args...))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	run.err = c.ExecuteContext(ctx)
@@ -165,7 +167,7 @@ func TestHostServeCmd_BootstrapRestarts(t *testing.T) {
 			tunnels <- b
 			return b, nil
 		},
-		func(context.Context, string, string) error { return nil })
+		func(context.Context, string, string, *slog.Logger) error { return nil })
 	ls := startHostServe(t, []string{"--config", path})
 	first := <-tunnels
 	waitFor(t, "ready health", func() bool { code, _ := getReady(addr); return code == 200 })
@@ -230,13 +232,18 @@ func serveGOOS() string {
 // directory, and returns the file and that directory.
 func serveFile(t *testing.T, extra string) (path, stateDir string) {
 	t.Helper()
+	return serveServicesFile(t, extra, "    - kind: rdp\n      port: 3390\n")
+}
+
+func serveServicesFile(t *testing.T, extra, services string) (path, stateDir string) {
+	t.Helper()
 	dir := isolateHostEnv(t)
 	stateDir = filepath.Join(dir, "state")
 	if err := os.Mkdir(stateDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	key := writeTestFile(t, filepath.Join(dir, "authkey"), "tskey-auth-test\n")
-	body := "host:\n  control_url: https://hs.example\n  services:\n    - kind: rdp\n      port: 3390\n" +
+	body := "host:\n  control_url: https://hs.example\n  services:\n" + services +
 		"  mesh:\n    hostname: lab-01\n    state_dir: '" + stateDir + "'\n    auth_key_file: '" + key + "'\n" + extra
 	return writeTestFile(t, filepath.Join(dir, "host.yaml"), body), stateDir
 }
@@ -310,6 +317,35 @@ func TestHostServeCmd_Ready(t *testing.T) {
 	}
 }
 
+func TestHostServeCmd_ExistingSSHAndRDP(t *testing.T) {
+	tests := []struct {
+		name, services, ready string
+		addrs                 []string
+	}{
+		{"ssh first", "    - kind: ssh\n      port: 22\n    - kind: rdp\n      port: 45000\n",
+			"services=ssh:22,rdp:45000", []string{":22", ":45000"}},
+		{"rdp first", "    - kind: rdp\n      port: 45000\n    - kind: ssh\n      port: 22\n",
+			"services=rdp:45000,ssh:22", []string{":45000", ":22"}},
+		{"ssh default port", "    - kind: ssh\n",
+			"services=ssh:22", []string{":22"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path, _ := serveServicesFile(t, "", tc.services)
+			run := runHostServe(t, serveGOOS(), []string{"--config", path}, []string{"tag:lab"}, nil)
+			if run.err != nil {
+				t.Fatalf("host serve rejected existing services: %v", run.err)
+			}
+			if !strings.Contains(run.stdout, "READY node=lab-01 "+tc.ready+" enrolled=true\n") {
+				t.Errorf("stdout = %q, want both declared services in READY", run.stdout)
+			}
+			if !slices.Equal(run.node.addrs, tc.addrs) || !run.node.closed {
+				t.Errorf("listen addresses = %v, closed = %v; want %v and closed", run.node.addrs, run.node.closed, tc.addrs)
+			}
+		})
+	}
+}
+
 func TestHostServeCmd_RefusesUntaggedNode(t *testing.T) {
 	path, _ := serveFile(t, "")
 	run := runHostServe(t, serveGOOS(), []string{"--config", path}, nil, nil)
@@ -374,7 +410,7 @@ func TestHostServeCmd_Bootstrap(t *testing.T) {
 					}
 					return tunnel, nil
 				},
-				func(_ context.Context, controlURL, socks string) error {
+				func(_ context.Context, controlURL, socks string, _ *slog.Logger) error {
 					proxied = []string{controlURL, socks}
 					return nil
 				})

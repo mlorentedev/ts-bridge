@@ -57,9 +57,10 @@ ok "setup without xrdp: exit 2, xrdp step names the fix" -- 'code 2 && has "apt 
 ok "setup not converged: no HOST READY banner" -- '! has "HOST READY"'
 ok "setup without IP: no empty TS_TARGET" -- '! has "TS_TARGET=:"'
 outcomes setup "$C" >"$W/j"
-# Unmarked, so a missing or broken document is a FAIL and not #608.
+# The step must exist, so all() over no step at all cannot pass.
 ok "ufw inactive: setup prints its Firewall step" -- "json '[s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"]' <$W/j"
-ok "ufw inactive: firewall step says so" 608 -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Firewall\") and \"inactive\" in s[\"message\"]]' <$W/j"
+ok "ufw inactive: firewall step says so" -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Firewall\") and \"inactive\" in s[\"message\"]]' <$W/j"
+ok "ufw inactive: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
 
 apt-get -qq update >/dev/null 2>&1 && apt-get -qq install -y xrdp >/dev/null 2>&1
 ufw --force enable >/dev/null
@@ -71,7 +72,7 @@ outcomes setup "$C" >"$W/j2"
 ok "setup #2: nothing changed" -- "json '{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"xrdp service\")==\"ok\" and {s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"Firewall configuration\")==\"ok\" and all(s[\"outcome\"]==\"ok\" for s in j[\"steps\"] if not s[\"name\"].startswith(\"Tailscale\"))' <$W/j2"
 ok "setup: Tailscale step fails without a node" -- "json '[s for s in j[\"steps\"] if s[\"name\"].startswith(\"Tailscale\") and s[\"outcome\"]==\"failed\" and s[\"fix\"]]' <$W/j2"
 outcomes check "$C" >"$W/jc"
-ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True}]' <$W/jc"
+ok "check --json: rdp 3389 enabled, active, firewall ok" -- "json 'j[\"services\"]==[{\"kind\":\"rdp\",\"port\":3389,\"enabled\":True,\"active\":True,\"firewall_ok\":True,\"unread\":False}]' <$W/jc"
 ok "xrdp listens on 3389" -- "ss -ltn | grep -q ':3389 '"
 
 ufw delete allow 3389/tcp >/dev/null 2>&1
@@ -83,6 +84,16 @@ ok "drift: setup starts xrdp" -- "outcomes setup $C >/dev/null; systemctl is-act
 
 U="${SUDO_USER:-nobody}"
 ok "unprivileged check names the declared service" -- 'su -s /bin/sh "$U" -c "$B host check --config $C" 2>&1 | grep -q "RDP:.*3389"'
+# #638: a systemctl that answers nothing leaves the unit unread, whoever runs the
+# check, and elevation cannot fix that. The declared service must still be
+# listed, flagged unread, and the wording must offer elevation only to a non-root
+# run.
+mkdir -p "$W/shim" && printf '#!/bin/sh\nexit 1\n' >"$W/shim/systemctl" && chmod 755 "$W/shim/systemctl"
+as_user() { su -s /bin/sh "$U" -c "PATH=$W/shim $B host check --config $C $1" 2>/dev/null; }
+ok "unprivileged unread: check --json lists rdp 3389 with unread true" -- "as_user --json | json 'j[\"rdp_port\"]==0 and [(s[\"kind\"],s[\"port\"],s[\"unread\"]) for s in j[\"services\"]]==[(\"rdp\",3389,True)]'"
+ok "unprivileged unread: line names the steps, elevation only as a maybe" -- 'as_user "" | grep -q "RDP:.*unread (rdp, port 3389): see the steps below for the cause; running as root/administrator may help"'
+run env PATH="$W/shim" "$B" host check --config "$C"
+ok "root unread: line names the steps and does not suggest elevation" -- 'has "RDP:.*unread (rdp, port 3389): see the steps below for the cause" && ! has "may help"'
 systemctl disable --now xrdp >/dev/null 2>&1
 run "$B" host check --config "$C"
 ok "disabled xrdp: check names it NOT OK, not undeclared" -- '! has "no service declared" && has "RDP:.*NOT OK.*3389"'
@@ -99,9 +110,14 @@ printf 'version: 2\nhost: {}\n' >"$W/v2.yaml"
 run "$B" host check --config "$W/v2.yaml"
 ok "unsupported version refused" -- '! code 0 && ! code 2 && has "version"'
 printf 'version: 1\nhost:\n  services:\n    - kind: rdp\n      port: 3390\n' >"$W/p.yaml"
-# The command itself must work, unmarked, so a crash is a FAIL and not #557.
-ok "declared port 3390: setup prints its steps as JSON" -- "outcomes setup $W/p.yaml | json 'len(j[\"steps\"])>0'"
-ok "declared port no step applies is not converged" 557 -- "outcomes setup $W/p.yaml | json '[s for s in j[\"steps\"] if s[\"outcome\"] in (\"failed\",\"manual\") and \"3390\" in s[\"message\"]]'"
+# A declared port moves the xrdp listener, not only the firewall (#557).
+xport() { json "{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"xrdp port\")==\"$1\""; }
+ok "declared port 3390: setup points xrdp at it" -- "outcomes setup $W/p.yaml | xport changed"
+ok "declared port 3390: xrdp listens on it" -- "sleep 2; ss -ltn | grep -q ':3390 ' && grep -q '^port=3390$' /etc/xrdp/xrdp.ini"
+ok "declared port 3390: second setup changes nothing" -- "outcomes setup $W/p.yaml | xport ok"
+ok "declared port 3390: the stock file sees the drift" -- "outcomes check $C | xport changed"
+ok "declared port 3389: setup moves xrdp back" -- "outcomes setup $C | xport changed && sleep 2 && ss -ltn | grep -q ':3389 '"
+ok "declared port 3389: back to the stock step list" -- "outcomes check $C | json 'not [s for s in j[\"steps\"] if s[\"name\"]==\"xrdp port\"]'"
 
 # Upgrade: the previous release's .env still applies from its directory.
 mkdir -p "$W/up" && cd "$W/up" && rm -f .env
@@ -123,6 +139,55 @@ install -d -m 0700 /var/lib/ts-bridge-e2e && echo k >/tmp/e2e-key && chmod 600 /
 mesh /var/lib/ts-bridge-e2e /tmp/e2e-key >"$W/key.yaml"
 run timeout 20 "$B" host serve --config "$W/key.yaml"
 ok "serve: auth_key_file under /tmp refused" -- 'code 1 && has "/tmp"'
+
+# Firewall scope (#631) on an iptables host: ufw is removed, so setup writes through iptables.
+ufw --force disable >/dev/null 2>&1
+apt-get -qq remove -y ufw >/dev/null 2>&1
+SCOPED='-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT'
+LEGACY='-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT'
+FOREIGN='-A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT'
+fwstep() { json "{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"Firewall configuration\")==\"$1\""; }
+ok "iptables host: ufw is gone" -- '[ ! -e /usr/sbin/ufw ]'
+ok "iptables host: setup #1 appends the rule" -- 'outcomes setup "$C" | fwstep changed'
+ok "iptables host: the rule is scoped to tailscale0, as printed" -- 'iptables -S INPUT | grep -qx -- "$SCOPED"'
+ok "iptables host: setup #2 changes nothing (the printed form agrees)" -- 'outcomes setup "$C" | fwstep ok'
+ok "iptables host: check reports firewall_ok" -- "outcomes check $C | json 'j[\"services\"][0][\"firewall_ok\"]'"
+iptables -A INPUT -p tcp --dport 3389 -j ACCEPT
+ok "legacy unscoped rule: check says setup would change it" -- 'outcomes check "$C" | fwstep changed'
+ok "legacy unscoped rule: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "legacy unscoped rule: setup replaces it" -- 'outcomes setup "$C" | fwstep changed && ! iptables -S INPUT | grep -qx -- "$LEGACY" && iptables -S INPUT | grep -qx -- "$SCOPED"'
+ok "legacy unscoped rule: check is ok afterwards" -- 'outcomes check "$C" | fwstep ok'
+iptables -A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT
+ok "foreign unscoped rule: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "foreign unscoped rule: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "$FOREIGN"'
+iptables -D INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT
+ok "foreign rule removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+# POSIX ACLs on a state_dir ancestor (#598). setfacl raises the mask with a named entry and the group
+# bits mirror it, so the mode check alone already refuses that; the ACL read names the principal, and is
+# the only layer that sees an entry the mask hides (setfacl -n).
+apt-get -qq install -y acl >/dev/null 2>&1
+ok "acl: setfacl is installed" -- 'command -v setfacl'
+install -d -m 0755 /var/lib/acl-e2e && install -d -m 0755 /etc/ts-bridge && echo k >/etc/ts-bridge/e2e-key && chmod 600 /etc/ts-bridge/e2e-key
+mesh /var/lib/acl-e2e/state /etc/ts-bridge/e2e-key >"$W/acl.yaml"
+setfacl -m u:nobody:rwx /var/lib/acl-e2e
+ok "acl: setfacl raises the mask, and stat shows it as the group bits (0775)" -- '[ "$(stat -c %a /var/lib/acl-e2e)" = 775 ]'
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a named-user write ACL refused, naming it and the user" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to user"'
+setfacl -b /var/lib/acl-e2e && setfacl -n -m u:nobody:rwx /var/lib/acl-e2e
+ok "acl: setfacl -n leaves the mask at r-x, so the mode stays 0755" -- '[ "$(stat -c %a /var/lib/acl-e2e)" = 755 ]'
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: a named-user write the mask hides is still refused" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to user"'
+setfacl -b /var/lib/acl-e2e && setfacl -m g:nogroup:rwx /var/lib/acl-e2e
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a named-group write ACL refused, naming it and the group" -- 'code 1 && has "/var/lib/acl-e2e" && has "ACL grants write to group"'
+# A refusal creates nothing; a pass creates state_dir (EnsureStateDir walks the ancestors first). That
+# makes the directory the positive half of the next case, so it cannot go green on an unrelated error.
+ok "acl: the refused runs created no state_dir" -- '[ ! -e /var/lib/acl-e2e/state ]'
+setfacl -b /var/lib/acl-e2e && setfacl -m u:nobody:r-x /var/lib/acl-e2e
+run timeout 20 "$B" host serve --config "$W/acl.yaml"
+ok "serve: ancestor with a read-only named-user ACL is not refused, and the walk lets state_dir be created" -- '! has "ancestor" && [ -d /var/lib/acl-e2e/state ]'
+rm -rf /var/lib/acl-e2e/state
+setfacl -b /var/lib/acl-e2e
 
 run "$B" import e2e "tsb://host-e2e:3389?cp=saas"
 ok "client: import a tsb:// descriptor" -- 'code 0'

@@ -1,7 +1,7 @@
 ---
 id: "HOST-008-host-serve-mode"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: implementing # draft | implementing | verifying | archived
 created: "2026-10-30"
 issue: "mlorentedev/ts-bridge#522"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, host, headscale, windows]
@@ -32,7 +32,12 @@ owns the macOS host.
 
 - Reads the ADR-017 host file (`--config`, HOST-005). It publishes exactly the services
   `host.services` declares (kind and port), each forwarded from the tailnet to
-  `127.0.0.1:<port>`. Nothing else answers on the node.
+  `127.0.0.1:<port>`. Nothing else answers on the node. On Windows and Linux this
+  includes an already-provisioned SSH service as well as RDP: publishing SSH does not
+  require the OS convergence steps tracked by #521. The convergence loader stays
+  strict: setup/check reject SSH until those steps exist, and init remains an
+  RDP-only generator. Serve does not install or configure OpenSSH. VNC and macOS
+  support are unchanged.
 - The control plane is the file's `control_url`. A new optional `host.mesh` block holds
   what serve alone needs: `bootstrap_ssh` (`user@host[:port]`, CLI-363),
   `bootstrap_socks_addr` (loopback, default `127.0.0.1:1055` as `connect`; it must differ
@@ -117,6 +122,14 @@ owns the macOS host.
 - **~300 LOC cap (decided 2026-11-02).** Four PRs: the `host.mesh` schema and the
   `state_dir` guard, the serve command with forwarding and enrolment, reconnect and
   health, then `host check`, the auth key guard and the docs.
+- **Serve/convergence validation (correction authorized 2026-11-06).** The pinned
+  lab candidate rejects SSH before node startup because it uses the OS step capability
+  table, although `Publish` forwards TCP and the lab already runs OpenSSH. Give serve
+  its own loader over the same decoding and validation rules, permitting SSH only on
+  OSes that already support serve. Do not widen the setup/check/init capability table
+  or implement #521. Until #521 lands, a combined SSH/RDP file cannot be used with
+  `host check`; inspect serve's health endpoint for its publication diagnostic and
+  keep the combined-file part of AC6 open.
 
 ## Acceptance criteria
 

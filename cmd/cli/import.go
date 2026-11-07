@@ -76,27 +76,3 @@ func runImportDirect(name, rawDescriptor, storePath string, force bool) error {
 	fmt.Printf("Next: ts-bridge auth set --profile %s\n      ts-bridge connect --profile %s\n", name, name)
 	return nil
 }
-
-// applyProfile resolves a named profile from storePath and populates cfg with
-// its target and control URL. If name is empty it is a no-op. If cfg.Target
-// is already set (from flag/env/YAML) it is preserved unchanged so existing
-// --target usage is fully backward compatible.
-func applyProfile(cfg *config.Config, name, storePath string) error {
-	if name == "" {
-		return nil
-	}
-
-	s := profile.NewStore(storePath)
-	p, err := s.Get(name)
-	if err != nil {
-		return fmt.Errorf("load profile %q: %w", name, err)
-	}
-
-	if cfg.Target == "" {
-		cfg.Target = p.Target
-	}
-	if cfg.ControlURL == "" && p.ControlURL != "" {
-		cfg.ControlURL = p.ControlURL
-	}
-	return nil
-}

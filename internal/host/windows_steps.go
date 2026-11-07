@@ -24,7 +24,7 @@ func setupWindows(cfg Config, r Runner) SetupResult {
 
 	// The RDP port lives in the registry; the firewall must open that exact port.
 	rdpStep, rdpPort := rdpSetupStep(r)
-	steps = append(steps, rdpStep)
+	steps = append(steps, declaredRDPPort(rdpStep, cfg, rdpPort))
 
 	steps = append(steps, windowsFirewallSetupStep(r, cfg.FirewallRule, rdpPort))
 
@@ -88,7 +88,7 @@ func readRDPDeny(r Runner) (rdpDeny, error) {
 		return rdpDeny{}, err
 	}
 	f := parseKeyValues(out)
-	return rdpDeny{policy: f["policy"], local: f["local"]}, nil
+	return rdpDeny{policy: f[denyPolicy.Key], local: f[denyLocal.Key]}, nil
 }
 
 // parseKeyValues reads the key=value lines the PowerShell reads print. The
@@ -166,12 +166,28 @@ func checkWindows(cfg Config, r Runner, result *CheckResult) {
 	if err == nil {
 		svc.Port = port
 		step, svc.Enabled = rdpCheckStep(r, port)
+		step = declaredRDPPort(step, cfg, port)
 	}
 	result.Steps = append(result.Steps, step)
 	fwStep, fwOK := windowsFirewallCheckStep(r, cfg.FirewallRule, svc.Port)
 	svc.FirewallOK = fwOK
 	result.Steps = append(result.Steps, fwStep)
+	if !cfg.NoSleep {
+		result.Steps = append(result.Steps, powerCheckStep(r))
+	}
 	result.Services = []Service{svc}
+}
+
+// declaredRDPPort turns a converged RDP step manual when the host declares a
+// port the registry does not listen on (#557). ts-bridge does not move the RDP
+// listener on Windows, so the operator changes it or the declaration.
+func declaredRDPPort(step SetupStep, cfg Config, port int) SetupStep {
+	if !cfg.PortDeclared || port == cfg.Port || !step.Outcome.Succeeded() {
+		return step
+	}
+	return newStep(step.Name, OutcomeManual,
+		fmt.Sprintf("RDP listens on port %d (set in the registry), not the declared %d", port, cfg.Port),
+		fmt.Sprintf(`declare port %d, or change PortNumber under HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp to %d and restart the TermService service`, port, cfg.Port))
 }
 
 // actRead maps a read's error to "ok" or "failed".
@@ -182,13 +198,54 @@ func actRead(name string, err error, okMsg, failMsg, fix string) SetupStep {
 	return newStep(name, OutcomeOK, okMsg, "")
 }
 
+// psField is one line of a key=value PowerShell read. The script prints
+// "Key=<Expr>" and the parser looks the value up by the same Key, so the two
+// cannot disagree on a name (#601).
+type psField struct{ Key, Expr string }
+
+func (f psField) print() string { return fmt.Sprintf(`Write-Output "%s=%s"`, f.Key, f.Expr) }
+
+// printAll joins the print statements of fields into one script fragment.
+func printAll(fields ...psField) string {
+	stmts := make([]string, len(fields))
+	for i, f := range fields {
+		stmts[i] = f.print()
+	}
+	return strings.Join(stmts, "; ")
+}
+
+var (
+	netCategory = psField{"category", "$($_.NetworkCategory)"}
+
+	denyPolicy = psField{"policy", "$p"}
+	denyLocal  = psField{"local", "$l"}
+
+	fwCount     = psField{"count", "$($r.Count)"}
+	fwEnabled   = psField{"enabled", "$($x.Enabled)"}
+	fwAction    = psField{"action", "$($x.Action)"}
+	fwDirection = psField{"direction", "$($x.Direction)"}
+	fwProfile   = psField{"profile", "$($x.Profile)"}
+	fwRemote    = psField{"remote", "$(($x | Get-NetFirewallAddressFilter).RemoteAddress)"}
+	fwProtocol  = psField{"protocol", "$($f.Protocol)"}
+	fwPort      = psField{keyPort, "$($f.LocalPort)"}
+)
+
+// keyPort is the key a port is read and declared under: the firewall read's
+// key=value line, the host file's services[] entry and xrdp.ini's [Globals].
+const keyPort = "port"
+
 const (
-	psReadNetworkProfile    = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { Write-Output "category=$($_.NetworkCategory)" }`
 	psNetworkProfilePrivate = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
 	psReadRDPPort           = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
-	psReadRDPDeny           = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; Write-Output "policy=$p"; Write-Output "local=$l"`
-	psReadFirewallRule      = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; Write-Output "remote=$(($x | Get-NetFirewallAddressFilter).RemoteAddress)"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
 	psEnableRDP             = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; ` + psReadRDPPort
+)
+
+// The key=value reads. psReadFirewallRule takes the rule name as its %q.
+var (
+	psReadNetworkProfile = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { ` + netCategory.print() + ` }`
+	psReadRDPDeny        = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; ` + printAll(denyPolicy, denyLocal)
+	psReadFirewallRule   = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); ` + fwCount.print() + `; foreach ($x in $r) { ` +
+		printAll(fwEnabled, fwAction, fwDirection, fwProfile, fwRemote) + `; $f = $x | Get-NetFirewallPortFilter; ` + printAll(fwProtocol, fwPort) + ` }`
 )
 
 func runPS(r Runner, script string) error {
@@ -270,7 +327,7 @@ func networkProfileStep(r Runner) SetupStep {
 // lists and how many of them are Private.
 func parseNetworkProfiles(out string) (count, private int) {
 	for _, line := range strings.Split(out, "\n") {
-		v, ok := strings.CutPrefix(strings.TrimSpace(line), "category=")
+		v, ok := strings.CutPrefix(strings.TrimSpace(line), netCategory.Key+"=")
 		if !ok {
 			continue
 		}
@@ -315,16 +372,46 @@ func powerStep(r Runner) SetupStep {
 // the DC index the last. An unreadable answer reports false, so the step sets
 // the value rather than trusting it.
 func acTimeoutZero(r Runner, sub, setting string) bool {
+	zero, err := readACTimeoutZero(r, sub, setting)
+	return err == nil && zero
+}
+
+// readACTimeoutZero reads whether an AC timeout is 0, telling an unreadable
+// value apart from a non-zero one for check (#652).
+func readACTimeoutZero(r Runner, sub, setting string) (bool, error) {
 	out, err := r.Output("powercfg", "/query", "SCHEME_CURRENT", sub, setting)
 	if err != nil {
-		return false
+		return false, err
 	}
 	hex := hexValue.FindAllString(string(out), -1)
 	if len(hex) < 2 {
-		return false
+		return false, fmt.Errorf("powercfg printed no AC setting index for %s %s", sub, setting)
 	}
 	v, err := strconv.ParseUint(hex[len(hex)-2][2:], 16, 32)
-	return err == nil && v == 0
+	if err != nil {
+		return false, fmt.Errorf("powercfg AC index for %s %s: %w", sub, setting, err)
+	}
+	return v == 0, nil
+}
+
+// powerCheckStep is the read half of powerStep: "changed" names the AC
+// timeouts setup would set to 0.
+func powerCheckStep(r Runner) SetupStep {
+	const name = "Power settings"
+	var drift []string
+	for _, p := range powerSettings {
+		zero, err := readACTimeoutZero(r, p.sub, p.setting)
+		if err != nil {
+			return newStep(name, OutcomeFailed, "Could not read "+p.change+": "+err.Error(), "run `powercfg /query SCHEME_CURRENT` to inspect the power plan")
+		}
+		if !zero {
+			drift = append(drift, p.change)
+		}
+	}
+	if len(drift) == 0 {
+		return newStep(name, OutcomeOK, "Sleep disabled (AC power)", "")
+	}
+	return newStep(name, OutcomeChanged, "Sleep is enabled on AC power: "+strings.Join(drift, ", ")+" not 0", "run ts-bridge host setup as an administrator")
 }
 
 var hexValue = regexp.MustCompile(`0x[0-9a-fA-F]{8}`)
@@ -338,15 +425,15 @@ const (
 // exactly one rule by that name exists, enabled, allowing inbound TCP from any
 // address on every profile on port, as the recreate sets it; port 0 (unknown)
 // skips the port comparison. found reports whether any rule has the name.
-func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found bool, err error) {
+func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found bool, err error) { //nolint:gocyclo // baseline #629
 	out, err := outputPS(r, fmt.Sprintf(psReadFirewallRule, rule))
 	if err != nil {
 		return false, false, err
 	}
 	f := parseKeyValues(out)
-	ok = f["count"] == "1" && f["enabled"] == "True" && f["action"] == "Allow" && f["direction"] == "Inbound" &&
-		f["protocol"] == "TCP" && f["profile"] == "Any" && f["remote"] == "Any" && (port == 0 || f["port"] == strconv.Itoa(port))
-	return ok, f["count"] != "0", nil
+	ok = f[fwCount.Key] == "1" && f[fwEnabled.Key] == "True" && f[fwAction.Key] == "Allow" && f[fwDirection.Key] == "Inbound" &&
+		f[fwProtocol.Key] == "TCP" && f[fwProfile.Key] == "Any" && f[fwRemote.Key] == "Any" && (port == 0 || f[fwPort.Key] == strconv.Itoa(port))
+	return ok, f[fwCount.Key] != "0", nil
 }
 
 // windowsFirewallSetupStep recreates the rule only when the read does not

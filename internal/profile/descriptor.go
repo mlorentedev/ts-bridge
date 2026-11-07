@@ -63,7 +63,7 @@ func (d Descriptor) String() string {
 
 // Parse decodes a tsb:// URI into a Descriptor. Unknown query parameters are
 // silently ignored (tolerant reader). Returns *ParseError on any malformation.
-func Parse(raw string) (Descriptor, error) {
+func Parse(raw string) (Descriptor, error) { //nolint:funlen,gocyclo // baseline #629
 	wrap := func(reason string) (Descriptor, error) {
 		return Descriptor{}, &ParseError{Input: redactDescriptor(raw), Reason: reason}
 	}

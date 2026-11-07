@@ -59,6 +59,7 @@ type Config struct {
 	FirewallRule string
 	NoSleep      bool
 	Port         int
+	PortDeclared bool // a flag, TS_HOST_RDP_PORT or the file named Port (#557)
 	Verbose      bool
 	LogFormat    string
 	Services     []DeclaredService
@@ -78,7 +79,7 @@ func Merge(flags Flags) Config {
 }
 
 // Resolve applies the precedence chain flags > env > file > per-OS defaults
-// (ADR-017 §1). The file must already be validated for goos (LoadFile).
+// (ADR-017 §1). The file must already be validated for goos by LoadFile or LoadServeFile.
 func Resolve(goos string, file File, flags Flags) Config {
 	cfg := defaultsFor(goos)
 	applyFile(&cfg, file.Host)
@@ -105,7 +106,7 @@ func defaultsFor(goos string) Config {
 
 // applyFile layers the declared state over the defaults. power.prevent_sleep
 // is the inverse of NoSleep.
-func applyFile(cfg *Config, h FileHost) {
+func applyFile(cfg *Config, h FileHost) { //nolint:gocyclo // baseline #629
 	if h.Services != nil {
 		cfg.Services = make([]DeclaredService, 0, len(h.Services))
 		for _, s := range h.Services {
@@ -116,6 +117,7 @@ func applyFile(cfg *Config, h FileHost) {
 			cfg.Services = append(cfg.Services, DeclaredService{Kind: s.Kind, Port: port})
 			if s.Kind == ServiceRDP {
 				cfg.Port = port
+				cfg.PortDeclared = s.Port != nil
 			}
 		}
 	}
@@ -156,7 +158,7 @@ func LoadConfig() (Config, error) {
 	return cfg, nil
 }
 
-func applyEnv(cfg *Config) {
+func applyEnv(cfg *Config) { //nolint:gocyclo // baseline #629
 	// Firewall rule.
 	if v := os.Getenv("TS_HOST_FIREWALL_RULE"); v != "" {
 		cfg.FirewallRule = v
@@ -175,7 +177,7 @@ func applyEnv(cfg *Config) {
 		} else if port < 1 || port > 65535 {
 			warnHostEnvVar("TS_HOST_RDP_PORT", v, "must be between 1 and 65535")
 		} else {
-			cfg.Port = port
+			cfg.Port, cfg.PortDeclared = port, true
 		}
 	}
 
@@ -209,7 +211,7 @@ func applyFlags(cfg *Config, flags Flags) {
 
 	// RDP Port — apply only if positive (zero means "not set").
 	if flags.Port > 0 {
-		cfg.Port = flags.Port
+		cfg.Port, cfg.PortDeclared = flags.Port, true
 	}
 
 	// Verbose — apply only if explicitly passed (same reasoning as NoSleep).

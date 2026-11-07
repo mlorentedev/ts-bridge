@@ -164,7 +164,7 @@ func displayOnce(addr string, jsonOut bool, w io.Writer) error {
 	return nil
 }
 
-func fetchHealth(addr string) (live, ready bool, metrics metricsResponse, err error) {
+func fetchHealth(addr string) (live, ready bool, metrics metricsResponse, err error) { //nolint:funlen // baseline #629
 	client := &http.Client{Timeout: 3 * time.Second}
 
 	// Check liveness.
@@ -249,11 +249,6 @@ func formatBytes(n int64) string {
 	return fmt.Sprintf("%.1f GiB", float64(n)/(unit*unit*unit))
 }
 
-// formatDuration formats a duration for display.
-func formatDuration(d time.Duration) string {
-	return d.String()
-}
-
 // supportsClearScreen returns true if ANSI escape codes should be emitted.
 // On Windows, VT processing must be enabled for ANSI codes to work correctly.
 // Without VT, escape sequences produce garbage output. We conservatively skip
@@ -263,8 +258,6 @@ func formatDuration(d time.Duration) string {
 // Note: runtime.GOOS is a compile-time constant, so golangci-lint may flag
 // this as "always true/false" on non-Windows runners. The //nolint comment
 // below suppresses that false-positive lint warning.
-//
-//nolint:unparam // runtime.GOOS is platform-dependent, not always true
 func supportsClearScreen() bool {
 	return runtime.GOOS != windowsOS
 }

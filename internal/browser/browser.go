@@ -53,7 +53,7 @@ func BuildPAC(proxyAddr string, routes map[string]string) (string, error) {
 		"}\n", nil
 }
 
-func EdgeArgs(cfg LaunchConfig) ([]string, error) {
+func EdgeArgs(cfg LaunchConfig) ([]string, error) { //nolint:gocyclo // baseline #629
 	if cfg.UserDataDir == "" {
 		return nil, fmt.Errorf("browser user-data directory is required")
 	}
@@ -183,22 +183,6 @@ func StartPACServer(address, pac string) (*http.Server, string, error) {
 		_ = server.Serve(listener)
 	}()
 	return server, "http://" + listener.Addr().String() + "/proxy.pac", nil
-}
-
-func routeHosts(routes map[string]string) ([]string, error) {
-	hosts := make([]string, 0, len(routes))
-	for source := range routes {
-		host, _, err := net.SplitHostPort(source)
-		if err != nil || host == "" {
-			return nil, fmt.Errorf("invalid browser route source %q", source)
-		}
-		hosts = append(hosts, host)
-	}
-	return normalizedHosts(hosts), nil
-}
-
-func AllowedHosts(routes map[string]string) ([]string, error) {
-	return routeHosts(routes)
 }
 
 func AllowedOrigins(routes map[string]string) ([]string, error) {

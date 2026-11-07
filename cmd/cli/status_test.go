@@ -195,24 +195,6 @@ func TestFormatBytes(t *testing.T) {
 	}
 }
 
-func TestFormatDuration(t *testing.T) {
-	tests := []struct {
-		input    time.Duration
-		expected string
-	}{
-		{0, "0s"},
-		{5 * time.Second, "5s"},
-		{90 * time.Second, "1m30s"},
-		{2*time.Hour + 30*time.Minute, "2h30m0s"},
-	}
-	for _, tt := range tests {
-		got := formatDuration(tt.input)
-		if got != tt.expected {
-			t.Errorf("formatDuration(%v) = %q, want %q", tt.input, got, tt.expected)
-		}
-	}
-}
-
 func TestStatusWatchMode(t *testing.T) {
 	callCount := 0
 	mux := http.NewServeMux()

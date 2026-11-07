@@ -94,6 +94,20 @@ func capabilityFor(goos string) osCapability {
 // writes one warning to warn (nil discards them) for each unknown key, which
 // it ignores.
 func LoadFile(path, goos string, warn io.Writer) (File, error) {
+	return loadFile(path, goos, warn, capabilityFor(goos))
+}
+
+// LoadServeFile reads a host file for publication, allowing an existing SSH
+// service on OSes that support serve without claiming an SSH setup/check step.
+func LoadServeFile(path, goos string, warn io.Writer) (File, error) {
+	capab := capabilityFor(goos)
+	if capab.serve {
+		capab.kinds = append(slices.Clone(capab.kinds), ServiceSSH)
+	}
+	return loadFile(path, goos, warn, capab)
+}
+
+func loadFile(path, goos string, warn io.Writer, capab osCapability) (File, error) {
 	if warn == nil {
 		warn = io.Discard
 	}
@@ -104,7 +118,7 @@ func LoadFile(path, goos string, warn io.Writer) (File, error) {
 	}
 	f, err := decodeFile(data, warn)
 	if err == nil {
-		err = f.validate(goos)
+		err = f.validate(goos, capab)
 	}
 	if err != nil {
 		return File{}, fmt.Errorf("host config %s: %w", path, err)
@@ -137,11 +151,10 @@ func decodeFile(data []byte, warn io.Writer) (File, error) {
 	return f, nil
 }
 
-func (f File) validate(goos string) error {
+func (f File) validate(goos string, capab osCapability) error {
 	if f.Version != fileVersion {
 		return fmt.Errorf("version %d: this ts-bridge reads version %d", f.Version, fileVersion)
 	}
-	capab := capabilityFor(goos)
 	if err := validateServices(f.Host.Services, goos, capab); err != nil {
 		return err
 	}
@@ -230,7 +243,7 @@ func validateControlURL(raw *string) error {
 var (
 	topKeys      = []string{"version", "host"}
 	hostKeys     = []string{"services", "firewall", "power", "control_url", "mesh"}
-	serviceKeys  = []string{"kind", "port"}
+	serviceKeys  = []string{"kind", keyPort}
 	firewallKeys = []string{"rule"}
 	powerKeys    = []string{"prevent_sleep"}
 	meshKeys     = []string{"bootstrap_ssh", "bootstrap_socks_addr", "hostname", keyStateDir, keyAuthKeyFile, "health_addr"}

@@ -24,7 +24,7 @@ func serviceKey(kind string, port int) string {
 // declared services it publishes (HOST-008 AC6). It returns nil when the file
 // declares no health_addr. Serve not answering, or a responder that does not
 // name the file's node, reads as nothing published.
-func probeServePublished(file host.File, declared []host.DeclaredService) map[string]bool {
+func probeServePublished(file host.File, declared []host.DeclaredService) map[string]bool { //nolint:gocyclo // baseline #629
 	mesh := file.Host.Mesh
 	if mesh == nil || mesh.HealthAddr == nil {
 		return nil

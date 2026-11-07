@@ -15,6 +15,7 @@ created: "2026-10-20"
 
 Accepted by the operator on 2026-10-20. Implementation is tracked by #450 and its
 sub-tickets. Amendment A below (HOST-008, #522) was accepted by the operator on 2026-11-01 in #525.
+Amendment B (SEC-631, #631) was decided by the operator on 2026-11-06 in #631.
 
 ## Context
 
@@ -141,9 +142,13 @@ host check`. Before this amendment `setup` exited 0 even when a step failed.
 ### 3. Services, not RDP fields
 
 `host check --json` gains a `services` array
-(`kind`, `port`, `enabled`, `active`, `firewall_ok`) and `steps[].outcome` / `steps[].fix`.
+(`kind`, `port`, `enabled`, `active`, `firewall_ok`, `unread`) and `steps[].outcome` /
+`steps[].fix`. `unread` is true when a step could not read the service. Its `enabled` and
+`firewall_ok` then keep their zero value (`false`) and `active` stays `null`; they are
+unreliable, not a reading of "off", and `unread` is what tells the two apart. The step's `fix`
+names the cause.
 The existing keys stay and are derived (C2): `rdp_port` / `rdp_enabled` from the `rdp`
-service (zero/false when absent), `firewall_ok` true only when at least one service is
+service (zero/false when absent or `unread`), `firewall_ok` true only when at least one service is
 declared and every declared service has `firewall_ok == true` (an `unverified` firewall
 read counts as false). `steps[].success` stays as `outcome in {ok, changed}`.
 
@@ -164,9 +169,18 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 
 | OS | Services | Automated | Verified and guided only |
 | --- | --- | --- | --- |
-| Windows | `rdp` (+ `ssh` via OpenSSH Server when declared) | RDP enable honouring Group Policy precedence, firewall rule (state-first), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
-| Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, firewall INPUT rule (ufw `allow` / iptables `-C` then `-A`) | none |
+| Windows | `rdp` (`ssh` via OpenSSH Server is planned, #521; its firewall rule must be scoped or reported like the RDP group) | RDP enable honouring Group Policy precedence, firewall rule scoped to the tailnet ranges (state-first, Amendment B), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
+| Linux | `rdp` (xrdp) (`ssh` is planned, #521; its rule takes the same `tailscale0` scope) | `systemctl enable --now`, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule scoped to `tailscale0` (ufw `allow in on` / iptables `-i`, Amendment B) | none |
 | macOS | `ssh` (Remote Login), `vnc` (Screen Sharing) | Remote Login when elevated and Full Disk Access is granted | Screen Sharing; Remote Login without Full Disk Access; application-firewall "block all" |
+
+A declared RDP port is applied where the OS lets a CLI move the listener and reported
+where it does not (#557, amended 2026-11-06). Linux rewrites xrdp's `port=` and restarts
+xrdp; the step appears only when a port is declared and it or xrdp's is not the default
+3389, so a stock host keeps its step list, and an `xrdp.ini` with no `[Globals]` section is
+`failed` rather than rewritten. Windows never writes `PortNumber`: a declared port the
+registry does not listen on makes the RDP step `manual` in `setup` and `check`, naming both
+ports. On both, a port no layer declares is left to the OS (the registry's, or a hand-set
+`port=`), with nothing to compare.
 
 On macOS, `check` reads Remote Login without root from the launchd override for
 `com.openssh.sshd` and, when no override exists, from the `Disabled` key of its launch
@@ -250,14 +264,70 @@ Decision:
   HOST-008).
 - The Neutral consequence "installing the bridge as an OS service is out of scope"
   still holds for ts-bridge itself; #451 remains the place for a local control plane.
+- Publication and OS convergence have separate service validation (clarified
+  2026-11-06). On Windows and Linux, serve may publish an already-provisioned `ssh`
+  service alongside `rdp`; it does not install or configure OpenSSH. The strict
+  step-capability check in §1 remains on `setup` and `check`: they still reject
+  SSH declarations until #521 supplies those OS steps. `init` still generates an
+  RDP-only file and validates it through the convergence loader. A combined SSH/RDP
+  serve file therefore cannot yet be used with `host check`; its publication
+  diagnostic is serve's health endpoint. This does not add VNC or macOS support.
 
 Rejected for this amendment: an OS service inside ts-bridge (Windows SCM or systemd
 integration in the binary), which is #451's question and would add a supervisor before
 that architecture is decided.
 
+## Amendment B (Accepted, 2026-11-06): firewall rules are scoped to the tailnet
+
+Status: decided by the operator on 2026-11-06 in #631; the spec is `specs/SEC-631-scoped-firewall-rules/`.
+
+Context: `setup` wrote the service port as open to every interface (iptables `-A INPUT -p tcp
+--dport N -j ACCEPT`, `ufw allow N/tcp`, a Windows rule with `-Profile Any` and no
+`RemoteAddress`). #530 named that as the root cause of a tailnet-admitted port being re-opened on
+every interface and left it for an ADR decision. A host joins the tailnet to be reached over it,
+not from its LAN.
+
+Decision, a hybrid because the two OSes name the tailnet differently:
+
+- **Linux scopes by interface.** iptables: `-i tailscale0`. ufw: `ufw allow in on tailscale0 to
+  any port <port> proto tcp`. The interface name is fixed at `tailscale0`; a tailscaled started
+  with another `--tun` name gets a rule that matches nothing. That fails closed under a
+  restrictive INPUT policy (default DROP, or active ufw); under `iptables -P INPUT ACCEPT` the scope
+  restricts nothing and `check` does not say so (#691).
+- **Windows scopes by address.** `-RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48`: Windows has
+  no interface name to rely on. Setup also stops enabling the built-in `Remote Desktop` rule
+  group, whose rules allow any address and would void the scope. It does not disable the group:
+  on an upgraded host an earlier setup enabled it, but setup cannot tell that from an operator's
+  choice and the group is Microsoft's own. `check` and `setup` report an enabled group as `manual`
+  with `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"` as the fix, and `firewall_ok` stays
+  `false` until it is off. The rule is recreated scoped before the old one is removed, so RDP is
+  never left without an allow rule; the old rules are removed by the identity captured before the
+  create, never by display name, which the new rule repeats.
+- **`check` reports a legacy unscoped rule**: an allow for the port with no interface, source or
+  destination address. `firewall_ok` is `false` while one remains. `setup` replaces it.
+
+Replacement narrows "setup does not delete firewall rules" (§3) and no further. Setup deletes
+only the exact rule earlier releases wrote (`ufw allow <port>/tcp`, `-A INPUT -p tcp -m tcp --dport
+<port> -j ACCEPT` as `iptables -S` prints it), after the scoped rule is in place, so the port is
+never closed in between. Any other unscoped allow that names the port is reported `manual`: setup
+cannot know it wrote it. An allow with no port in it is the operator's posture and is left alone.
+
+Residual, accepted: the Windows scope is a range, so a local network addressed inside
+`100.64.0.0/10` is admitted as if it were the tailnet. Linux has no such residual because it
+scopes by interface. Windows has no stable interface name (the alias is localised and changes with
+the adapter), so the range stands and the operator on such a LAN adds a block rule.
+
+Rejected: scoping Linux by the CGNAT range instead (an interface follows the tailnet whatever
+addresses it assigns, and a range would admit any local network that uses `100.64.0.0/10`);
+scoping Windows by interface alias (the alias is localised and changes with the adapter); keeping
+the unscoped rule and only reporting it (leaves the exposure in place after the next `setup`).
+
+Reopen when: tailscaled's interface name stops being `tailscale0` by default, or ts-bridge reads
+it from the node instead of fixing it.
+
 ## References
 
-- #450 (epic), #457, #458, #459, #453, #454, #455, #307, #408, #451.
+- #450 (epic), #457, #458, #459, #453, #454, #455, #307, #408, #451, #530, #631.
 - [`docs/design/host-client-parity.md`](../design/host-client-parity.md).
 - [ADR-005](adr-005-headscale-compat.md), [ADR-011](adr-011-shareable-connection-profile.md),
   [ADR-012](adr-012-config-profiles-model.md), [ADR-013](adr-013-cli-tests-in-go.md).

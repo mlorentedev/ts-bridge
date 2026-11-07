@@ -50,6 +50,24 @@ function AcZero {
     }
     $true
 }
+# Listening PORT [SECONDS]: polls for a TCP listener on PORT, 1 s apart. A
+# service reports Running before its listener is up (#680), so a single read
+# right after setup fails on a correct host. On timeout it prints whether the
+# last read found nothing listening or failed, and the TermService state.
+function Listening($port, $seconds = 30) {
+    $deadline = (Get-Date).AddSeconds($seconds)
+    do {
+        $err = $null
+        $n = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue -ErrorVariable err).Count
+        if ($n -gt 0) { return $true }
+        Start-Sleep -Seconds 1
+    } while ((Get-Date) -lt $deadline)
+    # No match is itself a non-terminating error; anything else is a failed query.
+    $why = if (-not $err -or $err[0].Exception.Message -match 'No MSFT_NetTCPConnection objects found') { 'nothing listening' } else { "query failed: $($err[0].Exception.Message)" }
+    $svc = (Get-Service TermService -ErrorAction SilentlyContinue).Status
+    Write-Host "  no listener on port $port after ${seconds}s; last read: $why; TermService: $svc"
+    $false
+}
 function Yaml($path, $text) { Set-Content -Path $path -Value $text -Encoding ascii }
 
 Case 'version prints' { Tsb version; $Code -eq 0 }
@@ -82,7 +100,7 @@ Case 'setup #2: nothing changed' { @($j2.steps).Count -gt 0 -and -not @($j2.step
 Case 'setup: no Tailscale adapter is manual' { (Steps $j2 'Network profile')[0].outcome -eq 'manual' }
 Case 'RDP enabled, TermService running, listening on 3389' {
     (Get-ItemProperty $TS).fDenyTSConnections -eq 0 -and (Get-Service TermService).Status -eq 'Running' -and
-    @(Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue).Count -gt 0
+    (Listening 3389)
 }
 Case 'firewall rule: one, enabled, inbound TCP 3389' {
     $r = @(Rule 'Tailscale-RDP-Ingress'); $f = $r | Get-NetFirewallPortFilter
@@ -112,6 +130,7 @@ Case 'drift: RDP denied seen by check' { $s = (Json check $C).services; $s.Count
 Json setup $C | Out-Null
 Case 'drift: RDP denied repaired by setup' { (Get-ItemProperty $TS).fDenyTSConnections -eq 0 }
 powercfg /change standby-timeout-ac 30
+Case 'drift: power reset seen by check' { (Steps (Json check $C) 'Power')[0].outcome -eq 'changed' }
 Case 'drift: power reset is changed, then ok' {
     (Steps (Json setup $C) 'Power')[0].outcome -eq 'changed' -and (Steps (Json setup $C) 'Power')[0].outcome -eq 'ok' -and (AcZero)
 }
@@ -128,11 +147,12 @@ Case 'unknown key warned by name, check still runs' { Tsb host check --config "$
 Yaml "$W\v2.yaml" "version: 2`nhost: {}"
 Case 'unsupported version refused' { Tsb host check --config "$W\v2.yaml"; $Code -eq 1 -and $Out -match 'version' }
 Yaml "$W\p.yaml" "version: 1`nhost:`n  services:`n    - kind: rdp`n      port: 3390"
-# The command itself must work, unmarked, so an exception is a FAIL and not #557.
+# Windows does not move the RDP listener: a declared port it does not listen on is manual (#557).
 Case 'declared port 3390: check prints its steps as JSON' { @((Json check "$W\p.yaml").steps).Count -gt 0 }
-Case 'check: declared port differs from the registry port' 557 {
-    @((Json check "$W\p.yaml").steps | Where-Object { $_.outcome -in 'manual', 'failed' -and $_.message -match '3390' }).Count -gt 0
+Case 'check: declared port differs from the registry port' {
+    @((Json check "$W\p.yaml").steps | Where-Object { $_.name -eq 'RDP configuration' -and $_.outcome -eq 'manual' -and $_.message -match '3390' -and $_.message -match '3389' }).Count -eq 1
 }
+Case 'check: a declared port mismatch exits 2' { Tsb host check --config "$W\p.yaml"; $Code -eq 2 }
 
 # Upgrade: the previous release's .env still applies from its directory.
 New-Item -ItemType Directory -Force "$W\up" | Out-Null; Set-Location "$W\up"; Remove-Item .env -ErrorAction SilentlyContinue
@@ -158,4 +178,21 @@ Case 'client: status with no bridge prints running false, hint on stderr' {
     $j = $o | ConvertFrom-Json
     $c -eq 0 -and $j.running -eq $false -and $j.addr -eq '127.0.0.1:1' -and (Get-Content "$W\err" -Raw) -match 'not running'
 }
+
+# OwnerOnly PATH: the ACL is protected and grants only the token's user SID (#632).
+function OwnerOnly($path) {
+    if (-not $path) { return $false } # Get-Acl without a path reads the current directory
+    $acl = Get-Acl -LiteralPath $path
+    $me = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    $acl.AreAccessRulesProtected -and $rules.Count -eq 1 -and $rules[0].IdentityReference -eq $me
+}
+# USERNAME names another account, as a renamed or domain user would see it.
+$user = $env:USERNAME; $env:USERNAME = 'Guest'
+'tskey-auth-e2e-notreal' | & $B auth set --stdin --profile e2e 2>&1 | Out-Null; $authCode = $LASTEXITCODE
+$env:USERNAME = $user
+$key = Get-ChildItem "$env:LOCALAPPDATA\ts-bridge" -Recurse -Filter *.key -ErrorAction SilentlyContinue | Select-Object -First 1
+Case 'auth set: stores the credential' { $authCode -eq 0 -and $key }
+Case 'auth set: key file grants only the token user' { $key -and (OwnerOnly $key.FullName) }
+Case 'auth set: store directory grants only the token user' { $key -and (OwnerOnly $key.DirectoryName) }
 exit 0

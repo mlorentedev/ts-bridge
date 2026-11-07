@@ -27,7 +27,6 @@ func TestGoModuleFilesCheckOutLF(t *testing.T) {
 	} else if err != nil {
 		t.Fatalf("stat .git: %v", err)
 	}
-	//nolint:gosec // fixed arguments; git is resolved from PATH like any developer tool.
 	out, err := exec.Command(git, "-C", root, "check-attr", "eol", "--", "go.mod", "go.sum").Output()
 	if err != nil {
 		t.Fatalf("git check-attr: %v", err)

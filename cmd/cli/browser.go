@@ -70,7 +70,7 @@ func runBrowser(command *cobra.Command, _ []string) error {
 	return BrowserRunner(cfg, options)
 }
 
-func resolveBrowserConfig(command *cobra.Command) (config.Config, error) {
+func resolveBrowserConfig(command *cobra.Command) (config.Config, error) { //nolint:gocyclo // baseline #629
 	authKeyFile, _ := command.Flags().GetString("auth-key-file")
 	profileName, _ := command.Flags().GetString("profile")
 	if authKeyFile == "" && profileName == "" {
@@ -148,6 +148,7 @@ func collectBrowserFlags(command *cobra.Command) (config.FlagSet, error) {
 	flags.Timeout, _ = command.Flags().GetDuration("timeout")
 	flags.DialTimeout, _ = command.Flags().GetDuration("dial-timeout")
 	flags.Config, _ = command.Flags().GetString("config")
+	flags.Verbose = collectVerboseFlag(command)
 
 	if flags.AuthKeyFile != "" {
 		key, err := readAuthKeyFile(flags.AuthKeyFile)

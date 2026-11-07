@@ -132,7 +132,7 @@ var bufferPool = sync.Pool{
 // handleConn manages a single proxied connection. cancel is the root-context
 // CancelCauseFunc; when a TerminalDialError is detected, handleConn calls it
 // so the AcceptLoop and shutdown path react immediately. nil is safe (tests).
-func handleConn(client net.Conn, dialer Dialer, cfg config.Config, cancel context.CancelCauseFunc, logger *slog.Logger) {
+func handleConn(client net.Conn, dialer Dialer, cfg config.Config, cancel context.CancelCauseFunc, logger *slog.Logger) { //nolint:funlen // baseline #629
 	// Active-connection slot management lives in AcceptLoop (atomic claim +
 	// release via defer in the spawned goroutine). We only count the total
 	// here so direct callers (unit tests that bypass AcceptLoop) still see
