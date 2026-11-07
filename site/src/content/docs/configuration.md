@@ -102,6 +102,13 @@ empty value is an error.
 `host.control_url` is required by serve. Setup and recipes: the
 [host serve runbook](https://github.com/mlorentedev/ts-bridge/blob/master/docs/runbooks/host-serve.md).
 
+On Windows and Linux, `host.services` may declare already-provisioned SSH and RDP
+for publication. This does not mean the OS convergence commands support SSH:
+`host setup` and `host check` still reject it until #521, and `host init` still
+generates an RDP-only file. For a combined file, configure `host.mesh.health_addr`
+as a loopback address before starting serve (restart it if already running).
+Read `/health/ready` at that address directly rather than using `host check`.
+
 ### Boolean parsing
 
 `TS_VERBOSE`, `TS_AUTO_INSTANCE`, `TS_MANUAL_MODE` accept: `1`, `true`, `yes`, `on` (case-insensitive). All other values are treated as `false`.
