@@ -1048,6 +1048,10 @@ func ufwInactiveStep(read firewallRead, port int, state string) SetupStep {
 		message += "; it also holds " + copiesHeld(read, port)
 		fix += "; " + copiesFix(read, port)
 	}
+	if len(read.foreign) > 0 {
+		message += "; legacy unscoped rule: " + strings.Join(read.foreign, "; ")
+		fix += "; " + foreignFix(read)
+	}
 	return newStep(linuxFwName, OutcomeManual, message, fix)
 }
 
