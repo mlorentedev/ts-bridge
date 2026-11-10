@@ -159,6 +159,15 @@ ufw delete allow 22,3389/tcp >/dev/null 2>&1
 iptables -A INPUT -p tcp --dport 3389 -j ACCEPT
 ok "legacy iptables copy on a ufw host: check says setup would change it" -- 'outcomes check "$C" | fwstep changed'
 ok "legacy iptables copy on a ufw host: setup deletes it" -- 'outcomes setup "$C" | fwstep changed && ! iptables -S INPUT | grep -qx -- "$LEGACY" && outcomes check "$C" | fwstep ok'
+# An allow scoped off the tailnet opens the port, but not to the tailnet: setup still owes its rule (#631).
+OFFNET='ufw allow from 10.0.0.0/8 to any port 3389 proto tcp'
+ufw delete allow in on tailscale0 to any port 3389 proto tcp >/dev/null 2>&1
+ufw allow from 10.0.0.0/8 to any port 3389 proto tcp >/dev/null 2>&1
+ok "off-tailnet ufw allow only: check says setup would change it" -- 'outcomes check "$C" | fwstep changed'
+ok "off-tailnet ufw allow only: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "off-tailnet ufw allow only: setup adds the tailscale0 allow, keeps the operator's" -- 'outcomes setup "$C" | fwstep changed && ufw show added | grep -qx "ufw allow in on tailscale0 to any port 3389 proto tcp" && ufw show added | grep -qx -- "$OFFNET"'
+ok "off-tailnet ufw allow only: check is ok afterwards" -- 'outcomes check "$C" | fwstep ok'
+ufw delete allow from 10.0.0.0/8 to any port 3389 proto tcp >/dev/null 2>&1
 
 # Firewall scope (#631) on an iptables host: ufw is removed, so setup writes through iptables.
 ufw --force disable >/dev/null 2>&1
@@ -178,6 +187,13 @@ ok "foreign unscoped rule: check says manual" -- 'outcomes check "$C" | fwstep m
 ok "foreign unscoped rule: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "$FOREIGN"'
 iptables -D INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT
 ok "foreign rule removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+OFFNET='-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT'
+iptables -D INPUT -i tailscale0 -p tcp --dport 3389 -j ACCEPT
+iptables -A INPUT -s 10.0.0.0/8 -p tcp --dport 3389 -j ACCEPT
+ok "off-tailnet iptables allow only: check says setup would change it" -- 'outcomes check "$C" | fwstep changed'
+ok "off-tailnet iptables allow only: setup adds the tailscale0 rule, keeps the operator's" -- 'outcomes setup "$C" | fwstep changed && iptables -S INPUT | grep -qx -- "$SCOPED" && iptables -S INPUT | grep -qx -- "$OFFNET"'
+ok "off-tailnet iptables allow only: check is ok afterwards" -- 'outcomes check "$C" | fwstep ok'
+iptables -D INPUT -s 10.0.0.0/8 -p tcp --dport 3389 -j ACCEPT
 # POSIX ACLs on a state_dir ancestor (#598). setfacl raises the mask with a named entry and the group
 # bits mirror it, so the mode check alone already refuses that; the ACL read names the principal, and is
 # the only layer that sees an entry the mask hides (setfacl -n).

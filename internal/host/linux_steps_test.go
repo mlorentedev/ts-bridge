@@ -750,6 +750,16 @@ func TestCheckForLinux(t *testing.T) {
 			fix:      "setup does not delete",
 		},
 		{
+			name:     "ufw host, the only allow is scoped off the tailnet (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow from 10.0.0.0/8 to any port 3389 proto tcp\n", iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "not on tailscale0",
+			fix:      "ts-bridge host setup",
+		},
+		{
 			name:     "ufw host, a qualified ts-input jump: unverified",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: iptQualified})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead),
@@ -1735,5 +1745,51 @@ func TestUnreadStepFixesDoNotBlamePrivilege(t *testing.T) {
 		if step.Fix == "" || privilege.MatchString(step.Fix) {
 			t.Errorf("%s: fix %q should name the cause, not privilege", name, step.Fix)
 		}
+	}
+}
+
+// TestOffTailnetOnlyAllow pins that an allow scoped to something other than the
+// tailnet does not converge the host: the port is open, but not from the
+// tailnet, so setup adds the tailscale0 rule and check reports it (#631).
+func TestOffTailnetOnlyAllow(t *testing.T) {
+	ufwRunner := func(added string) *recordingRunner {
+		return &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true}, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + added, iptRead: ufwHostInput, iptChain: tsInputNoAccept}}
+	}
+	iptRunner := func(rule string) *recordingRunner {
+		return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty + rule, iptChain: tsInputNoAccept}}
+	}
+	tests := []struct {
+		name   string
+		runner func() *recordingRunner
+		write  string
+	}{
+		{"iptables, a source address", func() *recordingRunner {
+			return iptRunner("-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT\n")
+		}, iptAppend},
+		{"iptables, another interface", func() *recordingRunner {
+			return iptRunner("-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n")
+		}, iptAppend},
+		{"ufw, a source address", func() *recordingRunner {
+			return ufwRunner("ufw allow from 10.0.0.0/8 to any port 3389 proto tcp\n")
+		}, ufwAllowCmd},
+		{"ufw, another interface", func() *recordingRunner {
+			return ufwRunner("ufw allow in on eth1 to any port 3389 proto tcp\n")
+		}, ufwAllowCmd},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := tt.runner()
+			setup := firewallSetupStep(r, 3389)
+			if setup.Outcome != OutcomeChanged || !slices.Contains(r.calls, "run "+tt.write) {
+				t.Errorf("setup = %v %q, calls %v; want changed with %q", setup.Outcome, setup.Message, r.calls, tt.write)
+			}
+			if !strings.Contains(setup.Message, tailnetInterface) {
+				t.Errorf("setup message %q does not name %s", setup.Message, tailnetInterface)
+			}
+			check := firewallCheckStep(readLinuxFirewall(tt.runner(), 3389), 3389)
+			if check.Outcome != OutcomeChanged || !strings.Contains(check.Message, tailnetInterface) {
+				t.Errorf("check = %v %q, want changed naming %s", check.Outcome, check.Message, tailnetInterface)
+			}
+		})
 	}
 }

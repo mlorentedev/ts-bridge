@@ -60,7 +60,7 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 		}
 	}
 	result.Steps = append(result.Steps, firewallCheckStep(fw, port))
-	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw), Unread: xrdp.Outcome == OutcomeUnverified}
+	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw), Unread: xrdp.Outcome == OutcomeUnverified}
 	if x.readable {
 		active := x.active
 		svc.Active = &active
@@ -687,6 +687,13 @@ func legacyHeld(read firewallRead) bool {
 	return read.state == rulePresent && (read.ufwLegacy || read.copies > 0 || len(read.foreign) > 0)
 }
 
+// offTailnetOnly reports a port that is allowed, but only off the tailnet: every
+// allow is scoped to another interface or to an address, so setup still owes
+// the tailscale0 rule (#631).
+func offTailnetOnly(read firewallRead) bool {
+	return read.state == rulePresent && !read.scoped && !legacyHeld(read)
+}
+
 // addScopedRule writes the rule setup owns, through the backend that manages
 // the host's rules.
 func addScopedRule(r Runner, backend string, port int) error {
@@ -897,6 +904,9 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 		if legacyHeld(read) {
 			return legacySetupStep(r, read, port)
 		}
+		if offTailnetOnly(read) {
+			break
+		}
 		return newStep(linuxFwName, OutcomeOK, fmt.Sprintf("Firewall allows TCP %d (%s)", port, read.source()), "")
 	case ruleBlocked:
 		return firewallBlockedStep(read, port)
@@ -908,7 +918,7 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 		return newStep(linuxFwName, OutcomeFailed, fmt.Sprintf("Could not add the firewall rule: %v", err),
 			fmt.Sprintf("allow TCP %d inbound on %s with %s, as root", port, tailnetInterface, read.backend))
 	}
-	return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Firewall rule added: TCP %d (%s)", port, read.backend), "")
+	return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Firewall rule added: TCP %d on %s (%s)", port, tailnetInterface, read.backend), "")
 }
 
 // legacySetupStep replaces the unscoped allows for the port (#631). The scoped
@@ -1073,6 +1083,10 @@ func firewallCheckStep(read firewallRead, port int) SetupStep {
 	}
 	if legacyHeld(read) {
 		return legacyCheckStep(read, port)
+	}
+	if offTailnetOnly(read) {
+		return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Firewall allows TCP %d (%s), but not on %s: every allow is scoped to another interface or address", port, read.source(), tailnetInterface),
+			fmt.Sprintf("run ts-bridge host setup as root: it adds the rule scoped to %s", tailnetInterface))
 	}
 	return firewallReadStep(linuxFwName, read.state == rulePresent, port)
 }
