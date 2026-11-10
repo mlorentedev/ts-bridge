@@ -546,17 +546,29 @@ func windowsFirewallCheckStep(r Runner, ruleName string, port int) (SetupStep, b
 		return newStep(name, OutcomeFailed, fmt.Sprintf("Could not read firewall rule '%s'", rule),
 			fmt.Sprintf("run Get-NetFirewallRule -DisplayName %q to see why the read fails", rule)), false
 	}
+	if ok {
+		return builtinGroupStep(r, firewallReadStep(name, true, port))
+	}
+	step := firewallReadStep(name, false, port)
 	if legacy {
-		return newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' is a legacy rule that allows TCP %d from any address; setup scopes it to the tailnet", rule, port),
-			"run ts-bridge host setup as an administrator"), false
+		step = newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' is a legacy rule that allows TCP %d from any address; setup scopes it to the tailnet", rule, port),
+			"run ts-bridge host setup as an administrator")
+	} else if found {
+		step = newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' differs from what setup creates (inbound TCP %d, tailnet addresses only, every profile, enabled, one rule)", rule, port),
+			"run ts-bridge host setup as an administrator")
 	}
-	if !ok && found {
-		return newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' differs from what setup creates (inbound TCP %d, tailnet addresses only, every profile, enabled, one rule)", rule, port),
-			"run ts-bridge host setup as an administrator"), false
+	return withGroupNote(r, step), false
+}
+
+// withGroupNote adds the built-in group exposure to a step that already
+// fails on the named rule, so the first check on a pre-#631 host reports
+// both. A failed group read adds nothing: the step is not ok either way.
+func withGroupNote(r Runner, step SetupStep) SetupStep {
+	group, ok := builtinGroupStep(r, step)
+	if ok || group.Outcome != OutcomeManual {
+		return step
 	}
-	step := firewallReadStep(name, ok, port)
-	if !ok {
-		return step, false
-	}
-	return builtinGroupStep(r, step)
+	step.Message += "; " + group.Message
+	step.Fix += "; then " + group.Fix
+	return step
 }

@@ -530,6 +530,8 @@ func TestWindowsFirewallRecreateOrder(t *testing.T) {
 // the group alone; check says the same and firewall_ok is false.
 func TestWindowsBuiltinGroup(t *testing.T) {
 	good := "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")
+	legacy := strings.Replace(good, tailnetRemote, "Any", 1)
+	drifted := strings.Replace(good, "port=3390", "port=3389", 1)
 	tests := []struct {
 		name      string
 		rule      string
@@ -537,12 +539,16 @@ func TestWindowsBuiltinGroup(t *testing.T) {
 		groupFail bool
 		want      Outcome
 		ok        bool
+		note      bool // check names the group beside the named-rule message
 	}{
 		{name: "none enabled", rule: good, group: "exposed=0\r\n", want: OutcomeOK, ok: true},
 		{name: "unreadable output counts as none", rule: good, group: "", want: OutcomeOK, ok: true},
 		{name: "two enabled", rule: good, group: "exposed=2\r\n", want: OutcomeManual},
 		{name: "read fails", rule: good, groupFail: true, want: OutcomeUnverified},
-		{name: "named rule drifted, group not read", rule: "count=0\r\n", group: "exposed=2\r\n", want: OutcomeChanged},
+		{name: "named rule missing, group reported", rule: "count=0\r\n", group: "exposed=2\r\n", want: OutcomeChanged, note: true},
+		{name: "legacy rule, group reported", rule: legacy, group: "exposed=2\r\n", want: OutcomeChanged, note: true},
+		{name: "drifted rule, group reported", rule: drifted, group: "exposed=1\r\n", want: OutcomeChanged, note: true},
+		{name: "legacy rule, group read fails", rule: legacy, groupFail: true, want: OutcomeChanged},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -556,14 +562,20 @@ func TestWindowsBuiltinGroup(t *testing.T) {
 			if step.Outcome != tt.want || ok != tt.ok {
 				t.Errorf("check: outcome %q ok %v, want %q ok %v (%s)", step.Outcome, ok, tt.want, tt.ok, step.Message)
 			}
-			if tt.want == OutcomeManual && !strings.Contains(step.Fix, `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`) {
+			if (tt.want == OutcomeManual || tt.note) && !strings.Contains(step.Fix, `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`) {
 				t.Errorf("check: fix %q lacks the disable command", step.Fix)
+			}
+			if mentions := strings.Contains(step.Message, "built-in Remote Desktop"); tt.want == OutcomeChanged && mentions != tt.note {
+				t.Errorf("check: message names the group = %v, want %v (%s)", mentions, tt.note, step.Message)
 			}
 			r := newRunner()
 			step = windowsFirewallSetupStep(r, "Rule", 3390)
 			wantSetup := tt.want
-			if tt.name == "named rule drifted, group not read" {
+			if tt.want == OutcomeChanged {
 				wantSetup = OutcomeManual // the recreate converges, then the group is read
+				if tt.groupFail {
+					wantSetup = OutcomeUnverified
+				}
 			}
 			if step.Outcome != wantSetup {
 				t.Errorf("setup: outcome %q, want %q (%s)", step.Outcome, wantSetup, step.Message)

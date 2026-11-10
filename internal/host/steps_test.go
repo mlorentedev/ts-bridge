@@ -223,7 +223,7 @@ func TestCheckFor(t *testing.T) {
 		{
 			name: "windows, registry unreadable and no rule", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{fail: map[string]bool{"tailscale ip -4": true, psPrefix + psPort: true}},
-			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
+			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck, "output " + psPrefix + psReadRDGroup},
 			steps:    []string{"Tailscale IP=failed", "RDP configuration=failed", "Firewall rule=changed"},
 			services: []Service{{Kind: "rdp", Active: active, Unread: true}},
 			legacy:   CheckResult{},
@@ -233,7 +233,7 @@ func TestCheckFor(t *testing.T) {
 			// never yields an enabled service on port 0.
 			name: "windows, registry reads 0", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "0", psPrefix + psDeny: "local=0"}},
-			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck},
+			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck, "output " + psPrefix + psReadRDGroup},
 			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: active}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.9", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
