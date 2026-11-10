@@ -191,6 +191,9 @@ type firewallRead struct {
 	ufwLegacy bool
 	foreign   []string
 	scoped    bool
+	// ufwScoped is scoped counting ufw's own list only: on an inactive ufw an
+	// iptables rule does not stand in for the allow ufw will need once enabled.
+	ufwScoped bool
 }
 
 // source names the tool whose rules decided the read, for messages; backend
@@ -239,7 +242,8 @@ func readUFW(r Runner, port int) firewallRead {
 	} else {
 		read.state, read.blockedBy = ufwDecide(string(out), port)
 		read.ufwAllows = read.state == rulePresent
-		read.ufwLegacy, read.foreign, read.scoped = ufwUnscopedRead(string(out), port)
+		read.ufwLegacy, read.foreign, read.ufwScoped = ufwUnscopedRead(string(out), port)
+		read.scoped = read.ufwScoped
 	}
 	if _, err := r.LookPath(backendIPT); err != nil {
 		return read
@@ -1006,7 +1010,7 @@ func ufwInactiveSetupStep(r Runner, read firewallRead, port int) SetupStep {
 // ufwInactiveReplace swaps ufw's legacy allow for the scoped one in ufw's own
 // rule list, adding the scoped allow only when no scoped allow is there already.
 func ufwInactiveReplace(r Runner, read firewallRead, port int) (SetupStep, bool) {
-	if !read.scoped {
+	if !read.ufwScoped {
 		if err := r.Run(backendUFW, ufwAllowArgs(port)...); err != nil {
 			return newStep(linuxFwName, OutcomeFailed, fmt.Sprintf("ufw is inactive, and adding its scoped allow failed: %v", err),
 				fmt.Sprintf("run `ufw %s` as root, then enable ufw with `ufw enable`", strings.Join(ufwAllowArgs(port), " "))), true

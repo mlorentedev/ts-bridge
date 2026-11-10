@@ -1521,6 +1521,9 @@ func TestUFWInactive(t *testing.T) {
 		// An unscoped allow setup did not write opens the port on every interface
 		// once ufw is enabled: both commands name it, and setup leaves it (#631).
 		{name: "a foreign unscoped allow", added: "ufw allow 22,3389/tcp\n", message: "legacy unscoped rule: ufw allow 22,3389/tcp", check: "legacy unscoped rule: ufw allow 22,3389/tcp", fix: "setup does not delete rules it did not write"},
+		// ts-input's scoped iptables rule is not a ufw allow: the legacy ufw
+		// allow is still replaced by a scoped ufw one, never just deleted (#631).
+		{name: "a legacy allow beside ts-input is replaced", added: ufwLegacyAllow, input: ufwHostInput, replaces: true, message: "allow is in place", check: "unscoped"},
 		// A ufw deny decides the port once ufw is enabled: name it, add nothing.
 		{name: "a ufw deny", added: "ufw deny 3389/tcp\n", message: "ufw deny 3389/tcp", check: "ufw deny 3389/tcp"},
 		// tailscaled's ts-input admits the tailnet whatever ufw's state: an
