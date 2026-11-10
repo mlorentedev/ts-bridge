@@ -14,6 +14,15 @@ import (
 // 24.04 (specs/BUG-034-linux-host-idempotent, measured 2026-10-22).
 const ufwAddedHeader = "Added user rules (see 'ufw status' for running firewall):\n"
 
+// ufwScopedAllow is the rule setup writes, as `ufw show added` prints it;
+// ufwLegacyAllow is the unscoped one earlier releases wrote (#631).
+const (
+	ufwScopedAllow = "ufw allow in on tailscale0 to any port 3389 proto tcp\n"
+	ufwLegacyAllow = "ufw allow 3389/tcp\n"
+	ufwAllowCmd    = "ufw allow in on tailscale0 to any port 3389 proto tcp"
+	ufwDeleteCmd   = "ufw delete allow 3389/tcp"
+)
+
 func TestUFWAllows(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -226,7 +235,7 @@ func TestIptablesRule(t *testing.T) {
 		{"ufw host, nothing covers", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept}}, ruleAbsent, ""},
 		{"ufw host, iptables unreadable", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded}, exit: map[string]int{iptRead: 4}}, ruleUnknown, iptRead},
 		{"ufw host, a qualified jump", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded, iptRead: iptQualified}}, ruleUnknown, "ts-input"},
-		{"ufw host, a ufw allow decides first", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}, exit: map[string]int{iptRead: 4}}, rulePresent, ""},
+		{"ufw host, a ufw allow decides first", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + ufwScopedAllow}, exit: map[string]int{iptRead: 4}}, rulePresent, ""},
 		{"ufw host, a ufw deny decides first", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + "ufw deny 3389/tcp\n", iptRead: ufwHostInput, iptChain: tsInputDefault}}, ruleBlocked, ""},
 	}
 	for _, tt := range tests {
@@ -316,7 +325,7 @@ func TestSetupForLinux(t *testing.T) {
 	}{
 		{
 			name:     "ufw, converged",
-			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})},
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 		},
@@ -328,20 +337,6 @@ func TestSetupForLinux(t *testing.T) {
 			message:  "Firewall allows TCP 3389 (iptables)",
 		},
 		{
-			name:     "ufw, a leftover setup copy: the same manual step as check, no write (#576)",
-			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputDefault})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
-			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
-			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
-		},
-		{
-			name:     "ufw, one leftover copy beside a ufw allow: still manual (#576)",
-			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
-			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
-			message:  "1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
-		},
-		{
 			name:     "ufw unreadable, a leftover copy: setup names it as check does, no write (#576)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
@@ -350,17 +345,68 @@ func TestSetupForLinux(t *testing.T) {
 			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time",
 		},
 		{
-			name:     "ufw, only the leftover copies admit the port: add a ufw allow before deleting them (#576)",
-			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputNoAccept})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			name:     "ufw, a leftover iptables copy while ts-input admits the tailnet: copies deleted, nothing added (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptDelete, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
+			name:     "ufw, one leftover copy beside a scoped ufw allow: deleted (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
+			name:     "ufw, a legacy ufw allow and nothing scoped: scoped allow first, then the legacy one deleted (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwLegacyAllow, iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+ufwAllowCmd, "run "+ufwDeleteCmd, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+			message:  "replaced",
+		},
+		{
+			name:     "ufw, a legacy ufw allow beside a scoped one: deleted only (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow + ufwLegacyAllow, iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+ufwDeleteCmd, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
+			name:     "ufw, a legacy ufw allow while ts-input admits the tailnet: deleted, nothing added (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwLegacyAllow, iptRead: ufwHostInput, iptChain: tsInputDefault})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+ufwDeleteCmd, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
+		},
+		{
+			name:     "ufw, an unscoped ufw allow setup did not write: scoped allow added, nothing deleted, manual (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 22,3389/tcp\n", iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+ufwAllowCmd, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
-			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
-			fix:      "run `ufw allow 3389/tcp` first",
+			message:  "legacy unscoped rule: ufw allow 22,3389/tcp",
+			fix:      "setup does not delete",
+		},
+		{
+			name:     "ufw, adding the scoped allow fails: the legacy allow stays (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwLegacyAllow, iptRead: ufwHostInput, iptChain: tsInputNoAccept}), fail: map[string]bool{ufwAllowCmd: true}},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+ufwAllowCmd, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			fix:      "tailscale0",
+		},
+		{
+			name:     "ufw, deleting the legacy allow fails (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwLegacyAllow, iptRead: ufwHostInput, iptChain: tsInputNoAccept}), fail: map[string]bool{ufwDeleteCmd: true}},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+ufwAllowCmd, "run "+ufwDeleteCmd, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeFailed, OutcomeOK},
+			fix:      ufwDeleteCmd,
+		},
+		{
+			name:     "ufw, only the leftover copies admit the port: scoped ufw allow first, then the copies deleted (#576, #631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+ufwAllowCmd, "run "+iptDelete, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
 			name:     "ufw, nothing covers in either: ufw allow as before",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
-			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run ufw allow 3389/tcp", "output tailscale ip -4"),
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+ufwAllowCmd, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
 		{
@@ -383,18 +429,18 @@ func TestSetupForLinux(t *testing.T) {
 				output: linuxUp(map[string]string{isEnabled: "disabled\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw route allow in on tailscale0 to any port 3389 proto tcp\n"}),
 				exit:   map[string]int{isEnabled: 1, isActive: 3}},
 			calls: append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables",
-				"run ufw allow 3389/tcp", "output tailscale ip -4"),
+				"run "+ufwAllowCmd, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeOK},
 		},
 		{
 			name:     "xrdp enabled, not running",
-			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isActive: 3}},
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + ufwScopedAllow}), exit: map[string]int{isActive: 3}},
 			calls:    append(append([]string{}, xrdpReads...), "run "+enableXRDP, "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeChanged, OutcomeOK, OutcomeOK},
 		},
 		{
 			name:     "xrdp masked: no enable, fix names unmask",
-			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isEnabled: "masked\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isEnabled: 1, isActive: 3}},
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isEnabled: "masked\n", isActive: "inactive\n", ufwAdded: ufwAddedHeader + ufwScopedAllow}), exit: map[string]int{isEnabled: 1, isActive: 3}},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeFailed, OutcomeOK, OutcomeOK},
 		},
@@ -545,7 +591,7 @@ func TestSetupForLinux(t *testing.T) {
 		},
 		{
 			name:     "no systemctl",
-			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(map[string]string{ufwAdded: "ufw allow 3389/tcp"})},
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "ufw": true}, output: linuxUp(map[string]string{ufwAdded: ufwScopedAllow})},
 			calls:    []string{"lookpath systemctl", "lookpath xrdp", "lookpath ufw", "output " + ufwStatus, "output " + ufwAdded, "lookpath iptables", "output tailscale ip -4"},
 			outcomes: []Outcome{OutcomeFailed, OutcomeOK, OutcomeOK},
 		},
@@ -630,7 +676,7 @@ func TestCheckForLinux(t *testing.T) {
 	}{
 		{
 			name:     "converged",
-			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"})},
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
@@ -664,24 +710,44 @@ func TestCheckForLinux(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
 		},
 		{
-			name:     "ufw host, two leftover copies in INPUT: delete both (#530)",
+			name:     "ufw host, two leftover copies in INPUT: setup would delete them (#631)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputDefault})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
-			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
-			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
-			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
-			message:  "2 copies of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
-			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 2 time",
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "legacy unscoped rule: " + iptCopiesNote,
+			fix:      "ts-bridge host setup",
 		},
 		{
-			name:     "ufw host, one leftover copy beside a ufw allow: still reported (#530)",
-			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault})},
+			name:     "ufw host, one leftover copy beside a scoped ufw allow (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
+			fix:      "ts-bridge host setup",
+		},
+		{
+			name:     "ufw host, a legacy ufw allow (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwLegacyAllow, iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "legacy unscoped rule: ufw allow 3389/tcp",
+			fix:      "ts-bridge host setup",
+		},
+		{
+			name:     "ufw host, an unscoped ufw allow setup did not write (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 22,3389/tcp\n", iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
-			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
-			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
-			message:  "1 copy of -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT",
-			fix:      "iptables -D INPUT -p tcp --dport 3389 -j ACCEPT` 1 time",
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "legacy unscoped rule: ufw allow 22,3389/tcp",
+			fix:      "setup does not delete",
 		},
 		{
 			name:     "ufw host, a qualified ts-input jump: unverified",
@@ -704,7 +770,7 @@ func TestCheckForLinux(t *testing.T) {
 		},
 		{
 			name:     "xrdp enabled, not running",
-			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n"}), exit: map[string]int{isActive: 3}},
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isActive: "failed\n", ufwAdded: ufwAddedHeader + ufwScopedAllow}), exit: map[string]int{isActive: 3}},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=changed", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &no, FirewallOK: true}},
@@ -897,7 +963,7 @@ func TestCheckForLinux(t *testing.T) {
 				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
 			}
 			for _, c := range tt.runner.calls {
-				if c == "run "+iptAppend || c == "run "+enableXRDP || c == "run ufw allow 3389/tcp" {
+				if c == "run "+iptAppend || c == "run "+enableXRDP || c == "run "+ufwAllowCmd || c == "run "+ufwDeleteCmd || c == "run "+iptDelete {
 					t.Errorf("check ran a mutating command: %q", c)
 				}
 			}
@@ -1258,7 +1324,7 @@ func TestCopiesFixKeepsThePortOpen(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := strings.Contains(copiesFix(tc.read, 3389), "run `ufw allow 3389/tcp` first")
+			got := strings.Contains(copiesFix(tc.read, 3389), "run `"+ufwAllowCmd+"` first")
 			if got != tc.want {
 				t.Errorf("copiesFix = %q, asks for a ufw allow first: %v, want %v", copiesFix(tc.read, 3389), got, tc.want)
 			}
@@ -1300,7 +1366,7 @@ func TestReadUFWCopiesAdmit(t *testing.T) {
 		{"ufw unreadable, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, iptRead: ufwHostCopies, iptChain: tsInputNoAccept}, fail: map[string]bool{ufwAdded: true}}, true},
 		{"ufw status unreadable, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{iptRead: ufwHostCopies, iptChain: tsInputNoAccept}, fail: map[string]bool{ufwStatus: true}}, true},
 		{"ufw absent, the copies alone admit", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwHostAdded, iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, true},
-		{"ufw allows the port itself", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + "ufw allow 3389/tcp\n", iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, false},
+		{"ufw allows the port itself", &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: ufwHostCopies, iptChain: tsInputNoAccept}}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1438,17 +1504,26 @@ func TestUFWInactive(t *testing.T) {
 		return &recordingRunner{elevated: true, onPath: path, output: linuxUp(out)}
 	}
 	tests := []struct {
-		name    string
-		added   string
-		input   string // iptables INPUT; empty means iptables is not installed
-		chain   string // ts-input; empty means tailscaled's default, which admits the tailnet
-		writes  bool   // setup adds the allow, so it holds once ufw is enabled
-		message string
-		check   string // what check's message names, when not just "inactive"
-		fix     string // what both fixes must also name
+		name     string
+		added    string
+		input    string // iptables INPUT; empty means iptables is not installed
+		chain    string // ts-input; empty means tailscaled's default, which admits the tailnet
+		writes   bool   // setup adds the allow, so it holds once ufw is enabled
+		replaces bool   // setup also deletes the legacy allow
+		message  string
+		check    string // what check's message names, when not just "inactive"
+		fix      string // what both fixes must also name
 	}{
 		{name: "no allow yet", writes: true, message: "allow added"},
-		{name: "allow already added", added: "ufw allow 3389/tcp\n", message: "allow is in place"},
+		{name: "allow already added", added: ufwScopedAllow, message: "allow is in place"},
+		// The legacy allow is inert while ufw is off, and still unscoped once it is on: setup replaces it.
+		{name: "a legacy allow is replaced", added: ufwLegacyAllow, replaces: true, message: "allow is in place"},
+		// An unscoped allow setup did not write opens the port on every interface
+		// once ufw is enabled: both commands name it, and setup leaves it (#631).
+		{name: "a foreign unscoped allow", added: "ufw allow 22,3389/tcp\n", message: "legacy unscoped rule: ufw allow 22,3389/tcp", check: "legacy unscoped rule: ufw allow 22,3389/tcp", fix: "setup does not delete rules it did not write"},
+		// ts-input's scoped iptables rule is not a ufw allow: the legacy ufw
+		// allow is still replaced by a scoped ufw one, never just deleted (#631).
+		{name: "a legacy allow beside ts-input is replaced", added: ufwLegacyAllow, input: ufwHostInput, replaces: true, message: "allow is in place", check: "unscoped"},
 		// A ufw deny decides the port once ufw is enabled: name it, add nothing.
 		{name: "a ufw deny", added: "ufw deny 3389/tcp\n", message: "ufw deny 3389/tcp", check: "ufw deny 3389/tcp"},
 		// tailscaled's ts-input admits the tailnet whatever ufw's state: an
@@ -1458,7 +1533,7 @@ func TestUFWInactive(t *testing.T) {
 		{name: "leftover copies", input: ufwHostCopies, message: "2 copies of", check: "2 copies of"},
 		// With no ts-input accept the copies are the only allow: deleting them
 		// before adding ufw's would close the port once ufw is enabled.
-		{name: "only the copies admit the port", input: ufwHostCopies, chain: tsInputNoAccept, message: "2 copies of", check: "2 copies of", fix: "run `ufw allow 3389/tcp` first"},
+		{name: "only the copies admit the port", input: ufwHostCopies, chain: tsInputNoAccept, message: "2 copies of", check: "2 copies of", fix: "run `" + ufwAllowCmd + "` first"},
 	}
 	for _, tt := range tests {
 		t.Run("setup/"+tt.name, func(t *testing.T) {
@@ -1468,8 +1543,11 @@ func TestUFWInactive(t *testing.T) {
 			if !strings.Contains(s.Fix, tt.fix) {
 				t.Errorf("fix %q does not name %q", s.Fix, tt.fix)
 			}
-			if got := slices.Contains(r.calls, "run ufw allow 3389/tcp"); got != tt.writes {
-				t.Errorf("ufw allow ran = %v, want %v: %v", got, tt.writes, r.calls)
+			if got := slices.Contains(r.calls, "run "+ufwAllowCmd); got != (tt.writes || tt.replaces) {
+				t.Errorf("ufw allow ran = %v, want %v: %v", got, tt.writes || tt.replaces, r.calls)
+			}
+			if got := slices.Contains(r.calls, "run "+ufwDeleteCmd); got != tt.replaces {
+				t.Errorf("ufw delete ran = %v, want %v: %v", got, tt.replaces, r.calls)
 			}
 		})
 		t.Run("check/"+tt.name, func(t *testing.T) {
@@ -1516,7 +1594,7 @@ func TestUFWStatusUnrecognized(t *testing.T) {
 			if s.Outcome != OutcomeFailed || !strings.Contains(s.Message, "ufw status") {
 				t.Errorf("setup = %s %q, want failed naming `ufw status`", s.Outcome, s.Message)
 			}
-			if slices.Contains(runner.calls, "run ufw allow 3389/tcp") {
+			if slices.Contains(runner.calls, "run "+ufwAllowCmd) {
 				t.Errorf("setup wrote on an unread status: %v", runner.calls)
 			}
 		})
@@ -1581,6 +1659,59 @@ func TestReadIptablesUnscoped(t *testing.T) {
 			got := readIptables(r, 3389)
 			if got.copies != tt.copies || len(got.foreign) != tt.foreign || got.scoped != tt.scoped {
 				t.Errorf("copies %d foreign %q scoped %v, want %d, %d, %v", got.copies, got.foreign, got.scoped, tt.copies, tt.foreign, tt.scoped)
+			}
+		})
+	}
+}
+
+// TestUFWAllowArgs pins the one place the ufw write is spelled (#631).
+func TestUFWAllowArgs(t *testing.T) {
+	if got := "ufw " + strings.Join(ufwAllowArgs(3389), " "); got != ufwAllowCmd {
+		t.Errorf("ufwAllowArgs = %q, want %q", got, ufwAllowCmd)
+	}
+	if got := "ufw " + strings.Join(ufwDeleteArgs(3389), " "); got != ufwDeleteCmd {
+		t.Errorf("ufwDeleteArgs = %q, want %q", got, ufwDeleteCmd)
+	}
+	if !ufwAllows(ufwAddedHeader+ufwScopedAllow, 3389) {
+		t.Error("the rule setup writes is not read back as an allow: every setup would write it again")
+	}
+}
+
+// TestReadUFWUnscoped pins which ufw allows for the port are legacy: those with
+// no interface, source or destination, and a port in them. Only the exact rule
+// earlier releases wrote is setup's to delete (#631).
+func TestReadUFWUnscoped(t *testing.T) {
+	tests := []struct {
+		name    string
+		added   string
+		legacy  bool
+		foreign int
+		scoped  bool
+	}{
+		{"scoped allow only", ufwScopedAllow, false, 0, true},
+		{"legacy allow only", ufwLegacyAllow, true, 0, false},
+		{"legacy beside scoped", ufwScopedAllow + ufwLegacyAllow, true, 0, true},
+		{"port list", "ufw allow 22,3389/tcp\n", false, 1, false},
+		{"bare port", "ufw allow 3389\n", false, 1, false},
+		{"explicit inbound", "ufw allow in 3389/tcp\n", false, 1, false},
+		{"a comment makes it foreign", "ufw allow 3389/tcp comment 'rdp'\n", false, 1, false},
+		{"a source address does not admit the tailnet", "ufw allow from 10.0.0.0/8 to any port 3389 proto tcp\n", false, 0, false},
+		{"another interface does not admit the tailnet", "ufw allow in on eth1 to any port 3389 proto tcp\n", false, 0, false},
+		{"a destination address does not admit the tailnet", "ufw allow to 192.168.1.5 port 3389 proto tcp\n", false, 0, false},
+		{"a legacy allow beside an eth1 rule is not scoped", "ufw allow in on eth1 to any port 3389 proto tcp\n" + ufwLegacyAllow, true, 0, false},
+		{"from any is not a scope", "ufw allow from any to any port 3389 proto tcp\n", false, 1, false},
+		{"from any beside a legacy allow is not scoped", "ufw allow from any to any port 3389 proto tcp\n" + ufwLegacyAllow, true, 1, false},
+		{"a tailnet allow from any source is scoped", "ufw allow in on tailscale0 from any to any port 3389 proto tcp\n", false, 0, true},
+		{"another port", "ufw allow 33890/tcp\n", false, 0, false},
+		{"udp", "ufw allow 3389/udp\n", false, 0, false},
+		{"a deny is not an allow", "ufw deny 3389/tcp\n", false, 0, false},
+		{"outbound", "ufw allow out 3389/tcp\n", false, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			legacy, foreign, scoped := ufwUnscopedRead(ufwAddedHeader+tt.added, 3389)
+			if legacy != tt.legacy || len(foreign) != tt.foreign || scoped != tt.scoped {
+				t.Errorf("legacy %v foreign %q scoped %v, want %v, %d, %v", legacy, foreign, scoped, tt.legacy, tt.foreign, tt.scoped)
 			}
 		})
 	}
