@@ -55,6 +55,9 @@ owner: manu
 - W3 also checks the rule's action (`Allow`), direction (`Inbound`), protocol (`TCP`), profile
   (`Any`) and remote address (`Any`), beyond the AC's port and state: these are what the recreate sets, so a same-named Block,
   UDP, Public-only or address-restricted rule would otherwise read as converged (review on #600).
+  Superseded by SEC-631 (ADR-017 Amendment B): setup now writes the remote address as the tailnet
+  ranges `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, and `windowsFirewallRuleOK` requires exactly
+  those, so `Any` or any other scope reads as drift. The W3 decision above is kept as it was made.
 - W3 on an unreadable rule: setup recreates it, because the recreate is idempotent. Check reports
   `failed`, because it cannot say what setup would do.
 - `Enable-NetFirewallRule -DisplayGroup "Remote Desktop"` now runs only when the named rule is

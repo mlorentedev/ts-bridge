@@ -25,7 +25,7 @@ owner: manu
 - [ ] AC3 → `TestCheckStateDir_WalksAncestors` (real filesystem): `CheckStateDir` on an existing
   `0700` `t.TempDir` is refused for an ancestor.
 - Mutants:
-  - dropping the group/other-write test fails 4 subtests;
+  - dropping the group/other-write test fails 5 subtests;
   - accepting a user-owned symlink fails 2.
 
 ## Test status
