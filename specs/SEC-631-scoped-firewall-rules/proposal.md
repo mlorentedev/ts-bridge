@@ -109,8 +109,8 @@ Decision: **setup stops enabling `-DisplayGroup "Remote Desktop"`**, does not di
   expected to accept the rule anyway; the e2e guest has no Tailscale, so the first run proves it.
   If ufw refuses, that is a blocker for the owner, not something to work around.
 - **Windows address normalisation.** The read must treat `RemoteAddress` as a set: the order and
-  the textual form Windows returns for the two ranges are not verified here. The Windows guest is
-  shared with another session, so PR 4 says its e2e is pending.
+  the textual form Windows returns for the two ranges were verified on a real guest by the PR 4 e2e
+  run (Windows prints the IPv4 range with a dotted mask; the read normalises it).
 - **Windows CGNAT residual.** The Windows scope is a range, not an interface, so a local network
   addressed inside `100.64.0.0/10` (managed or carrier-style networks) is admitted as if it were
   the tailnet. Linux does not have this residual, which is why Linux scopes by interface. Accepted:
@@ -121,13 +121,15 @@ Decision: **setup stops enabling `-DisplayGroup "Remote Desktop"`**, does not di
   and the group stays on until the operator runs the printed command. An automatic disable is an
   open option for the owner.
 - **Windows ordering.** The create-before-remove order and the terminating-error behaviour are
-  unit-tested as command text, not run on a host (the Windows e2e is pending).
+  unit-tested as command text and exercised by the Windows e2e (a legacy rule repaired by setup).
 - **ufw inactive.** Setup still adds the scoped allow "for when ufw is enabled" and replaces ufw's
   own legacy allow, but deletes no iptables copies, which are the only live rules (PR 3).
 - **Decision forks taken conservatively** (the owner decision does not cover them): the two tiers
   above; the Windows group not disabled but reported; `firewall_ok` is `false` while any unscoped allow remains;
   an unscoped allow with no port in it (`-A INPUT -p tcp -j ACCEPT`) is the operator's posture, not
-  "a rule for the port", and is neither reported nor replaced.
+  "a rule for the port", and is neither reported nor replaced; an allow scoped to an address counts
+  as off the tailnet even when the address is `100.64.0.0/10`, since a Headscale tailnet can use
+  other prefixes and the interface is the scope Linux trusts (AC7), so setup adds its rule beside it.
 
 ## Acceptance criteria
 
@@ -141,7 +143,11 @@ Decision: **setup stops enabling `-DisplayGroup "Remote Desktop"`**, does not di
 - [ ] AC5: On Windows, the rule carries the tailnet ranges, `check` reports a rule with
   `RemoteAddress Any` as differing, setup no longer enables the built-in group, and `check` reports an enabled group as `manual`
   (`firewall_ok` false).
-- [ ] AC6: The e2e harness covers both OSes (Linux on a real VM; Windows case added, run pending).
+- [ ] AC6: The e2e harness covers both OSes, each run on a real VM.
+- [ ] AC7: An allow for the port scoped to something other than the tailnet (another interface, a
+  source or destination address) does not make the host converged: `check` reports `changed`
+  (`firewall_ok` false) and `setup` adds the `tailscale0` rule, leaving the operator's rule in place
+  (review round 1, finding 1).
 
 ## References
 
