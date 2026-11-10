@@ -264,6 +264,14 @@ Decision:
   HOST-008).
 - The Neutral consequence "installing the bridge as an OS service is out of scope"
   still holds for ts-bridge itself; #451 remains the place for a local control plane.
+- Publication and OS convergence have separate service validation (clarified
+  2026-11-06). On Windows and Linux, serve may publish an already-provisioned `ssh`
+  service alongside `rdp`; it does not install or configure OpenSSH. The strict
+  step-capability check in §1 remains on `setup` and `check`: they still reject
+  SSH declarations until #521 supplies those OS steps. `init` still generates an
+  RDP-only file and validates it through the convergence loader. A combined SSH/RDP
+  serve file therefore cannot yet be used with `host check`; its publication
+  diagnostic is serve's health endpoint. This does not add VNC or macOS support.
 
 Rejected for this amendment: an OS service inside ts-bridge (Windows SCM or systemd
 integration in the binary), which is #451's question and would add a supervisor before

@@ -79,7 +79,7 @@ func Merge(flags Flags) Config {
 }
 
 // Resolve applies the precedence chain flags > env > file > per-OS defaults
-// (ADR-017 §1). The file must already be validated for goos (LoadFile).
+// (ADR-017 §1). The file must already be validated for goos by LoadFile or LoadServeFile.
 func Resolve(goos string, file File, flags Flags) Config {
 	cfg := defaultsFor(goos)
 	applyFile(&cfg, file.Host)

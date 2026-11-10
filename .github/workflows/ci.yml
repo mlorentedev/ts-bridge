@@ -60,7 +60,7 @@ jobs:
       # months ago -- a policy file silently decorative, with `fail_ci_if_error: false` making
       # the dead upload undetectable. See #335.
       - name: Coverage floor check
-        run: make cover-assert COVER_MIN=60
+        run: make cover-assert COVER_MIN=78
 
   # Native Windows job. The Linux `test` job above does not compile the
   # //go:build windows files, so a Windows-only build break (e.g. a stale
