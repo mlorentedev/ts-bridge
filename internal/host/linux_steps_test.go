@@ -1299,6 +1299,10 @@ func TestReadIptablesMultilineComment(t *testing.T) {
 		{"a comment that spells an allow", "-P INPUT ACCEPT\n-A INPUT -m comment --comment \"see\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT \" -j LOG\n", ""},
 		{"a comment that spells a qualified jump", "-P INPUT ACCEPT\n-A INPUT -m comment --comment \"see\n-A INPUT -i eth0 -j ts-input \" -j LOG\n-A INPUT -j ts-input\n", tsInputNoAccept},
 		{"a comment in ts-input that spells an allow", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n", tsInputNoAccept + "-A ts-input -m comment --comment \"see\n-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT \" -j LOG\n"},
+		// Verbatim from `iptables -S INPUT` (iptables v1.8.10 nf_tables and legacy, Ubuntu 24.04),
+		// after `iptables -A INPUT ... -m comment --comment "$(printf 'x\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\ny')" -j DROP`:
+		// the newline prints raw, so the middle line is a whole allow of its own (#526).
+		{"captured: a comment that prints a whole allow line", "-P INPUT ACCEPT\n-A INPUT -s 192.0.2.1/32 -p tcp -m tcp --dport 9 -m comment --comment \"x\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\ny\" -j DROP\n", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
