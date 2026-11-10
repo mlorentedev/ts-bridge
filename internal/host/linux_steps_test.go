@@ -604,8 +604,8 @@ func TestSetupForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := setupFor("linux", Config{Port: 3389, FirewallRule: "Rule"}, tt.runner)
-			if !reflect.DeepEqual(tt.runner.calls, tt.calls) {
-				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
+			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			var outcomes []Outcome
 			for _, s := range got.Steps {
@@ -964,8 +964,8 @@ func TestCheckForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := checkFor("linux", Config{Port: 3389}, tt.runner)
-			if !reflect.DeepEqual(tt.runner.calls, tt.calls) {
-				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
+			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			for _, c := range tt.runner.calls {
 				if c == "run "+iptAppend || c == "run "+enableXRDP || c == "run "+ufwAllowCmd || c == "run "+ufwDeleteCmd || c == "run "+iptDelete {
@@ -1770,4 +1770,80 @@ func TestReadIptablesCapturedModes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ip6tables INPUT as tailscaled 1.104.4 leaves it in netfilter mode on
+// (captured, #526), and the same chain with an unscoped v6 allow added.
+const (
+	ip6Read      = "ip6tables -S INPUT"
+	ip6Captured  = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	ip6Unscoped  = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
+	ip6DeleteFix = "ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
+)
+
+// TestIP6Exposure pins the v6 read as an exposure scan (#526): an unscoped v6
+// allow for the port is reported and never deleted; anything else in v6, or no
+// v6 read at all, leaves the IPv4 outcome as it was.
+func TestIP6Exposure(t *testing.T) {
+	tests := []struct {
+		name    string
+		onPath  bool
+		v6      string
+		v6Fails bool
+		want    Outcome
+		message string
+	}{
+		{name: "captured chain", onPath: true, v6: ip6Captured, want: OutcomeOK},
+		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Captured + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
+		{name: "a port-less v6 accept is the operator's posture", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeOK},
+		{name: "an unscoped v6 allow", onPath: true, v6: ip6Captured + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
+		{name: "v6 read fails", onPath: true, v6Fails: true, want: OutcomeOK, message: ip6Read},
+		{name: "no ip6tables", want: OutcomeOK},
+	}
+	unprivileged := &recordingRunner{onPath: map[string]bool{"iptables": true, "ip6tables": true}}
+	readLinuxFirewall(unprivileged, 3389)
+	if len(unprivileged.calls) != 0 {
+		t.Errorf("an unprivileged read ran %v; every firewall read needs root", unprivileged.calls)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "ip6tables": tt.onPath},
+					output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: tt.v6},
+					fail:   map[string]bool{ip6Read: tt.v6Fails}}
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") }) {
+				t.Errorf("setup wrote: %v", r.calls)
+			}
+			want := []string{"lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain, "lookpath " + backendIP6}
+			if tt.onPath {
+				want = append(want, "output "+ip6Read)
+			}
+			if !reflect.DeepEqual(r.calls, want) {
+				t.Errorf("calls:\n got %q\nwant %q", r.calls, want)
+			}
+			read := readLinuxFirewall(newRunner(), 3389)
+			check := firewallCheckStep(read, 3389)
+			for _, step := range []SetupStep{setup, check} {
+				if step.Outcome != tt.want || !strings.Contains(step.Message, tt.message) {
+					t.Errorf("outcome %v message %q, want %v naming %q", step.Outcome, step.Message, tt.want, tt.message)
+				}
+				if tt.want == OutcomeManual && !strings.Contains(step.Fix, ip6DeleteFix) {
+					t.Errorf("fix %q lacks %q", step.Fix, ip6DeleteFix)
+				}
+			}
+			if got := linuxFirewallOK(read); got != (tt.want == OutcomeOK) {
+				t.Errorf("linuxFirewallOK = %v, want %v", got, tt.want == OutcomeOK)
+			}
+		})
+	}
+}
+
+// withoutIP6Probe drops the ip6tables lookup that every elevated read makes
+// (#526). These tables pin the IPv4 sequence on hosts without ip6tables;
+// TestIP6Exposure pins the v6 read itself and where it runs.
+func withoutIP6Probe(calls []string) []string {
+	return slices.DeleteFunc(slices.Clone(calls), func(c string) bool { return c == "lookpath "+backendIP6 })
 }

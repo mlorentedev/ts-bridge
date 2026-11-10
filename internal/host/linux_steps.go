@@ -18,6 +18,7 @@ const (
 	xrdpFixSetup  = "run ts-bridge host setup as root"
 	backendUFW    = "ufw"
 	backendIPT    = "iptables"
+	backendIP6    = "ip6tables"
 	protoTCP      = "tcp"
 	iptAccept     = "ACCEPT"
 	iptInput      = "INPUT"
@@ -60,7 +61,7 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 		}
 	}
 	result.Steps = append(result.Steps, firewallCheckStep(fw, port))
-	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw), Unread: xrdp.Outcome == OutcomeUnverified}
+	svc := Service{Kind: ServiceRDP, Port: port, Enabled: x.enabled, FirewallOK: linuxFirewallOK(fw), Unread: xrdp.Outcome == OutcomeUnverified}
 	if x.readable {
 		active := x.active
 		svc.Active = &active
@@ -194,6 +195,11 @@ type firewallRead struct {
 	// ufwScoped is scoped counting ufw's own list only: on an inactive ufw an
 	// iptables rule does not stand in for the allow ufw will need once enabled.
 	ufwScoped bool
+	// v6Foreign lists the unscoped allows for the port in ip6tables' INPUT, and
+	// v6Note why ip6tables could not be read. The v6 read is an exposure scan,
+	// not a reachability decision: the descriptor dials the IPv4 address (#526).
+	v6Foreign []string
+	v6Note    string
 }
 
 // source names the tool whose rules decided the read, for messages; backend
@@ -209,6 +215,58 @@ func (read firewallRead) source() string {
 // Every read needs root, so it runs nothing unprivileged: some iptables
 // backends exit 1, the "absent" answer, on permission denied.
 func readLinuxFirewall(r Runner, port int) firewallRead {
+	read := readLinuxFirewallV4(r, port)
+	if r.Elevated() {
+		read.v6Foreign, read.v6Note = readIP6(r, port)
+	}
+	return read
+}
+
+// readIP6 lists the unscoped allows for port in ip6tables' INPUT. setup never
+// writes a v6 rule, so every one of them is the operator's to delete.
+func readIP6(r Runner, port int) (foreign []string, note string) {
+	if _, err := r.LookPath(backendIP6); err != nil {
+		return nil, ""
+	}
+	out, err := r.Output(backendIP6, "-S", iptInput)
+	if err != nil {
+		return nil, fmt.Sprintf("%s -S %s: %v", backendIP6, iptInput, err)
+	}
+	return iptUnscoped(iptRules(string(out)), port), ""
+}
+
+// linuxFirewallOK is check's firewall_ok: the port is admitted, through a rule
+// scoped to the tailnet, and nothing admits it on every interface (#631, #526).
+func linuxFirewallOK(fw firewallRead) bool {
+	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && len(fw.v6Foreign) == 0
+}
+
+// withIP6 adds the v6 read to a firewall step. An unscoped v6 allow turns a
+// converged or repaired step manual; a v6 read that failed is only noted.
+func withIP6(read firewallRead, step SetupStep, port int) SetupStep {
+	if read.v6Note != "" {
+		step.Message += "; IPv6 not read: " + read.v6Note
+	}
+	if len(read.v6Foreign) == 0 {
+		return step
+	}
+	deletes := make([]string, 0, len(read.v6Foreign))
+	for _, rule := range read.v6Foreign {
+		deletes = append(deletes, "`"+backendIP6+" -D"+strings.TrimPrefix(rule, "-A")+"`")
+	}
+	step.Message += fmt.Sprintf("; %s admits TCP %d on every interface: %s", backendIP6, port, strings.Join(read.v6Foreign, "; "))
+	fix := fmt.Sprintf("run %s as root to delete the v6 rule (setup never writes one)", strings.Join(deletes, ", then "))
+	if step.Fix != "" {
+		fix = step.Fix + "; " + fix
+	}
+	step.Fix = fix
+	if step.Outcome == OutcomeOK || step.Outcome == OutcomeChanged {
+		step.Outcome = OutcomeManual
+	}
+	return step
+}
+
+func readLinuxFirewallV4(r Runner, port int) firewallRead {
 	if !r.Elevated() {
 		return firewallRead{reason: "reading the firewall rules needs root"}
 	}
@@ -889,6 +947,10 @@ func portListHas(list string, port int) bool {
 
 func firewallSetupStep(r Runner, port int) SetupStep {
 	read := readLinuxFirewall(r, port)
+	return withIP6(read, firewallSetupFrom(r, read, port), port)
+}
+
+func firewallSetupFrom(r Runner, read firewallRead, port int) SetupStep {
 	if inactiveUFWDecides(read) {
 		return ufwInactiveSetupStep(r, read, port)
 	}
@@ -1060,6 +1122,10 @@ func ufwInactiveStep(read firewallRead, port int, state string) SetupStep {
 }
 
 func firewallCheckStep(read firewallRead, port int) SetupStep {
+	return withIP6(read, firewallCheckV4(read, port), port)
+}
+
+func firewallCheckV4(read firewallRead, port int) SetupStep {
 	if read.state == ruleUnknown {
 		message, fix := firewallUnreadable(read, port, "check")
 		return newStep(linuxFwName, OutcomeUnverified, message, fix)
