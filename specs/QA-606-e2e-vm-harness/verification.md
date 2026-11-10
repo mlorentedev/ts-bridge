@@ -49,7 +49,7 @@ owner: manu
   only a hint for a missing clean base: a wrong guess costs a clearer error, never a false pass.
 - f3 is fail-open without `dotf` (Minor, REAL): applied. f3 now captures `dotf vm <os> status` and
   exits 1 when the command fails, before it greps: with no `dotf` the status read exits 127 and f3
-  fails.
+  fails. Replayed at bbd8685 with `dotf` present: exit 0, and `dotf vm linux|windows status` list no `tsb-e2e-` session.
 - `report()` has no case-count floor (Minor, SPECULATIVE): declined. A floor would be a second
   count to keep in step with the scripts, the drift f4 just removed; the summary line prints the
   totals, and a lost block shows in the diff of the scenario script that lost it.
