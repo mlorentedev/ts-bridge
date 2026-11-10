@@ -74,7 +74,16 @@ owner: manu
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/HOST-455-windows-host-state/` -> `specs/archive/HOST-455-windows-host-state/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/HOST-455-windows-host-state/` -> `specs/archive/HOST-455-windows-host-state/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
+
+## Review disposition
+
+`review.md` (nan/deepseek-v4-flash) returned PASS-WITH-GAPS:
+
+- Setup fails before it starts a stopped Tailscale service (Major, THEORETICAL, pre-existing): ticketed as #700.
+- Check skips the port comparison when the port read fails (Minor, THEORETICAL): ticketed as #700. The RDP step already fails and `svc.Unread` makes `host check` exit non-zero.
+- Closing record lags: REAL. PR 2 and PR 3 passed `go test -race ./...`, golangci-lint and gosec in CI on their merge commits. The reviewer re-ran all of them green at archive time.
+- AC3 text is narrower than `windowsFirewallRuleOK`: REAL and intended. The widening came with SEC-631 (ADR-017 Amendment B) and is recorded above under "Decisions made during implementation". The contract text stays as reviewed.
