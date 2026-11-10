@@ -56,7 +56,7 @@ the last says `Closes #631`.
   and a failed create is terminating (no remove runs)
 - [x] [AC5] Failing test: `check` and `setup` report an enabled built-in `Remote Desktop` group as
   `manual` with the disable command, and `firewall_ok` is false (folds in #685)
-- [x] [AC6] `scripts/e2e/windows.ps1` cases written; the run is pending (the guest is shared), not run
+- [x] [AC6] `scripts/e2e/windows.ps1` cases written and run: `make e2e-windows` 50 pass, 0 fail at 310bfc6
 - [x] `features.json`, the Windows runbook, `Closes #631` and `Closes #685`, each on its own line
 
 ## Closing (every PR)

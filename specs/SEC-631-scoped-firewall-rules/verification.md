@@ -17,8 +17,8 @@ owner: manu
 - [x] AC3 -> PR 3: unit tests on the ufw write; e2e: `ufw show added` holds the scoped line.
 - [x] AC4 -> PR 2 (iptables) and PR 3 (ufw): unit tests per tier; e2e: a hand-added unscoped rule is reported by
   `check` and replaced by `setup`.
-- [x] AC5 -> PR 4: unit tests on the recreate command and the read. Windows e2e is pending.
-- [x] AC6 -> `scripts/e2e/linux.sh` (run), `scripts/e2e/windows.ps1` (written, run pending).
+- [x] AC5 -> PR 4: unit tests on the recreate command and the read; Windows e2e run (see PR 4 below).
+- [x] AC6 -> `scripts/e2e/linux.sh` (run), `scripts/e2e/windows.ps1` (run).
 
 ## Test status
 
@@ -57,12 +57,11 @@ PR 4 (Windows):
   remote accepted (5), IPv4 mask not normalized (2), IPv6 case not folded (2), legacy never
   reported (2), recreate errors not terminating (19), remove before create (19), remove by display name (1), check ignores the
   built-in group (5), group never reported (3).
-- **Windows e2e is PENDING.** `scripts/e2e/windows.ps1` gained cases (scoped address, legacy rule
-  repaired, built-in group untouched) and parses clean under `pwsh`, but it was not run: the
-  Windows guest is shared. The normalized form Windows prints for `RemoteAddress` (a dotted mask
-  for the IPv4 range, upper-case IPv6) is therefore unverified on a real host; the read accepts
-  the CIDR and the dotted-mask forms and compares as a set, so a different spelling would make
-  `check` report `changed` and setup recreate the rule every run until the form is added.
+- `make e2e-windows` on a throwaway Windows 11 Arm64 guest, at 310bfc6 (after the merge from master):
+  50 pass, 0 fail. The #631 cases: the rule is scoped to the tailnet addresses, as Windows prints
+  them, so the read matches the real `RemoteAddress` form; an enabled built-in Remote Desktop group
+  is reported by check and left on by setup; once the operator disables it the firewall is ok
+  again; a legacy rule open to any address is seen by check and repaired by setup.
 
 ## Decisions made during implementation
 
