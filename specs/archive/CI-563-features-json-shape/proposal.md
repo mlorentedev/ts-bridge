@@ -1,7 +1,7 @@
 ---
 id: "CI-563-features-json-shape"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-11-02"
 issue: "mlorentedev/ts-bridge#563"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
