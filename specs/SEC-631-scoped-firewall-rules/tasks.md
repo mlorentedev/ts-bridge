@@ -48,16 +48,16 @@ the last says `Closes #631`.
 
 ## PR 4 - Windows
 
-- [ ] [AC5] Failing test: the recreate command carries `-RemoteAddress
+- [x] [AC5] Failing test: the recreate command carries `-RemoteAddress
   100.64.0.0/10,fd7a:115c:a1e0::/48` and no `Enable-NetFirewallRule`
-- [ ] [AC5] `windowsFirewallRuleOK` compares `RemoteAddress` as a set; `Any` is a legacy rule, and
+- [x] [AC5] `windowsFirewallRuleOK` compares `RemoteAddress` as a set; `Any` is a legacy rule, and
   check says so
-- [ ] [AC5] Failing test: the recreate creates the scoped rule before it removes the old ones,
+- [x] [AC5] Failing test: the recreate creates the scoped rule before it removes the old ones,
   and a failed create is terminating (no remove runs)
-- [ ] [AC5] Failing test: `check` and `setup` report an enabled built-in `Remote Desktop` group as
+- [x] [AC5] Failing test: `check` and `setup` report an enabled built-in `Remote Desktop` group as
   `manual` with the disable command, and `firewall_ok` is false (folds in #685)
-- [ ] [AC6] `scripts/e2e/windows.ps1` cases written; the run is pending (the guest is shared)
-- [ ] `features.json`, the Windows runbook, `Closes #631` and `Closes #685`, each on its own line
+- [x] [AC6] `scripts/e2e/windows.ps1` cases written and run: `make e2e-windows` 50 pass, 0 fail at 310bfc6
+- [x] `features.json`, the Windows runbook, `Closes #631` and `Closes #685`, each on its own line
 
 ## Closing (every PR)
 

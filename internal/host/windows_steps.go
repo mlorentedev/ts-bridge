@@ -3,6 +3,7 @@ package host
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"regexp"
 	"strconv"
 	"strings"
@@ -225,7 +226,7 @@ var (
 	fwAction    = psField{"action", "$($x.Action)"}
 	fwDirection = psField{"direction", "$($x.Direction)"}
 	fwProfile   = psField{"profile", "$($x.Profile)"}
-	fwRemote    = psField{"remote", "$(($x | Get-NetFirewallAddressFilter).RemoteAddress)"}
+	fwRemote    = psField{"remote", "$(($x | Get-NetFirewallAddressFilter).RemoteAddress -join ',')"}
 	fwProtocol  = psField{"protocol", "$($f.Protocol)"}
 	fwPort      = psField{keyPort, "$($f.LocalPort)"}
 )
@@ -244,6 +245,7 @@ const (
 var (
 	psReadNetworkProfile = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { ` + netCategory.print() + ` }`
 	psReadRDPDeny        = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; ` + printAll(denyPolicy, denyLocal)
+	psReadRDGroup        = `Write-Output "exposed=$(@(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -Enabled True -Direction Inbound -Action Allow -ErrorAction SilentlyContinue | Where-Object { ($_ | Get-NetFirewallAddressFilter).RemoteAddress -eq 'Any' }).Count)"`
 	psReadFirewallRule   = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); ` + fwCount.print() + `; foreach ($x in $r) { ` +
 		printAll(fwEnabled, fwAction, fwDirection, fwProfile, fwRemote) + `; $f = $x | Get-NetFirewallPortFilter; ` + printAll(fwProtocol, fwPort) + ` }`
 )
@@ -417,23 +419,75 @@ func powerCheckStep(r Runner) SetupStep {
 var hexValue = regexp.MustCompile(`0x[0-9a-fA-F]{8}`)
 
 const (
-	windowsFirewallFix     = "allow TCP %d inbound in Windows Defender Firewall"
+	windowsFirewallFix     = "allow TCP %d inbound from the tailnet addresses in Windows Defender Firewall"
+	windowsGroupFix        = `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`
 	windowsFirewallNameFix = "set host.firewall.rule (or --firewall-rule) to a name of A-Z, a-z, 0-9, - and _"
 )
 
+// tailnetRemoteAddress is the scope of the rule (ADR-017 Amendment B): the
+// Tailscale CGNAT range and the IPv6 ULA prefix a tailnet assigns from.
+const tailnetRemoteAddress = "100.64.0.0/10,fd7a:115c:a1e0::/48"
+
+// remoteIsTailnet reports whether the RemoteAddress read is exactly the
+// tailnet scope. Windows may print an IPv4 range with a dotted mask and an
+// IPv6 prefix in upper case, so each entry is normalized before the sets are
+// compared; "Any" or any other range is not the scope.
+func remoteIsTailnet(remote string) bool {
+	want := remoteSet(tailnetRemoteAddress)
+	got := remoteSet(remote)
+	if len(got) != len(want) {
+		return false
+	}
+	for e := range got {
+		if !want[e] {
+			return false
+		}
+	}
+	return true
+}
+
+func remoteSet(list string) map[string]bool {
+	set := map[string]bool{}
+	for _, e := range strings.FieldsFunc(list, func(c rune) bool { return c == ',' || c == ' ' }) {
+		set[normalizeRange(e)] = true
+	}
+	return set
+}
+
+// normalizeRange lower-cases an entry and rewrites a dotted IPv4 mask as a
+// prefix length (100.64.0.0/255.192.0.0 -> 100.64.0.0/10).
+func normalizeRange(e string) string {
+	e = strings.ToLower(e)
+	addr, mask, ok := strings.Cut(e, "/")
+	if !ok || !strings.Contains(mask, ".") {
+		return e
+	}
+	ip := net.ParseIP(mask).To4()
+	if ip == nil {
+		return e
+	}
+	ones, bits := net.IPMask(ip).Size()
+	if bits == 0 {
+		return e
+	}
+	return addr + "/" + strconv.Itoa(ones)
+}
+
 // windowsFirewallRuleOK reads the named rule (W3, #455). It holds only when
-// exactly one rule by that name exists, enabled, allowing inbound TCP from any
-// address on every profile on port, as the recreate sets it; port 0 (unknown)
-// skips the port comparison. found reports whether any rule has the name.
-func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found bool, err error) { //nolint:gocyclo // baseline #629
+// exactly one rule by that name exists, enabled, allowing inbound TCP from the
+// tailnet addresses on every profile on port, as the recreate sets it; port 0
+// (unknown) skips the port comparison. found reports whether any rule has the
+// name; legacy reports a rule that allows any address, as earlier releases
+// created it.
+func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found, legacy bool, err error) { //nolint:gocyclo // baseline #629
 	out, err := outputPS(r, fmt.Sprintf(psReadFirewallRule, rule))
 	if err != nil {
-		return false, false, err
+		return false, false, false, err
 	}
 	f := parseKeyValues(out)
 	ok = f[fwCount.Key] == "1" && f[fwEnabled.Key] == "True" && f[fwAction.Key] == "Allow" && f[fwDirection.Key] == "Inbound" &&
-		f[fwProtocol.Key] == "TCP" && f[fwProfile.Key] == "Any" && f[fwRemote.Key] == "Any" && (port == 0 || f[fwPort.Key] == strconv.Itoa(port))
-	return ok, f[fwCount.Key] != "0", nil
+		f[fwProtocol.Key] == "TCP" && f[fwProfile.Key] == "Any" && remoteIsTailnet(f[fwRemote.Key]) && (port == 0 || f[fwPort.Key] == strconv.Itoa(port))
+	return ok, f[fwCount.Key] != "0", f[fwCount.Key] == "1" && strings.EqualFold(f[fwRemote.Key], "any"), nil
 }
 
 // windowsFirewallSetupStep recreates the rule only when the read does not
@@ -446,12 +500,38 @@ func windowsFirewallSetupStep(r Runner, ruleName string, port int) SetupStep {
 	if err != nil {
 		return newStep(name, OutcomeFailed, fmt.Sprintf("Failed to configure firewall: validate firewall rule: %v", err), windowsFirewallNameFix)
 	}
-	if ok, _, err := windowsFirewallRuleOK(r, rule, port); err == nil && ok {
-		return newStep(name, OutcomeOK, fmt.Sprintf("Rule '%s' already active (port %d)", rule, port), "")
+	if ok, _, _, err := windowsFirewallRuleOK(r, rule, port); err == nil && ok {
+		step, _ := builtinGroupStep(r, newStep(name, OutcomeOK, fmt.Sprintf("Rule '%s' already active (port %d)", rule, port), ""))
+		return step
 	}
-	err = runPS(r, fmt.Sprintf(`Remove-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName %q -Direction Inbound -Action Allow -Protocol TCP -LocalPort %d -Profile Any -Enabled True | Out-Null; Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue`, rule, rule, port))
-	return actStep(name, err, fmt.Sprintf("Rule '%s' active (port %d)", rule, port),
+	// The scoped rule is created before the old ones go, and errors terminate,
+	// so a failed create removes nothing and RDP is never left without a rule.
+	err = runPS(r, fmt.Sprintf(`$ErrorActionPreference = 'Stop'; $old = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); New-NetFirewallRule -DisplayName %q -Direction Inbound -Action Allow -Protocol TCP -LocalPort %d -Profile Any -RemoteAddress %s -Enabled True | Out-Null; $old | Remove-NetFirewallRule`, rule, rule, port, tailnetRemoteAddress))
+	step := actStep(name, err, fmt.Sprintf("Rule '%s' active (port %d)", rule, port),
 		fmt.Sprintf("Failed to configure firewall: %v", err), fix)
+	if err != nil {
+		return step
+	}
+	step, _ = builtinGroupStep(r, step)
+	return step
+}
+
+// builtinGroupStep turns a converged firewall step manual while an enabled
+// rule of the built-in "Remote Desktop" group allows any address: earlier
+// setups enabled the group, and its rules void the tailnet scope. It does not
+// disable the group (ADR-017 Amendment B); the operator runs the printed fix.
+func builtinGroupStep(r Runner, step SetupStep) (SetupStep, bool) {
+	out, err := outputPS(r, psReadRDGroup)
+	if err != nil {
+		return newStep(step.Name, OutcomeUnverified, "Could not read the built-in Remote Desktop rule group",
+			"run Get-NetFirewallRule -DisplayGroup \"Remote Desktop\" to see why the read fails"), false
+	}
+	exposed, _ := strconv.Atoi(parseKeyValues(out)["exposed"])
+	if exposed == 0 {
+		return step, true
+	}
+	return newStep(step.Name, OutcomeManual, fmt.Sprintf("%d enabled rule(s) of the built-in Remote Desktop group allow inbound RDP from any address, which voids the tailnet scope", exposed),
+		windowsGroupFix), false
 }
 
 // windowsFirewallCheckStep is the read half of windowsFirewallSetupStep.
@@ -461,14 +541,34 @@ func windowsFirewallCheckStep(r Runner, ruleName string, port int) (SetupStep, b
 	if err != nil {
 		return newStep(name, OutcomeFailed, fmt.Sprintf("Invalid firewall rule name: %v", err), windowsFirewallNameFix), false
 	}
-	ok, found, err := windowsFirewallRuleOK(r, rule, port)
+	ok, found, legacy, err := windowsFirewallRuleOK(r, rule, port)
 	if err != nil {
 		return newStep(name, OutcomeFailed, fmt.Sprintf("Could not read firewall rule '%s'", rule),
 			fmt.Sprintf("run Get-NetFirewallRule -DisplayName %q to see why the read fails", rule)), false
 	}
-	if !ok && found {
-		return newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' differs from what setup creates (inbound TCP %d, any address, every profile, enabled, one rule)", rule, port),
-			"run ts-bridge host setup as an administrator"), false
+	if ok {
+		return builtinGroupStep(r, firewallReadStep(name, true, port))
 	}
-	return firewallReadStep(name, ok, port), ok
+	step := firewallReadStep(name, false, port)
+	if legacy {
+		step = newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' is a legacy rule that allows TCP %d from any address; setup scopes it to the tailnet", rule, port),
+			"run ts-bridge host setup as an administrator")
+	} else if found {
+		step = newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' differs from what setup creates (inbound TCP %d, tailnet addresses only, every profile, enabled, one rule)", rule, port),
+			"run ts-bridge host setup as an administrator")
+	}
+	return withGroupNote(r, step), false
+}
+
+// withGroupNote adds the built-in group exposure to a step that already
+// fails on the named rule, so the first check on a pre-#631 host reports
+// both. A failed group read adds nothing: the step is not ok either way.
+func withGroupNote(r Runner, step SetupStep) SetupStep {
+	group, ok := builtinGroupStep(r, step)
+	if ok || group.Outcome != OutcomeManual {
+		return step
+	}
+	step.Message += "; " + group.Message
+	step.Fix += "; then " + group.Fix
+	return step
 }

@@ -98,8 +98,8 @@ const (
 	psProfile     = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
 	psEnable      = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; $RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
 	psPort        = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
-	psFw          = `Remove-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName "Rule" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3390 -Profile Any -Enabled True | Out-Null; Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue`
-	psFwCheck     = `$r = @(Get-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; Write-Output "remote=$(($x | Get-NetFirewallAddressFilter).RemoteAddress)"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
+	psFw          = `$ErrorActionPreference = 'Stop'; $old = @(Get-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue); New-NetFirewallRule -DisplayName "Rule" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3390 -Profile Any -RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48 -Enabled True | Out-Null; $old | Remove-NetFirewallRule`
+	psFwCheck     = `$r = @(Get-NetFirewallRule -DisplayName "Rule" -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; Write-Output "remote=$(($x | Get-NetFirewallAddressFilter).RemoteAddress -join ',')"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
 	psProfileRead = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { Write-Output "category=$($_.NetworkCategory)" }`
 )
 
@@ -126,7 +126,7 @@ func windowsSetupCalls(noSleep bool) []string {
 	calls = append(calls, serviceCalls("Tailscale", true)...)
 	calls = append(calls, serviceCalls("SSDPSRV", false)...)
 	calls = append(calls, serviceCalls("upnphost", false)...)
-	calls = append(calls, "output "+psPrefix+psProfileRead, "output "+psPrefix+psDeny, "output "+psPrefix+psEnable, "output "+psPrefix+psFwCheck, "run "+psPrefix+psFw)
+	calls = append(calls, "output "+psPrefix+psProfileRead, "output "+psPrefix+psDeny, "output "+psPrefix+psEnable, "output "+psPrefix+psFwCheck, "run "+psPrefix+psFw, "output "+psPrefix+psReadRDGroup)
 	if !noSleep {
 		calls = append(calls, powercfgCalls...)
 	}
@@ -191,7 +191,7 @@ func TestSetupForWindowsRDPFailureFallsBackToDefaultPort(t *testing.T) {
 		t.Fatalf("RDPPort = %d, want 3389", got.RDPPort)
 	}
 	want := "run " + psPrefix + strings.Replace(psFw, "3390", "3389", 1)
-	if last := r.calls[len(r.calls)-1]; last != want {
+	if last := r.calls[len(r.calls)-2]; last != want { // the group read follows the recreate
 		t.Errorf("firewall call = %q, want %q", last, want)
 	}
 }
@@ -215,7 +215,7 @@ func TestCheckFor(t *testing.T) {
 		{
 			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psDeny: "policy=\r\nlocal=0", psPrefix + psFwCheck: "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")}},
-			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck},
+			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck, "output " + psPrefix + psReadRDGroup},
 			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=ok"},
 			services: []Service{{Kind: "rdp", Port: 3390, Enabled: true, Active: active, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.9", TailscaleUp: true, RDPPort: 3390, RDPEnabled: true, FirewallOK: true},
@@ -223,7 +223,7 @@ func TestCheckFor(t *testing.T) {
 		{
 			name: "windows, registry unreadable and no rule", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{fail: map[string]bool{"tailscale ip -4": true, psPrefix + psPort: true}},
-			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck},
+			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck, "output " + psPrefix + psReadRDGroup},
 			steps:    []string{"Tailscale IP=failed", "RDP configuration=failed", "Firewall rule=changed"},
 			services: []Service{{Kind: "rdp", Active: active, Unread: true}},
 			legacy:   CheckResult{},
@@ -233,7 +233,7 @@ func TestCheckFor(t *testing.T) {
 			// never yields an enabled service on port 0.
 			name: "windows, registry reads 0", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
 			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "0", psPrefix + psDeny: "local=0"}},
-			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck},
+			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck, "output " + psPrefix + psReadRDGroup},
 			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: active}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.9", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},

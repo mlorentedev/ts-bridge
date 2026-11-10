@@ -11,14 +11,14 @@ owner: manu
 
 ## Evidence
 
-- [ ] AC1 -> `docs/adr/adr-017-host-desired-state.md`, Amendment B (PR 1).
+- [x] AC1 -> `docs/adr/adr-017-host-desired-state.md`, Amendment B (PR 1).
 - [x] AC2 -> PR 2: unit tests on the iptables append and the printed form; e2e on a real VM with
   ufw removed, setup twice, `iptables -S INPUT` holds the scoped line, the second run is `ok`.
 - [x] AC3 -> PR 3: unit tests on the ufw write; e2e: `ufw show added` holds the scoped line.
 - [x] AC4 -> PR 2 (iptables) and PR 3 (ufw): unit tests per tier; e2e: a hand-added unscoped rule is reported by
   `check` and replaced by `setup`.
-- [ ] AC5 -> PR 4: unit tests on the recreate command and the read. Windows e2e is pending.
-- [ ] AC6 -> `scripts/e2e/linux.sh` (run), `scripts/e2e/windows.ps1` (written, run pending).
+- [x] AC5 -> PR 4: unit tests on the recreate command and the read; Windows e2e run (see PR 4 below).
+- [x] AC6 -> `scripts/e2e/linux.sh` (run), `scripts/e2e/windows.ps1` (run).
 
 ## Test status
 
@@ -48,6 +48,20 @@ PR 3 (Linux ufw):
   unscoped allow (9). An allow off the tailnet (another interface, a source or a destination) is not
   the scoped rule, so setup still adds the tailscale0 allow before it deletes a legacy one; each of
   the three conditions in `ufwAllowOffTailnet`, removed, fails `TestReadUFWUnscoped`.
+
+PR 4 (Windows):
+
+- `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`, `GOOS=windows`) and `gosec ./...`:
+  see the PR body.
+- Mutants, each killed by the unit tests: no `-RemoteAddress` in the recreate (19 failures), any
+  remote accepted (5), IPv4 mask not normalized (2), IPv6 case not folded (2), legacy never
+  reported (2), recreate errors not terminating (19), remove before create (19), remove by display name (1), check ignores the
+  built-in group (5), group never reported (3).
+- `make e2e-windows` on a throwaway Windows 11 Arm64 guest, at 310bfc6 (after the merge from master):
+  50 pass, 0 fail. The #631 cases: the rule is scoped to the tailnet addresses, as Windows prints
+  them, so the read matches the real `RemoteAddress` form; an enabled built-in Remote Desktop group
+  is reported by check and left on by setup; once the operator disables it the firewall is ok
+  again; a legacy rule open to any address is seen by check and repaired by setup.
 
 ## Decisions made during implementation
 

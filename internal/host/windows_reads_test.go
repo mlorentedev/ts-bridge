@@ -36,14 +36,31 @@ func (r scriptRunner) Output(name string, args ...string) ([]byte, error) {
 func TestWindowsReadsReachTheirParsers(t *testing.T) {
 	converged := map[string]string{
 		"count": "1", "enabled": "True", "action": "Allow", "direction": "Inbound",
-		"profile": "Any", "remote": "Any", "protocol": "TCP", "port": "3390",
+		"profile": "Any", "remote": tailnetRemoteAddress, "protocol": "TCP", "port": "3390",
 		"category": "Private", "policy": "1", "local": "0",
 	}
 	t.Run("firewall rule", func(t *testing.T) {
 		r := scriptRunner{&recordingRunner{}, converged}
-		ok, found, err := windowsFirewallRuleOK(r, "Rule", 3390)
-		if err != nil || !ok || !found {
-			t.Fatalf("converged rule read: ok=%v found=%v err=%v, want ok and found", ok, found, err)
+		ok, found, legacy, err := windowsFirewallRuleOK(r, "Rule", 3390)
+		if err != nil || !ok || !found || legacy {
+			t.Fatalf("converged rule read: ok=%v found=%v legacy=%v err=%v, want ok and found", ok, found, legacy, err)
+		}
+	})
+	t.Run("legacy firewall rule", func(t *testing.T) {
+		values := map[string]string{}
+		for k, v := range converged {
+			values[k] = v
+		}
+		values["remote"] = "Any"
+		ok, _, legacy, err := windowsFirewallRuleOK(scriptRunner{&recordingRunner{}, values}, "Rule", 3390)
+		if err != nil || ok || !legacy {
+			t.Fatalf("any-address rule read: ok=%v legacy=%v err=%v, want legacy and not ok", ok, legacy, err)
+		}
+	})
+	t.Run("built-in group", func(t *testing.T) {
+		step, ok := builtinGroupStep(scriptRunner{&recordingRunner{}, map[string]string{"exposed": "2"}}, SetupStep{Name: "Firewall configuration", Outcome: OutcomeOK})
+		if ok || step.Outcome != OutcomeManual {
+			t.Fatalf("exposed group read: ok=%v outcome=%v, want manual", ok, step.Outcome)
 		}
 	})
 	t.Run("rdp deny", func(t *testing.T) {
