@@ -450,6 +450,60 @@ func TestHandleSOCKS5Conn_AppliesDialTimeoutAndTerminalCancel(t *testing.T) {
 	}
 }
 
+// DialTimeout bounds the handshake and the dial, not the session. The deadline
+// armed for the handshake must be cleared once the target resolves; leaving it
+// in place kills every proxied session at DialTimeout. IdleTimeout stays 0 so
+// no idleConn re-arms a deadline and hides the missing reset.
+func TestHandleSOCKS5Conn_SessionOutlivesDialTimeout(t *testing.T) {
+	const dialTimeout = 100 * time.Millisecond
+	client, server := net.Pipe()
+	remote, remotePeer := net.Pipe()
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = remotePeer.Close()
+	})
+	dialer := &mockDialer{
+		dialFunc: func(context.Context, string, string) (net.Conn, error) { return remote, nil },
+	}
+
+	handlerDone := make(chan error, 1)
+	go func() {
+		handlerDone <- handleSOCKS5Conn(
+			server,
+			dialer,
+			directSOCKSTarget,
+			config.Config{DialTimeout: dialTimeout},
+			nil,
+			slog.New(slog.NewTextHandler(io.Discard, nil)),
+		)
+	}()
+
+	writeAll(t, client, []byte{0x05, 0x01, 0x00})
+	assertBytes(t, client, []byte{0x05, 0x00})
+	writeAll(t, client, domainSOCKSRequest(0x01, "forge.example.internal", 443))
+	assertBytes(t, client, []byte{0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+
+	time.Sleep(3 * dialTimeout)
+
+	payload := []byte("ping after the dial timeout")
+	writeAll(t, client, payload)
+	assertBytes(t, remotePeer, payload)
+	reply := []byte("pong after the dial timeout")
+	writeAll(t, remotePeer, reply)
+	assertBytes(t, client, reply)
+
+	_ = client.Close()
+	_ = remotePeer.Close()
+	select {
+	case err := <-handlerDone:
+		if err != nil {
+			t.Fatalf("handleSOCKS5Conn returned error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("handleSOCKS5Conn did not finish")
+	}
+}
+
 func domainSOCKSRequest(command byte, host string, port uint16) []byte {
 	if len(host) > 255 {
 		panic("SOCKS5 test host exceeds domain-length limit")

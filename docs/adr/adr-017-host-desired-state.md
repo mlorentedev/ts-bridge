@@ -142,9 +142,13 @@ host check`. Before this amendment `setup` exited 0 even when a step failed.
 ### 3. Services, not RDP fields
 
 `host check --json` gains a `services` array
-(`kind`, `port`, `enabled`, `active`, `firewall_ok`) and `steps[].outcome` / `steps[].fix`.
+(`kind`, `port`, `enabled`, `active`, `firewall_ok`, `unread`) and `steps[].outcome` /
+`steps[].fix`. `unread` is true when a step could not read the service. Its `enabled` and
+`firewall_ok` then keep their zero value (`false`) and `active` stays `null`; they are
+unreliable, not a reading of "off", and `unread` is what tells the two apart. The step's `fix`
+names the cause.
 The existing keys stay and are derived (C2): `rdp_port` / `rdp_enabled` from the `rdp`
-service (zero/false when absent), `firewall_ok` true only when at least one service is
+service (zero/false when absent or `unread`), `firewall_ok` true only when at least one service is
 declared and every declared service has `firewall_ok == true` (an `unverified` firewall
 read counts as false). `steps[].success` stays as `outcome in {ok, changed}`.
 
@@ -166,7 +170,7 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 | OS | Services | Automated | Verified and guided only |
 | --- | --- | --- | --- |
 | Windows | `rdp` (`ssh` via OpenSSH Server is planned, #521; its firewall rule must be scoped or reported like the RDP group) | RDP enable honouring Group Policy precedence, firewall rule scoped to the tailnet ranges (state-first, Amendment B), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
-| Linux | `rdp` (xrdp), `ssh` | `systemctl enable --now`, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule scoped to `tailscale0` (ufw `allow in on` / iptables `-i`, Amendment B) | none |
+| Linux | `rdp` (xrdp) (`ssh` is planned, #521; its rule takes the same `tailscale0` scope) | `systemctl enable --now`, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule scoped to `tailscale0` (ufw `allow in on` / iptables `-i`, Amendment B) | none |
 | macOS | `ssh` (Remote Login), `vnc` (Screen Sharing) | Remote Login when elevated and Full Disk Access is granted | Screen Sharing; Remote Login without Full Disk Access; application-firewall "block all" |
 
 A declared RDP port is applied where the OS lets a CLI move the listener and reported
@@ -260,6 +264,14 @@ Decision:
   HOST-008).
 - The Neutral consequence "installing the bridge as an OS service is out of scope"
   still holds for ts-bridge itself; #451 remains the place for a local control plane.
+- Publication and OS convergence have separate service validation (clarified
+  2026-11-06). On Windows and Linux, serve may publish an already-provisioned `ssh`
+  service alongside `rdp`; it does not install or configure OpenSSH. The strict
+  step-capability check in §1 remains on `setup` and `check`: they still reject
+  SSH declarations until #521 supplies those OS steps. `init` still generates an
+  RDP-only file and validates it through the convergence loader. A combined SSH/RDP
+  serve file therefore cannot yet be used with `host check`; its publication
+  diagnostic is serve's health endpoint. This does not add VNC or macOS support.
 
 Rejected for this amendment: an OS service inside ts-bridge (Windows SCM or systemd
 integration in the binary), which is #451's question and would add a supervisor before

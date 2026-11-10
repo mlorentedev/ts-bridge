@@ -98,6 +98,27 @@ created: "2026-10-30"
 
 - [ ] PR 3 close: `go test ./...`, cross-GOOS vet, `smoke.bats`; CI green.
 
+## Implementation - 2026-11-06 correction: publish existing SSH without converging it
+
+- [x] [AC1] Add `TestHostServeCmd_ExistingSSHAndRDP` in `cmd/cli/host_serve_test.go`,
+  exercising the real root command and file loader with SSH/RDP in both orders,
+  while faking only the privileged file guards and the tsnet boundary. Run
+  `go test ./cmd/cli -run '^TestHostServeCmd_ExistingSSHAndRDP$' -count=1 -v`.
+  Expected: FAIL with `windows has no ssh step in this version (#521)` (Linux
+  names Linux), before the node starts.
+- [x] [AC1] [AC5] Add table-driven `TestLoadServeFile` in `internal/host/`, then
+  introduce `host.LoadServeFile` over shared decoding/validation and wire only
+  `loadServePlan` to it. SSH/RDP is accepted on Windows/Linux; the ordinary loader
+  still rejects SSH afterwards. Invalid/duplicate kinds, port bounds, VNC/macOS
+  limits and mesh validation remain enforced. Run
+  `go test ./internal/host ./cmd/cli -run 'TestLoad(Serve)?File|TestHostServeCmd|TestRootCmd_ReachesHostServe' -count=1`.
+  Expected: PASS, except any explicitly reported privilege-dependent skip.
+- [x] [AC1] [AC5] Document the publish/converge boundary in ADR-017 Amendment A,
+  `docs/runbooks/host-serve.md` and the serve help; retain #521 and the combined-file
+  AC6 gap. Run affected-package tests and vet, and compare the rebuilt binary's
+  SSH/RDP parsing against the recorded pre-fix failure. No lab enrolment, shared
+  listener changes or peer PR operations are part of this correction.
+
 ## Closing
 
 - [x] Every acceptance criterion from `proposal.md` is covered by at least one test

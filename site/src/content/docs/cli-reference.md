@@ -19,8 +19,10 @@ Available Commands:
 
 Flags:
   -v, --verbose   Enable verbose logging
-      --config string   Config file path (reserved for future use)
 ```
+
+`--config` is not a global flag. `connect`, `browser`, `init` and `host` each take
+their own `--config`, documented in their sections.
 
 ## `ts-bridge auth`
 
@@ -102,6 +104,42 @@ ts-bridge connect --control-url https://vpn.example.com \
   --bootstrap-ssh deployer@bastion.example.com \
   --auth-key-file /run/secrets/headscale-authkey \
   --target mesh-host:3389
+```
+
+## `ts-bridge browser`
+
+Open Microsoft Edge with an isolated profile that reaches allow-listed private
+origins through a loopback SOCKS5 proxy over the mesh (ADR-014).
+
+```bash
+ts-bridge browser [flags]
+```
+
+### Flags
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--auth-key-file` | string | Read auth key from a local file |
+| `--config` | string | Path to YAML config file |
+| `--control-url` | string | Custom Headscale control plane URL |
+| `--dial-timeout` | duration | Per-dial timeout |
+| `--edge-path` | string | Path to the Microsoft Edge executable (auto-detected when omitted) |
+| `--hostname` | string | Tailscale hostname |
+| `--pac-addr` | string | Loopback address for the local PAC server (default `127.0.0.1:0`) |
+| `--profile` | string | Named profile supplying control plane and managed credential |
+| `--route` | string (repeatable) | Allow-listed route `SOURCE_HOST:PORT=MESH_HOST:PORT` |
+| `--socks5` | string | Loopback SOCKS5 listener address (default `127.0.0.1:1080`) |
+| `--state-dir` | string | State directory |
+| `--timeout` | duration | Connect timeout for tsnet init |
+| `--url` | string | Private HTTPS URL to open |
+| `--user-data-dir` | string | Isolated Edge user-data directory (default: a `ts-bridge-browser` directory under the system temp dir) |
+
+### Example
+
+```bash
+ts-bridge browser --profile office \
+  --route "forge.example.internal:443=apps:443" \
+  --url https://forge.example.internal/
 ```
 
 ## `ts-bridge init`
@@ -258,6 +296,8 @@ is not `ok` (each one is printed with its fix), `1` when the check could not run
 With `host.mesh.health_addr` in the `--config` file, `--json` adds `published` to each
 service: whether `host serve` publishes it. Serve not answering, or a responder that does
 not name the file's node, reads as `false`; without `health_addr` the field is absent.
+SSH declarations are still rejected by `host check` until its OS steps exist (#521);
+use serve's health endpoint directly for a combined SSH/RDP publication diagnostic.
 
 ### `ts-bridge host serve`
 
@@ -265,6 +305,11 @@ Join the tailnet as a persistent node and publish exactly the services the host 
 declares, each forwarded to `127.0.0.1:<port>` (Windows and Linux). It runs in the
 foreground; register it with the OS as a Scheduled Task or systemd unit
 ([runbook](https://github.com/mlorentedev/ts-bridge/blob/master/docs/runbooks/host-serve.md)).
+
+Serve can publish already-provisioned SSH and RDP together. This does not add SSH
+configuration to `host setup` or `host check`; they still reject SSH declarations
+until #521 lands. `host init` still generates an RDP-only file. VNC and macOS
+support are unchanged.
 
 ```bash
 ts-bridge host serve --config /etc/ts-bridge/host.yaml

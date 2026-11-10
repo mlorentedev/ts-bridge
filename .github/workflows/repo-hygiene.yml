@@ -74,6 +74,10 @@ jobs:
         run: bash scripts/check-features-shape.sh
       - name: That check names every file that differs, and only those
         run: bash scripts/tests/test-features-shape.sh
+      - name: Spec features.json selectors each match a declared test (#575)
+        run: bash scripts/check-features-selectors.sh
+      - name: That guard catches a lost alternative under bash and zsh
+        run: bash scripts/tests/test-features-selectors.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod

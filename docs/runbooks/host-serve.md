@@ -28,6 +28,11 @@ recipes below register it.
   `known_hosts` readable by the account serve runs as. See
   [SSH Control Bootstrap](guide-control-bootstrap.md).
 - Windows and Linux. macOS refuses `host.mesh` until #459.
+- SSH and RDP must already be provisioned and listening locally. Serve can publish
+  both on Windows and Linux, but does not install or configure either service.
+  `host setup` and `host check` retain their stricter OS-step contract and reject
+  SSH declarations until #521 adds those convergence steps. `host init` still
+  generates an RDP-only file.
 
 ## 1. Write the host file
 
@@ -39,6 +44,8 @@ host:
   services:
     - kind: rdp
       port: 3389
+    - kind: ssh
+      port: 22
   mesh:
     hostname: lab-pc-01
     state_dir: 'C:\ProgramData\ts-bridge\serve'      # /var/lib/ts-bridge/serve on Linux
@@ -62,11 +69,11 @@ live credential; once deleted, it is no longer checked:
 | | `state_dir` | `auth_key_file` |
 |---|---|---|
 | Windows | Owned by SYSTEM or Administrators; no other SID in the DACL (inherit-only ACEs included); no link or junction on the path | Owned by SYSTEM or Administrators; no other SID in the DACL |
-| Linux | Directory, mode `0700`, owned by root; every existing ancestor a root-owned directory no group or other may write, or a root-owned symlink whose target passes the same check. Mode bits only: an ACL that grants write on an ancestor is not detected | Regular file owned by root, no group or other bits (`0600` or `0400`); every existing ancestor passes the same check as for `state_dir` |
+| Linux | Directory, mode `0700`, owned by root; every existing ancestor a root-owned directory no group or other may write, or a root-owned symlink whose target passes the same check; an ancestor whose POSIX ACL gives a named user or group other than root write is refused too, naming the ancestor and the principal | Regular file owned by root, no group or other bits (`0600` or `0400`); every existing ancestor passes the same check as for `state_dir` |
 
 So a Linux `state_dir` or `auth_key_file` under `/tmp` or `/var/tmp` is refused: the sticky world-writable
 ancestor would let another user rename the key store away or swap the key file. The refusal names the
-ancestor. An absent `state_dir` is created protected, after its ancestors pass. An existing one is checked, never
+ancestor. Any named user or group entry other than root's that carries write is refused, even one the ACL mask currently hides (`setfacl -n`): the next `chmod g+w` would make it effective. An ACL that cannot be read, or that is malformed, is refused. On macOS only the mode bits are checked: an extended ACL is readable only through libc's `acl_get_file`, which a pure-Go build does not reach, so an ancestor that carries one (`ls -le`) is not seen; check it yourself. An absent `state_dir` is created protected, after its ancestors pass. An existing one is checked, never
 repaired. Protect the key file yourself:
 
 ```powershell
@@ -122,7 +129,7 @@ sudo systemctl enable --now ts-bridge-serve.service
 
 ## 4. Confirm, then delete the key
 
-The first start prints `READY node=lab-pc-01 services=rdp:3389 enrolled=true`.
+The first start prints `READY node=lab-pc-01 services=rdp:3389,ssh:22 enrolled=true`.
 `enrolled=true` means this start used the auth key, so the provisioning script
 should delete the key file now; serve never deletes it. Later starts reuse the
 identity in `state_dir` and print `enrolled=false`.
@@ -131,8 +138,13 @@ With `health_addr` declared:
 
 ```sh
 curl -s http://127.0.0.1:9099/health/ready
-ts-bridge host check --json --config /etc/ts-bridge/host.yaml   # services[].published
 ```
+
+The response lists each declared service and its `published` diagnostic. For an
+RDP-only file, `host check --json --config <path>` can read the same diagnostic.
+It still rejects a combined SSH/RDP file until #521 supplies the SSH OS steps;
+read serve's health endpoint directly for that file instead. Do not remove SSH
+from the file and count the RDP-only result as combined-service acceptance.
 
 `published` is a diagnostic: it trusts a responder that names the file's node,
 which proves the contract, not the process. The tailnet ACL governs who can

@@ -43,6 +43,32 @@ var loggingInstance *logging.Logger
 
 var errSSHBootstrapExited = errors.New("SSH bootstrap exited")
 
+// tailnetNode is the part of the tsnet server runBridge uses: it dials mesh
+// targets for the proxy and is closed on the way out.
+type tailnetNode interface {
+	proxy.Dialer
+	Close() error
+}
+
+// tailnetNodeStarter brings the node up. Tests replace it so runBridge's
+// lifecycle (listen, drain, close) runs without a control plane.
+var tailnetNodeStarter = func(ctx context.Context, cfg config.Config) (tailnetNode, error) {
+	server, err := initTailscale(ctx, cfg)
+	if err != nil {
+		// Return an untyped nil: a nil *tsnet.Server in the interface would
+		// read as a live node.
+		return nil, err
+	}
+	return server, nil
+}
+
+// removeAllFn and cleanupSleep are the filesystem and clock the ephemeral
+// state cleanup uses; tests replace them to exercise the retry loop.
+var (
+	removeAllFn  = os.RemoveAll
+	cleanupSleep = time.Sleep
+)
+
 type controlBootstrap interface {
 	Done() <-chan struct{}
 	Err() error
@@ -95,10 +121,9 @@ func ensureStateDir(dir string) error {
 	return nil
 }
 
-//nolint:unused // wired into Runner = run
 func cleanupEphemeralStateDir(dir string) {
 	for attempt := 1; attempt <= cleanupMaxAttempts; attempt++ {
-		err := os.RemoveAll(dir)
+		err := removeAllFn(dir)
 		if err == nil || os.IsNotExist(err) {
 			if logger != nil {
 				logger.Debug("cleaned up ephemeral state directory", "path", dir, "attempt", attempt)
@@ -116,11 +141,10 @@ func cleanupEphemeralStateDir(dir string) {
 			return
 		}
 
-		time.Sleep(time.Duration(attempt) * cleanupRetryDelay)
+		cleanupSleep(time.Duration(attempt) * cleanupRetryDelay)
 	}
 }
 
-//nolint:unused // helper for cleanupEphemeralStateDir (called via Runner)
 func isRetryableCleanupError(err error) bool {
 	if err == nil {
 		return false
@@ -134,7 +158,6 @@ func isRetryableCleanupError(err error) bool {
 		strings.Contains(errStr, "device or resource busy")
 }
 
-//nolint:unused // wired into Runner = Run
 func Run(cfg config.Config) error {
 	return run(cfg, nil)
 }
@@ -182,13 +205,13 @@ func withBootstrapLifecycle(
 	return runBridge()
 }
 
-func runBridge(
+func runBridge( //nolint:funlen,gocyclo // baseline #629
 	ctx context.Context,
 	cancelWithCause context.CancelCauseFunc,
 	cfg config.Config,
 	onReady func() error,
 ) error {
-	server, err := initTailscale(ctx, cfg)
+	server, err := tailnetNodeStarter(ctx, cfg)
 	if err != nil {
 		if runErr := emitRunCause(ctx, os.Stderr); runErr != nil {
 			return runErr
@@ -211,6 +234,7 @@ func runBridge(
 	var tunnelStatus health.TunnelStatus
 	var healthServer *http.Server
 	if cfg.HealthAddr != "" {
+		warnHealthExposure(logger, cfg)
 		healthServer = health.StartServer(cfg.HealthAddr, &tunnelStatus, logger)
 	}
 
@@ -364,8 +388,12 @@ func readyTarget(cfg config.Config) string {
 	return cfg.Target
 }
 
-//nolint:unused // wired into Runner = Run
-func initTailscale(parentCtx context.Context, cfg config.Config) (*tsnet.Server, error) {
+func initTailscale(parentCtx context.Context, cfg config.Config) (*tsnet.Server, error) { //nolint:funlen // baseline #629
+	// tsnet starts its control client before it looks at the context, so a run
+	// that is already over must not reach Up at all.
+	if cause := context.Cause(parentCtx); cause != nil {
+		return nil, cause
+	}
 	var tsnetLogf func(string, ...any)
 	if loggingInstance != nil {
 		tsnetLogf = func(format string, args ...any) {
@@ -445,7 +473,6 @@ func diagnoseTailscaleInitError(err error) (reason, hint, remediation string) {
 	return reasonUnknown, "", ""
 }
 
-//nolint:unused // wired into Runner = Run
 func handleShutdown(ctx context.Context, status *health.TunnelStatus, listener net.Listener, healthServer *http.Server) {
 	<-ctx.Done()
 	logger.Info("shutting down")
@@ -468,7 +495,6 @@ func handleShutdown(ctx context.Context, status *health.TunnelStatus, listener n
 	}
 }
 
-//nolint:unused // wired into Runner = Run
 func drainActiveConnections(cfg config.Config, wg *sync.WaitGroup) {
 	if cfg.DrainTimeout <= 0 {
 		return
@@ -503,8 +529,6 @@ const bannerWidth = 22
 // no-op when cfg.Quiet is set (UX-004 / #203) — the machine-readable READY
 // line is emitted separately and always. Takes an io.Writer so it is unit
 // testable without capturing os.Stdout.
-//
-//nolint:unused // wired into Runner = Run
 func writeStartupBanner(w io.Writer, cfg config.Config) {
 	if cfg.Quiet {
 		return
@@ -535,4 +559,16 @@ func writeStartupBanner(w io.Writer, cfg config.Config) {
 	fmt.Fprintln(w, "  +---------------------------------------+")
 	fmt.Fprintln(w, "  Waiting for connections...")
 	fmt.Fprintln(w)
+}
+
+// warnHealthExposure records that the operator opted in to a health listener
+// reachable beyond loopback, and what that makes reachable (#633).
+func warnHealthExposure(log *slog.Logger, cfg config.Config) {
+	if !config.HealthExposed(cfg) {
+		return
+	}
+	log.Warn("health endpoint is reachable beyond loopback (--health-allow-remote)",
+		"addr", cfg.HealthAddr,
+		"endpoints", "/health/live, /health/ready (readiness reason), /metrics (connection counters)",
+		"authentication", "none")
 }

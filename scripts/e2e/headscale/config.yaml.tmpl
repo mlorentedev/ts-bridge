@@ -1,0 +1,39 @@
+# Headscale v0.29 config for the QA-607 mesh scenarios. @HOST_IP@ is the host's default-route
+# address (hs_render_config). No TLS: the guests and the client speak Noise over plain HTTP,
+# and the embedded DERP runs on the same port (TS_DEBUG_USE_DERP_HTTP, set by the harness).
+server_url: http://@HOST_IP@:8080
+listen_addr: 0.0.0.0:8080
+grpc_listen_addr: 127.0.0.1:50443
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: e2e
+    region_name: e2e embedded DERP
+    stun_listen_addr: 0.0.0.0:3478
+    private_key_path: /var/lib/headscale/derp_server_private.key
+    automatically_add_embedded_derp_region: true
+  urls: []
+  paths: []
+  auto_update_enabled: false
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+policy:
+  mode: file
+  path: /etc/headscale/policy.hujson
+dns:
+  magic_dns: false
+  base_domain: e2e.test
+  override_local_dns: false
+unix_socket: /var/run/headscale/headscale.sock
+log:
+  level: info
+logtail:
+  enabled: false

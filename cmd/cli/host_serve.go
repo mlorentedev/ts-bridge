@@ -49,6 +49,10 @@ func newHostServeCmd() *cobra.Command {
 the host file declares (host.services), each forwarded to 127.0.0.1:<port>
 on this host. Nothing else answers on the node (HOST-008, ADR-017 Amendment A).
 
+On Windows and Linux this includes already-provisioned SSH and RDP services.
+Serve does not configure them. The separate host setup/check commands still
+reject SSH declarations until their OS steps exist (#521).
+
 The host file must declare host.control_url and host.mesh: state_dir keeps the
 node identity (0700 root, or SYSTEM and Administrators on Windows), and
 auth_key_file is read only for the first enrolment. bootstrap_ssh reaches the
@@ -110,7 +114,7 @@ func loadServePlan(cmd *cobra.Command) (servePlan, error) {
 	if path == "" {
 		return servePlan{}, errors.New("host serve: --config is required; serve publishes only what a host file declares")
 	}
-	file, err := host.LoadFile(path, hostGOOS, cmd.ErrOrStderr())
+	file, err := host.LoadServeFile(path, hostGOOS, cmd.ErrOrStderr())
 	if err != nil {
 		return servePlan{}, err
 	}

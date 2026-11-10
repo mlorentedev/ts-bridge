@@ -2,7 +2,9 @@ package host
 
 import (
 	"cmp"
+	"errors"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -791,6 +793,15 @@ func TestCheckForLinux(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
 		},
 		{
+			// What the e2e shim does: a systemctl that exits 1 and prints nothing is unread, not off (#638).
+			name:     "systemctl present, answers nothing, ufw unreadable",
+			runner:   &recordingRunner{elevated: true, onPath: ufw, output: linuxUp(map[string]string{isEnabled: "", isActive: ""}), exit: map[string]int{isEnabled: 1, isActive: 1}, fail: map[string]bool{ufwAdded: true}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables"),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=unverified", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Unread: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true},
+		},
+		{
 			name:     "ufw host, ufw unreadable, a leftover copy: still reported (#530)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{iptRead: ufwHostInput + iptLegacyRule, iptChain: tsInputDefault}), fail: map[string]bool{ufwAdded: true}},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
@@ -952,7 +963,7 @@ func TestCheckForLinux(t *testing.T) {
 				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
 			}
 			for _, c := range tt.runner.calls {
-				if c == "run "+iptAppend || c == "run "+enableXRDP || c == "run "+ufwAllowCmd {
+				if c == "run "+iptAppend || c == "run "+enableXRDP || c == "run "+ufwAllowCmd || c == "run "+ufwDeleteCmd || c == "run "+iptDelete {
 					t.Errorf("check ran a mutating command: %q", c)
 				}
 			}
@@ -1507,6 +1518,12 @@ func TestUFWInactive(t *testing.T) {
 		{name: "allow already added", added: ufwScopedAllow, message: "allow is in place"},
 		// The legacy allow is inert while ufw is off, and still unscoped once it is on: setup replaces it.
 		{name: "a legacy allow is replaced", added: ufwLegacyAllow, replaces: true, message: "allow is in place"},
+		// An unscoped allow setup did not write opens the port on every interface
+		// once ufw is enabled: both commands name it, and setup leaves it (#631).
+		{name: "a foreign unscoped allow", added: "ufw allow 22,3389/tcp\n", message: "legacy unscoped rule: ufw allow 22,3389/tcp", check: "legacy unscoped rule: ufw allow 22,3389/tcp", fix: "setup does not delete rules it did not write"},
+		// ts-input's scoped iptables rule is not a ufw allow: the legacy ufw
+		// allow is still replaced by a scoped ufw one, never just deleted (#631).
+		{name: "a legacy allow beside ts-input is replaced", added: ufwLegacyAllow, input: ufwHostInput, replaces: true, message: "allow is in place", check: "unscoped"},
 		// A ufw deny decides the port once ufw is enabled: name it, add nothing.
 		{name: "a ufw deny", added: "ufw deny 3389/tcp\n", message: "ufw deny 3389/tcp", check: "ufw deny 3389/tcp"},
 		// tailscaled's ts-input admits the tailnet whatever ufw's state: an
@@ -1624,8 +1641,9 @@ func TestReadIptablesUnscoped(t *testing.T) {
 		{"two copies", iptTwoCopies, 2, 0, false},
 		{"multiport allow", iptEmpty + iptForeignRule, 0, 1, false},
 		{"a comment on the legacy rule makes it foreign", iptEmpty + `-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "rdp" -j ACCEPT` + "\n", 0, 1, false},
-		{"a source address scopes it", iptEmpty + "-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, true},
-		{"another interface scopes it", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, true},
+		{"a source address does not admit the tailnet", iptEmpty + "-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"another interface does not admit the tailnet", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"a legacy copy beside an eth1 rule is not scoped", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n" + iptLegacyRule, 1, 0, false},
 		{"a port-less accept is the operator's posture", iptEmpty + "-A INPUT -p tcp -j ACCEPT\n", 0, 0, true},
 		{"another port", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n", 0, 0, false},
 		{"a drop is not an allow", iptDropFirst, 0, 0, false},
@@ -1677,8 +1695,13 @@ func TestReadUFWUnscoped(t *testing.T) {
 		{"bare port", "ufw allow 3389\n", false, 1, false},
 		{"explicit inbound", "ufw allow in 3389/tcp\n", false, 1, false},
 		{"a comment makes it foreign", "ufw allow 3389/tcp comment 'rdp'\n", false, 1, false},
-		{"a source address scopes it", "ufw allow from 10.0.0.0/8 to any port 3389 proto tcp\n", false, 0, true},
-		{"another interface scopes it", "ufw allow in on eth1 to any port 3389 proto tcp\n", false, 0, true},
+		{"a source address does not admit the tailnet", "ufw allow from 10.0.0.0/8 to any port 3389 proto tcp\n", false, 0, false},
+		{"another interface does not admit the tailnet", "ufw allow in on eth1 to any port 3389 proto tcp\n", false, 0, false},
+		{"a destination address does not admit the tailnet", "ufw allow to 192.168.1.5 port 3389 proto tcp\n", false, 0, false},
+		{"a legacy allow beside an eth1 rule is not scoped", "ufw allow in on eth1 to any port 3389 proto tcp\n" + ufwLegacyAllow, true, 0, false},
+		{"from any is not a scope", "ufw allow from any to any port 3389 proto tcp\n", false, 1, false},
+		{"from any beside a legacy allow is not scoped", "ufw allow from any to any port 3389 proto tcp\n" + ufwLegacyAllow, true, 1, false},
+		{"a tailnet allow from any source is scoped", "ufw allow in on tailscale0 from any to any port 3389 proto tcp\n", false, 0, true},
 		{"another port", "ufw allow 33890/tcp\n", false, 0, false},
 		{"udp", "ufw allow 3389/udp\n", false, 0, false},
 		{"a deny is not an allow", "ufw deny 3389/tcp\n", false, 0, false},
@@ -1691,5 +1714,26 @@ func TestReadUFWUnscoped(t *testing.T) {
 				t.Errorf("legacy %v foreign %q scoped %v, want %v, %d, %v", legacy, foreign, scoped, tt.legacy, tt.foreign, tt.scoped)
 			}
 		})
+	}
+}
+
+// The RDP line of check points at "the steps below for the cause" when a
+// service is unread (#638), so the fix of every unread step names that cause
+// and never falls back to blaming privilege.
+func TestUnreadStepFixesDoNotBlamePrivilege(t *testing.T) {
+	privilege := regexp.MustCompile(`(?i)\b(root|sudo|administrator|elevat)`)
+	steps := map[string]SetupStep{}
+	for name, x := range map[string]xrdpState{
+		"no systemd reading": {installed: true},
+		"undecided answer":   {installed: true, readable: true, undecided: "indirect"},
+	} {
+		step, _ := xrdpUnmet(x, OutcomeUnverified)
+		steps["xrdp: "+name] = step
+	}
+	steps["windows: RDP port unread"] = actRead("RDP configuration", errors.New("read failed"), "", "Could not read the RDP port from the registry", rdpEnableFix)
+	for name, step := range steps {
+		if step.Fix == "" || privilege.MatchString(step.Fix) {
+			t.Errorf("%s: fix %q should name the cause, not privilege", name, step.Fix)
+		}
 	}
 }

@@ -52,11 +52,11 @@ func readXRDPListener(r Runner) (xrdpListener, error) {
 			}
 			continue
 		}
-		key, value, ok := strings.Cut(line, "=")
-		if section != "[Globals]" || !ok || strings.TrimSpace(key) != "port" {
+		value, ok := globalsPort(section, line)
+		if !ok {
 			continue
 		}
-		l.line, l.value = i, strings.TrimSpace(value)
+		l.line, l.value = i, value
 		m := xrdpPortValue.FindStringSubmatch(l.value)
 		if m == nil {
 			return l, fmt.Errorf("%s sets port=%s, which is not one TCP port", xrdpINIPath, l.value)
@@ -65,6 +65,15 @@ func readXRDPListener(r Runner) (xrdpListener, error) {
 		l.port, _ = strconv.Atoi(m[2])
 	}
 	return l, nil
+}
+
+// globalsPort returns the value of a `port=` line when line sits in [Globals].
+func globalsPort(section, line string) (string, bool) {
+	key, value, ok := strings.Cut(line, "=")
+	if section != "[Globals]" || !ok || strings.TrimSpace(key) != keyPort {
+		return "", false
+	}
+	return strings.TrimSpace(value), true
 }
 
 // withPort is xrdp.ini with [Globals] listening on port, inserting a `port=`

@@ -89,7 +89,7 @@ func readRDPDeny(r Runner) (rdpDeny, error) {
 		return rdpDeny{}, err
 	}
 	f := parseKeyValues(out)
-	return rdpDeny{policy: f["policy"], local: f["local"]}, nil
+	return rdpDeny{policy: f[denyPolicy.Key], local: f[denyLocal.Key]}, nil
 }
 
 // parseKeyValues reads the key=value lines the PowerShell reads print. The
@@ -199,14 +199,55 @@ func actRead(name string, err error, okMsg, failMsg, fix string) SetupStep {
 	return newStep(name, OutcomeOK, okMsg, "")
 }
 
+// psField is one line of a key=value PowerShell read. The script prints
+// "Key=<Expr>" and the parser looks the value up by the same Key, so the two
+// cannot disagree on a name (#601).
+type psField struct{ Key, Expr string }
+
+func (f psField) print() string { return fmt.Sprintf(`Write-Output "%s=%s"`, f.Key, f.Expr) }
+
+// printAll joins the print statements of fields into one script fragment.
+func printAll(fields ...psField) string {
+	stmts := make([]string, len(fields))
+	for i, f := range fields {
+		stmts[i] = f.print()
+	}
+	return strings.Join(stmts, "; ")
+}
+
+var (
+	netCategory = psField{"category", "$($_.NetworkCategory)"}
+
+	denyPolicy = psField{"policy", "$p"}
+	denyLocal  = psField{"local", "$l"}
+
+	fwCount     = psField{"count", "$($r.Count)"}
+	fwEnabled   = psField{"enabled", "$($x.Enabled)"}
+	fwAction    = psField{"action", "$($x.Action)"}
+	fwDirection = psField{"direction", "$($x.Direction)"}
+	fwProfile   = psField{"profile", "$($x.Profile)"}
+	fwRemote    = psField{"remote", "$(($x | Get-NetFirewallAddressFilter).RemoteAddress -join ',')"}
+	fwProtocol  = psField{"protocol", "$($f.Protocol)"}
+	fwPort      = psField{keyPort, "$($f.LocalPort)"}
+)
+
+// keyPort is the key a port is read and declared under: the firewall read's
+// key=value line, the host file's services[] entry and xrdp.ini's [Globals].
+const keyPort = "port"
+
 const (
-	psReadNetworkProfile    = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { Write-Output "category=$($_.NetworkCategory)" }`
 	psNetworkProfilePrivate = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { $_ | Set-NetConnectionProfile -NetworkCategory Private }`
 	psReadRDPPort           = `$RdpPort = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -ErrorAction SilentlyContinue).PortNumber; if (-not $RdpPort) { $RdpPort = 3389 }; Write-Output $RdpPort`
-	psReadRDPDeny           = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; Write-Output "policy=$p"; Write-Output "local=$l"`
-	psReadRDGroup           = `Write-Output "exposed=$(@(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -Enabled True -Direction Inbound -Action Allow -ErrorAction SilentlyContinue | Where-Object { ($_ | Get-NetFirewallAddressFilter).RemoteAddress -eq 'Any' }).Count)"`
-	psReadFirewallRule      = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); Write-Output "count=$($r.Count)"; foreach ($x in $r) { Write-Output "enabled=$($x.Enabled)"; Write-Output "action=$($x.Action)"; Write-Output "direction=$($x.Direction)"; Write-Output "profile=$($x.Profile)"; Write-Output "remote=$(($x | Get-NetFirewallAddressFilter).RemoteAddress -join ',')"; $f = $x | Get-NetFirewallPortFilter; Write-Output "protocol=$($f.Protocol)"; Write-Output "port=$($f.LocalPort)" }`
 	psEnableRDP             = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; ` + psReadRDPPort
+)
+
+// The key=value reads. psReadFirewallRule takes the rule name as its %q.
+var (
+	psReadNetworkProfile = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { ` + netCategory.print() + ` }`
+	psReadRDPDeny        = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; ` + printAll(denyPolicy, denyLocal)
+	psReadRDGroup        = `Write-Output "exposed=$(@(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -Enabled True -Direction Inbound -Action Allow -ErrorAction SilentlyContinue | Where-Object { ($_ | Get-NetFirewallAddressFilter).RemoteAddress -eq 'Any' }).Count)"`
+	psReadFirewallRule   = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); ` + fwCount.print() + `; foreach ($x in $r) { ` +
+		printAll(fwEnabled, fwAction, fwDirection, fwProfile, fwRemote) + `; $f = $x | Get-NetFirewallPortFilter; ` + printAll(fwProtocol, fwPort) + ` }`
 )
 
 func runPS(r Runner, script string) error {
@@ -288,7 +329,7 @@ func networkProfileStep(r Runner) SetupStep {
 // lists and how many of them are Private.
 func parseNetworkProfiles(out string) (count, private int) {
 	for _, line := range strings.Split(out, "\n") {
-		v, ok := strings.CutPrefix(strings.TrimSpace(line), "category=")
+		v, ok := strings.CutPrefix(strings.TrimSpace(line), netCategory.Key+"=")
 		if !ok {
 			continue
 		}
@@ -438,15 +479,15 @@ func normalizeRange(e string) string {
 // (unknown) skips the port comparison. found reports whether any rule has the
 // name; legacy reports a rule that allows any address, as earlier releases
 // created it.
-func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found, legacy bool, err error) {
+func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found, legacy bool, err error) { //nolint:gocyclo // baseline #629
 	out, err := outputPS(r, fmt.Sprintf(psReadFirewallRule, rule))
 	if err != nil {
 		return false, false, false, err
 	}
 	f := parseKeyValues(out)
-	ok = f["count"] == "1" && f["enabled"] == "True" && f["action"] == "Allow" && f["direction"] == "Inbound" &&
-		f["protocol"] == "TCP" && f["profile"] == "Any" && remoteIsTailnet(f["remote"]) && (port == 0 || f["port"] == strconv.Itoa(port))
-	return ok, f["count"] != "0", f["count"] == "1" && strings.EqualFold(f["remote"], "any"), nil
+	ok = f[fwCount.Key] == "1" && f[fwEnabled.Key] == "True" && f[fwAction.Key] == "Allow" && f[fwDirection.Key] == "Inbound" &&
+		f[fwProtocol.Key] == "TCP" && f[fwProfile.Key] == "Any" && remoteIsTailnet(f[fwRemote.Key]) && (port == 0 || f[fwPort.Key] == strconv.Itoa(port))
+	return ok, f[fwCount.Key] != "0", f[fwCount.Key] == "1" && strings.EqualFold(f[fwRemote.Key], "any"), nil
 }
 
 // windowsFirewallSetupStep recreates the rule only when the read does not

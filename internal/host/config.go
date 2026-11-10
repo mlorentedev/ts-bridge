@@ -79,7 +79,7 @@ func Merge(flags Flags) Config {
 }
 
 // Resolve applies the precedence chain flags > env > file > per-OS defaults
-// (ADR-017 §1). The file must already be validated for goos (LoadFile).
+// (ADR-017 §1). The file must already be validated for goos by LoadFile or LoadServeFile.
 func Resolve(goos string, file File, flags Flags) Config {
 	cfg := defaultsFor(goos)
 	applyFile(&cfg, file.Host)
@@ -106,7 +106,7 @@ func defaultsFor(goos string) Config {
 
 // applyFile layers the declared state over the defaults. power.prevent_sleep
 // is the inverse of NoSleep.
-func applyFile(cfg *Config, h FileHost) {
+func applyFile(cfg *Config, h FileHost) { //nolint:gocyclo // baseline #629
 	if h.Services != nil {
 		cfg.Services = make([]DeclaredService, 0, len(h.Services))
 		for _, s := range h.Services {
@@ -158,7 +158,7 @@ func LoadConfig() (Config, error) {
 	return cfg, nil
 }
 
-func applyEnv(cfg *Config) {
+func applyEnv(cfg *Config) { //nolint:gocyclo // baseline #629
 	// Firewall rule.
 	if v := os.Getenv("TS_HOST_FIREWALL_RULE"); v != "" {
 		cfg.FirewallRule = v

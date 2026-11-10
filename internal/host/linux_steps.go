@@ -191,6 +191,9 @@ type firewallRead struct {
 	ufwLegacy bool
 	foreign   []string
 	scoped    bool
+	// ufwScoped is scoped counting ufw's own list only: on an inactive ufw an
+	// iptables rule does not stand in for the allow ufw will need once enabled.
+	ufwScoped bool
 }
 
 // source names the tool whose rules decided the read, for messages; backend
@@ -239,7 +242,8 @@ func readUFW(r Runner, port int) firewallRead {
 	} else {
 		read.state, read.blockedBy = ufwDecide(string(out), port)
 		read.ufwAllows = read.state == rulePresent
-		read.ufwLegacy, read.foreign, read.scoped = ufwUnscopedRead(string(out), port)
+		read.ufwLegacy, read.foreign, read.ufwScoped = ufwUnscopedRead(string(out), port)
+		read.scoped = read.ufwScoped
 	}
 	if _, err := r.LookPath(backendIPT); err != nil {
 		return read
@@ -287,7 +291,7 @@ var tsInputJump = []string{"-A", iptInput, "-j", tsInputChain}
 // ts-input chain. A failed read of either is an unknown state, and so is a
 // qualified jump into ts-input that the walk reaches with nothing decided:
 // setup never appends an open rule on a guess (#532).
-func readIptables(r Runner, port int) firewallRead {
+func readIptables(r Runner, port int) firewallRead { //nolint:gocyclo // baseline #629
 	out, err := r.Output(backendIPT, "-S", iptInput)
 	if err != nil {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
@@ -326,8 +330,25 @@ func iptUnscopedRead(input, walked string, port int, state ruleState) (foreign [
 	unscoped := iptUnscoped(input, port)
 	legacy := iptPrinted(iptablesLegacy(port))
 	foreign = slices.DeleteFunc(slices.Clone(unscoped), func(line string) bool { return slices.Equal(strings.Fields(line), legacy) })
-	rest := slices.DeleteFunc(strings.Split(walked, "\n"), func(line string) bool { return slices.Contains(unscoped, strings.TrimSpace(line)) })
+	rest := slices.DeleteFunc(strings.Split(walked, "\n"), func(line string) bool {
+		return slices.Contains(unscoped, strings.TrimSpace(line)) || iptAcceptOffTailnet(line)
+	})
 	return foreign, state == rulePresent && iptablesCovers(strings.Join(rest, "\n"), port)
+}
+
+// iptAcceptOffTailnet reports an ACCEPT scoped to something other than the
+// tailnet: another interface, or a source or destination address. Such a rule
+// admits the port, but not from the tailnet, so it is not the scoped rule and
+// setup must still add `-i tailscale0` before it deletes a legacy copy.
+func iptAcceptOffTailnet(line string) bool {
+	f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+	if iptFlag(f, "-j") != iptAccept {
+		return false
+	}
+	if in := iptFlag(f, "-i"); in != "" && in != tailnetInterface {
+		return true
+	}
+	return iptFlag(f, "-s") != "" || iptFlag(f, "-d") != ""
 }
 
 // tsInputUnreached reads the two places tailscaled keeps ts-input where an
@@ -452,7 +473,7 @@ func iptBeforeQualifiedJump(input string) (string, string) {
 // it would read as a rule of its own; here it becomes a space. An unterminated
 // quote is not iptables' output: it is returned as printed, so the rules after
 // it are not swallowed into one line.
-func iptRules(out string) string {
+func iptRules(out string) string { //nolint:gocyclo // baseline #629
 	b := []byte(out)
 	quoted, escaped := false, false
 	for i, c := range b {
@@ -582,7 +603,7 @@ func iptPortlessCovers(f []string) bool {
 
 // iptPortlessToken returns how many fields the qualifier at the start of f
 // spans when it keeps a rule open to every TCP port, or 0 when it narrows it.
-func iptPortlessToken(f []string) int {
+func iptPortlessToken(f []string) int { //nolint:gocyclo // baseline #629
 	if len(f) < 2 {
 		return 0
 	}
@@ -701,7 +722,7 @@ func ufwAllows(added string, port int) bool {
 // `to <address>`),
 // together with that rule. route, out and limit rules never decide, and the
 // port must match exactly: 33890 is not 3389.
-func ufwDecide(added string, port int) (ruleState, string) {
+func ufwDecide(added string, port int) (ruleState, string) { //nolint:gocyclo // baseline #629
 	for _, line := range strings.Split(added, "\n") {
 		f := strings.Fields(line)
 		if i := slices.Index(f, "comment"); i >= 0 {
@@ -726,11 +747,7 @@ func ufwDecide(added string, port int) (ruleState, string) {
 // interface or destination address, as iptables' -s/-i/-d do. `to any` does
 // not narrow it.
 func ufwScoped(f []string) bool {
-	if slices.Contains(f, "from") || slices.Contains(f, "on") {
-		return true
-	}
-	t := slices.Index(f, "to")
-	return t >= 0 && t+1 < len(f) && f[t+1] != "any"
+	return slices.Contains(f, "on") || ufwArgIsNot(f, "from", "any") || ufwArgIsNot(f, "to", "any")
 }
 
 // ufwAllowArgs is the allow setup writes: the port, on the tailnet interface.
@@ -754,6 +771,9 @@ func ufwUnscopedRead(added string, port int) (legacy bool, foreign []string, sco
 	var rest []string
 	for _, line := range strings.Split(added, "\n") {
 		f := strings.Fields(line)
+		if ufwAllowOffTailnet(f) {
+			continue
+		}
 		if !ufwUnscopedAllow(f, port) {
 			rest = append(rest, line)
 		} else if slices.Equal(f, []string{backendUFW, ufwAllow, ufwLegacyShort(port)}) {
@@ -766,13 +786,39 @@ func ufwUnscopedRead(added string, port int) (legacy bool, foreign []string, sco
 	return legacy, foreign, state == rulePresent
 }
 
+// ufwAllowOffTailnet reports an allow scoped to something other than the
+// tailnet: another interface, or a source or destination address. Such a rule
+// admits the port, but not from the tailnet, so it is not the scoped rule and
+// setup must still add the tailscale0 allow before it deletes a legacy one.
+func ufwAllowOffTailnet(f []string) bool {
+	if i := slices.Index(f, "comment"); i >= 0 {
+		f = f[:i]
+	}
+	if !ufwInboundAllow(f) {
+		return false
+	}
+	return ufwArgIsNot(f, "on", tailnetInterface) || ufwArgIsNot(f, "from", "any") || ufwArgIsNot(f, "to", "any")
+}
+
+// ufwInboundAllow reports whether the fields of a `ufw show added` line are an
+// inbound allow with at least one argument.
+func ufwInboundAllow(f []string) bool {
+	return len(f) >= 3 && f[0] == backendUFW && f[1] == ufwAllow && !slices.Contains(f, "out")
+}
+
+// ufwArgIsNot reports whether keyword appears with a value other than want.
+func ufwArgIsNot(f []string, keyword, want string) bool {
+	i := slices.Index(f, keyword)
+	return i >= 0 && i+1 < len(f) && f[i+1] != want
+}
+
 // ufwUnscopedAllow reports whether a `ufw show added` line is an inbound allow
 // for TCP port with no interface, source or destination address.
 func ufwUnscopedAllow(f []string, port int) bool {
 	if i := slices.Index(f, "comment"); i >= 0 {
 		f = f[:i+1] // keep the keyword: a commented rule never equals the exact legacy one
 	}
-	if len(f) < 3 || f[0] != backendUFW || f[1] != ufwAllow || slices.Contains(f, "out") || ufwScoped(f) {
+	if !ufwInboundAllow(f) || ufwScoped(f) {
 		return false
 	}
 	g := slices.DeleteFunc(slices.Clone(f[2:]), func(w string) bool { return w == "log" || w == "log-all" })
@@ -782,7 +828,7 @@ func ufwUnscopedAllow(f []string, port int) bool {
 // ufwRuleMatchesPort matches the short form (`3389/tcp`, `3389`, `in 3389/tcp`)
 // and the full form (`... port 3389 [proto tcp]`). A trailing `comment '...'` is
 // ignored, as is a `log`/`log-all` modifier, and the port may sit in a list or range (`22,3389/tcp`, `3380:3390/tcp`).
-func ufwRuleMatchesPort(f []string, port int) bool {
+func ufwRuleMatchesPort(f []string, port int) bool { //nolint:gocyclo // baseline #629
 	if i := slices.Index(f, "comment"); i >= 0 {
 		f = f[:i]
 	}
@@ -964,7 +1010,7 @@ func ufwInactiveSetupStep(r Runner, read firewallRead, port int) SetupStep {
 // ufwInactiveReplace swaps ufw's legacy allow for the scoped one in ufw's own
 // rule list, adding the scoped allow only when no scoped allow is there already.
 func ufwInactiveReplace(r Runner, read firewallRead, port int) (SetupStep, bool) {
-	if !read.scoped {
+	if !read.ufwScoped {
 		if err := r.Run(backendUFW, ufwAllowArgs(port)...); err != nil {
 			return newStep(linuxFwName, OutcomeFailed, fmt.Sprintf("ufw is inactive, and adding its scoped allow failed: %v", err),
 				fmt.Sprintf("run `ufw %s` as root, then enable ufw with `ufw enable`", strings.Join(ufwAllowArgs(port), " "))), true
@@ -1005,6 +1051,10 @@ func ufwInactiveStep(read firewallRead, port int, state string) SetupStep {
 	if read.copies > 0 {
 		message += "; it also holds " + copiesHeld(read, port)
 		fix += "; " + copiesFix(read, port)
+	}
+	if len(read.foreign) > 0 {
+		message += "; legacy unscoped rule: " + strings.Join(read.foreign, "; ")
+		fix += "; " + foreignFix(read)
 	}
 	return newStep(linuxFwName, OutcomeManual, message, fix)
 }

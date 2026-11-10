@@ -73,6 +73,9 @@ type FlagSet struct {
 	PortRange       string
 	Config          string
 	Reset           bool
+	// HealthAllowRemote is a pointer so --health-allow-remote=false can override
+	// TS_HEALTH_ALLOW_REMOTE; nil means the user did not pass the flag.
+	HealthAllowRemote *bool
 	// Verbose is a pointer so --verbose=false can override TS_VERBOSE; nil
 	// means the user did not pass the flag.
 	Verbose *bool
@@ -80,7 +83,7 @@ type FlagSet struct {
 
 // Merge applies the precedence chain: flags > env > yaml > defaults.
 // Returns a fully-populated Config.
-func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) {
+func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) { //nolint:funlen,gocyclo // baseline #629
 	if err := validateYAMLAuthKey(yamlCfg); err != nil {
 		return Config{}, err
 	}
@@ -362,6 +365,9 @@ func applyEnv(cfg *Config) {
 	applyEnvString(&cfg.BootstrapSSH, "TS_BOOTSTRAP_SSH")
 	applyEnvString(&cfg.BootstrapSOCKSAddr, "TS_BOOTSTRAP_SOCKS_ADDR")
 	applyEnvString(&cfg.HealthAddr, "TS_HEALTH_ADDR")
+	if v := os.Getenv("TS_HEALTH_ALLOW_REMOTE"); v != "" {
+		cfg.HealthAllowRemote = parseBoolEnv(v)
+	}
 	applyEnvString(&cfg.LogFormat, "TS_LOG_FORMAT")
 
 	// AutoInstance from env (TS_AUTO_INSTANCE / TS_MANUAL_MODE).
@@ -444,7 +450,7 @@ func positiveDuration(d time.Duration) bool    { return d > 0 }
 func nonNegativeInt(n int) bool                { return n >= 0 }
 func positiveInt64(n int64) bool               { return n > 0 }
 
-func applyFlags(cfg *Config, flags FlagSet) {
+func applyFlags(cfg *Config, flags FlagSet) { //nolint:funlen,gocyclo // baseline #629
 	// String fields.
 	applyFlagProxyMode(cfg, flags)
 	applyFlagString(&cfg.AuthKey, flags.AuthKey)
@@ -491,6 +497,9 @@ func applyFlags(cfg *Config, flags FlagSet) {
 	}
 	if flags.DialRetries != nil {
 		cfg.DialRetries = *flags.DialRetries
+	}
+	if flags.HealthAllowRemote != nil {
+		cfg.HealthAllowRemote = *flags.HealthAllowRemote
 	}
 	if flags.Verbose != nil {
 		cfg.Verbose = *flags.Verbose
@@ -547,7 +556,7 @@ func resolveAutoInstance(cfg *Config, yamlCfg PartialConfig, flags FlagSet) {
 	// Default: auto-mode is on (already set by defaults()).
 }
 
-func applyAutoInstance(cfg *Config, flags FlagSet) error {
+func applyAutoInstance(cfg *Config, flags FlagSet) error { //nolint:gocyclo // baseline #629
 	if !cfg.AutoInstance {
 		return nil
 	}
@@ -678,7 +687,7 @@ func validateBootstrapListenerCollision(cfg Config) error {
 	return nil
 }
 
-func sameListenerEndpoint(left, right string) bool {
+func sameListenerEndpoint(left, right string) bool { //nolint:gocyclo // baseline #629
 	if left == "" || right == "" {
 		return false
 	}

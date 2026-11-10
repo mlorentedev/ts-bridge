@@ -8,7 +8,7 @@ import (
 )
 
 // decodeYAML decodes YAML data into cfg, checking for unknown fields.
-func decodeYAML(data []byte, cfg *PartialConfig) error {
+func decodeYAML(data []byte, cfg *PartialConfig) error { //nolint:funlen // baseline #629
 	// First decode into a map to check for unknown fields.
 	var raw map[string]interface{}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
