@@ -110,14 +110,14 @@ preflight_mesh() {
 # mesh_rdp_case DIR reaches the guest's xrdp through the mesh from a client on this host. The
 # client key is a 0600 file; nothing secret reaches argv.
 mesh_rdp_case() {
-  local dir="$1" gip port pid ok=1 i
+  local dir="$1" gip port pid ok=1
   gip="$(hs_nodes_json | python3 -c 'import json,sys; print(next(a for n in json.load(sys.stdin) if n["name"] == "tsb-e2e-linux" for a in n["ip_addresses"] if "." in a))')" || return 1
   port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
   (umask 077 && hs_mint_key tag:e2e-client >"$dir/clientkey") || return 1
   env "${MESH_ENV[@]}" "$dir/tsb-client" connect --control-url "http://$(hs_host_ip):8080" --auth-key-file "$dir/clientkey" \
     --state-dir "$dir/state" --target "$gip:3389" --local-addr "127.0.0.1:$port" --manual-mode --hostname tsb-e2e-client >"$dir/client.log" 2>&1 &
   pid=$!
-  for i in $(seq 1 60); do grep -q '^READY ' "$dir/client.log" && break; sleep 1; done
+  for _ in $(seq 1 60); do grep -q '^READY ' "$dir/client.log" && break; sleep 1; done
   python3 -I "$HERE/probe.py" x224 "127.0.0.1:$port" >/dev/null 2>&1 && ok=0
   kill "$pid" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
@@ -126,7 +126,8 @@ mesh_rdp_case() {
 }
 
 run_mesh_linux() {
-  local dir="$1" url="http://$(hs_host_ip):8080"
+  local dir="$1" url
+  url="http://$(hs_host_ip):8080" || return 1
   dotf vm linux cp "$dir/tsb-guest" "$SESSION:/tmp/tsb-guest" >/dev/null
   dotf vm linux cp "$HERE/probe.py" "$SESSION:/tmp/probe.py" >/dev/null
   # The guest reads the control URL, then the tagged single-use key, from stdin.
