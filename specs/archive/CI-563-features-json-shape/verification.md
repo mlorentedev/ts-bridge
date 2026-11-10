@@ -35,7 +35,16 @@ created: "2026-11-02"
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/CI-563-features-json-shape/` -> `specs/archive/CI-563-features-json-shape/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/CI-563-features-json-shape/` -> `specs/archive/CI-563-features-json-shape/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
+
+## Review disposition
+
+`review.md` (nan/mimo-v2.6-flash) returned PASS with four Minors:
+
+- Symlinked `features.json` skipped: REAL, ticketed as #699.
+- Unreadable file reported as invalid JSON: REAL, ticketed as #699.
+- `proposal.md` still says neither step runs in CI: REAL and stale. #581 wired both steps and exempted CI-345. `proposal.md` is in the contract set, so the text stays as reviewed; this line records the drift.
+- Unticked AC and closing boxes: REAL. The substance holds: the check runs in the `hygiene` job and `bash scripts/check-features-shape.sh` passes on the real tree. Ticking the boxes is left as is, so the reviewed text is what is archived.
