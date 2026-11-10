@@ -114,13 +114,18 @@ const (
 )
 
 // tsInputDefault is tailscaled's ts-input chain as `iptables -S ts-input`
-// prints it: tailscale.com v1.104.2's AddChains, addBase4, AddExternalCGNATRules,
-// AddLoopbackRule and AddMagicsockPortRule replayed in that order with iptables
-// 1.8.10 (nf_tables) in ubuntu:24.04 (#492). tsInputNoAccept is the same chain
-// without the tailnet ACCEPT, so only rules that never decide remain.
+// prints it, verbatim from tailscaled 1.104.4 (the tailscale.com of go.mod) in
+// netfilter mode on, iptables 1.8.10 (nf_tables), Ubuntu 24.04, enrolled against
+// a local Headscale (scripts/e2e/capture-tsfw.sh, #526). tsInputNoAccept is the
+// same chain without the tailnet ACCEPT, so only rules that never decide remain.
+// tsInputNFTMode is the chain tailscaled builds in nftables mode
+// (TS_DEBUG_FIREWALL_MODE=nftables), as iptables-nft prints it: the interface
+// is the wildcard tailscale0+, and INPUT jumps to it as in mode on.
 const (
-	tsInputDefault  = "-N ts-input\n-A ts-input -s 100.64.0.5/32 -i lo -j ACCEPT\n-A ts-input -i tailscale0 -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n-A ts-input -p udp -m udp --dport 41641 -j ACCEPT\n"
-	tsInputNoAccept = "-N ts-input\n-A ts-input -s 100.64.0.5/32 -i lo -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n-A ts-input -p udp -m udp --dport 41641 -j ACCEPT\n"
+	tsInputDefault   = "-N ts-input\n-A ts-input -s 100.64.0.1/32 -i lo -j ACCEPT\n-A ts-input -i tailscale0 -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n"
+	tsInputNoAccept  = "-N ts-input\n-A ts-input -s 100.64.0.1/32 -i lo -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n"
+	tsInputNFTMode   = "-N ts-input\n-A ts-input -s 100.64.0.1/32 -i lo+ -j ACCEPT\n-A ts-input -i tailscale0+ -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0+ -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0+ -j DROP\n"
+	iptTSInputJumped = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
 )
 
 // A ufw host's `iptables -S INPUT` with tailscaled's jump inserted, verbatim
@@ -1382,13 +1387,13 @@ func TestReadUFWCopiesAdmit(t *testing.T) {
 }
 
 // nftTSInputRead is the command that finds tailscaled's ts-input in the nftables
-// table it shares with iptables-nft; nftTSInput is what it prints, rendered
-// from the rule tailscale.com v1.104.4 builds (util/linuxfw/nftables_runner.go,
-// AddChains and createAcceptIncomingPacketRule). Not captured from a live host:
-// #526 keeps the capture open.
+// table it shares with iptables-nft; nftTSInput is what it prints, verbatim from
+// tailscaled 1.104.4 in nftables mode with nftables 1.0.9 (capture-tsfw.sh, #526).
+// On that host iptables-nft prints the chain and INPUT's jump to it as well, so
+// the nft read matters only where the iptables binary is iptables-legacy.
 const (
 	nftTSInputRead = "nft list chain ip filter ts-input"
-	nftTSInput     = "table ip filter {\n\tchain ts-input {\n\t\tiifname \"tailscale0\" counter packets 0 bytes 0 accept\n\t}\n}\n"
+	nftTSInput     = "table ip filter {\n\tchain ts-input {\n\t\tiifname \"lo*\" ip saddr 100.64.0.1 counter packets 0 bytes 0 accept\n\t\tiifname \"tailscale0*\" counter packets 0 bytes 0 accept\n\t\tiifname != \"tailscale0*\" ip saddr 100.115.92.0/23 counter packets 0 bytes 0 return\n\t\tiifname != \"tailscale0*\" ip saddr 100.64.0.0/10 counter packets 0 bytes 0 drop\n\t}\n}\n"
 	iptNoJump      = "-P INPUT ACCEPT\n"
 )
 
@@ -1739,5 +1744,30 @@ func TestUnreadStepFixesDoNotBlamePrivilege(t *testing.T) {
 		if step.Fix == "" || privilege.MatchString(step.Fix) {
 			t.Errorf("%s: fix %q should name the cause, not privilege", name, step.Fix)
 		}
+	}
+}
+
+// TestReadIptablesCapturedModes reads what tailscaled 1.104.4 leaves in
+// iptables in each netfilter mode, captured live (capture-tsfw.sh, #526):
+// mode on and nftables mode admit the port through ts-input, and nodivert
+// leaves the chain unreached, which is unknown, never absent.
+func TestReadIptablesCapturedModes(t *testing.T) {
+	tests := []struct {
+		name, input, chain string
+		want               ruleState
+		reason             string
+	}{
+		{"netfilter-mode on", iptTSInputJumped, tsInputDefault, rulePresent, ""},
+		{"netfilter-mode nodivert", iptNoJump, tsInputDefault, ruleUnknown, "nodivert"},
+		{"nftables mode, read through iptables-nft", iptTSInputJumped, tsInputNFTMode, rulePresent, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{output: map[string]string{iptRead: tt.input, iptChain: tt.chain}}
+			got := readIptables(r, 3389)
+			if got.state != tt.want || !strings.Contains(got.reason, tt.reason) {
+				t.Fatalf("got state %v reason %q, want %v with %q", got.state, got.reason, tt.want, tt.reason)
+			}
+		})
 	}
 }
