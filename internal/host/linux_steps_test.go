@@ -963,7 +963,7 @@ func TestCheckForLinux(t *testing.T) {
 				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
 			}
 			for _, c := range tt.runner.calls {
-				if c == "run "+iptAppend || c == "run "+enableXRDP || c == "run "+ufwAllowCmd {
+				if c == "run "+iptAppend || c == "run "+enableXRDP || c == "run "+ufwAllowCmd || c == "run "+ufwDeleteCmd || c == "run "+iptDelete {
 					t.Errorf("check ran a mutating command: %q", c)
 				}
 			}
@@ -1693,6 +1693,8 @@ func TestReadUFWUnscoped(t *testing.T) {
 		{"another interface does not admit the tailnet", "ufw allow in on eth1 to any port 3389 proto tcp\n", false, 0, false},
 		{"a destination address does not admit the tailnet", "ufw allow to 192.168.1.5 port 3389 proto tcp\n", false, 0, false},
 		{"a legacy allow beside an eth1 rule is not scoped", "ufw allow in on eth1 to any port 3389 proto tcp\n" + ufwLegacyAllow, true, 0, false},
+		{"from any is not a scope", "ufw allow from any to any port 3389 proto tcp\n", false, 1, false},
+		{"from any beside a legacy allow is not scoped", "ufw allow from any to any port 3389 proto tcp\n" + ufwLegacyAllow, true, 1, false},
 		{"a tailnet allow from any source is scoped", "ufw allow in on tailscale0 from any to any port 3389 proto tcp\n", false, 0, true},
 		{"another port", "ufw allow 33890/tcp\n", false, 0, false},
 		{"udp", "ufw allow 3389/udp\n", false, 0, false},
