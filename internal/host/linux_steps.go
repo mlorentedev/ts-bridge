@@ -743,11 +743,7 @@ func ufwDecide(added string, port int) (ruleState, string) { //nolint:gocyclo //
 // interface or destination address, as iptables' -s/-i/-d do. `to any` does
 // not narrow it.
 func ufwScoped(f []string) bool {
-	if slices.Contains(f, "from") || slices.Contains(f, "on") {
-		return true
-	}
-	t := slices.Index(f, "to")
-	return t >= 0 && t+1 < len(f) && f[t+1] != "any"
+	return slices.Contains(f, "on") || ufwArgIsNot(f, "from", "any") || ufwArgIsNot(f, "to", "any")
 }
 
 // ufwAllowArgs is the allow setup writes: the port, on the tailnet interface.
@@ -794,10 +790,16 @@ func ufwAllowOffTailnet(f []string) bool {
 	if i := slices.Index(f, "comment"); i >= 0 {
 		f = f[:i]
 	}
-	if len(f) < 3 || f[0] != backendUFW || f[1] != ufwAllow || slices.Contains(f, "out") {
+	if !ufwInboundAllow(f) {
 		return false
 	}
 	return ufwArgIsNot(f, "on", tailnetInterface) || ufwArgIsNot(f, "from", "any") || ufwArgIsNot(f, "to", "any")
+}
+
+// ufwInboundAllow reports whether the fields of a `ufw show added` line are an
+// inbound allow with at least one argument.
+func ufwInboundAllow(f []string) bool {
+	return len(f) >= 3 && f[0] == backendUFW && f[1] == ufwAllow && !slices.Contains(f, "out")
 }
 
 // ufwArgIsNot reports whether keyword appears with a value other than want.
@@ -812,7 +814,7 @@ func ufwUnscopedAllow(f []string, port int) bool {
 	if i := slices.Index(f, "comment"); i >= 0 {
 		f = f[:i+1] // keep the keyword: a commented rule never equals the exact legacy one
 	}
-	if len(f) < 3 || f[0] != backendUFW || f[1] != ufwAllow || slices.Contains(f, "out") || ufwScoped(f) {
+	if !ufwInboundAllow(f) || ufwScoped(f) {
 		return false
 	}
 	g := slices.DeleteFunc(slices.Clone(f[2:]), func(w string) bool { return w == "log" || w == "log-all" })
