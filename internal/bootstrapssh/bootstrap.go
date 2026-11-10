@@ -45,14 +45,20 @@ type Tunnel struct {
 }
 
 func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
-	return start(ctx, cfg, dependencies{
+	return start(ctx, cfg, defaultDependencies())
+}
+
+// defaultDependencies are the real ones Start uses; TestStartWiresContainment
+// pins the containment hooks among them.
+func defaultDependencies() dependencies {
+	return dependencies{
 		lookPath:       exec.LookPath,
 		commandContext: exec.CommandContext,
 		dialContext:    new(net.Dialer).DialContext,
 		prepare:        prepareContainment,
 		contain:        containProcess,
 		pollInterval:   defaultPollInterval,
-	})
+	}
 }
 
 func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) { //nolint:funlen // baseline #629

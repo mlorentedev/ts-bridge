@@ -28,4 +28,4 @@ owner: manu
 - [x] macOS `go test -race ./...`; Linux in Docker (`golang:1.27`) for the package with `-race`
 - [x] `golangci-lint` for darwin, linux and windows; `gosec ./...`
 - [x] Mutation (Linux): dropping Pdeathsig makes the child outlive its parent
-- [ ] `test-windows` CI log shows `TestContainment_KillsChildWhenParentDies` passing
+- [x] `test-windows` CI log shows `TestContainment_KillsChildWhenParentDies` passing
