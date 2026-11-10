@@ -326,6 +326,10 @@ func readIptables(r Runner, port int) firewallRead { //nolint:gocyclo // baselin
 // setup did not write and says whether a scoped rule admits the port without
 // them (#631). Rules walked is what decided state: tailscaled's ts-input is
 // inlined there, so its `-i tailscale0 -j ACCEPT` counts as the scoped rule.
+// Unscoped allows are looked for in INPUT only: an unscoped port ACCEPT inside
+// ts-input would count as the scoped rule. tailscaled writes none (its accepts
+// are `-i tailscale0` and loopback, see the captures in the tests), and the
+// chain is tailscaled's to rewrite, not setup's.
 func iptUnscopedRead(input, walked string, port int, state ruleState) (foreign []string, scoped bool) {
 	unscoped := iptUnscoped(input, port)
 	legacy := iptPrinted(iptablesLegacy(port))

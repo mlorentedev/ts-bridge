@@ -129,7 +129,7 @@ func TestWindowsFirewallRule(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			newRunner := func() *recordingRunner {
 				return &recordingRunner{
-					output: map[string]string{psPrefix + psFwCheck: tt.read},
+					output: map[string]string{psPrefix + psFwCheck: tt.read, psPrefix + psReadRDGroup: groupClean},
 					fail:   map[string]bool{psPrefix + psFwCheck: tt.readFails},
 				}
 			}
@@ -528,6 +528,10 @@ func TestWindowsFirewallRecreateOrder(t *testing.T) {
 // any-address rule in the built-in "Remote Desktop" group voids the tailnet
 // scope, so a converged named rule is not enough. Setup reports it and leaves
 // the group alone; check says the same and firewall_ok is false.
+// groupClean is the built-in group read on a host where no enabled rule of the
+// group admits RDP from any address.
+const groupClean = "exposed=0\r\n"
+
 func TestWindowsBuiltinGroup(t *testing.T) {
 	good := "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")
 	legacy := strings.Replace(good, tailnetRemote, "Any", 1)
@@ -542,7 +546,8 @@ func TestWindowsBuiltinGroup(t *testing.T) {
 		note      bool // check names the group beside the named-rule message
 	}{
 		{name: "none enabled", rule: good, group: "exposed=0\r\n", want: OutcomeOK, ok: true},
-		{name: "unreadable output counts as none", rule: good, group: "", want: OutcomeOK, ok: true},
+		{name: "a garbled count is unverified, not none", rule: good, group: "", want: OutcomeUnverified},
+		{name: "a non-numeric count is unverified", rule: good, group: "exposed=n/a\r\n", want: OutcomeUnverified},
 		{name: "two enabled", rule: good, group: "exposed=2\r\n", want: OutcomeManual},
 		{name: "read fails", rule: good, groupFail: true, want: OutcomeUnverified},
 		{name: "named rule missing, group reported", rule: "count=0\r\n", group: "exposed=2\r\n", want: OutcomeChanged, note: true},
