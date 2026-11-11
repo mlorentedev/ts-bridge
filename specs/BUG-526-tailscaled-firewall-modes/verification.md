@@ -62,3 +62,8 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - *Vacuous assertion* (REAL): applied. `TestIP6Exposure` now fails a row with no expected v6 text if the message mentions `ip6tables` or IPv6. A mutant that returns a note when `ip6tables` is missing fails the `no ip6tables` row.
 - *Contradictory doc claim* (REAL): applied. Lesson 055 now says the v6 `INPUT` chain is scanned for an off-tailnet allow and plays no part in reachability.
 - *Hardcoded guest arch* (THEORETICAL): declined. The e2e harness is Apple Silicon only (QA-606 topology); `run.sh` builds the guest for arm64 too.
+
+## PR-Agent disposition (#714, head `347b581`, partial run)
+
+- *Vacuous verification* (REAL): applied. `f1` now replays `TestFirewallStepsTailscaledModes/nodivert` (setup writes nothing) beside the read test. This changes `features.json`, so the spec review runs again as round 2 before archive.
+- *v6 scan skips jumped chains* (THEORETICAL): ticketed as #720. tailscaled's own v6 `ts-input` rules are interface-scoped; the gap needs a rule someone added inside a jumped chain.

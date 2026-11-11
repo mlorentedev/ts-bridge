@@ -2,7 +2,7 @@
   {
     "id": "BUG-526-tailscaled-firewall-modes-f1",
     "behavior": "AC1: with --netfilter-mode=nodivert, check reports unverified naming the mode, and setup writes nothing",
-    "verification": "go test ./internal/host/ -run 'TestReadIptablesCapturedModes'",
+    "verification": "go test ./internal/host/ -run 'TestReadIptablesCapturedModes|TestFirewallStepsTailscaledModes/nodivert' -count=1",
     "state": "passing",
     "evidence": "TestReadIptablesCapturedModes/netfilter-mode_nodivert passes at cf2366c on a live capture (a264c19)"
   },
