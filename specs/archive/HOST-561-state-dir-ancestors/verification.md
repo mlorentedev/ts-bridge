@@ -25,7 +25,7 @@ owner: manu
 - [ ] AC3 → `TestCheckStateDir_WalksAncestors` (real filesystem): `CheckStateDir` on an existing
   `0700` `t.TempDir` is refused for an ancestor.
 - Mutants:
-  - dropping the group/other-write test fails 4 subtests;
+  - dropping the group/other-write test fails 5 subtests;
   - accepting a user-owned symlink fails 2.
 
 ## Test status
@@ -67,7 +67,16 @@ owner: manu
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/HOST-561-state-dir-ancestors/` -> `specs/archive/HOST-561-state-dir-ancestors/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/HOST-561-state-dir-ancestors/` -> `specs/archive/HOST-561-state-dir-ancestors/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
+
+## Review disposition
+
+`review.md` (nan/mimo-v2.6-flash) returned PASS with four Minors:
+
+- Relative `state_dir` ends the walk early: declined. The only production caller resolves `state_dir` to an absolute path before the walk, so a relative path never reaches `walkAncestors`.
+- Mutant count: corrected. Disabling the `perm&0o022` case fails 5 subtests, not 4 (`TestCheckUnixAncestor/{sticky_world-writable,group-writable,others-writable}` and two `TestWalkStateDirAncestors` rows).
+- `checkUnixAncestor` is called only by its own test: declined. `TestWalkStateDirAncestors` drives the production path through `ancestorAt`, so a rewiring there is caught.
+- macOS ACLs not read: declined. It is disclosed in `docs/runbooks/host-serve.md` and unreachable, because `validateMesh` refuses `host.mesh` on macOS until #459.
