@@ -101,6 +101,22 @@ PR 5 (review round 1 fixes):
   `iptUnscopedRead` states the assumption: tailscaled writes no such rule (the captures in #526
   show only `-i tailscale0` and loopback), and the chain is tailscaled's to rewrite.
 
+## Review disposition (round 2, FAIL)
+
+Reviewer `nan/mimo-v2.6-flash`, at e6fbbcb (`review.md`; round 1 kept as `review-round1.md`). Fixed in f08036a.
+
+- **Major REAL: an inactive ufw whose only allow is scoped off the tailnet.** Applied. `ufwInactiveState` now checks `offTailnetOnly` before `ufwAllows`. Setup writes `ufw allow in on tailscale0 ...` for when ufw is enabled, and both commands say that the existing allow admits only addresses or interfaces off the tailnet.
+  - After the legacy-allow replacement the read is marked scoped. That keeps "a legacy allow is replaced" saying "allow is in place".
+  - New `TestUFWInactive` row "an allow scoped off the tailnet" (setup and check): red before the fix.
+  - New e2e case "ufw inactive, off-tailnet allow only" in `scripts/e2e/linux.sh`. `make e2e-linux` at f08036a: 85 pass, 0 fail, including this case (`scripts/e2e/out/linux-20261111T024834Z.log`). The Windows change is message-only and is pinned by unit tests, so Windows e2e was not rerun.
+- **Major THEORETICAL: a negated scope (`! -i tailscale0 ... -j ACCEPT`) passed as the scoped rule.** Applied anyway, since the fix is four lines. `iptAcceptOffTailnet` counts a negated `-i`/`-s`/`-d` as off the tailnet, via the new `iptNegated`.
+  - Two `TestReadIptablesUnscoped` rows (negated interface, negated source): red before the fix.
+
+PR-Agent on #704 (head e6fbbcb; its run is marked partial):
+- **Misleading message (REAL).** Applied. A read that answers with no count now says "returned no rule count (...)", and its fix lists the enabled rules instead of sending the operator to a failing read. `TestWindowsBuiltinGroup` asserts it on the two `unparsed` rows, which were red before the fix.
+- **Misplaced doc comment (REAL).** Applied: a blank line now separates `TestWindowsBuiltinGroup`'s comment from `groupClean`'s.
+- **Vacuous e2e guard (THEORETICAL).** Declined. In the same run, `windows.ps1` asserts `(RdGroupOn) -gt 0` once the group is enabled (the drift case near line 124). A query that resolves nothing on this image therefore fails that run, so the two `-eq 0` cases cannot pass alone.
+
 ## Decisions made during implementation
 
 See the proposal: two-tier replacement, Windows built-in group reported but not disabled, fixed `tailscale0`.

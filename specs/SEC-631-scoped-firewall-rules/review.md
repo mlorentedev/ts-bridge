@@ -1,122 +1,130 @@
 ---
 spec: "SEC-631-scoped-firewall-rules"
 verdict: "FAIL"
-reviewed_sha: "55cfd68ba8ef0f91d8ecfc12669895e1498e216c"
-reviewer: "nan/deepseek-v4-flash"
-date: "2026-11-09"
+reviewed_sha: "e6fbbcbd525609327026d529deadbd8cec9db53a"
+reviewer: "nan/mimo-v2.6-flash"
+date: "2026-11-10"
 ---
 
 ## Adversarial review
 
 **Scope**: SEC-631-scoped-firewall-rules — `git diff 9ec0c909fc8d194839b3f7bebade48ba366e29cb...HEAD`
-(12 first-parent commits, of which 4 are this spec's: `80108b2` ADR-017 Amendment B, `605e5d2`
-iptables, `6d53dd6` ufw, `55cfd68` Windows). The rest arrived through merges from master
-(#674/#676/#675/#677/#690/#698/#696/#681, SEC-391) and were judged only where they interact.
+(16 first-parent commits; this spec's are `80108b2` ADR-017 Amendment B, `605e5d2` iptables,
+`6d53dd6` ufw, `55cfd68` Windows, plus round-1-fix PR 5: `af7a330` off-tailnet fix, `27ccaf9`
+garbled group count + fresh-guest pin, `12ea1b5` spec reconciliation/AC7, `e6fbbcb` disposition.
+The rest arrived through merges from master (#674/#676/#675/#677/#690/#698/#696/#681) and are
+judged only where they interact, as in round 1). Round 2: the whole change again, with round 1's
+findings re-checked against the late fixes they interact with.
 **Sources**: `specs/SEC-631-scoped-firewall-rules/{proposal,tasks,verification,features.json}`,
-`internal/host/{linux_steps.go,windows_steps.go}` + their tests, `scripts/e2e/{linux.sh,windows.ps1}`,
-`docs/adr/adr-017-host-desired-state.md`; `contract_digests` in `review-request.json` match
-`dotf spec digest SEC-631-scoped-firewall-rules` (identical four hashes).
+`review-round1.md`, `internal/host/{linux_steps,windows_steps}.go` + tests,
+`scripts/e2e/{linux.sh,windows.ps1}`, `docs/adr/adr-017-host-desired-state.md`.
+`contract_digests` in `review-request.json` match `dotf spec digest SEC-631-scoped-firewall-rules`
+(identical four hashes), so the contract set is the one this review reads.
 
-### What I ran (fresh, this session, at `55cfd68`)
+### What I ran (fresh, this session, at `e6fbbcb`)
 
 | Command | Result |
 |---|---|
-| `go test -race ./...` | exit 0, no failures |
-| `golangci-lint run ./...` (pinned 2.14.0, host/darwin) | `0 issues.` |
-| `gofmt -l .` | empty |
-| `GOOS=windows go vet ./...`, `GOOS=linux go vet ./...` | clean |
-| `bash scripts/check-features-selectors.sh` | `OK (50 go test -run selectors)` — every `features.json` selector resolves |
+| `go test -race -count=1 ./...` | exit 0, 17 packages ok, 0 failures |
+| `golangci-lint run ./...` (pinned 2.14.0) | `0 issues.` |
+| `gofmt -l .` / `go vet ./...` / `GOOS=windows go vet ./internal/host` / `GOOS=linux go vet ./internal/host` | all clean |
+| `bash scripts/check-features-selectors.sh` | `OK (46 go test -run selectors)` |
 | `bash scripts/check-features-shape.sh` | `OK (39 features.json files)` |
-| `features.json` f1 verification (grep on ADR-017) | exit 0 |
-| Mutation: drop `-i tailscale0` from `iptablesAppend` | killed — `TestIptablesPrintedForm` fails on both the printed form and the append string |
-| `make e2e-linux` / `make e2e-windows` | **not run** — requires `dotf vm` guests; AC6 is UNVERIFIED here |
+| features f1 verification (grep on ADR-017) | exit 0 |
+| `bash -n scripts/e2e/linux.sh` | syntax OK |
+| Mutation A: `offTailnetOnly` forced `false` | **killed** — `TestOffTailnetOnlyAllow` (all 4 subtests) and `TestCheckForLinux/ufw_host,_the_only_allow_is_scoped_off_the_tailnet_(#631)` fail |
+| Mutation B: drop the `parseErr` guard in `builtinGroupStep` | **killed** — `TestWindowsBuiltinGroup` "a garbled count…" and "a non-numeric count…" fail |
+| Probes (see findings) | run in a `mktemp -d` copy of the tree (`/tmp/sec631probe.*`); repo tree untouched apart from this file |
+| `make e2e-linux` / `make e2e-windows` | **not run** — needs `dotf vm` guests; AC6 runs are UNVERIFIED in this session |
 
-Probes were run in a throwaway copy (`/tmp/probe631`, `tar` of the worktree, no `.git`); the repo
-tree is clean apart from this file (`git status --porcelain` shows no tracked change).
+`git status --porcelain` shows no changed file outside `specs/SEC-631-scoped-firewall-rules/`.
 
 ### Spec and task alignment
 
-- AC1 (ADR-017 Amendment B): present, and f1's command passes. ✔ verified.
-- AC2/AC4 (iptables): the scoped append, the printed form, the two replacement tiers, the failed-add
-  and failed-delete paths all exist with named tests (`TestIptablesPrintedForm`,
-  `TestReadIptablesUnscoped`, `TestSetupForLinux`, `TestCheckForLinux`). ✔ verified, with one gap
-  (finding 1).
-- AC3 (ufw): one write helper (`ufwAllowArgs`), pinned by `TestUFWAllowArgs`; legacy/foreign split by
+- **AC1** (ADR-017 Amendment B): present (`## Amendment B (Accepted, 2026-11-06)`, §5 table cells
+  for Linux and Windows); f1's own grep passes. ✔ verified.
+- **AC2/AC4** (iptables): scoped append, printed form, two-tier replacement, failed-add/failed-delete
+  all exist with named tests (`TestIptablesPrintedForm`, `TestReadIptablesUnscoped`,
+  `TestSetupForLinux`, `TestCheckForLinux`), all green fresh. ✔ verified.
+- **AC3** (ufw): single write helper pinned by `TestUFWAllowArgs`; legacy/foreign split by
   `TestReadUFWUnscoped`. ✔ verified.
-- AC4 negative path: foreign rules are reported `manual` and left in place — pinned by
-  `TestSetupForLinux`/`TestCheckForLinux` and by the e2e cases (script read, not run).
-- AC5 (Windows): scoped recreate, set comparison of `RemoteAddress`, create-before-remove with
-  terminating errors, built-in group reported and never disabled —
-  `TestWindowsFirewallRecreateScoped`, `TestWindowsFirewallRule`, `TestWindowsFirewallRecreateOrder`,
-  `TestWindowsBuiltinGroup`. ✔ verified as unit-level behaviour, with the premise doubt in finding 2.
-- AC6 (e2e both OSes): both scripts carry the cases; the Windows run is **UNVERIFIED** here.
-- The two unchecked "Closing (every PR)" boxes in `tasks.md` (go test / lint / gosec / verification
-  filled) contradict `verification.md`, which claims all of it — finding 3.
+- **AC5** (Windows): scoped recreate, `RemoteAddress` set comparison with dotted-mask/IPv6-case
+  normalisation, create-before-remove with terminating errors, built-in group reported and never
+  disabled — `TestWindowsFirewallRecreateScoped`, `TestWindowsFirewallRule`,
+  `TestWindowsFirewallRecreateOrder`, `TestWindowsBuiltinGroup`. ✔ verified at unit level.
+- **AC6** (e2e both OSes): the cases exist in both scripts (off-tailnet cases on both Linux
+  backends; Windows scoped-address, fresh-guest group, group enable/disable and legacy-drift
+  cases). The runs themselves are UNVERIFIED here (no guests).
+- **AC7** (round-1 finding 1): `offTailnetOnly` is consulted in `firewallSetupStep`,
+  `firewallCheckStep` and `Service.FirewallOK`; four unit subtests, a `TestCheckForLinux` row and
+  four e2e cases cover it, and Mutation A kills the fix's removal. ✔ verified on the paths
+  tested — with one untested state where it does not hold (finding 1).
+- **Round-1 dispositions**: finding 3 (Windows-e2e status) now agrees across proposal Risks / AC6 /
+  tasks / verification / f12 — checked each file. Finding 4: `tasks.md` Closing is fully ticked and
+  `verification.md` has the "Promotion candidates" section. Finding 5: parse guard present and
+  pinned (Mutation B kills it). Finding 6: the assumption comment on `iptUnscopedRead` is present.
+  Round-1 finding 2 (pristine Windows guest): the disposition rests on two e2e cases reading the
+  group before setup touches it; script verified, the run itself UNVERIFIED here.
+- No `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tags in the spec files (only round 1's sentence
+  saying none remain, and this transcript).
 
 ### Findings
 
-| Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
-|----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Major | REAL | correctness / AC2 | A host whose **only** allow for the port is scoped to something other than the tailnet (a LAN source, another interface) makes `check` return `ok` with `firewall_ok: true` and `setup` return `ok`, while setup never writes the `-i tailscale0` rule — so the port stays unreachable over the mesh and the tool reports convergence. `scoped` is computed correctly (`false`) by `iptAcceptOffTailnet`/`ufwAllowOffTailnet`, but is only consulted when a legacy/copy rule is also present (`legacyHeld` requires `ufwLegacy \|\| copies>0 \|\| foreign>0`), never on its own. | Reproduced against a copy of the tree: iptables host, `-P INPUT DROP` + `-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT` → `state=2 copies=0 foreign=[] scoped=false`, `check outcome="ok" msg="Firewall allows port 3389"`, `setup outcome="ok" msg="Firewall allows TCP 3389 (iptables)"`, `calls=[lookpath ufw lookpath iptables output iptables -S INPUT]` (no append). ufw host, `ufw show added` = `ufw allow in on eth1 to any port 3389 proto tcp` → `scoped=false ufwScoped=false`, `check outcome="ok"`, `setup outcome="ok" msg="Firewall allows TCP 3389 (ufw)"`, no `ufw allow …` call. The allow lines are the ones the fixtures in `TestReadIptablesUnscoped` / `TestReadUFWUnscoped` call "a source address does not admit the tailnet" / "another interface does not admit the tailnet"; my probe only tightens the iptables host to `-P INPUT DROP`, so the port really is unreachable from the tailnet rather than merely unaddressed. | UNTESTED — no test asserts the step outcome for the off-tailnet-only state; the two fixtures only pin `read.scoped` | code + tests (a `TestSetupForLinux`/`TestCheckForLinux` case: `changed` and an append; and an e2e case), or a proposal entry listing it as accepted |
-| Major | THEORETICAL | correctness (Windows) | The built-in "Remote Desktop" group is reported `manual` whenever it is **enabled**, and the proposal defends that with "on an upgraded host the group is usually enabled *by setup*". Windows ships those rules enabled (Profile = Domain/Private) by default, so on a *pristine* host the report fires too: `check` exits non-ok and `host setup` never converges until the operator disables Microsoft's own group. The e2e cannot see this: it calls `Enable-NetFirewallRule` itself and only asserts the subsequent `firewall_ok` after its own `Disable-NetFirewallRule`, so a default-enabled guest passes identically. | Code: `psReadRDGroup` selects `-Enabled True … RemoteAddress -eq 'Any'`; `builtinGroupStep` turns any non-zero count into `OutcomeManual`. Script: `scripts/e2e/windows.ps1` "built-in … enabled" / "disabled by the operator" cases, both self-driven. Not observed on a host (no Windows guest here). | UNTESTED — no case reads the group state *before* touching it, so the default premise is unverified | spec (proposal premise + an accepted-impact note) + tests (a Windows e2e case asserting convergence on an untouched `check`) |
-| Minor | REAL | spec artifacts | The four spec files disagree about whether the Windows e2e ran. `proposal.md` Risks: "the Windows guest is shared with another session, so PR 4 says its e2e is pending"; `features.json` f12: "… (pending: the Windows guest is shared)"; `tasks.md` PR 4: "cases written and run: `make e2e-windows` 50 pass, 0 fail at 310bfc6"; `verification.md`: "Windows e2e run (see PR 4 below)" with 50/0. (`310bfc6` and `66f28d6` are real commits, "Merge origin/master into fix/issue-631-windows-scope" and the ufw off-tailnet fix.) | file read | n/a (artifact) | spec + verification.md |
-| Minor | REAL | spec artifacts / handoff | `tasks.md`'s "Closing (every PR)" items are still `[ ]` (`go test -race ./...`, `golangci-lint` host+linux+windows, `gosec ./...`, `verification.md` filled) although `verification.md` asserts them; `verification.md` has no "Promotion candidates" section, which `dotf spec archive`'s third pre-flight reads (whether its absence is accepted is UNVERIFIED — I did not run the archive, it moves the folder). | `tasks.md` lines under "## Closing (every PR)"; `grep -n "Promotion candidates" specs/SEC-631-scoped-firewall-rules/*.md` → none | n/a (artifact) | spec (tasks.md, contract set) + verification.md |
-| Minor | SPECULATIVE | resilience (Windows) | An unparsable/empty `exposed=` value reads as `0` (`exposed, _ := strconv.Atoi(...)`), so a garbled read is silently treated as "group clean" rather than unverified — the opposite of the read-failure branch two lines above. | `builtinGroupStep` in `internal/host/windows_steps.go` | UNTESTED | code + tests |
-| Minor | SPECULATIVE | correctness (iptables edge) | `iptUnscoped` is computed from the raw INPUT text, while the "scoped" walk runs over the *inlined* ts-input chain; an unscoped port ACCEPT living in `ts-input` therefore counts as the scoped rule and is neither reported nor replaced. tailscaled does not write such a rule (its accept is `-i tailscale0`), so no repro. | `iptUnscopedRead` / `iptInlineChain`; `tsInputDefault` fixture | UNTESTED | code + tests (or a comment recording the assumption) |
+| Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location |
+|----------|---------|------|---------|----------|---------------------------|--------------|
+| Major | REAL | correctness / AC7 | **Inactive ufw whose only allow is scoped off the tailnet**: `ufwInactiveState`'s `read.ufwAllows` branch wins before any off-tailnet consideration, so `setup` writes **no** `tailscale0` allow (it does write one in every other non-admitting inactive state: "no allow yet", and it replaces the legacy one) and both commands report `manual` with the message *"its allow is in place for when ufw is enabled"* — an allow scoped to e.g. `10.0.0.0/8`, which will **not** admit the tailnet once ufw is enabled. AC7 says "setup adds the `tailscale0` rule"; here it does not, and check does not say `changed` either. The safety half holds: `firewall_ok` is `false` (reproduced), so this is a wrong-remedy/delayed-convergence defect, not a false convergence. | Probe in a `mktemp -d` copy of the tree: inactive ufw (`Status: inactive`), `ufw show added` = `ufw allow from 10.0.0.0/8 to any port 3389 proto tcp`: `setup outcome=manual msg="ufw is inactive, so it filters nothing: … its allow is in place for when ufw is enabled"` with **no** `run ufw allow …` in `calls`; `check outcome=manual` same message; full `checkLinux`: step "Firewall configuration"=manual, `firewall_ok=false`. Control probe (active ufw, same allow): `setup outcome=changed`, writes `ufw allow in on tailscale0 …` — so only the inactive path misses it. | **UNTESTED** — `TestOffTailnetOnlyAllow` builds only *active* ufw runners (`ufwActive`), and `TestUFWInactive`'s table has no off-tailnet row | code + tests (a `TestUFWInactive` row: off-tailnet-only allow → setup writes the scoped allow and the message says the existing one does not admit the tailnet; plus an e2e case). If the owner accepts the current behaviour instead, that is a **contract edit** to `proposal.md` (its "ufw inactive" fork), needing this review redone |
+| Major | THEORETICAL | correctness (iptables) | A **negated-scope** allow (`-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT`, i.e. accepts everywhere *except* the tailnet) is classified as the scoped rule: it is neither `iptUnscoped` (has scope) nor `iptAcceptOffTailnet` (the `-i` *value* equals `tailscale0`), so it survives into `rest` and makes `scoped=true` → check and setup both report `ok` with `firewall_ok` true while the tailnet cannot reach the port — the same false-convergence class round 1 blocked, via negation. No known producer: tailscaled writes only `-i tailscale0` accepts (its `! -i tailscale0` lines are DROP/RETURN, and require `-j ACCEPT` here), so no observed host. | Probe (same temp copy): `iptables -S INPUT` = `iptEmpty` + the negated rule → `read.state=rulePresent scoped=true foreign=[]`, `setup outcome=ok "Firewall allows TCP 3389 (iptables)"`, `check outcome=ok "Firewall allows port 3389"` | UNTESTED | code + tests (treat a negated scope as off-tailnet, or a comment on `iptAcceptOffTailnet` recording the assumption, as was done for `iptUnscopedRead`). Follow-up ticket acceptable |
+| Question | — | spec artifacts | `proposal.md` still shows every AC box `[ ]` and frontmatter `status: implementing` while `tasks.md`/`verification.md` are complete and ticked. Archived specs are mixed on ticking AC boxes, so this may be exactly what the archive expects; confirm rather than assume (the gate's implementation is out of scope here, so I could not check it — `dotf spec check` is not a subcommand). | file read: `specs/SEC-631-scoped-firewall-rules/proposal.md` | n/a (artifact) | spec (only if the gate wants it; then contract edit + re-review) |
 
-No `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tags remain in the spec folder.
-
-**Not a finding, recorded for the next runner:** the very first `go test ./internal/host/...` of this
-session reported two failures in `TestWindowsRDPDenyState` / `TestWindowsReadsReachTheirParsers`
-(`effective() = false, false; want true, true`). It did not reproduce in 26 further runs
-(`-count=1`, 25 in a loop), nor in the full `-race` run; I could not attribute it to the change and
-treat it as an artifact of the checkout, not a defect. UNVERIFIED either way.
+Verification-evidence note (not a finding): the recorded e2e runs (56 / 77 / 84 Linux, 50 / 52
+Windows, with log file names) are **UNVERIFIED** in this session — `make e2e-linux`/`e2e-windows`
+need `dotf vm` guests I did not spawn. The scripts' cases exist, parse (`bash -n`) and match the
+claims' wording.
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | C | Every enumerated AC path is implemented and tested, but a state the spec's own helpers classify (`scoped=false`, an off-tailnet-only allow) yields a false `ok` on both backends (finding 1). |
-| Verification       | B | Reproducible named tests, mutant kills and e2e counts are recorded, and `go test -race`, lint, gofmt and vet reproduce clean here; AC6 needs `dotf vm` guests and could not be reproduced in this session. |
-| Scope              | B | The branch's four PRs match `tasks.md`; the range also carries merged master work (SEC-391, HOST-008, QA-607) that this review judged only where it interacts. |
-| Reliability        | B | Failed add deletes nothing, failed delete names the command, Windows create precedes remove with `$ErrorActionPreference='Stop'`, the group is never disabled — but "converged" is asserted for a host the mesh cannot reach (finding 1) and one Windows read failure reads as clean (finding 5). |
-| Maintainability    | B | New code passes the raised `funlen`/`gocyclo`/`nolintlint` gates; helpers are small and single-purpose; several functions carry `//nolint:gocyclo // baseline #629`, so the complexity picture in this package is baselined rather than reduced. |
-| Handoff-readiness  | B | ADR amendment, `docs/design/host-client-parity.md` and the runbooks are updated and implementation decisions are written down; the Windows-e2e status is contradictory across four files (finding 3) and the closing checklist is unticked (finding 4). |
+| Correctness        | C | Every enumerated AC holds on the paths tested, but AC7 does not hold in the inactive-ufw state (finding 1), which the proposal itself enumerates as a fork — criteria partially met. |
+| Verification       | B | Fresh full `-race` run, lint/vet/gofmt, selector guard, two mutants killed and probes reproduce both the fix and its gap; the e2e runs (AC6) are recorded but not reproducible in this session. |
+| Scope              | B | The branch's commits match `tasks.md` (four PRs + review-fix PR); the range also carries merged master work, judged only where it interacts. |
+| Reliability        | B | Failed add deletes nothing, create-before-remove, parse failures read `unverified`, group never disabled — but one backend state gets a wrong remedy message and no write (finding 1). |
+| Maintainability    | B | `golangci-lint` 0 issues; helpers small and single-purpose; several functions carry `//nolint:gocyclo // baseline #629`, so complexity is baselined rather than reduced. |
+| Handoff-readiness  | A | All six round-1 findings dispositioned in `verification.md` with red-first evidence, ADR amendment landed, spec files reconciled, promotion candidates recorded. |
 
 ### Verdict
 FAIL
 
-One **REAL Major** (finding 1) — `check`/`setup` report a host converged when the tailnet cannot
-reach the port — is reproduced, is UNTESTED, and is in the contract's own terms (AC2/AC4). The
-rubric's C in Correctness is a second, independent path to the same verdict.
+One **REAL Major** (finding 1): reproduced in a probe against the exact code under review, in a
+state the proposal itself discusses, with **no covering test** (`TestUFWInactive` has no
+off-tailnet row). AC7 — the criterion added to close round 1 — does not hold there: setup writes
+no scoped allow and the message steers the operator to a wrong conclusion. Per
+`severity × reality`, a REAL Major requires a fix and a re-review; the rubric's C in
+Correctness independently floors the verdict at PASS WITH GAPS, and the REAL Major lifts it to FAIL.
+The THEORETICAL negation finding is tracked and does not by itself move the verdict.
 
 ### Recommended next steps
 
-All of these are for the implementer to disposition in `verification.md` (applied / ticketed /
-declined with a reason) or to carry in the re-review round; on a FAIL the contract-set edits happen
-**now**, and the archive waits for the next review.
+For the implementer to apply and record the disposition in `verification.md`. On a FAIL the
+contract-set edits are on the table (a re-review follows either way); these are ordered by what
+flips the verdict:
 
-1. **Finding 1 (code + tests, contract set too).** Make the scoped rule setup's own invariant: when
-   `read.state == rulePresent` and `read.scoped` is false, append/replace as `legacyHeld` does today
-   (`-i tailscale0` on iptables, `ufw allow in on tailscale0 …`), report `changed`, and say why in the
-   step message so an operator with a LAN-scoped rule understands what was added. Add a
-   `TestSetupForLinux`/`TestCheckForLinux` case using the existing
-   `-A INPUT -s 10.0.0.0/8 …` and `ufw allow in on eth1 …` fixtures, plus one e2e case. If the owner
-   prefers the current behaviour, record it in `proposal.md`'s "Decision forks" instead — that is a
-   contract edit and needs this review redone either way.
-2. **Finding 2 (spec + Windows e2e).** Verify the group's state on a *pristine* guest before any
-   `Enable-NetFirewallRule`, and either re-word the proposal's "usually enabled by setup" premise or
-   add the accepted-impact note (with the disable command) to the Windows runbook. Add the e2e case
-   that asserts the first `check` on an untouched guest, so the default state is part of the record.
-3. **Findings 3–4 (spec artifacts).** Reconcile the Windows-e2e status to one statement across
-   `proposal.md` Risks, `tasks.md` PR 4, `verification.md` and `features.json` f12; tick or re-word
-   the "Closing (every PR)" items; add a "Promotion candidates" section with `no: <reason>` lines
-   (the ADR-017 amendment and the choice of `tailscale0` as a fixed constant are the obvious
-   candidates) before archiving.
-4. **Finding 5 (code + tests).** Treat an unparsable `exposed=` as `OutcomeUnverified` (the same
-   branch as a failed read) and pin it with a `TestWindowsBuiltinGroup` case.
-5. **Finding 6 (code comment or test).** Either exclude ts-input's inlined lines from the "scoped"
-   walk or record why an unscoped accept there is treated as the scoped rule.
+1. **Finding 1 (code + tests, or contract).** In `ufwInactiveSetupStep`/`ufwInactiveState`, when
+   ufw is inactive and no allow admits the tailnet (only off-tailnet allows, no `ufwScoped`), write
+   the scoped allow "for when ufw is enabled" — exactly as the "no allow yet" branch already does —
+   and reword the message so it does not claim an off-tailnet allow is "in place" for the operator's
+   purpose. Add a `TestUFWInactive` row (setup writes `ufw allow in on tailscale0 …`, check's
+   message names the off-tailnet allow) and, ideally, one e2e case. Alternative: if the owner
+   accepts today's behaviour, record it in `proposal.md`'s "ufw inactive" fork instead — that is a
+   contract edit and the review is redone regardless.
+2. **Finding 2 (code + test, or comment; follow-up ticket acceptable).** Make a negated scope
+   (`!`, or `-i`/`-s`/`-d` under a `!`) count as off-tailnet in `iptAcceptOffTailnet`, or add a
+   comment on that function recording the assumption the way `iptUnscopedRead` now does; pin with
+   one `TestOffTailnetOnlyAllow` subtest either way.
+3. **Question.** Confirm whether the archive expects the proposal's AC boxes/status updated; if it
+   does, that is a contract-set touch to make with the round-3 edits, not after them.
 
-Archive is **not** advisable in the current state: the review is FAIL and, separately, the contract
-set still needs the finding-1 decision.
+**`dotf spec archive` is not advisable in the current state**: the verdict is FAIL. Minimum set to
+flip it to PASS: fix finding 1 (code + a named regression test — or the contract-recorded owner
+acceptance), then a fresh re-review; finding 2 and the question can ride along as tracked
+dispositions.
