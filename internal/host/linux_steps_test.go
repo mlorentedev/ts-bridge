@@ -1807,11 +1807,21 @@ func TestIP6Exposure(t *testing.T) {
 		v6Fails bool
 		want    Outcome
 		message string
+		fix     string // the -D fix a manual step names; ip6DeleteFix when empty
 	}{
 		{name: "captured chain", onPath: true, v6: ip6Captured, want: OutcomeOK},
 		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Captured + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
 		{name: "a port-less v6 accept is the operator's posture", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeOK},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Captured + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
+		// A negated scope or an explicit any prefix still opens the port off
+		// the tailnet (BUG-526 review, finding 1).
+		{name: "a v6 allow on every interface but tailscale0", onPath: true, v6: ip6Captured + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+			message: "! -i tailscale0", fix: "ip6tables -D INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
+		{name: "a v6 allow from any source", onPath: true, v6: ip6Captured + "-A INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+			message: "-s ::/0", fix: "ip6tables -D INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
+		{name: "a v6 allow to any destination", onPath: true, v6: ip6Captured + "-A INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+			message: "-d ::/0", fix: "ip6tables -D INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
+		{name: "a v6 allow for one LAN prefix is the operator's scope", onPath: true, v6: ip6Captured + "-A INPUT -s 2001:db8::/32 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
 		{name: "v6 read fails", onPath: true, v6Fails: true, want: OutcomeOK, message: ip6Read},
 		{name: "no ip6tables", want: OutcomeOK},
 	}
@@ -1839,14 +1849,19 @@ func TestIP6Exposure(t *testing.T) {
 			if !reflect.DeepEqual(r.calls, want) {
 				t.Errorf("calls:\n got %q\nwant %q", r.calls, want)
 			}
-			read := readLinuxFirewall(newRunner(), 3389)
+			cr := newRunner()
+			read := readLinuxFirewall(cr, 3389)
+			if !reflect.DeepEqual(cr.calls, want) {
+				t.Errorf("check calls:\n got %q\nwant %q", cr.calls, want)
+			}
 			check := firewallCheckStep(read, 3389)
 			for _, step := range []SetupStep{setup, check} {
 				if step.Outcome != tt.want || !strings.Contains(step.Message, tt.message) {
 					t.Errorf("outcome %v message %q, want %v naming %q", step.Outcome, step.Message, tt.want, tt.message)
 				}
-				if tt.want == OutcomeManual && !strings.Contains(step.Fix, ip6DeleteFix) {
-					t.Errorf("fix %q lacks %q", step.Fix, ip6DeleteFix)
+				fix := cmp.Or(tt.fix, ip6DeleteFix)
+				if tt.want == OutcomeManual && !strings.Contains(step.Fix, fix) {
+					t.Errorf("fix %q lacks %q", step.Fix, fix)
 				}
 			}
 			if got := linuxFirewallOK(read); got != (tt.want == OutcomeOK) {
@@ -1907,4 +1922,15 @@ func TestOffTailnetOnlyAllow(t *testing.T) {
 // TestIP6Exposure pins the v6 read itself and where it runs.
 func withoutIP6Probe(calls []string) []string {
 	return slices.DeleteFunc(slices.Clone(calls), func(c string) bool { return c == "lookpath "+backendIP6 })
+}
+
+// TestReadIP6NoteQuotesTheTool pins that a failed v6 read says why, in the
+// tool's own words, as on a host booted with ipv6.disable=1 (BUG-526 review).
+func TestReadIP6NoteQuotesTheTool(t *testing.T) {
+	const said = "ip6tables v1.8.10 (nf_tables): Could not fetch rule set generation id: Address family not supported by protocol"
+	r := &recordingRunner{onPath: map[string]bool{backendIP6: true}, exit: map[string]int{"ip6tables -S INPUT": 1}, stderr: map[string]string{"ip6tables -S INPUT": said + "\n"}}
+	_, note := readIP6(r, 3389)
+	if !strings.Contains(note, "Address family not supported by protocol") {
+		t.Errorf("note = %q, want it to quote the tool's stderr", note)
+	}
 }

@@ -230,9 +230,32 @@ func readIP6(r Runner, port int) (foreign []string, note string) {
 	}
 	out, err := r.Output(backendIP6, "-S", iptInput)
 	if err != nil {
-		return nil, fmt.Sprintf("%s -S %s: %v", backendIP6, iptInput, err)
+		return nil, fmt.Sprintf("%s -S %s: %v%s", backendIP6, iptInput, err, toolSaid(err))
 	}
-	return iptUnscoped(iptRules(string(out)), port), ""
+	return ip6Exposed(iptRules(string(out)), port), ""
+}
+
+// ip6Exposed lists the v6 INPUT allows for the port that are not narrowed:
+// the exposure scan, not setup's rule-shape test. A negated -i/-s/-d or an
+// explicit ::/0 still opens the port off the tailnet (BUG-526 review).
+func ip6Exposed(input string, port int) []string {
+	var found []string
+	for _, line := range strings.Split(input, "\n") {
+		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+		if len(f) > 1 && f[0] == "-A" && f[1] == iptInput && iptFlag(f, "-j") == iptAccept && iptPortCovers(f, port) && !iptLoopback(f) && !ip6Narrowed(f) {
+			found = append(found, strings.TrimSpace(line))
+		}
+	}
+	return found
+}
+
+// ip6Narrowed reports a rule held to part of the traffic by a plain -i, -s
+// or -d: a negated one, or ::/0, narrows nothing.
+func ip6Narrowed(f []string) bool {
+	return slices.ContainsFunc([]string{"-i", "-s", "-d"}, func(flag string) bool {
+		v := iptFlag(f, flag)
+		return v != "" && v != "::/0" // iptFlag skips a negated flag
+	})
 }
 
 // linuxFirewallOK is check's firewall_ok: the port is admitted, through a rule
@@ -461,6 +484,19 @@ func tsInputInNFT(r Runner, port int) (firewallRead, bool) {
 // name", nft "No such file or directory"). Exit status 1 is the only failure
 // code either tool has, so it cannot tell a missing chain from a refused read;
 // any other failure leaves the chain unread.
+// toolSaid quotes the first stderr line of a failed command, so a note says
+// why the read failed and not only that it did.
+func toolSaid(err error) string {
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		return ""
+	}
+	if line, _, _ := strings.Cut(strings.TrimSpace(string(exit.Stderr)), "\n"); line != "" {
+		return " (" + line + ")"
+	}
+	return ""
+}
+
 func chainMissing(err error, words string) bool {
 	var exit *exec.ExitError
 	return errors.As(err, &exit) && strings.Contains(string(exit.Stderr), words)

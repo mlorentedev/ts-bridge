@@ -13,7 +13,7 @@ owner: manu
 
 Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
 
-- [x] AC1 (nodivert `unverified`, no write) -> a264c19 / `TestReadIptablesCapturedModes/netfilter-mode_nodivert`, built on a live capture (`capture-tsfw.sh`, eb43f7d).
+- [x] AC1 (nodivert `unverified`, no write) -> a264c19 / `TestReadIptablesCapturedModes/netfilter-mode_nodivert` (the read, built on a live capture from `capture-tsfw.sh`, eb43f7d) and `TestFirewallStepsTailscaledModes/nodivert` (no `run` call on setup; check `unverified`).
 - [x] AC2 (nftables mode on nf_tables reads as iptables mode) -> a264c19 / `TestReadIptablesCapturedModes/nftables_mode,_read_through_iptables-nft`, built on a live capture.
 - [x] AC3 (unscoped v6 allow `manual` in check and setup, `ip6tables -D` fix, `firewall_ok` false, nothing deleted) -> edd29a3 / `TestIP6Exposure/an_unscoped_v6_allow`. Mutants, re-run after the master merge 6bc1fba: dropping `len(fw.v6Foreign) == 0` from `linuxFirewallOK`, or `withIP6` from the setup or the check step, each fail `TestIP6Exposure`.
 - [x] AC4 (failed v6 read noted, no `ip6tables` unchanged) -> edd29a3 / `TestIP6Exposure/v6_read_fails`, `/no_ip6tables`.
@@ -46,3 +46,13 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - [ ] Folder moved: `specs/BUG-526-tailscaled-firewall-modes/` -> `specs/archive/BUG-526-tailscaled-firewall-modes/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [ ] Promotions above executed (if any)
+
+## Review disposition (round 1, PASS-WITH-GAPS)
+
+`review.md` (nan/deepseek-v4-flash, reviewed `8d832f2`) returned PASS-WITH-GAPS. No contract file changed after it.
+
+- **The v6 scan reuses the rule-shape test, so a negated scope or `::/0` is invisible** (Major, THEORETICAL): applied. `readIP6` now uses `ip6Exposed`. An allow counts as narrowed only with a plain `-i`, `-s` or `-d` whose value is not `::/0`; a negated one narrows nothing. Three new `TestIP6Exposure` rows (`! -i tailscale0`, `-s ::/0`, `-d ::/0`) failed before the change and pass after. A fourth row, a single LAN prefix, pins that an operator-scoped allow stays `ok`. The v4 read is unchanged: its off-tailnet handling came with #704.
+- **AC3's "manual" is narrower than the code** (Minor, REAL): declined as a code change and recorded here. When the v4 step is already `unverified` or `failed`, `withIP6` keeps that outcome and appends the v6 rule to the message, with `firewall_ok` false. Overwriting it with `manual` would hide the v4 problem, which the operator has to fix first. So AC3's `manual` applies when v4 has converged; otherwise the v6 rule is still named.
+- **A failed v6 read gives no reason** (Minor, REAL): applied. The note now quotes the tool's first stderr line (`toolSaid`). `TestReadIP6NoteQuotesTheTool` failed before the change and passes after.
+- **`withoutIP6Probe` hides the probe's placement, and the check path's sequence is unasserted** (Minor, SPECULATIVE): applied in part. `TestIP6Exposure` now also asserts the check path's exact call sequence. The filter stays in the IPv4 tables, which pin the IPv4 sequence; the v6 probe's place is pinned here on both paths.
+- **The AC1 citation is incomplete** (Minor, REAL): applied. AC1 now also cites `TestFirewallStepsTailscaledModes/nodivert`.
