@@ -61,7 +61,7 @@ func defaultDependencies() dependencies {
 	}
 }
 
-func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) { //nolint:funlen // baseline #629
+func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) {
 	sshPath, err := deps.lookPath("ssh")
 	if err != nil {
 		return nil, fmt.Errorf("find OpenSSH executable %q in PATH (install OpenSSH or add its directory to PATH): %w", "ssh", err)
@@ -85,12 +85,27 @@ func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	tunnel, err := spawn(cmd, cancel, deps)
+	if err != nil {
+		return nil, startupError(sshPath, err)
+	}
+
+	if err := waitUntilReady(ctx, tunnel, cfg, deps); err != nil {
+		_ = tunnel.Close()
+		return nil, startupError(sshPath, err)
+	}
+	return tunnel, nil
+}
+
+// spawn starts ssh with its containment: prepare before Start, so a Linux
+// SysProcAttr takes effect, and contain after it, released once Wait returns.
+func spawn(cmd *exec.Cmd, cancel context.CancelFunc, deps dependencies) (*Tunnel, error) {
 	if deps.prepare != nil {
 		deps.prepare(cmd)
 	}
 	if err := cmd.Start(); err != nil {
 		cancel()
-		return nil, startupError(sshPath, fmt.Errorf("start OpenSSH bootstrap: %w", err))
+		return nil, fmt.Errorf("start OpenSSH bootstrap: %w", err)
 	}
 	job := containStarted(cmd, deps.contain)
 
@@ -100,11 +115,6 @@ func start(ctx context.Context, cfg Config, deps dependencies) (*Tunnel, error) 
 		_ = job.Close() // after Wait, so the graceful path is unchanged
 		close(tunnel.done)
 	}()
-
-	if err := waitUntilReady(ctx, tunnel, cfg, deps); err != nil {
-		_ = tunnel.Close()
-		return nil, startupError(sshPath, err)
-	}
 	return tunnel, nil
 }
 
