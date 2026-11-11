@@ -93,3 +93,17 @@ func TestWindowsReadsReachTheirParsers(t *testing.T) {
 		}
 	})
 }
+
+// TestRDGroupReadUsesTheResourceID pins the query itself: the Go tests feed
+// canned output, so without this a revert to the localized display name
+// (#707) would only fail on a Windows VM.
+func TestRDGroupReadUsesTheResourceID(t *testing.T) {
+	for name, script := range map[string]string{"read": psReadRDGroup, "fix": windowsGroupFix} {
+		if !strings.Contains(script, "-Group '"+rdGroupID+"'") && !strings.Contains(script, `-Group "`+rdGroupID+`"`) {
+			t.Errorf("%s does not select the group by %s: %s", name, rdGroupID, script)
+		}
+		if strings.Contains(script, "DisplayGroup") {
+			t.Errorf("%s selects the group by its localized display name: %s", name, script)
+		}
+	}
+}
