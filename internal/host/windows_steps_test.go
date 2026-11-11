@@ -129,7 +129,7 @@ func TestWindowsFirewallRule(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			newRunner := func() *recordingRunner {
 				return &recordingRunner{
-					output: map[string]string{psPrefix + psFwCheck: tt.read},
+					output: map[string]string{psPrefix + psFwCheck: tt.read, psPrefix + psReadRDGroup: groupClean},
 					fail:   map[string]bool{psPrefix + psFwCheck: tt.readFails},
 				}
 			}
@@ -524,6 +524,10 @@ func TestWindowsFirewallRecreateOrder(t *testing.T) {
 	}
 }
 
+// groupClean is the built-in group read on a host where no enabled rule of the
+// group admits RDP from any address.
+const groupClean = "exposed=0\r\n"
+
 // TestWindowsBuiltinGroup pins the report folded in from #685: an enabled
 // any-address rule in the built-in "Remote Desktop" group voids the tailnet
 // scope, so a converged named rule is not enough. Setup reports it and leaves
@@ -540,9 +544,11 @@ func TestWindowsBuiltinGroup(t *testing.T) {
 		want      Outcome
 		ok        bool
 		note      bool // check names the group beside the named-rule message
+		unparsed  bool // the read answered, but with no count: say so, not that it failed
 	}{
 		{name: "none enabled", rule: good, group: "exposed=0\r\n", want: OutcomeOK, ok: true},
-		{name: "unreadable output counts as none", rule: good, group: "", want: OutcomeOK, ok: true},
+		{name: "a garbled count is unverified, not none", rule: good, group: "", want: OutcomeUnverified, unparsed: true},
+		{name: "a non-numeric count is unverified", rule: good, group: "exposed=n/a\r\n", want: OutcomeUnverified, unparsed: true},
 		{name: "two enabled", rule: good, group: "exposed=2\r\n", want: OutcomeManual},
 		{name: "read fails", rule: good, groupFail: true, want: OutcomeUnverified},
 		{name: "named rule missing, group reported", rule: "count=0\r\n", group: "exposed=2\r\n", want: OutcomeChanged, note: true},
@@ -564,6 +570,9 @@ func TestWindowsBuiltinGroup(t *testing.T) {
 			}
 			if (tt.want == OutcomeManual || tt.note) && !strings.Contains(step.Fix, `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`) {
 				t.Errorf("check: fix %q lacks the disable command", step.Fix)
+			}
+			if tt.unparsed && (!strings.Contains(step.Message, "no rule count") || strings.Contains(step.Fix, "read fails")) {
+				t.Errorf("check: a read that answered is reported as failed: %q / %q", step.Message, step.Fix)
 			}
 			if mentions := strings.Contains(step.Message, "built-in Remote Desktop"); tt.want == OutcomeChanged && mentions != tt.note {
 				t.Errorf("check: message names the group = %v, want %v (%s)", mentions, tt.note, step.Message)

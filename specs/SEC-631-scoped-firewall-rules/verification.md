@@ -19,6 +19,8 @@ owner: manu
   `check` and replaced by `setup`.
 - [x] AC5 -> PR 4: unit tests on the recreate command and the read; Windows e2e run (see PR 4 below).
 - [x] AC6 -> `scripts/e2e/linux.sh` (run), `scripts/e2e/windows.ps1` (run).
+- [x] AC7 -> PR 5: `TestOffTailnetOnlyAllow` (iptables and ufw, a source and an interface), a
+  `TestCheckForLinux` row (`firewall_ok` false); e2e on both backends (see PR 5 below).
 
 ## Test status
 
@@ -63,6 +65,65 @@ PR 4 (Windows):
   is reported by check and left on by setup; once the operator disables it the firewall is ok
   again; a legacy rule open to any address is seen by check and repaired by setup.
 
+PR 5 (review round 1 fixes):
+
+- `go test -race ./...` exit 0; `golangci-lint run` 0 issues; `GOOS=windows go vet ./internal/host` clean.
+- Red first: `TestOffTailnetOnlyAllow` failed 4/4 (setup `ok` with no write, check `ok`) before
+  `offTailnetOnly`; the two `TestWindowsBuiltinGroup` rows failed (`ok`, want `unverified`) before
+  the parse check.
+- `make e2e-linux` at 12ea1b5 (code as at 27ccaf9) on a throwaway Ubuntu 24.04 VM: 84 pass, 0 fail
+  (`linux-20261110T060947Z.log`). The new cases add an allow scoped to `10.0.0.0/8` on ufw and on
+  iptables: check says `changed` (`firewall_ok` false), setup adds the `tailscale0` rule and keeps
+  the operator's, check is `ok` afterwards.
+- `make e2e-windows` at 27ccaf9 on a throwaway Windows 11 Arm64 guest: 52 pass, 0 fail
+  (`windows-20261110T060817Z.log`). On the fresh guest the built-in Remote Desktop group is
+  disabled, and it is still disabled after setup.
+
+## Review disposition (round 1, FAIL)
+
+`review.md` (nan/deepseek-v4-flash, at 55cfd68) returned FAIL on one REAL Major. Each finding:
+
+- An allow scoped only off the tailnet reads as converged (Major, REAL): applied (PR 5, AC7).
+  `offTailnetOnly` sends setup to add the `tailscale0` rule and check to report `changed`, and
+  `firewall_ok` is false. The operator's rule stays. An address scope counts as off the tailnet
+  even when it is `100.64.0.0/10`; the proposal records why.
+- The built-in group is enabled by default on Windows (Major, THEORETICAL): refuted on a real host.
+  The fresh guest has the group disabled, and setup leaves it disabled. Two e2e cases pin this, so
+  a guest image that ships it enabled turns the run red.
+- Spec files disagree on whether the Windows e2e ran (Minor, REAL): applied. The proposal Risks,
+  AC6 and `features.json` f12 now agree with `tasks.md` and this file.
+- Closing boxes unticked; no Promotion candidates (Minor, REAL): applied. `tasks.md` Closing is
+  ticked, and this file has the section below.
+- A garbled `exposed=` reads as clean (Minor, SPECULATIVE): applied anyway, because it is cheap and
+  fails closed. A count that does not parse is `unverified`, the same as a failed read, and two
+  `TestWindowsBuiltinGroup` rows pin it.
+- An unscoped accept inside ts-input counts as scoped (Minor, SPECULATIVE): recorded. A comment on
+  `iptUnscopedRead` states the assumption: tailscaled writes no such rule (the captures in #526
+  show only `-i tailscale0` and loopback), and the chain is tailscaled's to rewrite.
+
+## Review disposition (round 2, FAIL)
+
+Reviewer `nan/mimo-v2.6-flash`, at e6fbbcb (`review.md`; round 1 kept as `review-round1.md`). Fixed in f08036a.
+
+- **Major REAL: an inactive ufw whose only allow is scoped off the tailnet.** Applied. `ufwInactiveState` now checks `offTailnetOnly` before `ufwAllows`. Setup writes `ufw allow in on tailscale0 ...` for when ufw is enabled, and both commands say that the existing allow admits only addresses or interfaces off the tailnet.
+  - After the legacy-allow replacement the read is marked scoped. That keeps "a legacy allow is replaced" saying "allow is in place".
+  - New `TestUFWInactive` row "an allow scoped off the tailnet" (setup and check): red before the fix.
+  - New e2e case "ufw inactive, off-tailnet allow only" in `scripts/e2e/linux.sh`. `make e2e-linux` at f08036a: 85 pass, 0 fail, including this case (`scripts/e2e/out/linux-20261111T024834Z.log`). The Windows change is message-only and is pinned by unit tests, so Windows e2e was not rerun.
+- **Major THEORETICAL: a negated scope (`! -i tailscale0 ... -j ACCEPT`) passed as the scoped rule.** Applied anyway, since the fix is four lines. `iptAcceptOffTailnet` counts a negated `-i`/`-s`/`-d` as off the tailnet, via the new `iptNegated`.
+  - Two `TestReadIptablesUnscoped` rows (negated interface, negated source): red before the fix.
+
+PR-Agent on #704 (head e6fbbcb; its run is marked partial):
+- **Misleading message (REAL).** Applied. A read that answers with no count now says "returned no rule count (...)", and its fix lists the enabled rules instead of sending the operator to a failing read. `TestWindowsBuiltinGroup` asserts it on the two `unparsed` rows, which were red before the fix.
+- **Misplaced doc comment (REAL).** Applied: a blank line now separates `TestWindowsBuiltinGroup`'s comment from `groupClean`'s.
+- **Vacuous e2e guard (THEORETICAL).** Declined. In the same run, `windows.ps1` asserts `(RdGroupOn) -gt 0` once the group is enabled (the drift case near line 124). A query that resolves nothing on this image therefore fails that run, so the two `-eq 0` cases cannot pass alone.
+
+## Review disposition (round 3, PASS-WITH-GAPS)
+
+Reviewer `nan/deepseek-v4-flash`, at 94cf5d7 (`review.md`; earlier rounds kept as `review-round1.md` and `review-round2.md`).
+
+- **Major THEORETICAL: the built-in group is read by its localized display name.** Ticketed as #707. On a non-English Windows, `-DisplayGroup 'Remote Desktop'` matches nothing and reads as `exposed=0`. The fix is the invariant `-Group` id, or `unverified` on an empty answer. It is not reproduced, because no localized guest exists here.
+- **Minor REAL: the Windows e2e was not rerun at f08036a.** Applied: `make e2e-windows` at 94cf5d7 gave 52 pass, 0 fail (`scripts/e2e/out/windows-20261111T025924Z.log`).
+
 ## Decisions made during implementation
 
 See the proposal: two-tier replacement, Windows built-in group reported but not disabled, fixed `tailscale0`.
@@ -79,3 +140,9 @@ See the proposal: two-tier replacement, Windows built-in group reported but not 
 - PR 3: iptables copies on a ufw host are deleted only when ufw is active and a scoped rule is in
   place. On inactive ufw only ufw's own list is replaced. A commented ufw rule is foreign, never
   exact, so a rule someone annotated is reported rather than deleted.
+
+## Promotion candidates
+
+- [x] Lesson for the repo's `docs/lessons/`? no: the scope rule is ADR-017 Amendment B, and the off-tailnet gap is a missed case of it, not a new lesson
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-017 Amendment B already records the scope; AC7 applies it
+- [x] New pattern candidate for `00_meta/patterns/`? no: one project

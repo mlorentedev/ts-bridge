@@ -78,7 +78,7 @@
   },
   {
     "id": "SEC-631-scoped-firewall-rules-f12",
-    "behavior": "On a real Windows host setup writes the scoped rule and repairs a legacy one (pending: the Windows guest is shared)",
+    "behavior": "On a real Windows host setup writes the scoped rule and repairs a legacy one",
     "verification": "pwsh scripts/e2e/windows.ps1",
     "state": "pending",
     "evidence": ""
@@ -93,6 +93,20 @@
   {
     "id": "SEC-631-scoped-firewall-rules-f14",
     "behavior": "Check and setup report an enabled built-in Remote Desktop group as manual with the disable command, and never disable it",
+    "verification": "go test ./internal/host -run 'TestWindowsBuiltinGroup' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f15",
+    "behavior": "An allow scoped off the tailnet (another interface, a source address) does not converge: check reports changed and setup adds the tailscale0 rule beside it",
+    "verification": "go test ./internal/host -run 'TestOffTailnetOnlyAllow|TestCheckForLinux' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "SEC-631-scoped-firewall-rules-f16",
+    "behavior": "A built-in group read whose count does not parse is unverified, not clean",
     "verification": "go test ./internal/host -run 'TestWindowsBuiltinGroup' -count=1",
     "state": "pending",
     "evidence": ""
