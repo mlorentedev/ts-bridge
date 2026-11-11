@@ -252,7 +252,7 @@ type localAPINode interface {
 
 var _ localAPINode = (*tsnet.Server)(nil)
 
-// watchServeControl reports the node's control session on readiness when the
+// watchServeControl reports the node's control session (bus state and Self.Online) on readiness when the
 // node exposes its local API (a tsnet.Server does).
 func watchServeControl(ctx context.Context, node serveNode, ready serve.Readiness, logger *slog.Logger) {
 	n, ok := node.(localAPINode)
@@ -268,6 +268,12 @@ func watchServeControl(ctx context.Context, node serveNode, ready serve.Readines
 				if ctx.Err() == nil {
 					logger.Warn("control session watch ended; /health/ready reads control_plane_unreachable")
 				}
+			}()
+			// The bus stays Running through a control-plane outage; Self.Online does not (HOST-011).
+			ticker := time.NewTicker(serve.ControlPollInterval)
+			go func() {
+				defer ticker.Stop()
+				serve.WatchControlOnline(ctx, lc.Status, ticker.C, ready)
 			}()
 			return
 		}

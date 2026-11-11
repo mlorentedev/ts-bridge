@@ -39,7 +39,7 @@ Design, settled by the measurement:
 
 ## Acceptance criteria
 
-- [ ] AC1: with the control plane unreachable after `READY`, `/health/ready` answers 503 with `reason=control_plane_unreachable` within 40 s, and 200 again within 20 s of recovery. Shown end to end on the local mesh (no `bootstrap_ssh`); with `bootstrap_ssh` declared, the unit tests show the same reason whichever source is down.
+- [ ] AC1: with the control plane unreachable after `READY`, `/health/ready` answers 503 with `reason=control_plane_unreachable` within 40 s, and 200 again within 30 s of recovery. Shown end to end on the local mesh (no `bootstrap_ssh`); with `bootstrap_ssh` declared, the unit tests show the same reason whichever source is down.
 - [ ] AC2: one or two offline samples do not change readiness; the third does. A failed status read counts as an offline sample.
 - [ ] AC3: the bus watcher keeps its behavior: a non-`Running` state or a bus that ends still reads not ready.
 

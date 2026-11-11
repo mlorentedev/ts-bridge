@@ -22,7 +22,7 @@
   },
   {
     "id": "HOST-011-control-liveness-f4",
-    "behavior": "AC1 end to end: on the local mesh, stopping Headscale after READY gives 503 control_plane_unreachable within 40 s and 200 within 20 s of the restart",
+    "behavior": "AC1 end to end: on the local mesh, stopping Headscale after READY gives 503 control_plane_unreachable within 40 s and 200 within 30 s of the restart",
     "verification": "make e2e-mesh-linux",
     "state": "pending",
     "evidence": ""

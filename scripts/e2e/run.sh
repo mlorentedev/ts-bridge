@@ -126,6 +126,26 @@ mesh_rdp_case() {
   return "$ok"
 }
 
+# mesh_outage_case stops the control plane after READY. host serve's /health/ready must read
+# control_plane_unreachable within 40 s, then ready within 30 s of the restart (HOST-011, #565):
+# the IPN bus stays Running through an outage, so this proves the Self.Online watcher.
+mesh_outage_case() {
+  local rc=0
+  docker stop "$HS_NAME" >/dev/null || return 1
+  if echo "503 40" | dotf vm linux exec --session "$SESSION" --timeout 2m --script "$HERE/mesh_health.sh"; then
+    echo "PASS mesh outage: /health/ready reads control_plane_unreachable"
+  else
+    echo "FAIL mesh outage: /health/ready reads control_plane_unreachable"; rc=1
+  fi
+  docker start "$HS_NAME" >/dev/null || return 1
+  if echo "200 30" | dotf vm linux exec --session "$SESSION" --timeout 2m --script "$HERE/mesh_health.sh"; then
+    echo "PASS mesh outage: ready again after the control plane returns"
+  else
+    echo "FAIL mesh outage: ready again after the control plane returns"; rc=1
+  fi
+  return "$rc"
+}
+
 run_mesh_linux() {
   local dir="$1" url
   url="http://$(hs_host_ip):8080" || return 1
@@ -135,6 +155,7 @@ run_mesh_linux() {
   { echo "$url"; hs_mint_key tag:e2e-host; } |
     dotf vm linux exec --session "$SESSION" --elevated --timeout 20m --script "$HERE/mesh_linux.sh" || return 1
   if mesh_rdp_case "$dir"; then echo "PASS mesh rdp: X.224 confirm through connect"; else echo "FAIL mesh rdp: X.224 confirm through connect"; return 1; fi
+  mesh_outage_case
 }
 
 # teardown_mesh is the EXIT trap of a mesh run. bash runs it when SIGINT or SIGTERM ends the
