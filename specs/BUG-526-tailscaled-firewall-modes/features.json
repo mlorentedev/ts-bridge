@@ -1,9 +1,37 @@
 [
   {
     "id": "BUG-526-tailscaled-firewall-modes-f1",
-    "behavior": "Outcome 1",
-    "verification": "echo 'not implemented' && exit 1",
-    "state": "pending",
-    "evidence": ""
+    "behavior": "AC1: with --netfilter-mode=nodivert, check reports unverified naming the mode, and setup writes nothing",
+    "verification": "go test ./internal/host/ -run 'TestReadIptablesCapturedModes'",
+    "state": "passing",
+    "evidence": "TestReadIptablesCapturedModes/netfilter-mode_nodivert passes at cf2366c on a live capture (a264c19)"
+  },
+  {
+    "id": "BUG-526-tailscaled-firewall-modes-f2",
+    "behavior": "AC2: in nftables mode on an nf_tables iptables, the read admits the port through tailscaled's ACCEPT",
+    "verification": "go test ./internal/host/ -run 'TestReadIptablesCapturedModes'",
+    "state": "passing",
+    "evidence": "TestReadIptablesCapturedModes/nftables_mode,_read_through_iptables-nft passes at cf2366c on a live capture (a264c19)"
+  },
+  {
+    "id": "BUG-526-tailscaled-firewall-modes-f3",
+    "behavior": "AC3: an unscoped v6 allow makes check and setup manual, naming the rule and its ip6tables -D fix, firewall_ok false, nothing deleted",
+    "verification": "go test ./internal/host/ -run 'TestIP6Exposure'",
+    "state": "passing",
+    "evidence": "TestIP6Exposure/an_unscoped_v6_allow passes at cf2366c; mutants dropping the v6 term from linuxFirewallOK, or withIP6 from setup or check, each fail it"
+  },
+  {
+    "id": "BUG-526-tailscaled-firewall-modes-f4",
+    "behavior": "AC4: a failed v6 read or no ip6tables leaves the IPv4 outcome unchanged; a failed read adds a note",
+    "verification": "go test ./internal/host/ -run 'TestIP6Exposure'",
+    "state": "passing",
+    "evidence": "TestIP6Exposure/v6_read_fails and /no_ip6tables pass at cf2366c"
+  },
+  {
+    "id": "BUG-526-tailscaled-firewall-modes-f5",
+    "behavior": "AC5: the Linux e2e sees an unscoped v6 allow reported, then ok once the operator deletes it",
+    "verification": "l=$(ls -t scripts/e2e/out/linux-*.log | head -1); [ -n \"$l\" ] && grep -q '^PASS unscoped v6 allow: check says manual' \"$l\" && grep -q '^PASS v6 allow removed by the operator: check is ok again' \"$l\" && ! grep -q '^FAIL' \"$l\"",
+    "state": "passing",
+    "evidence": "linux-20261111T071101Z.log at cf2366c: 89 pass, 0 fail, 0 xfail, 0 xpass, the four v6 cases included"
   }
 ]

@@ -22,15 +22,15 @@ owner: manu
 
 ## Implementation
 
-- [ ] [AC1] [AC2] Captured fixtures pin nodivert (`unverified`) and nftables on nf_tables (present): `TestReadIptablesCapturedModes`
-- [ ] [AC3] Failing test: an unscoped v6 allow makes check and setup `manual`, naming `ip6tables` and its `-D` fix, with no write
-- [ ] [AC3] Read `ip6tables -S INPUT` in `readLinuxFirewall`; report in the firewall steps; `FirewallOK` false
-- [ ] [AC4] Failing test: a failed v6 read adds a note and keeps the outcome; no `ip6tables` changes nothing
-- [ ] [AC5] `scripts/e2e/linux.sh`: v6 unscoped allow reported, then `ok` once deleted
-- [ ] `docs/runbooks` Linux host note on what the v6 read reports
+- [x] [AC1] [AC2] Captured fixtures pin nodivert (`unverified`) and nftables on nf_tables (present): `TestReadIptablesCapturedModes`
+- [x] [AC3] Failing test: an unscoped v6 allow makes check and setup `manual`, naming `ip6tables` and its `-D` fix, with no write
+- [x] [AC3] Read `ip6tables -S INPUT` in `readLinuxFirewall`; report in the firewall steps; `FirewallOK` false
+- [x] [AC4] Failing test: a failed v6 read adds a note and keeps the outcome; no `ip6tables` changes nothing
+- [x] [AC5] `scripts/e2e/linux.sh`: v6 unscoped allow reported, then `ok` once deleted
+- [x] `docs/runbooks` Linux host note on what the v6 read reports (no Linux host runbook exists, so it went to `docs/design/host-client-parity.md`)
 
 ## Closing
 
-- [ ] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`, `GOOS=windows`), `gosec ./...`
-- [ ] `make e2e-linux` on a real VM
-- [ ] `verification.md` filled with the command output
+- [x] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`, `GOOS=windows`), `gosec ./...`
+- [x] `make e2e-linux` on a real VM
+- [x] `verification.md` filled with the command output
