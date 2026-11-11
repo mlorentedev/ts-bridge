@@ -83,10 +83,12 @@ suite, to keep the suite fast, hermetic, and non-hanging:
   `--watch`). Smoke tests cover only the pre-start validation/error paths;
   starting the bridge and draining it is covered by `main_integration_test.go`
   (mock `Dialer`) and the QA-013 e2e run.
-- **`discover` live fetch, interactive selection, `--filter`/`--auto`** — these
+- **`discover` live fetch, interactive selection, `--filter`** — these
   are reached only after a successful tailnet API query (needs a real auth key,
   tailnet, and network). Smoke tests cover the pre-fetch validation/error paths
   and the flag surface; the live behaviour is covered by the QA-013 e2e run.
+  `--auto` is the exception: `TestDiscoverAutoWritesTheFirstHost` runs the real
+  command against a fake Headscale API and checks the `.env` it writes (#684).
 - **`host setup` real execution (Windows registry/firewall/UPnP/sleep; Linux
   xrdp/UFW/iptables)** — mutates the machine and needs admin/root. The smoke
   suite exercises only `--help`, flag parsing, and the non-root elevation guard,
