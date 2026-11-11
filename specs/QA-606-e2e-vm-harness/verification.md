@@ -24,6 +24,58 @@ owner: manu
 - `bash scripts/tests/test-e2e-report.sh`: exit 0.
 - Not run in CI by design: GitHub runners cannot nest a VM (proposal, Non-goals).
 
+## Review disposition (round 1, FAIL)
+
+`review.md` (nan/deepseek-v4-flash) returned FAIL on one REAL Major. Each finding:
+
+- f4's verification asserted 9 Windows drift lines; the script prints 12 (Major, REAL): applied. f4 now
+  requires `PASS setup #2: nothing changed`, at least one `PASS drift` and no `FAIL drift` in the
+  newest log of each OS, so it no longer pins a count that every new drift case breaks. Replayed at
+  bbd8685 against the two runs below: exit 0. Superseded in round 2: "at least one" was too weak, and
+  f4 now requires floors of 4 (Linux) and 12 (Windows) `PASS drift` lines (see the round-2 entry).
+- Evidence cites 37/39 pass at 03e077c (Minor, REAL): applied. Both runs are repeated at the
+  reviewed scripts' head bbd8685: `make e2e-linux` 77 pass, 0 fail, 0 xfail, 0 xpass, exit 0
+  (`linux-20261110T060009Z.log`); `make e2e-windows` 50 pass, 0 fail, 0 xfail, 0 xpass, exit 0
+  (`windows-20261110T060033Z.log`). The XFAILs of the first runs are gone because #608 and #557
+  were fixed since. AC1/AC2 above keep the first run; f1/f2 carry both.
+- `scripts/e2e/*.sh` outside shellcheck (Minor, REAL): applied. `scripts/check-shellcheck.sh` now
+  globs `scripts/e2e/*.sh` (red on the two `run.sh` warnings first, then fixed: the unused loop
+  variable and the `local` that masked `hs_host_ip`'s status). `scripts/tests/test-shellcheck.sh`
+  pins the new glob and an empty `scripts/e2e` failing closed. OK (30 scripts).
+- The `test-e2e-*.sh` suites run in no workflow (Minor, REAL): ticketed as #702. The wiring is in
+  `.github/`, which only the owner changes.
+- The primary path's teardown trap has no test (Minor, REAL): ticketed as #702, with the CI wiring.
+- Preflight probes only `up --help` and hardcodes dotf's state path (Minor, THEORETICAL): declined. A
+  missing `exec`/`cp` fails the run on its first use, with dotf's own message, and the state path is
+  only a hint for a missing clean base: a wrong guess costs a clearer error, never a false pass.
+- f3 is fail-open without `dotf` (Minor, REAL): applied. f3 now captures `dotf vm <os> status` and
+  exits 1 when the command fails, before it greps: with no `dotf` the status read exits 127 and f3
+  fails. Replayed at bbd8685 with `dotf` present: exit 0, and `dotf vm linux|windows status` list no `tsb-e2e-` session.
+- `report()` has no case-count floor (Minor, SPECULATIVE): declined. A floor would be a second
+  count to keep in step with the scripts, the drift f4 just removed; the summary line prints the
+  totals, and a lost block shows in the diff of the scenario script that lost it.
+
+## Review disposition (round 3, PASS-WITH-GAPS)
+
+Reviewer `nan/mimo-v2.6-flash`, at ea0781a (`review.md`; round 2 kept as `review-round2.md`). This round re-read the contract set after the f4 replay edit, so its digests match this branch.
+
+- **Minor REAL: the round-2 dispositions cite #705, which is not on this branch.** This is accurate: they are applied there, not here. #705 carries the log header, `test-e2e-run-teardown.sh` and the CI wiring, and it was open and green at the time. #705 has since merged (2026-11-11) and reached this branch through the master merge `20b7e99`.
+- **Minor REAL: AC3 has no test for `main()` at this sha.** Same as the line above: covered by `test-e2e-run-teardown.sh` in #705 (pass, fail, interrupt, failed teardown, leftover session).
+- **Minor THEORETICAL (preflight) and Minor SPECULATIVE (portability).** Declined, as in rounds 1 and 2.
+
+## Review disposition (round 2, PASS-WITH-GAPS)
+
+Reviewer `nan/deepseek-v4-flash`, at 5c0bee8 (`review-round2.md`). No Blocker or Major.
+
+- **Minor REAL, evidence provenance.** The log does not name its candidate commit or previous release: `run.sh` echoes that header before the `tee`. Implemented in #705, which was open at review rounds 2 and 3 and has since merged into this branch through master (`20b7e99`): the header goes through `tee` into the log, and `test-e2e-run-teardown.sh` asserts that the log names the candidate.
+- **Minor REAL, AC3 untested for `main()`.** Implemented in #705 (closes #702; open at review rounds 2 and 3, since merged into this branch through master): `test-e2e-run-teardown.sh` runs the real `run.sh linux` against shims. It covers pass, fail, interrupt, a failed teardown and the pre-run deletion of a leftover session.
+- **Minor THEORETICAL, preflight checks only `vm up`.** Declined, as in round 1. A missing verb fails at first use with dotf's own message, so no run reads green.
+- **Minor SPECULATIVE, `unzip`/`tar`/`shasum` not preflighted.** Declined. They ship with the only supported host (macOS on Apple Silicon, per the runbook). A missing one fails closed in `die "could not verify"`.
+
+PR-Agent on #703 (head 5c0bee8):
+- **f4 replay weakened (REAL).** Applied. The replay requires at least 4 `PASS drift` lines on Linux and 12 on Windows. Deleting one Linux drift line from the log makes it exit 1 (mutant), and the restored log exits 0.
+- **Dead `|| exit 1` (THEORETICAL).** Applied on the same line, since it costs nothing: `[ -n "$l" ] || exit 1`.
+
 ## Decisions made during implementation
 
 - `run.sh` keeps the temp dir in a global variable. The EXIT trap fires after `main` returns, and with a `local` the trap hit `dir: unbound variable` and left the guest running.
@@ -45,3 +97,9 @@ owner: manu
 - [ ] Folder moved: `specs/QA-606-e2e-vm-harness/` -> `specs/archive/QA-606-e2e-vm-harness/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [ ] Promotions above executed (if any)
+
+## PR-Agent disposition (on `20b7e99`, after round 3)
+
+- **Stale-log fail-open** (REAL): applied. `run.sh` now opens the log before `preflight`, so a run that dies early still leaves the newest log, and f4's replay fails on it instead of reading an earlier run's passing log. `preflight-failure-leaves-the-newest-log` in `scripts/tests/test-e2e-run-teardown.sh` failed before the change and passes after. f4's command, a contract file, is unchanged.
+- **Over-broad lint suppression** (THEORETICAL): declined. CI's shellcheck reports "function never invoked" as SC2317, so the file-wide disable is the form both versions accept. With shellcheck 0.11, `shellcheck -e SC2016,SC2034,SC2329 scripts/e2e/linux.sh` (SC2317 left enabled) reports nothing, so no unreachable code is hidden today.
+- **Stale branch claim in dispositions** (REAL, on `c2def72`): applied. The round-2 and round-3 bullets now say that #705 was open at those reviews and has since merged into this branch through master (`20b7e99`).

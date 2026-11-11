@@ -16,8 +16,9 @@ import (
 
 func setupWindows(cfg Config, r Runner) SetupResult {
 	steps := []SetupStep{
-		unattendedStep(r),
+		// The service first: `tailscale debug prefs` and `tailscale set` need a running daemon (#700).
 		serviceStep(r, "Tailscale", "Tailscale service", "Tailscale service not found — is Tailscale installed?", "install Tailscale"),
+		unattendedStep(r),
 		serviceStep(r, "SSDPSRV", "SSDP Discovery", "Failed to start SSDPSRV", "start the SSDPSRV service"),
 		serviceStep(r, "upnphost", "UPnP Device Host", "Failed to start upnphost", "start the upnphost service"),
 		networkProfileStep(r),
@@ -550,6 +551,12 @@ func windowsFirewallCheckStep(r Runner, ruleName string, port int) (SetupStep, b
 	if err != nil {
 		return newStep(name, OutcomeFailed, fmt.Sprintf("Could not read firewall rule '%s'", rule),
 			fmt.Sprintf("run Get-NetFirewallRule -DisplayName %q to see why the read fails", rule)), false
+	}
+	if ok && port == 0 {
+		// The RDP port read failed, so the rule's port went unchecked (#700).
+		return withGroupNote(r, newStep(name, OutcomeUnverified,
+			fmt.Sprintf("Rule '%s' is scoped to the tailnet, but its port is unchecked: the RDP port could not be read", rule),
+			"fix the RDP configuration step, then run ts-bridge host check again")), false
 	}
 	if ok {
 		return builtinGroupStep(r, firewallReadStep(name, true, port))
