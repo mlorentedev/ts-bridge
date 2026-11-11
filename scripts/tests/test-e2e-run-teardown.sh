@@ -37,7 +37,7 @@ case "$*" in
 esac'
 
 reset() { # reset <scenario result line>
-  rm -rf "$WORK/state" "$WORK/hang" "$WORK/hanging" "$WORK/down-fails" "$WORK/dotf.log"
+  rm -rf "$WORK/state" "$WORK/hang" "$WORK/hanging" "$WORK/down-fails" "$WORK/dotf.log" "$WORK/out"
   mkdir "$WORK/state"
   touch "$WORK/dotf.log"
   echo "$1" >"$WORK/verdict"
@@ -57,7 +57,7 @@ check pass-run-exits-zero test "$rc" -eq 0
 check pass-run-booted-the-guest grep -q 'vm linux up --session' "$WORK/dotf.log"
 check pass-run-tore-down-the-guest guest_gone
 # The log is the run's evidence: it must name the build it describes (QA-606 round-2 review).
-# This is the first run, so its log is the only one.
+# reset clears the logs, so this run's is the only one.
 check pass-run-log-names-its-candidate grep -q "^e2e linux: candidate $(git -C "$ROOT" rev-parse --short HEAD), previous v0.0.0\$" "$WORK"/out/linux-*.log
 
 # A session left by an earlier run is deleted before the new one boots, not reused.
@@ -78,6 +78,8 @@ reset 'PASS shim case'
 touch "$WORK/down-fails"
 rc=0
 linux || rc=$?
+# The scenario ran and passed, so the failure can only be the trap's teardown.
+check failed-teardown-ran-the-scenario grep -q '^PASS shim case' "$WORK"/out/linux-*.log
 check failed-teardown-exits-nonzero test "$rc" -ne 0
 check failed-teardown-says-why grep -q 'could not delete session tsb-e2e-linux' "$WORK/out.txt"
 

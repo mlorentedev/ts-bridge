@@ -4,7 +4,8 @@
 # Usage: scripts/e2e/run.sh linux|windows|clean|headscale-up|headscale-down|mesh linux
 #
 # Brings a fresh `dotf vm` session up, runs the guest scenario elevated, and
-# always tears the session down. Not run in CI: the runners cannot nest a VM.
+# always tears the session down. The VM run is not in CI, since the runners cannot nest a VM;
+# its logic is, through the shim suites scripts/tests/test-e2e-*.sh.
 # See docs/runbooks/e2e-vm.md. headscale-up and headscale-down run the local control plane the
 # mesh scenarios use (QA-607); clean removes it too. `mesh linux` runs the Linux guest's
 # `host serve` and the host's `connect` through it.
