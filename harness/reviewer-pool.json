@@ -40,12 +40,12 @@
       "why": "1M context and a mandatory reasoning chain. Slow on trivial prompts, which is the correct trade for a gate that runs once per spec. Exercised in the sibling ports: it re-ran a mutation battery itself rather than trusting the spec's table."
     },
     {
-      "id": "agy/gemini-3.1-pro-high",
+      "id": "agy/gemini-3.8-flash-high",
       "runner": "agy",
-      "model": "gemini-3.1-pro-high",
+      "model": "gemini-3.8-flash-high",
       "role": "fallback",
       "auth": "login",
-      "why": "Provider-diverse: independent of both NaN and Anthropic. Pro tier at high effort; the flash tiers are excluded for the same reason the daily models are. agy has no --provider flag — the model id selects the family. AUTH IS LOGIN, not a key: agy holds an OAuth token and answers with no API key in the environment, so this arm must not be wired to a secret the registry does not declare (dotfiles #1156 found an arm that had never once run for exactly that reason)."
+      "why": "Provider-diverse: independent of both NaN and Anthropic. Ported verbatim from the dotfiles SSOT, where the owner admitted it on 2026-10-14 (mlorentedev/dotfiles#2385) after agy stopped serving gemini-3.1-pro-high, the id this arm held until then; here a draw on the dead id failed at model resolution (#642). Flash tier at high effort is the one exception to the reasoning-class rule above, taken because agy serves no live Pro id: the alternative is no provider-diverse arm at all. Admitted on the bar every member clears: the planted `((count++))` defect under `set -e` with count=0, found in 54 s with a failing input and the fix. gpt-oss-120b-medium, the only other non-Anthropic id agy served then, missed it twice. PROVISIONAL: gemini-4-argon-high is listed by agy but was quota-limited when this port landed; measure it on the same bar and replace this member if it passes. agy has no --provider flag; the model id selects the family. AUTH IS LOGIN, not a key: agy holds an OAuth token and answers with no API key in the environment, so this arm must not be wired to a secret the registry does not declare (dotfiles #1156 found an arm that had never once run for exactly that reason)."
     },
     {
       "id": "nan/mimo-v2.6-flash",
