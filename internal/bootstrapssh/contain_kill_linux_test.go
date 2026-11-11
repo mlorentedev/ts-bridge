@@ -1,6 +1,7 @@
 package bootstrapssh
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"strconv"
@@ -10,10 +11,14 @@ import (
 )
 
 // processGone reports a pid that has exited: absent, or a zombie nobody reaped.
-func processGone(pid int) bool {
+func processGone(t testing.TB, pid int) bool {
+	t.Helper()
 	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	if err != nil {
+	if errors.Is(err, os.ErrNotExist) {
 		return true
+	}
+	if err != nil {
+		t.Fatalf("read pid %d state: %v", pid, err)
 	}
 	// The state follows the parenthesised command name.
 	fields := strings.Fields(string(stat[strings.LastIndexByte(string(stat), ')')+1:]))
