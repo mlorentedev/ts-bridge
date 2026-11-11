@@ -56,3 +56,9 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - **A failed v6 read gives no reason** (Minor, REAL): applied. The note now quotes the tool's first stderr line (`toolSaid`). `TestReadIP6NoteQuotesTheTool` failed before the change and passes after.
 - **`withoutIP6Probe` hides the probe's placement, and the check path's sequence is unasserted** (Minor, SPECULATIVE): applied in part. `TestIP6Exposure` now also asserts the check path's exact call sequence. The filter stays in the IPv4 tables, which pin the IPv4 sequence; the v6 probe's place is pinned here on both paths.
 - **The AC1 citation is incomplete** (Minor, REAL): applied. AC1 now also cites `TestFirewallStepsTailscaledModes/nodivert`.
+
+## PR-Agent disposition (#714, head `bb62c81`)
+
+- *Vacuous assertion* (REAL): applied. `TestIP6Exposure` now fails a row with no expected v6 text if the message mentions `ip6tables` or IPv6. A mutant that returns a note when `ip6tables` is missing fails the `no ip6tables` row.
+- *Contradictory doc claim* (REAL): applied. Lesson 055 now says the v6 `INPUT` chain is scanned for an off-tailnet allow and plays no part in reachability.
+- *Hardcoded guest arch* (THEORETICAL): declined. The e2e harness is Apple Silicon only (QA-606 topology); `run.sh` builds the guest for arm64 too.

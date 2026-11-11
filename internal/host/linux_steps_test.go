@@ -1859,6 +1859,11 @@ func TestIP6Exposure(t *testing.T) {
 				if step.Outcome != tt.want || !strings.Contains(step.Message, tt.message) {
 					t.Errorf("outcome %v message %q, want %v naming %q", step.Outcome, step.Message, tt.want, tt.message)
 				}
+				// A row with no expected v6 text must stay silent about v6 (AC4: no
+				// ip6tables, or nothing to report, reads as before).
+				if tt.message == "" && (strings.Contains(step.Message, "ip6tables") || strings.Contains(step.Message, "IPv6")) {
+					t.Errorf("message %q mentions IPv6, want the IPv4 report alone", step.Message)
+				}
 				fix := cmp.Or(tt.fix, ip6DeleteFix)
 				if tt.want == OutcomeManual && !strings.Contains(step.Fix, fix) {
 					t.Errorf("fix %q lacks %q", step.Fix, fix)
