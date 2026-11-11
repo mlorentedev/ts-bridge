@@ -64,10 +64,10 @@ Reviewer `nan/mimo-v2.6-flash`, at ea0781a (`review.md`; round 2 kept as `review
 
 ## Review disposition (round 2, PASS-WITH-GAPS)
 
-Reviewer `nan/deepseek-v4-flash`, at a357428 (`review.md`). No Blocker or Major.
+Reviewer `nan/deepseek-v4-flash`, at 5c0bee8 (`review-round2.md`). No Blocker or Major.
 
-- **Minor REAL, evidence provenance.** The log does not name its candidate commit or previous release: `run.sh` echoes that header before the `tee`. Applied in #705: the header goes through `tee` into the log, and `test-e2e-run-teardown.sh` asserts that the log names the candidate.
-- **Minor REAL, AC3 untested for `main()`.** Applied in #705 (closes #702): `test-e2e-run-teardown.sh` runs the real `run.sh linux` against shims. It covers pass, fail, interrupt, a failed teardown and the pre-run deletion of a leftover session.
+- **Minor REAL, evidence provenance.** The log does not name its candidate commit or previous release: `run.sh` echoes that header before the `tee`. Implemented in #705, which was open at review rounds 2 and 3 and is not on this branch: the header goes through `tee` into the log, and `test-e2e-run-teardown.sh` asserts that the log names the candidate.
+- **Minor REAL, AC3 untested for `main()`.** Implemented in #705 (closes #702; open at review rounds 2 and 3, not on this branch): `test-e2e-run-teardown.sh` runs the real `run.sh linux` against shims. It covers pass, fail, interrupt, a failed teardown and the pre-run deletion of a leftover session.
 - **Minor THEORETICAL, preflight checks only `vm up`.** Declined, as in round 1. A missing verb fails at first use with dotf's own message, so no run reads green.
 - **Minor SPECULATIVE, `unzip`/`tar`/`shasum` not preflighted.** Declined. They ship with the only supported host (macOS on Apple Silicon, per the runbook). A missing one fails closed in `die "could not verify"`.
 
