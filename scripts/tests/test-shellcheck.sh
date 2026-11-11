@@ -13,13 +13,14 @@ trap 'rm -rf "$tmp"' EXIT
 
 # A tree with one clean script at each covered depth, in $1.
 make_tree() {
-  mkdir -p "$1/scripts/tests"
+  mkdir -p "$1/scripts/tests" "$1/scripts/e2e"
   cat >"$1/scripts/clean.sh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "$HOME"
 SH
   cp "$1/scripts/clean.sh" "$1/scripts/tests/clean-test.sh"
+  cp "$1/scripts/clean.sh" "$1/scripts/e2e/clean-e2e.sh"
 }
 
 # SC2086: an unquoted expansion, written to the path in $1.
@@ -51,6 +52,10 @@ make_tree "$tmp/tests"
 write_bad "$tmp/tests/scripts/tests/bad-test.sh"
 expect "violation in scripts/tests/*.sh fails" 1 "$tmp/tests"
 
+make_tree "$tmp/e2e"
+write_bad "$tmp/e2e/scripts/e2e/bad-e2e.sh"
+expect "violation in scripts/e2e/*.sh fails" 1 "$tmp/e2e"
+
 # Out of scope by decision: fixtures hold deliberately bad inputs.
 make_tree "$tmp/fixture"
 mkdir -p "$tmp/fixture/scripts/tests/fixtures/x"
@@ -72,6 +77,10 @@ expect "an empty scope fails closed" 1 "$tmp/empty"
 make_tree "$tmp/no-tests"
 rm "$tmp/no-tests/scripts/tests/clean-test.sh"
 expect "an empty scripts/tests fails closed" 1 "$tmp/no-tests"
+
+make_tree "$tmp/no-e2e"
+rm "$tmp/no-e2e/scripts/e2e/clean-e2e.sh"
+expect "an empty scripts/e2e fails closed" 1 "$tmp/no-e2e"
 
 make_tree "$tmp/no-top"
 rm "$tmp/no-top/scripts/clean.sh"

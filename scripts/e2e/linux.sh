@@ -1,5 +1,5 @@
 #!/bin/sh
-# shellcheck disable=SC2016,SC2034,SC2329 # cases are strings eval'd by ok(), which calls the helpers
+# shellcheck disable=SC2016,SC2034,SC2317,SC2329 # SC2317 is SC2329 before shellcheck 0.11; cases are strings eval'd by ok(), which calls the helpers
 # Linux guest scenario (QA-606). Runs as root on a fresh Ubuntu 24.04 guest,
 # with /tmp/tsb-new (candidate) and /tmp/tsb-old (previous release) copied in.
 # Prints one line per case: PASS, FAIL, XFAIL #N or XPASS #N.
