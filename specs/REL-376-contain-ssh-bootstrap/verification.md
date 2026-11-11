@@ -16,7 +16,7 @@ owner: manu
   until the child is gone or a zombie.
   - Linux (Docker `golang:1.27`): PASS.
   - Mutant: without Pdeathsig, the test fails with `child 4610 outlived its killed parent`.
-  - Windows: `test-windows` CI only; the run is not recorded here yet.
+  - Windows: `test-windows` CI only. Run 41887607029 on #597 passed with `ok ts-bridge/internal/bootstrapssh 1.119s`; `TestContainment_KillsChildWhenParentDies` builds on windows and has no skip.
 - [x] AC2 → `TestStartSurvivesContainmentFailure`: with containment returning `access denied`,
   `start` still returns a tunnel, and `Close` works.
 - [x] AC3 → `TestStartContainsTheStartedProcessAndReleasesAfterWait`: `cmd.Process` is set when
@@ -61,3 +61,14 @@ owner: manu
 - **A containment refusal is dropped silently** (Minor, THEORETICAL): declined for this spec. AC2 asks that `Start` proceed, and the runbook documents the boundary. A warn-log would be a new observable contract, and no runner has ever refused job assignment.
 - **Evidence not recorded** (Minor, REAL): applied. The AC boxes above are ticked. Windows evidence: `test-windows` passed on #597 (run 41887607029), with `ok ts-bridge/internal/bootstrapssh 1.119s`. `contain_kill_test.go` builds on `linux || windows` and holds no skip, so `TestContainment_KillsChildWhenParentDies` ran in that package.
 - **The draft-tag pre-flight may read the transcript** (Question): answered by the archive itself. `review-transcript.jsonl` is git-ignored, and `dotf spec archive` passed its draft-tag pre-flight on three specs whose folders held a transcript (#701).
+
+## Review disposition (round 2, PASS-WITH-GAPS)
+
+`review.md` (nan/deepseek-v4-flash, reviewed `f5e27cd`) returned PASS-WITH-GAPS. Round 1 is kept as `review-round1.md`. No contract file changed after the review: `dotf spec digest` matches `review-request.json`.
+
+- **No test proves `start` calls `prepare`, or calls it before `cmd.Start()`** (Major, THEORETICAL): applied. `TestStartAppliesPrepareBeforeStart` records `prepare` and asserts `cmd.Process == nil` when it runs. Both of the review's mutants now fail: dropping the call gives "start never called prepare", and moving it after `Start` gives "prepare ran after the process started". Restored, the test passes on darwin and in `golang:1.27` on linux.
+- **`start` is over the 40-line limit, exempted by a baseline marker** (Minor, REAL): applied. The prepare/start/contain/wait block moved into `spawn`, the `//nolint:funlen // baseline #629` marker is gone, and `baselineCeiling["funlen"]` drops from 22 to 21. `golangci-lint run` reports 0 issues and `TestComplexityBaselineOnlyShrinks` passes.
+- **`verification.md` contradicts itself on the Windows evidence** (Minor, REAL): applied. The AC1 bullet now cites run 41887607029.
+- **Windows `processGone` reads any `OpenProcess` error as gone** (Minor, THEORETICAL): applied. Only `ERROR_INVALID_PARAMETER` (no such pid) reads as gone, and any other error fails the test. The Linux helper gets the same treatment: only `ErrNotExist` reads as gone. Both helpers now take `testing.TB`.
+- **No scanner reads `contain_windows.go`** (Minor, REAL, repo-wide): ticketed as #709. It is a CI change outside this spec, and the owner merges it.
+- **The runbook overstates the Linux Pdeathsig boundary** (Minor, THEORETICAL): applied. The Linux bullet in `docs/runbooks/guide-control-bootstrap.md` now gives the thread caveat.

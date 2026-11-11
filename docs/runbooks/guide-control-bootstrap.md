@@ -28,7 +28,9 @@ administrator privileges are required.
   listener and active tunnels. The SSH child remains under the normal bootstrap
   lifecycle; do not kill or reuse an unrelated process.
 - An abrupt exit is handled per OS: a panic, `kill -9`, or Task Manager's End task.
-  - Linux: the kernel sends `SIGKILL` to `ssh` when ts-bridge dies.
+  - Linux: the kernel sends `SIGKILL` to `ssh` when ts-bridge dies. Strictly, the signal
+    fires when the OS thread that started `ssh` exits; the bootstrap never pins a thread,
+    so in practice that is when ts-bridge dies.
   - Windows: `ssh` runs in a kill-on-close Job Object, and the job dies with ts-bridge.
     `ssh` joins the job just after it starts. If ts-bridge is killed inside that window,
     or `ssh` spawns a process before joining (a `ProxyCommand`), that process is not covered.
