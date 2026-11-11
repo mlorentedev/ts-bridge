@@ -755,6 +755,16 @@ func TestCheckForLinux(t *testing.T) {
 			fix:      "setup does not delete",
 		},
 		{
+			name:     "ufw host, the only allow is scoped off the tailnet (#631)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow from 10.0.0.0/8 to any port 3389 proto tcp\n", iptRead: ufwHostInput, iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "not on tailscale0",
+			fix:      "ts-bridge host setup",
+		},
+		{
 			name:     "ufw host, a qualified ts-input jump: unverified",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: iptQualified})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead),
@@ -1533,6 +1543,9 @@ func TestUFWInactive(t *testing.T) {
 		// ts-input's scoped iptables rule is not a ufw allow: the legacy ufw
 		// allow is still replaced by a scoped ufw one, never just deleted (#631).
 		{name: "a legacy allow beside ts-input is replaced", added: ufwLegacyAllow, input: ufwHostInput, replaces: true, message: "allow is in place", check: "unscoped"},
+		// An allow scoped to an address or another interface will not admit the
+		// tailnet once ufw is enabled: setup still adds the tailscale0 allow (#631 review).
+		{name: "an allow scoped off the tailnet", added: "ufw allow from 10.0.0.0/8 to any port 3389 proto tcp\n", writes: true, message: "off the tailnet", check: "off the tailnet"},
 		// A ufw deny decides the port once ufw is enabled: name it, add nothing.
 		{name: "a ufw deny", added: "ufw deny 3389/tcp\n", message: "ufw deny 3389/tcp", check: "ufw deny 3389/tcp"},
 		// tailscaled's ts-input admits the tailnet whatever ufw's state: an
@@ -1652,6 +1665,8 @@ func TestReadIptablesUnscoped(t *testing.T) {
 		{"a comment on the legacy rule makes it foreign", iptEmpty + `-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "rdp" -j ACCEPT` + "\n", 0, 1, false},
 		{"a source address does not admit the tailnet", iptEmpty + "-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
 		{"another interface does not admit the tailnet", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"a negated tailnet interface does not admit the tailnet", iptEmpty + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"a negated source does not admit the tailnet", iptEmpty + "-A INPUT ! -s 100.64.0.0/10 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
 		{"a legacy copy beside an eth1 rule is not scoped", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n" + iptLegacyRule, 1, 0, false},
 		{"a port-less accept is the operator's posture", iptEmpty + "-A INPUT -p tcp -j ACCEPT\n", 0, 0, true},
 		{"another port", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n", 0, 0, false},
@@ -1836,6 +1851,52 @@ func TestIP6Exposure(t *testing.T) {
 			}
 			if got := linuxFirewallOK(read); got != (tt.want == OutcomeOK) {
 				t.Errorf("linuxFirewallOK = %v, want %v", got, tt.want == OutcomeOK)
+			}
+		})
+	}
+}
+
+// TestOffTailnetOnlyAllow pins that an allow scoped to something other than the
+// tailnet does not converge the host: the port is open, but not from the
+// tailnet, so setup adds the tailscale0 rule and check reports it (#631).
+func TestOffTailnetOnlyAllow(t *testing.T) {
+	ufwRunner := func(added string) *recordingRunner {
+		return &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true}, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + added, iptRead: ufwHostInput, iptChain: tsInputNoAccept}}
+	}
+	iptRunner := func(rule string) *recordingRunner {
+		return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptEmpty + rule, iptChain: tsInputNoAccept}}
+	}
+	tests := []struct {
+		name   string
+		runner func() *recordingRunner
+		write  string
+	}{
+		{"iptables, a source address", func() *recordingRunner {
+			return iptRunner("-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT\n")
+		}, iptAppend},
+		{"iptables, another interface", func() *recordingRunner {
+			return iptRunner("-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n")
+		}, iptAppend},
+		{"ufw, a source address", func() *recordingRunner {
+			return ufwRunner("ufw allow from 10.0.0.0/8 to any port 3389 proto tcp\n")
+		}, ufwAllowCmd},
+		{"ufw, another interface", func() *recordingRunner {
+			return ufwRunner("ufw allow in on eth1 to any port 3389 proto tcp\n")
+		}, ufwAllowCmd},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := tt.runner()
+			setup := firewallSetupStep(r, 3389)
+			if setup.Outcome != OutcomeChanged || !slices.Contains(r.calls, "run "+tt.write) {
+				t.Errorf("setup = %v %q, calls %v; want changed with %q", setup.Outcome, setup.Message, r.calls, tt.write)
+			}
+			if !strings.Contains(setup.Message, tailnetInterface) {
+				t.Errorf("setup message %q does not name %s", setup.Message, tailnetInterface)
+			}
+			check := firewallCheckStep(readLinuxFirewall(tt.runner(), 3389), 3389)
+			if check.Outcome != OutcomeChanged || !strings.Contains(check.Message, tailnetInterface) {
+				t.Errorf("check = %v %q, want changed naming %s", check.Outcome, check.Message, tailnetInterface)
 			}
 		})
 	}

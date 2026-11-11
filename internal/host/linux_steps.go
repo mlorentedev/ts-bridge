@@ -238,7 +238,7 @@ func readIP6(r Runner, port int) (foreign []string, note string) {
 // linuxFirewallOK is check's firewall_ok: the port is admitted, through a rule
 // scoped to the tailnet, and nothing admits it on every interface (#631, #526).
 func linuxFirewallOK(fw firewallRead) bool {
-	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && len(fw.v6Foreign) == 0
+	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw) && len(fw.v6Foreign) == 0
 }
 
 // withIP6 adds the v6 read to a firewall step. An unscoped v6 allow turns a
@@ -384,6 +384,10 @@ func readIptables(r Runner, port int) firewallRead { //nolint:gocyclo // baselin
 // setup did not write and says whether a scoped rule admits the port without
 // them (#631). Rules walked is what decided state: tailscaled's ts-input is
 // inlined there, so its `-i tailscale0 -j ACCEPT` counts as the scoped rule.
+// Unscoped allows are looked for in INPUT only: an unscoped port ACCEPT inside
+// ts-input would count as the scoped rule. tailscaled writes none (its accepts
+// are `-i tailscale0` and loopback, see the captures in the tests), and the
+// chain is tailscaled's to rewrite, not setup's.
 func iptUnscopedRead(input, walked string, port int, state ruleState) (foreign []string, scoped bool) {
 	unscoped := iptUnscoped(input, port)
 	legacy := iptPrinted(iptablesLegacy(port))
@@ -397,11 +401,16 @@ func iptUnscopedRead(input, walked string, port int, state ruleState) (foreign [
 // iptAcceptOffTailnet reports an ACCEPT scoped to something other than the
 // tailnet: another interface, or a source or destination address. Such a rule
 // admits the port, but not from the tailnet, so it is not the scoped rule and
-// setup must still add `-i tailscale0` before it deletes a legacy copy.
+// setup must still add `-i tailscale0` before it deletes a legacy copy. A
+// negated scope (`! -i tailscale0`, `! -s ...`) counts as off the tailnet: it
+// may exclude the tailnet, so it never proves the rule admits it (#631 review).
 func iptAcceptOffTailnet(line string) bool {
 	f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
 	if iptFlag(f, "-j") != iptAccept {
 		return false
+	}
+	if slices.ContainsFunc([]string{"-i", "-s", "-d"}, func(flag string) bool { return iptNegated(f, flag) }) {
+		return true
 	}
 	if in := iptFlag(f, "-i"); in != "" && in != tailnetInterface {
 		return true
@@ -720,6 +729,12 @@ func iptFlag(f []string, flag string) string {
 	return f[i+1]
 }
 
+// iptNegated reports a flag written under `!`, which iptFlag reads as absent.
+func iptNegated(f []string, flag string) bool {
+	i := slices.Index(f, flag)
+	return i > 0 && f[i-1] == "!"
+}
+
 // tailnetInterface is the interface tailscaled creates, and the only one setup
 // opens the service port on (ADR-017 Amendment B, #631).
 const tailnetInterface = "tailscale0"
@@ -743,6 +758,13 @@ func iptablesDelete(port int) []string {
 // port: setup replaces the ones it wrote and reports the others (#631).
 func legacyHeld(read firewallRead) bool {
 	return read.state == rulePresent && (read.ufwLegacy || read.copies > 0 || len(read.foreign) > 0)
+}
+
+// offTailnetOnly reports a port that is allowed, but only off the tailnet: every
+// allow is scoped to another interface or to an address, so setup still owes
+// the tailscale0 rule (#631).
+func offTailnetOnly(read firewallRead) bool {
+	return read.state == rulePresent && !read.scoped && !legacyHeld(read)
 }
 
 // addScopedRule writes the rule setup owns, through the backend that manages
@@ -959,6 +981,9 @@ func firewallSetupFrom(r Runner, read firewallRead, port int) SetupStep {
 		if legacyHeld(read) {
 			return legacySetupStep(r, read, port)
 		}
+		if offTailnetOnly(read) {
+			break
+		}
 		return newStep(linuxFwName, OutcomeOK, fmt.Sprintf("Firewall allows TCP %d (%s)", port, read.source()), "")
 	case ruleBlocked:
 		return firewallBlockedStep(read, port)
@@ -970,7 +995,7 @@ func firewallSetupFrom(r Runner, read firewallRead, port int) SetupStep {
 		return newStep(linuxFwName, OutcomeFailed, fmt.Sprintf("Could not add the firewall rule: %v", err),
 			fmt.Sprintf("allow TCP %d inbound on %s with %s, as root", port, tailnetInterface, read.backend))
 	}
-	return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Firewall rule added: TCP %d (%s)", port, read.backend), "")
+	return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Firewall rule added: TCP %d on %s (%s)", port, tailnetInterface, read.backend), "")
 }
 
 // legacySetupStep replaces the unscoped allows for the port (#631). The scoped
@@ -1056,7 +1081,7 @@ func ufwInactiveSetupStep(r Runner, read firewallRead, port int) SetupStep {
 		if step, failed := ufwInactiveReplace(r, read, port); failed {
 			return step
 		}
-		read.ufwLegacy, read.ufwAllows = false, true
+		read.ufwLegacy, read.ufwAllows, read.ufwScoped, read.scoped = false, true, true, true // the scoped allow is in place now
 	}
 	state, add := ufwInactiveState(read, port)
 	if !add {
@@ -1066,7 +1091,11 @@ func ufwInactiveSetupStep(r Runner, read firewallRead, port int) SetupStep {
 		return newStep(linuxFwName, OutcomeFailed, fmt.Sprintf("ufw is inactive, and adding its allow failed: %v", err),
 			fmt.Sprintf("run `ufw %s` as root, then enable ufw with `ufw enable`", strings.Join(ufwAllowArgs(port), " ")))
 	}
-	return ufwInactiveStep(read, port, "allow added (ufw) for when ufw is enabled")
+	added := "allow added (ufw) for when ufw is enabled"
+	if offTailnetOnly(read) {
+		added += "; the allow it already held admits only addresses or interfaces off the tailnet"
+	}
+	return ufwInactiveStep(read, port, added)
 }
 
 // ufwInactiveReplace swaps ufw's legacy allow for the scoped one in ufw's own
@@ -1093,6 +1122,9 @@ func ufwInactiveState(read firewallRead, port int) (state string, add bool) {
 		return fmt.Sprintf("once ufw is enabled, its rule %s blocks the port", read.blockedBy), false
 	case read.ufwLegacy:
 		return fmt.Sprintf("its allow for TCP %d is unscoped, which ts-bridge host setup replaces with one scoped to %s", port, tailnetInterface), false
+	case offTailnetOnly(read):
+		// An allow scoped to an address or another interface will not admit the tailnet once ufw is enabled (#631).
+		return fmt.Sprintf("its allow for TCP %d admits only addresses or interfaces off the tailnet, so setup adds one on %s", port, tailnetInterface), true
 	case read.ufwAllows:
 		return "its allow is in place for when ufw is enabled", false
 	case read.state == rulePresent:
@@ -1139,6 +1171,10 @@ func firewallCheckV4(read firewallRead, port int) SetupStep {
 	}
 	if legacyHeld(read) {
 		return legacyCheckStep(read, port)
+	}
+	if offTailnetOnly(read) {
+		return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Firewall allows TCP %d (%s), but not on %s: every allow is scoped to another interface or address", port, read.source(), tailnetInterface),
+			fmt.Sprintf("run ts-bridge host setup as root: it adds the rule scoped to %s", tailnetInterface))
 	}
 	return firewallReadStep(linuxFwName, read.state == rulePresent, port)
 }
