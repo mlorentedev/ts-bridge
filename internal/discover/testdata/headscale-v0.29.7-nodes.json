@@ -1,0 +1,114 @@
+{
+  "nodes": [
+    {
+      "id": "1",
+      "machineKey": "mkey:0000000000000000000000000000000000000000000000000000000000000000",
+      "nodeKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+      "discoKey": "discokey:0000000000000000000000000000000000000000000000000000000000000000",
+      "ipAddresses": [
+        "100.64.0.1",
+        "fd7a:115c:a1e0::1"
+      ],
+      "name": "tsb-e2e-linux",
+      "user": {
+        "id": "2147455555",
+        "name": "tagged-devices",
+        "createdAt": "0001-01-01T00:00:00Z",
+        "displayName": "Tagged Devices",
+        "email": "",
+        "providerId": "",
+        "provider": "",
+        "profilePicUrl": ""
+      },
+      "lastSeen": "2026-11-11T07:42:53.725122966Z",
+      "expiry": null,
+      "preAuthKey": {
+        "user": {
+          "id": "1",
+          "name": "e2e",
+          "createdAt": "2026-11-11T07:40:01.085671220Z",
+          "displayName": "",
+          "email": "",
+          "providerId": "",
+          "provider": "",
+          "profilePicUrl": ""
+        },
+        "id": "1",
+        "key": "REDACTED",
+        "reusable": false,
+        "ephemeral": false,
+        "used": true,
+        "expiration": "2026-11-11T08:40:13.937148628Z",
+        "createdAt": "2026-11-11T07:40:13.937522657Z",
+        "aclTags": [
+          "tag:e2e-host"
+        ]
+      },
+      "createdAt": "2026-11-11T07:42:48.606722548Z",
+      "registerMethod": "REGISTER_METHOD_AUTH_KEY",
+      "givenName": "tsb-e2e-linux",
+      "online": true,
+      "approvedRoutes": [],
+      "availableRoutes": [],
+      "subnetRoutes": [],
+      "tags": [
+        "tag:e2e-host"
+      ]
+    },
+    {
+      "id": "2",
+      "machineKey": "mkey:0000000000000000000000000000000000000000000000000000000000000000",
+      "nodeKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+      "discoKey": "discokey:0000000000000000000000000000000000000000000000000000000000000000",
+      "ipAddresses": [
+        "100.64.0.2",
+        "fd7a:115c:a1e0::2"
+      ],
+      "name": "tsb-e2e-client",
+      "user": {
+        "id": "2147455555",
+        "name": "tagged-devices",
+        "createdAt": "0001-01-01T00:00:00Z",
+        "displayName": "Tagged Devices",
+        "email": "",
+        "providerId": "",
+        "provider": "",
+        "profilePicUrl": ""
+      },
+      "lastSeen": "2026-11-11T07:43:10.255774237Z",
+      "expiry": null,
+      "preAuthKey": {
+        "user": {
+          "id": "1",
+          "name": "e2e",
+          "createdAt": "2026-11-11T07:40:01.085671220Z",
+          "displayName": "",
+          "email": "",
+          "providerId": "",
+          "provider": "",
+          "profilePicUrl": ""
+        },
+        "id": "2",
+        "key": "REDACTED",
+        "reusable": false,
+        "ephemeral": false,
+        "used": true,
+        "expiration": "2026-11-11T08:42:53.861975783Z",
+        "createdAt": "2026-11-11T07:42:53.862455389Z",
+        "aclTags": [
+          "tag:e2e-client"
+        ]
+      },
+      "createdAt": "2026-11-11T07:42:54.344845001Z",
+      "registerMethod": "REGISTER_METHOD_AUTH_KEY",
+      "givenName": "tsb-e2e-client",
+      "online": false,
+      "approvedRoutes": [],
+      "availableRoutes": [],
+      "subnetRoutes": [],
+      "tags": [
+        "tag:e2e-client"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 package discover
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,12 +20,12 @@ func ListHeadscaleDevices(ctx context.Context, apiKey, controlURL string) ([]Hea
 		return nil, fmt.Errorf("Headscale control URL is required")
 	}
 
-	// Normalize URL: ensure it ends with /api/v1/device
+	// Headscale lists its nodes at /api/v1/node; there is no /api/v1/device (#717).
 	apiURL := controlURL
 	if !strings.HasSuffix(apiURL, "/") {
 		apiURL += "/"
 	}
-	apiURL += "api/v1/device"
+	apiURL += "api/v1/node"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -62,26 +63,48 @@ func ListHeadscaleDevices(ctx context.Context, apiKey, controlURL string) ([]Hea
 		}
 	}
 
-	// Headscale returns either an array or an object with a "devices" key.
-	// Read the body once, then try both formats.
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1MB limit
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
-
-	var rawDevices []HeadscaleDevice
-	if err := json.Unmarshal(body, &rawDevices); err != nil {
-		// Try object wrapper: {"devices": [...]}
-		var wrapper struct {
-			Devices []HeadscaleDevice `json:"devices"`
-		}
-		if err2 := json.Unmarshal(body, &wrapper); err2 != nil {
-			return nil, fmt.Errorf("parse response: unexpected format (tried array and object wrapper): %w", err)
-		}
-		rawDevices = wrapper.Devices
+	var list struct {
+		Nodes []headscaleNode `json:"nodes"`
 	}
+	if err := json.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+	devices := make([]HeadscaleDevice, 0, len(list.Nodes))
+	for _, n := range list.Nodes {
+		devices = append(devices, n.device())
+	}
+	return devices, nil
+}
 
-	return rawDevices, nil
+// headscaleNode is one entry of Headscale's GET /api/v1/node, as v0.29.7
+// returns it (testdata/headscale-v0.29.7-nodes.json).
+type headscaleNode struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	GivenName   string   `json:"givenName"`
+	IPAddresses []string `json:"ipAddresses"`
+	User        struct {
+		Name string `json:"name"`
+	} `json:"user"`
+	LastSeen string  `json:"lastSeen"`
+	Expiry   *string `json:"expiry"`
+	Online   bool    `json:"online"`
+}
+
+// device maps a node. givenName is the node's name in the tailnet (MagicDNS),
+// so it wins over the client-reported name. Headscale has no approval step: a
+// node it lists is registered, so it is authorized.
+func (n headscaleNode) device() HeadscaleDevice {
+	d := HeadscaleDevice{ID: n.ID, Name: cmp.Or(n.GivenName, n.Name), User: n.User.Name, IPs: n.IPAddresses,
+		LastSeen: n.LastSeen, Authorized: true, Online: n.Online}
+	if n.Expiry != nil {
+		d.Expires = *n.Expiry
+	}
+	return d
 }
 
 // diagnoseHeadscaleAPIError inspects a Headscale API error and returns
