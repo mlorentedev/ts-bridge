@@ -54,6 +54,19 @@ owner: manu
   count to keep in step with the scripts, the drift f4 just removed; the summary line prints the
   totals, and a lost block shows in the diff of the scenario script that lost it.
 
+## Review disposition (round 2, PASS-WITH-GAPS)
+
+Reviewer `nan/deepseek-v4-flash`, at a357428 (`review.md`). No Blocker or Major.
+
+- **Minor REAL, evidence provenance.** The log does not name its candidate commit or previous release: `run.sh` echoes that header before the `tee`. Applied in #705: the header goes through `tee` into the log, and `test-e2e-run-teardown.sh` asserts that the log names the candidate.
+- **Minor REAL, AC3 untested for `main()`.** Applied in #705 (closes #702): `test-e2e-run-teardown.sh` runs the real `run.sh linux` against shims. It covers pass, fail, interrupt, a failed teardown and the pre-run deletion of a leftover session.
+- **Minor THEORETICAL, preflight checks only `vm up`.** Declined, as in round 1. A missing verb fails at first use with dotf's own message, so no run reads green.
+- **Minor SPECULATIVE, `unzip`/`tar`/`shasum` not preflighted.** Declined. They ship with the only supported host (macOS on Apple Silicon, per the runbook). A missing one fails closed in `die "could not verify"`.
+
+PR-Agent on #703 (head 5c0bee8):
+- **f4 replay weakened (REAL).** Applied. The replay requires at least 4 `PASS drift` lines on Linux and 12 on Windows. Deleting one Linux drift line from the log makes it exit 1 (mutant), and the restored log exits 0.
+- **Dead `|| exit 1` (THEORETICAL).** Applied on the same line, since it costs nothing: `[ -n "$l" ] || exit 1`.
+
 ## Decisions made during implementation
 
 - `run.sh` keeps the temp dir in a global variable. The EXIT trap fires after `main` returns, and with a `local` the trap hit `dir: unbound variable` and left the guest running.
