@@ -201,11 +201,13 @@ main() {
     trap 'rc=$?; rm -rf "$dir"; down "$OS" || { [ "$rc" != 0 ] || rc=1; }; exit "$rc"' EXIT
   fi
   dotf vm "$OS" up --session "$SESSION" >/dev/null
-  echo "e2e $OS: candidate $(cd "$ROOT" && git rev-parse --short HEAD), previous $(cat "$dir/prev-tag")"
+  # The log opens with the build it describes, so it stands as evidence on its own.
+  echo "e2e $OS: candidate $(cd "$ROOT" && git rev-parse --short HEAD), previous $(cat "$dir/prev-tag")" |
+    tee "$log" || die "could not write the log $log"
   # The exit status goes through a file: the pipeline would hide it.
   # A failed log write must not pass: tee keeps copying to stdout after one.
   if ! { "run_$OS" "$dir" 2>&1 && echo 0 >"$dir/rc" || echo $? >"$dir/rc"; } |
-    tee "$log" | { grep -E '^(PASS|FAIL|XFAIL|XPASS) ' || true; }; then
+    tee -a "$log" | { grep -E '^(PASS|FAIL|XFAIL|XPASS) ' || true; }; then
     die "could not write the log $log"
   fi
   report "$log" "$(cat "$dir/rc")"

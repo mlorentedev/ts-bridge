@@ -4,9 +4,10 @@
 #
 # test-e2e-mesh-preflight.sh covers the mesh run's teardown; this covers main()'s. Each case runs
 # the real `run.sh linux` against shims for go, gh and dotf and judges what is left running: the
-# guest session goes whether the scenario passes, fails or is interrupted, and a teardown that
-# fails turns a passing run red. `pass-run-exits-zero` is the control that stops a trap which
-# fails everything.
+# guest session goes whether the scenario passes, fails or is interrupted, a teardown that fails
+# turns a passing run red, a leftover session is deleted before the boot, and the log names its
+# candidate. `pass-run-exits-zero` is the control that stops a trap which fails
+# everything.
 #
 # Run: bash scripts/tests/test-e2e-run-teardown.sh
 set -euo pipefail
@@ -55,6 +56,16 @@ linux || rc=$?
 check pass-run-exits-zero test "$rc" -eq 0
 check pass-run-booted-the-guest grep -q 'vm linux up --session' "$WORK/dotf.log"
 check pass-run-tore-down-the-guest guest_gone
+# The log is the run's evidence: it must name the build it describes (QA-606 round-2 review).
+# This is the first run, so its log is the only one.
+check pass-run-log-names-its-candidate grep -q "^e2e linux: candidate $(git -C "$ROOT" rev-parse --short HEAD), previous v0.0.0\$" "$WORK"/out/linux-*.log
+
+# A session left by an earlier run is deleted before the new one boots, not reused.
+reset 'PASS shim case'
+touch "$WORK/state/vm"
+rc=0
+linux || rc=$?
+check leftover-session-deleted-before-boot awk '/vm linux down/ && !d { d = NR } /vm linux up --session/ && !u { u = NR } END { exit !(d && u && d < u) }' "$WORK/dotf.log"
 
 reset 'FAIL shim case'
 rc=0
