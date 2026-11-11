@@ -58,7 +58,7 @@ func TestWindowsReadsReachTheirParsers(t *testing.T) {
 		}
 	})
 	t.Run("built-in group", func(t *testing.T) {
-		step, ok := builtinGroupStep(scriptRunner{&recordingRunner{}, map[string]string{"exposed": "2"}}, SetupStep{Name: "Firewall configuration", Outcome: OutcomeOK})
+		step, ok := builtinGroupStep(scriptRunner{&recordingRunner{}, map[string]string{"total": "3", "exposed": "2"}}, SetupStep{Name: "Firewall configuration", Outcome: OutcomeOK})
 		if ok || step.Outcome != OutcomeManual {
 			t.Fatalf("exposed group read: ok=%v outcome=%v, want manual", ok, step.Outcome)
 		}

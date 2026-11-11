@@ -83,9 +83,12 @@ New-NetFirewallRule -DisplayName "Tailscale-RDP-Ingress" `
 Restricting to the tailnet addresses ensures RDP is only accessible via Tailscale, not the local LAN.
 `host setup` no longer enables the built-in `Remote Desktop` rule group: its rules allow any
 address and would void that scope. If an earlier setup or an operator enabled the group, disable
-it yourself (`Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`). Both `host check` and
+it yourself (`Disable-NetFirewallRule -Group "@FirewallAPI.dll,-28752"`, the group's resource id,
+which works whatever the display language; `-DisplayGroup "Remote Desktop"` matches nothing on a
+non-English install). Both `host check` and
 `host setup` report an enabled group as `manual` (and `firewall_ok` stays false) until you do;
-`host setup` never disables it. A named rule that allows any address is reported as a legacy rule,
+`host setup` never disables it. If the group query matches no rule at all, both report
+`unverified`: Windows ships the group with rules, so an empty answer means the read missed it. A named rule that allows any address is reported as a legacy rule,
 and `host setup` recreates it scoped.
 
 ### 4. Tailscale Configuration

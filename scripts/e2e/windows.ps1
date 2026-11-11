@@ -91,7 +91,10 @@ Case 'init: invalid firewall rule name refused' {
 # Fresh guest: RDP denied, no rule, sleep on, no Tailscale.
 Case 'fresh guest denies RDP' { (Get-ItemProperty $TS).fDenyTSConnections -eq 1 }
 # The built-in group ships disabled while RDP is denied; check reports it only once someone enables it (#631 review).
-function RdGroupOn { @(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count }
+# By resource id, not display name: the name is localized (#707).
+$RdGroup = '@FirewallAPI.dll,-28752'
+function RdGroupOn { @(Get-NetFirewallRule -Group $RdGroup -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count }
+Case 'the Remote Desktop group resolves by its resource id' { @(Get-NetFirewallRule -Group $RdGroup -ErrorAction SilentlyContinue).Count -gt 0 }
 Case 'fresh guest: the built-in Remote Desktop group is disabled' { (RdGroupOn) -eq 0 }
 Tsb host setup --config $C
 Case 'setup not converged: no HOST READY banner' { $Out -notmatch 'HOST READY' }
@@ -118,13 +121,13 @@ Case 'firewall rule: scoped to the tailnet addresses' {
 # The built-in group's rules allow any address. setup does not enable or disable it; check reports
 # it (firewall_ok false) until the operator disables it (#685, folded into #631).
 Case 'built-in Remote Desktop group enabled: check reports it, setup leaves it on' {
-    Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+    Enable-NetFirewallRule -Group $RdGroup
     $seen = -not (Json check $C).services[0].firewall_ok
     Json setup $C | Out-Null
     $seen -and (RdGroupOn) -gt 0 -and -not (Json check $C).services[0].firewall_ok
 }
 Case 'built-in Remote Desktop group disabled by the operator: firewall ok again' {
-    Disable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+    Disable-NetFirewallRule -Group $RdGroup
     (Json check $C).services[0].firewall_ok
 }
 Case 'power: AC sleep, hibernate and monitor timeouts are 0' { AcZero }
