@@ -524,15 +524,14 @@ func TestWindowsFirewallRecreateOrder(t *testing.T) {
 	}
 }
 
-// TestWindowsBuiltinGroup pins the report folded in from #685: an enabled
-// any-address rule in the built-in "Remote Desktop" group voids the tailnet
-// scope, so a converged named rule is not enough. Setup reports it and leaves
-// the group alone; check says the same and firewall_ok is false.
-
 // groupClean is the built-in group read on a host where no enabled rule of the
 // group admits RDP from any address.
 const groupClean = "exposed=0\r\n"
 
+// TestWindowsBuiltinGroup pins the report folded in from #685: an enabled
+// any-address rule in the built-in "Remote Desktop" group voids the tailnet
+// scope, so a converged named rule is not enough. Setup reports it and leaves
+// the group alone; check says the same and firewall_ok is false.
 func TestWindowsBuiltinGroup(t *testing.T) {
 	good := "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")
 	legacy := strings.Replace(good, tailnetRemote, "Any", 1)
