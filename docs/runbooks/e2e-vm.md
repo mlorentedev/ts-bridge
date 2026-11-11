@@ -13,7 +13,9 @@ systems: a fresh Ubuntu 24.04 guest (Lima) and a fresh Windows 11 Pro Arm64 gues
 (QEMU), both through `dotf vm`. It exists because faked runners prove the argv we
 chose, not that the OS accepts it (lesson 054).
 
-It does not run in CI: GitHub runners cannot nest a VM. Run it:
+The VM run does not happen in CI: GitHub runners cannot nest a VM. The harness's own logic does,
+against shims: the verdict, the probe, the Headscale helpers and the teardown of `run.sh linux` and
+`run.sh mesh` are suites under `scripts/tests/test-e2e-*.sh` in the `hygiene` job. Run the VM run:
 
 - before merging a Release PR that carries a breaking or host-facing change;
 - after any change to `internal/host` steps or to `cmd/cli/host.go`.

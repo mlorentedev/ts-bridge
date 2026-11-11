@@ -146,13 +146,13 @@ func TestSetupFor(t *testing.T) {
 	}{
 		{
 			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule"},
-			runner: &recordingRunner{output: map[string]string{"sc query Tailscale": "STATE : 4 RUNNING", psPrefix + psEnable: "3390\r\n"}},
+			runner: &recordingRunner{output: map[string]string{"sc query Tailscale": "STATE : 4 RUNNING", psPrefix + psEnable: "3390\r\n", psPrefix + psReadRDGroup: groupClean}},
 			calls:  windowsSetupCalls(false), port: 3390,
 			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeManual, OutcomeChanged, OutcomeChanged, OutcomeChanged},
 		},
 		{
 			name: "windows --no-sleep", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true},
-			runner: &recordingRunner{output: map[string]string{"sc query Tailscale": "RUNNING", psPrefix + psEnable: "3390"}},
+			runner: &recordingRunner{output: map[string]string{"sc query Tailscale": "RUNNING", psPrefix + psEnable: "3390", psPrefix + psReadRDGroup: groupClean}},
 			calls:  windowsSetupCalls(true), port: 3390,
 			outcomes: []Outcome{OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeChanged, OutcomeManual, OutcomeChanged, OutcomeChanged},
 		},
@@ -214,7 +214,7 @@ func TestCheckFor(t *testing.T) {
 	}{
 		{
 			name: "windows", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
-			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psDeny: "policy=\r\nlocal=0", psPrefix + psFwCheck: "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")}},
+			runner:   &recordingRunner{output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psPort: "3390", psPrefix + psDeny: "policy=\r\nlocal=0", psPrefix + psFwCheck: "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390"), psPrefix + psReadRDGroup: groupClean}},
 			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psDeny, "output " + psPrefix + psFwCheck, "output " + psPrefix + psReadRDGroup},
 			steps:    []string{"Tailscale IP=ok", "RDP configuration=ok", "Firewall rule=ok"},
 			services: []Service{{Kind: "rdp", Port: 3390, Enabled: true, Active: active, FirewallOK: true}},
