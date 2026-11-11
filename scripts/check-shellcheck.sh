@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run shellcheck over this repository's own shell scripts (#562).
 #
-# Scope, deliberately narrow: `scripts/*.sh` and `scripts/tests/*.sh`, one level each, no
+# Scope, deliberately narrow: `scripts/*.sh`, `scripts/tests/*.sh` and `scripts/e2e/*.sh`, one level each, no
 # recursion. Out of scope: shell embedded in workflows (the `actionlint -shellcheck` step
 # of the same job covers it), `scripts/tests/helpers/*.bash` (sourced libraries that read
 # variables their caller assigns, which shellcheck reports as SC2154), and
@@ -22,7 +22,7 @@ command -v shellcheck >/dev/null || { echo "check-shellcheck: shellcheck is not 
 
 shopt -s nullglob
 files=()
-for glob in 'scripts/*.sh' 'scripts/tests/*.sh'; do
+for glob in 'scripts/*.sh' 'scripts/tests/*.sh' 'scripts/e2e/*.sh'; do
   # shellcheck disable=SC2206 # the glob must expand here
   matched=($glob)
   [ "${#matched[@]}" -gt 0 ] || { echo "check-shellcheck: no scripts match $ROOT/$glob" >&2; exit 1; }

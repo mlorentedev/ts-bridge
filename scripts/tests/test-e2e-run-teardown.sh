@@ -28,7 +28,7 @@ mkdir -p ts-bridge-linux-arm64 && : >ts-bridge-linux-arm64/ts-bridge
 tar czf "$a" ts-bridge-linux-arm64 && shasum -a 256 "$a" >checksums.txt'
 shim dotf 'echo "$*" >>"$WORK/dotf.log"
 case "$*" in
-  *--help*) exit 0 ;;
+  *--help*) [ ! -f "$WORK/no-up" ] || exit 1; exit 0 ;;
   "vm linux status"*) [ ! -f "$WORK/state/vm" ] || echo "tsb-e2e-linux running" ;;
   "vm linux up"*) touch "$WORK/state/vm" ;;
   "vm linux down"*) [ ! -f "$WORK/down-fails" ] || exit 1; rm -f "$WORK/state/vm" ;;
@@ -37,7 +37,7 @@ case "$*" in
 esac'
 
 reset() { # reset <scenario result line>
-  rm -rf "$WORK/state" "$WORK/hang" "$WORK/hanging" "$WORK/down-fails" "$WORK/dotf.log" "$WORK/out"
+  rm -rf "$WORK/state" "$WORK/no-up" "$WORK/hang" "$WORK/hanging" "$WORK/down-fails" "$WORK/dotf.log" "$WORK/out"
   mkdir "$WORK/state"
   touch "$WORK/dotf.log"
   echo "$1" >"$WORK/verdict"
@@ -66,6 +66,18 @@ touch "$WORK/state/vm"
 rc=0
 linux || rc=$?
 check leftover-session-deleted-before-boot awk '/vm linux down/ && !d { d = NR } /vm linux up --session/ && !u { u = NR } END { exit !(d && u && d < u) }' "$WORK/dotf.log"
+
+# A run that dies in preflight still leaves the newest log, so a replay of the
+# evidence (QA-606 f4) cannot read an earlier run's passing log as this one's.
+reset 'PASS shim case'
+mkdir -p "$WORK/out"
+echo 'PASS setup #2: nothing changed' >"$WORK/out/linux-20000101T000000Z.log"
+touch "$WORK/no-up"
+rc=0
+linux || rc=$?
+newest() { printf '%s\n' "$WORK"/out/linux-*.log | sort | tail -1; }
+check preflight-failure-exits-nonzero test "$rc" -ne 0
+check preflight-failure-leaves-the-newest-log sh -c '! grep -q "^PASS" "$1"' _ "$(newest)"
 
 reset 'FAIL shim case'
 rc=0

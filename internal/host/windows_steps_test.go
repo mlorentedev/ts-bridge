@@ -1,7 +1,9 @@
 package host
 
 import (
+	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -595,5 +597,51 @@ func TestWindowsBuiltinGroup(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// daemonDownRunner is a host whose Tailscale service is stopped: every tailscale
+// command fails until setup starts the service (#700).
+type daemonDownRunner struct {
+	*recordingRunner
+	started bool
+}
+
+func (r *daemonDownRunner) Run(name string, args ...string) error {
+	err := r.recordingRunner.Run(name, args...)
+	if name == "net" && slices.Equal(args, []string{"start", "Tailscale"}) {
+		r.started = true
+	}
+	if name == "tailscale" && !r.started {
+		return errors.New("failed to connect to local Tailscale daemon")
+	}
+	return err
+}
+
+func (r *daemonDownRunner) Output(name string, args ...string) ([]byte, error) {
+	out, err := r.recordingRunner.Output(name, args...)
+	if name == "tailscale" && !r.started {
+		return nil, errors.New("failed to connect to local Tailscale daemon")
+	}
+	return out, err
+}
+
+// TestSetupWindows_StartsTailscaleFirst pins #700: on a stopped (or never
+// started) Tailscale service, setup starts it before it sets unattended mode,
+// so the unattended step does not fail against a daemon that is not running.
+func TestSetupWindows_StartsTailscaleFirst(t *testing.T) {
+	r := &daemonDownRunner{recordingRunner: &recordingRunner{output: map[string]string{
+		"sc query Tailscale": "STATE : 1 STOPPED", psPrefix + psEnable: "3389\r\n",
+	}}}
+	got := setupWindows(Config{FirewallRule: "Rule"}, r)
+	for _, s := range got.Steps {
+		if s.Name == "Tailscale unattended mode" && s.Outcome != OutcomeChanged {
+			t.Errorf("unattended step = %s %q, want changed once the service runs", s.Outcome, s.Message)
+		}
+	}
+	start := slices.Index(r.calls, "run net start Tailscale")
+	set := slices.Index(r.calls, "run tailscale set --unattended")
+	if start < 0 || set < 0 || start > set {
+		t.Errorf("net start at %d, tailscale set at %d: the service must start first: %v", start, set, r.calls)
 	}
 }
