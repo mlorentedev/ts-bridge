@@ -1534,6 +1534,9 @@ func TestUFWInactive(t *testing.T) {
 		// ts-input's scoped iptables rule is not a ufw allow: the legacy ufw
 		// allow is still replaced by a scoped ufw one, never just deleted (#631).
 		{name: "a legacy allow beside ts-input is replaced", added: ufwLegacyAllow, input: ufwHostInput, replaces: true, message: "allow is in place", check: "unscoped"},
+		// An allow scoped to an address or another interface will not admit the
+		// tailnet once ufw is enabled: setup still adds the tailscale0 allow (#631 review).
+		{name: "an allow scoped off the tailnet", added: "ufw allow from 10.0.0.0/8 to any port 3389 proto tcp\n", writes: true, message: "off the tailnet", check: "off the tailnet"},
 		// A ufw deny decides the port once ufw is enabled: name it, add nothing.
 		{name: "a ufw deny", added: "ufw deny 3389/tcp\n", message: "ufw deny 3389/tcp", check: "ufw deny 3389/tcp"},
 		// tailscaled's ts-input admits the tailnet whatever ufw's state: an
@@ -1653,6 +1656,8 @@ func TestReadIptablesUnscoped(t *testing.T) {
 		{"a comment on the legacy rule makes it foreign", iptEmpty + `-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "rdp" -j ACCEPT` + "\n", 0, 1, false},
 		{"a source address does not admit the tailnet", iptEmpty + "-A INPUT -s 10.0.0.0/8 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
 		{"another interface does not admit the tailnet", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"a negated tailnet interface does not admit the tailnet", iptEmpty + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
+		{"a negated source does not admit the tailnet", iptEmpty + "-A INPUT ! -s 100.64.0.0/10 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
 		{"a legacy copy beside an eth1 rule is not scoped", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n" + iptLegacyRule, 1, 0, false},
 		{"a port-less accept is the operator's posture", iptEmpty + "-A INPUT -p tcp -j ACCEPT\n", 0, 0, true},
 		{"another port", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n", 0, 0, false},

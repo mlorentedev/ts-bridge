@@ -51,6 +51,13 @@ ok "init: directory refused even with --force" -- '! code 0'
 run "$B" host init --config "$W/x.yaml" --firewall-rule R </dev/null
 ok "init: --firewall-rule refused on linux" -- "! code 0 && [ ! -e $W/x.yaml ]"
 
+# Inactive ufw whose only allow is off the tailnet: setup still adds the tailscale0 allow for when
+# ufw is enabled (#631 review). Both allows are removed after, so the fresh-guest cases below hold.
+ufw allow from 10.0.0.0/8 to any port 3389 proto tcp >/dev/null 2>&1
+ok "ufw inactive, off-tailnet allow only: setup adds the tailscale0 allow, keeps the operator's" -- 'outcomes setup "$C" >/dev/null; ufw show added | grep -qx "ufw allow in on tailscale0 to any port 3389 proto tcp" && ufw show added | grep -qx "ufw allow from 10.0.0.0/8 to any port 3389 proto tcp"'
+ufw delete allow from 10.0.0.0/8 to any port 3389 proto tcp >/dev/null 2>&1
+ufw delete allow in on tailscale0 to any port 3389 proto tcp >/dev/null 2>&1
+
 # Fresh guest: no xrdp, ufw inactive, no Tailscale.
 run "$B" host setup --config "$C"
 ok "setup without xrdp: exit 2, xrdp step names the fix" -- 'code 2 && has "apt install xrdp"'
