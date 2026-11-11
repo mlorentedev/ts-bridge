@@ -1,7 +1,7 @@
 {
-  "reviewed_sha": "e6fbbcbd525609327026d529deadbd8cec9db53a",
-  "reviewer": "nan/mimo-v2.6-flash",
-  "requested_at": "2026-11-11T02:11:13Z",
+  "reviewed_sha": "94cf5d735caad04acb948701e8f0e8f40a714469",
+  "reviewer": "nan/deepseek-v4-flash",
+  "requested_at": "2026-11-11T02:53:17Z",
   "review_digest_before": "",
   "base_sha": "9ec0c909fc8d194839b3f7bebade48ba366e29cb",
   "contract_digests": {

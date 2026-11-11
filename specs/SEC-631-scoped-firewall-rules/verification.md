@@ -117,6 +117,13 @@ PR-Agent on #704 (head e6fbbcb; its run is marked partial):
 - **Misplaced doc comment (REAL).** Applied: a blank line now separates `TestWindowsBuiltinGroup`'s comment from `groupClean`'s.
 - **Vacuous e2e guard (THEORETICAL).** Declined. In the same run, `windows.ps1` asserts `(RdGroupOn) -gt 0` once the group is enabled (the drift case near line 124). A query that resolves nothing on this image therefore fails that run, so the two `-eq 0` cases cannot pass alone.
 
+## Review disposition (round 3, PASS-WITH-GAPS)
+
+Reviewer `nan/deepseek-v4-flash`, at 94cf5d7 (`review.md`; earlier rounds kept as `review-round1.md` and `review-round2.md`).
+
+- **Major THEORETICAL: the built-in group is read by its localized display name.** Ticketed as #707. On a non-English Windows, `-DisplayGroup 'Remote Desktop'` matches nothing and reads as `exposed=0`. The fix is the invariant `-Group` id, or `unverified` on an empty answer. It is not reproduced, because no localized guest exists here.
+- **Minor REAL: the Windows e2e was not rerun at f08036a.** Applied: `make e2e-windows` at 94cf5d7 gave 52 pass, 0 fail (`scripts/e2e/out/windows-20261111T025924Z.log`).
+
 ## Decisions made during implementation
 
 See the proposal: two-tier replacement, Windows built-in group reported but not disabled, fixed `tailscale0`.
