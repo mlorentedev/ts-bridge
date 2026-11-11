@@ -367,7 +367,6 @@ func updateEnvFile(path, target string, port int, controlURL string) error {
 	return nil
 }
 
-// selectHost presents an interactive list and returns the selected device.
 // chooseHost picks the host to persist. Under --auto it takes the first
 // authorized host in list order without reading stdin, so a script with no
 // terminal never blocks (#684); otherwise it prompts.
@@ -382,6 +381,7 @@ func chooseHost(devices []discover.Device, auto bool) (discover.Device, error) {
 	return devices[0], nil
 }
 
+// selectHost presents an interactive list and returns the selected device.
 func selectHost(devices []discover.Device) (discover.Device, error) {
 	sortDevices(devices)
 	printHostList(devices)
