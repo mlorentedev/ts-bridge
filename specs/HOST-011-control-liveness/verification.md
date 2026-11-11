@@ -11,9 +11,9 @@ owner: manu
 
 ## Evidence
 
-- [ ] AC1 -> pending
-- [ ] AC2 -> pending
-- [ ] AC3 -> pending
+- [x] AC1 -> commit `d308e1a` / `TestWatchControlOnline` ("the first online sample after a down is up"), `TestHealth_FoldsControlOnline` (with a bootstrap source down too), and `make e2e-mesh-linux`: `mesh outage: /health/ready reads control_plane_unreachable` (503 after 20 s, budget 40 s) and `mesh outage: ready again after the control plane returns` (200 after 19 s, budget 30 s)
+- [x] AC2 -> `TestWatchControlOnline` rows "two offline samples do not flap", "the third offline sample is down", "an online sample resets the count", "a failed status read counts as offline", "a node with no self entry counts as offline". Mutant: `offlineSamplesDown = 1` fails the suite.
+- [x] AC3 -> `TestServeHealth_ControlSession` and `TestHealth_FoldsSources` unchanged and passing
 
 ## Test status
 
@@ -32,8 +32,11 @@ Local QA-607 mesh (`E2E_KEEP=1 make e2e-mesh-linux` at `1d9f92f`, Headscale v0.2
 
 Findings: the bus sends no notification during the outage, so the current watcher cannot see it and `/health/ready` stays 200 (the #565 premise holds). Health warnings stay empty. `Self.Online` drops within 3 s of the stop and recovers 14 s after the restart, so it is the signal.
 
-- Test suite: pending
-- No regressions: pending
+### 2026-11-11: implementation at `d308e1a`
+
+- `go test -race ./...`, `golangci-lint run` (0 issues), `gosec ./internal/serve/ ./cmd/cli/`, `shellcheck -x scripts/e2e/run.sh scripts/e2e/mesh_health.sh`: clean.
+- `make e2e-mesh-linux`: 5 pass, 0 fail. Before this change the same outage left `/health/ready` at 200 for four minutes (the table above), so the outage cases are red without the poller.
+- No regressions: yes.
 
 ## Decisions made during implementation
 
@@ -44,9 +47,9 @@ Findings: the bus sends no notification during the outage, so the current watche
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-058-2026-11-11.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: a second readiness source inside the existing fold, no new contract
+- [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: seen in one project
 
 ## Archive checklist
 

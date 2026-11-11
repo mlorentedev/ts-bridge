@@ -1,7 +1,7 @@
 ---
 id: "HOST-011-control-liveness"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-11-11"
 issue: "mlorentedev/ts-bridge#565"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal, host, serve, health]

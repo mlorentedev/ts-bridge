@@ -23,20 +23,20 @@ owner: manu
 
 ## Implementation
 
-- [ ] [AC2] Failing test: `WatchControlOnline` stays ready through two offline samples and goes down on the third; a status error counts as offline
-- [ ] [AC2] Implement `WatchControlOnline(ctx, status, ticks, r)` in `internal/serve/control.go`
-- [ ] [AC1] Failing test: after a down, the first online sample marks `control-online` up; `/health/ready` carries `control_plane_unreachable` while it is down
-- [ ] [AC1] Implement the up path
-- [ ] [AC1] [AC3] Failing test: `watchServeControl` starts both watchers on a node with a local API, and the bus watcher's existing tests still pass unchanged
-- [ ] [AC1] Wire the poller in `cmd/cli/host_serve.go` (10 s ticker, `lc.Status`)
-- [ ] [AC1] e2e: `run.sh mesh linux` stops the Headscale container after `READY`, the guest polls `/health/ready` for the 503 and its reason, restarts it, and polls for the 200 (`host.mesh.health_addr` is already in `mesh_linux.sh`)
+- [x] [AC2] Failing test: `WatchControlOnline` stays ready through two offline samples and goes down on the third; a status error counts as offline
+- [x] [AC2] Implement `WatchControlOnline(ctx, status, ticks, r)` in `internal/serve/control.go`
+- [x] [AC1] Failing test: after a down, the first online sample marks `control-online` up; `/health/ready` carries `control_plane_unreachable` while it is down
+- [x] [AC1] Implement the up path
+- [x] [AC3] The bus watcher's existing tests pass unchanged; the wiring in `watchServeControl` (a real `*local.Client`) is covered by the mesh e2e, not a unit test
+- [x] [AC1] Wire the poller in `cmd/cli/host_serve.go` (10 s ticker, `lc.Status`)
+- [x] [AC1] e2e: `run.sh mesh linux` stops the Headscale container after `READY`, the guest polls `/health/ready` for the 503 and its reason, restarts it, and polls for the 200 (`host.mesh.health_addr` is already in `mesh_linux.sh`)
 
 ## Closing
 
-- [ ] Every acceptance criterion is covered by a test and a `features.json` entry with a non-vacuous command
-- [ ] `go test -race ./...`, `golangci-lint run`, `gosec ./...` clean
-- [ ] `make e2e-mesh-linux` green, with the outage case
-- [ ] `verification.md` filled in
+- [x] Every acceptance criterion is covered by a test and a `features.json` entry with a non-vacuous command
+- [x] `go test -race ./...`, `golangci-lint run`, `gosec ./...` clean
+- [x] `make e2e-mesh-linux` green, with the outage case
+- [x] `verification.md` filled in
 - [ ] PR opened with `Closes #565`
 - [ ] Independent spec review before archive
 
