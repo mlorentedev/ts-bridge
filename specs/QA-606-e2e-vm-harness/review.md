@@ -1,141 +1,138 @@
 ---
 spec: "QA-606-e2e-vm-harness"
 verdict: "PASS-WITH-GAPS"
-reviewed_sha: "5c0bee8ae0dd85e716b791e9ad73fb907740cbdf"
-reviewer: "nan/deepseek-v4-flash"
+reviewed_sha: "ea0781abf5cce5440690837d5776dd32259782b1"
+reviewer: "nan/mimo-v2.6-flash"
 date: "2026-11-10"
 ---
 
 ## Adversarial review
 
-**Scope**: `QA-606-e2e-vm-harness` — `git diff 82b1c6918c3b101a2bd58e048f17bb1b5829ff8b...HEAD`
-(198 files). The QA-606 slice is 22 files: `scripts/e2e/{run.sh,linux.sh,windows.ps1}` (1047 lines),
-`scripts/check-shellcheck.sh` + `scripts/tests/test-shellcheck.sh` (the `scripts/e2e/*.sh` glob),
-`scripts/tests/test-e2e-report.sh`, the five `make e2e*` targets, `docs/runbooks/e2e-vm.md` and its
-link, the `.gitignore` entry, the `AGENTS.md` row and `specs/QA-606-e2e-vm-harness/`. The remaining
-~176 files are sibling specs' work that arrived on this branch (the range holds the branch's own 40
-commits up to `bbd8685`, plus a merge of `origin/master` at `a357428`, plus three later docs/lint
-commits); they are judged only where they touch the harness — `headscale.sh`/`mesh_linux.sh` reach
-`run.sh`'s `clean` and `mesh` verbs, `windows.ps1`/`linux.sh` were edited by five master commits
-(#660, #661, #663, #681, #689), and `release.yml` decides the asset names the upgrade case downloads.
+**Scope**: `QA-606-e2e-vm-harness` — `git diff 82b1c6918c3b101a2bd58e048f17bb1b5829ff8b...HEAD` at
+`ea0781a` (45 commits, 200 files). This is review round 3 (rounds 1–2 in `review-round1.md` /
+`review-round2.md`); it judges the whole range, including the ea0781a delta since round 2
+(features.json f4 floors, the round-2 disposition record) and how it interacts with rounds 1–2.
 **Sources**: `specs/QA-606-e2e-vm-harness/{proposal,tasks,verification}.md`, `features.json`,
-`review-request.json`, `review-request-round1.json`; the scripts above; `Makefile`;
-`docs/runbooks/{e2e-vm,guide-development-workflow}.md`; `.github/workflows/release.yml`;
-`.gitignore`; `AGENTS.md`.
+`review-request.json`, `review-request-round2.json`; `scripts/e2e/{run.sh,linux.sh,windows.ps1}`,
+`scripts/check-shellcheck.sh`, `scripts/tests/test-{shellcheck,e2e-report,e2e-mesh-preflight,e2e-probe,e2e-headscale,features-shape,features-selectors}.sh`;
+`Makefile`, `.gitignore`, `docs/runbooks/{e2e-vm,guide-development-workflow}.md`,
+`.github/workflows/release.yml`, `harness/reviewer-pool.json`; the two git-ignored run logs under
+`scripts/e2e/out/`; `gh pr view {703,705}`.
 
 ### Spec and task alignment
 
 - **Contract digests are current.** `dotf spec digest QA-606-e2e-vm-harness` returns
-  `features.json 38268cc4…`, `proposal.md 5a57dc14…`, `tasks.md a6327121…` — byte-identical to
-  `review-request.json`'s `contract_digests`, and `reviewed_sha` equals `git rev-parse HEAD`. The
-  round-2 review is of the state the launcher asked for.
-- **Every ticked task has a diff artefact.** `[AC5]` → `report()` + `test-e2e-report.sh`;
-  `[AC3]` → `preflight`/`build`/`down`/EXIT trap/`clean`; `[AC1][AC4]` → `linux.sh` (77 cases);
-  `[AC2][AC4]` → `windows.ps1` (42 static cases + 4 drift keys × 2 = 50 runtime lines);
-  Makefile targets, `scripts/e2e/out/` ignored (`.gitignore:76`), `docs/runbooks/e2e-vm.md` linked
-  at item 5 of `guide-development-workflow.md:94`. No `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tags.
-- **AC5 verified by running, red-green.** `bash scripts/tests/test-e2e-report.sh` → 9/9 ok, exit 0.
-  Mutating `report()` (dropping the `[ "$xpass" -eq 0 ]` clause) in a `mktemp` copy of the tree turns
-  `FAIL one-xpass: want fail, got pass` and exit 1, while the unmutated control prints
-  `all cases passed`. The fixture's `clean` and `xfail-only` controls stop a report that fails
-  everything.
-- **AC1/AC2/AC4 are evidenced, and the evidence is traceable to this tree.** The cited logs exist
-  (`scripts/e2e/out/linux-20261110T060009Z.log`, `windows-20261110T060033Z.log`, both git-ignored),
-  and their contents confirm the recorded 77/50 pass, 0 fail, 0 xfail, 0 xpass. Beyond the counts,
-  I mapped the case names: the Linux log's 77 result lines match `linux.sh`'s 77 `ok "…"` calls with
-  an empty `diff`; the Windows log's 50 lines are the 42 static `Case '…'` declarations plus the
-  `$drifts` loop's 4 keys × 2 (after CRLF normalisation, empty `diff`). So the recorded runs describe
-  the scripts at `HEAD`, not an older revision — which is what round 1 could not establish.
-- **AC4 is verified by replay, not by reading.** `features.json` f4's `verification` command, run
-  verbatim, exits 0 against both newest logs, and it no longer pins a line count.
-- **AC3's post-run and `clean` halves hold; its interrupt half is untested** (finding R1).
-- **AC6 verified by reading**: preconditions, trigger (before a breaking/host-facing Release PR),
-  the four result lines, and cleanup are all present, and the release runbook links it.
-- **Round 1's dispositions are recorded, not verbal.** Each is applied, declined with a reason, or
-  ticketed: `gh issue view 702` → **OPEN**, "test(e2e): wire the e2e unit suites into CI and cover the
-  primary teardown", created 2026-11-10T06:00:22Z — so the teardown gap and the CI wiring have a
-  durable home. `scripts/check-shellcheck.sh` now globs `scripts/e2e/*.sh` and reports
-  `OK (30 scripts)`; `test-shellcheck.sh` pins the new depth and the fail-closed empty scope.
-  The two declined findings (preflight depth, `report()` case floor) state defensible reasons.
+  `features.json d9870758…`, `proposal.md 5a57dc14…`, `tasks.md a6327121…` — byte-identical to
+  `review-request.json`'s `contract_digests`; `reviewed_sha` equals `git rev-parse HEAD`
+  (`ea0781a…`); `reviewer: nan/mimo-v2.6-flash` is spelled exactly as in
+  `harness/reviewer-pool.json`. The features.json digest differs from round 2's
+  (`38268cc4…` → `d9870758…`) because ea0781a strengthened f4 — the launcher recorded the new
+  digests, so this review measures the right contract.
+- **Every ticked task has a diff artefact, and I re-ran its check.** `[AC5]` → `report()` +
+  `test-e2e-report.sh` (9/9 ok, exit 0, re-run by me). `[AC3]` → preflight/build/down/EXIT
+  trap/clean in `run.sh` (read line-by-line; f3 replayed verbatim below). `[AC1][AC4]` → `linux.sh`
+  (77 result lines; every `^PASS ` line in the cited log maps 1:1 to its `ok` call sites, empty
+  diff). `[AC2][AC4]` → `windows.ps1` (50 lines = 42 static `Case` declarations + 4 `$drifts` keys
+  × 2 + RDP-denied × 2 + power × 2; matches the log after CRLF). Makefile targets `e2e`,
+  `e2e-linux`, `e2e-windows`, `e2e-clean` present (lines 81–109); `.gitignore:76`
+  `scripts/e2e/out/`. `[AC6]` → runbook read in full, linked at
+  `guide-development-workflow.md:94`. Closing: shellcheck re-run (`OK (30 scripts)`), features
+  shape/selector guards re-run (56 + 64 cases, exit 0), PR #703 open with the spec folder named in
+  its body. No `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tags.
+- **AC5 is verified red-green by my own mutation.** Control `bash scripts/tests/test-e2e-report.sh`
+  → exit 0. In a `mktemp` copy of the tree with `report()`'s `[ "$xpass" -eq 0 ]` clause deleted:
+  `FAIL one-xpass: want fail, got pass`, exit 1. The XPASS gate is real, not decorative.
+- **AC4 is verified red-green by my own mutation.** f4's verification command run verbatim against
+  the newest logs → exit 0; deleting one `^PASS drift` line from the Linux log → exit 1, from the
+  Windows log → exit 1 (both in a `mktemp` copy; the repo tree was not touched). The floors equal
+  the true counts (Linux 4, Windows 12 — both script-derived and log-derived by me), so a lost case
+  is caught while an added one still passes.
+- **AC3's idempotent half is replayed; its interrupt half is not covered** (finding F2). The f3
+  command from features.json run verbatim: `make e2e-clean` twice prints "no session left, no
+  headscale container" both times, `dotf vm linux|windows status` list no `tsb-e2e-` session,
+  exit 0.
+- **AC1/AC2 evidence is internally consistent but not re-executed by me**: both cited logs exist,
+  and their contents are exactly the recorded counts (77/0/0/0 and 50/0/0/0 PASS/FAIL/XFAIL/XPASS)
+  with case names matching `HEAD`'s scripts. I did not re-run the VMs (~6 + ~15 min, out of this
+  run's window): **AC1/AC2 full runs UNVERIFIED by re-execution**, verified by artifact inspection.
+- **AC6 verified by reading**: preconditions (dotf ≥ 0.79, gh, Go, clean base, Arm64, RAM), trigger
+  (release PR breaking/host-facing; after `internal/host` changes), the four result-line meanings,
+  and cleanup (incl. "a run killed mid-way … `make e2e-clean`") are all present; the release
+  section links it.
+- **Round-2/PR-Agent dispositions are recorded, one with a provenance defect** (F1): the f4 floor +
+  `[ -n "$l" ]` fix is committed in ea0781a and I proved it fallible; the log-header and
+  teardown-test dispositions say "Applied in #705", which is an **open** PR not in this tree.
 
 ### Findings
 
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
 |----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Minor | REAL | verification (evidence provenance) | The log the runbook calls "the full log" cannot identify the build it describes. `run.sh:205` echoes `candidate <sha>, previous <tag>` to stdout **before** the `tee` pipeline starts, so neither the commit nor the previous release reaches `scripts/e2e/out/<os>-<ts>.log`; every log begins with the first case. `features.json` f1/f2 cite "rerun at bbd8685" and `verification.md` repeats it, but the artifact itself carries no sha — an archived spec's evidence inherits a claim only the operator's memory backs. | `head -5` of both cited logs → first line is `PASS version prints`; `grep -c 'candidate\|previous'` → 0 in both. Mitigation I applied: case-name set equals `HEAD`'s exactly (77/77, 50/50), so the logs *are* from this tree — but that check needs the checkout, not the log. | UNTESTED (no test asserts the log identifies its candidate) | code — `scripts/e2e/run.sh` (send the header through `tee` too, one line) + `verification.md` noting it |
-| Minor | REAL | tests (AC3) | "Every run deletes a leftover session first" (`run.sh:197`, `down "$OS"` before `up`) and "whether it passes, fails or **is interrupted**" (the EXIT trap) have no test. `verification.md`'s AC3 box proves the *post*-run state, `make e2e-clean` twice, and one failed run — not the pre-run cleanup, not a SIGINT, and not "a second run gives the same result". The only interrupt test in the tree (`test-e2e-mesh-preflight.sh`'s case) covers `main_mesh`'s trap, not `main`'s. | code read of `run.sh:193-212`; `grep -rn 'interrupt\|SIGINT' scripts/tests/` finds only the mesh case; the two recorded runs are one per OS, not repeated | UNTESTED for `main()` — `test-e2e-mesh-preflight.sh:interrupt-tore-down-the-guest` covers the mesh path only | tests — tracked by **#702** (OPEN); reuse the mesh suite's shim technique |
-| Minor | THEORETICAL | preflight | `preflight()` gates on `dotf vm "$OS" up --help` only (not `exec --script` / `cp`) and hardcodes `$HOME/.local/state/dotfiles/vm/windows/clean-base.qcow2` (`run.sh:42`), duplicating dotf's state layout. The declined rationale in round 1 is sound for the *false-pass* direction (a missing verb fails at first use with dotf's own message, so no run reads green), but the *false-refusal* direction survives: a dotf that honours `XDG_STATE_HOME` has its base image elsewhere and the harness stops with "run 'dotf vm windows build' once" on a machine where it already was. | code read; the proposal's risk note claims a stronger gate ("checks both and stops with the fix") than the code performs | UNTESTED | code — `run.sh:preflight` (ask dotf for the path; it prints one) |
-| Minor | SPECULATIVE | portability | The previous-release path needs `unzip`, GNU/BSD `tar` and `shasum -a 256 -c`. None is preflighted, and the failure is funnelled into `die "could not verify $asset"` (`run.sh:56-57`), which names the wrong cause. The runbook's prerequisite list says only `dotf`, `gh`, Go and an Arm64 host, while its own troubleshooting section contemplates a non-Apple-Silicon host failing with `exec format error`. | code read of `run.sh:52-62` against the runbook's Prerequisites; not reproduced (no Linux host here) | UNTESTED | code — `run.sh:preflight` (add the three tools) + `verification.md` |
-| Question / assumption | — | operator ergonomics | `make e2e` is two recipe lines, so a Linux failure stops the run before Windows. That is defensible (and probably wanted), but the runbook says "both, one after the other", which reads as "Windows runs regardless". Confirm the intended semantics and say so in the runbook row. | `Makefile:82-84`; `docs/runbooks/e2e-vm.md` Run section | n/a (documentation) | spec — `verification.md` disposition, or a runbook wording fix |
+| Minor | REAL | verification (disposition provenance) | verification.md's round-2 dispositions claim the log-provenance header and `test-e2e-run-teardown.sh` are "**Applied in #705**", but neither exists at this reviewed sha: `run.sh:205` still echoes `candidate …` **before** the `tee` pipeline (lines 207–209), both cited logs grep `candidate` → 0 lines, and `scripts/tests/test-e2e-run-teardown.sh` is absent from the tree. `gh pr view 705` → **OPEN** (`ci/issue-702-wire-e2e-suites`, unmerged; its commits `eadeea2`/`1907da8` are reachable only via `git log --all`). Round-2's R1/R2 gaps are therefore still open **at this sha**, and the same block names round 2 "at a357428" while the recorded round-2 `review.md` says `5c0bee8`. An archived spec would carry "Applied" for fixes that only land if #705 merges. | `sed -n '203,210p' scripts/e2e/run.sh`; `grep -c candidate` on both logs → 0; `ls scripts/tests/`; `gh pr view 705 --json state` → OPEN; `git merge-base --is-ancestor 1907da8 HEAD` → no; verification.md round-2 block vs `review-round2.md` frontmatter | UNTESTED — the covering test named by the disposition is the file that does not exist at this sha; `test-e2e-mesh-preflight.sh` covers `main_mesh`'s interrupt only (re-run: all pass) | spec artifacts — `verification.md` (outside the contract set): say "#705 (open at round 3)" or merge #705 first, and correct the round-2 sha |
+| Minor | REAL | tests (AC3) | AC3's "deletes a leftover session first … whether it passes, fails **or is interrupted**" for `main()` still has no test at this sha: `grep -rln 'interrupt\|SIGINT' scripts/tests/` matches only `test-e2e-mesh-preflight.sh` (the mesh path). The pre-run `down` and the EXIT-trap SIGINT path rest on code reading; the two recorded runs are one per OS, not repeated. | code read of `run.sh:193–212` (trap installed after `down`, replaced after `up`); round-2 R2, tracked as #702 → #705 (open) | UNTESTED for `main()`; mesh analog `test-e2e-mesh-preflight.sh` (ran green, covers `main_mesh` only) | tests — already ticketed (#702); lands with PR #705 |
+| Minor | THEORETICAL | preflight | `preflight()` probes only `vm $OS up --help` and hardcodes `$HOME/.local/state/dotfiles/vm/windows/clean-base.qcow2` (`run.sh:37–45`), while the proposal's risk note claims a stronger gate ("checks both and stops with the fix"). A dotf honouring `XDG_STATE_HOME` gets a **false refusal** on a machine whose base exists. Declined twice (rounds 1–2) with a sound false-pass argument; only the false-refusal direction survives. | code read; proposal "Risks / open questions" vs `preflight()` | UNTESTED | code (`run.sh:preflight`) or a proposal note — accepted debt, disposition already recorded |
+| Minor | SPECULATIVE | portability | `unzip`/`tar`/`shasum` are not preflighted; a missing one funnels into `die "could not verify $asset"` (`run.sh:52–57`), naming the wrong cause. Declined: the only supported host (macOS Arm64) ships all three. | code read against the runbook's Prerequisites; not reproduced | UNTESTED | code + runbook — surface only; do not gate |
+| Question | — | docs | `make e2e` is two recipe lines, so a Linux failure stops the run before Windows; the runbook says "both, one after the other", which does not state failure semantics (round-2 Q1, still open). Current behaviour (stop) is the safer one. | `Makefile:82-84`; `docs/runbooks/e2e-vm.md` Run section | n/a (documentation) | docs/runbooks wording, or a verification.md disposition |
 
-**What I tried to break and could not** (recorded because each refuted a plausible Blocker):
+**What I tried to break and could not** (each refuted a plausible escalation):
 
-- **Upgrade path asset names.** `run.sh` builds `ts-bridge-$tag-linux-arm64.tar.gz` /
-  `…-windows-arm64.zip` from `gh release view --json tagName`, greps the checksum line for exactly
-  that asset, and copies out of `ts-bridge-linux-arm64/` / `ts-bridge-windows-arm64/`.
-  `release.yml:70-86` stages exactly those directory names and names the archives
-  `ts-bridge-${VERSION}-${OS}-${ARCH}` from `needs.release-please.outputs.tag_name`, and emits
-  `checksums.txt` with `sha256sum -- *` (two-space form, which `shasum -c` accepts). The upgrade case
-  is not relying on a guessed layout.
-- **`report()` cannot be fooled by noise.** `test-e2e-report.sh`'s `noise-only` and
-  `fail-word-mid` fixtures prove the `^(PASS|FAIL|…) ` anchoring; `empty`, `no-result` and
-  `RC=1 aborted` prove a guest that dies early fails the run; the `tee` guard is real because
-  `set -o pipefail` makes a failed log write abort rather than pass.
-- **A log write failure, a failed teardown and a missing `dotf` all fail closed.** `run.sh:202`
-  re-raises a failed `down` (`[ "$rc" != 0 ] || rc=1`), and f3's `out=$(dotf vm $os status) || exit 1`
-  turns the round-1 fail-open into a failure (confirmed by reading the recorded command).
-- **`make e2e-clean` on a docker-less machine.** `headscale.sh:78-86` guards `hs_down` with
-  `command -v docker`, so AC3's cleanup does not depend on QA-607's container being installed.
-- **A dropped `--` in `linux.sh`'s `ok` helper.** I suspected a silent-PASS footgun (the helper
-  shifts unconditionally), so I ran the real `result`/`ok` block from `linux.sh` in a scratch
-  directory: `ok "x" 'false'` reports `XPASS #false x`, which `report()` fails — the misuse is
-  visible, not silent. All 77 call sites carry `--` anyway.
+- **f4 as a rubber stamp.** The floor could have been decorative: it is not — both one-line
+  deletions (per OS) flipped it to exit 1, and the empty-`out/` case fails closed (`ls` glob
+  unmatched → empty `l` → `[ -n "$l" ] || exit 1`; without that clause `grep -q "" $l` also errors,
+  so the PR-Agent "dead guard" observation is true but harmless either way).
+- **`report()` fooled by noise or a dead guest.** `noise-only`, `fail-word-mid`, `empty`,
+  `no-result`, `RC=1 aborted` fixtures all hold; my XPASS-clause mutant was caught.
+- **Upgrade-path asset names guessed.** `run.sh` builds `ts-bridge-$tag-{linux,windows}-arm64.{tar.gz,zip}`
+  from `gh release view`'s tagName; `release.yml:84–94` stages exactly those names from
+  `needs.release-please.outputs.tag_name` and emits `checksums.txt` via `sha256sum -- *`, which
+  `shasum -c` accepts. Re-confirmed myself this round.
+- **f3 fail-open.** Re-run verbatim: `dotf vm … status` failure propagates (`|| exit 1`); with a
+  missing session both cleans are idempotent.
+- **A test suite quietly skipped.** All five spec-adjacent suites re-run green this session:
+  `test-e2e-report.sh` (9/9), `test-shellcheck.sh`, `check-shellcheck.sh` (30 scripts incl.
+  `scripts/e2e/*.sh`), `test-features-shape.sh` (56), `test-features-selectors.sh` (64), plus
+  `test-e2e-mesh-preflight.sh`, `test-e2e-probe.sh`, `test-e2e-headscale.sh`; `go build ./...` → exit 0.
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | B | AC1/2/4/5 verified (logs, replay, red-green); AC3's interrupt and pre-run-cleanup halves are untested, and no criterion is observably broken. |
-| Verification       | B | Every criterion has a runnable command and I replayed f4 plus both test suites; the cited logs omit the candidate sha, so the evidence identifies its build only through the case-name diff I had to perform. |
-| Scope              | B | The QA-606 slice matches the proposal; the range carries ~176 sibling files (plus `run.sh`'s mesh verbs from QA-607) that the proposal does not name — documented in the branch history, judged only where it touches the harness. |
-| Reliability        | B | Fails closed on an empty/aborted scenario, a failed teardown, a failed log write and a missing `dotf`; the interrupt path rests on code reading rather than a test. |
-| Maintainability    | B | Small functions, comments carry the *why* (`run.sh:21`, `linux.sh:14-35`, `windows.ps1:126-135`), shellcheck now covers `scripts/e2e/*.sh`; the verdict primitive's argument contract (`NAME [ISSUE] -- EXPR`) is a sharp edge documented only in a comment. |
-| Handoff-readiness  | B | Spec artifacts complete, round-1 findings dispositioned in `verification.md`, #702 open for the tracked gaps, runbook linked; the archived log's missing provenance is the one thing a future reader cannot recover. |
+| Correctness        | B | AC3–AC6 verified by replay/mutation/reading, AC1/AC2 by artifact inspection (77/50 lines map 1:1 to script cases); no criterion observably broken, but the AC1/AC2 VM runs were not re-executed by me and AC3's interrupt half is untested. |
+| Verification       | B | Every AC has a runnable command and I red-greened f4 and f5 myself; the logs still lack a candidate sha (F1) and two round-2 dispositions cite an unmerged PR. |
+| Scope              | B | The 22-file QA-606 slice matches the proposal exactly; the range carries ~176 sibling-work files plus `run.sh`'s mesh verbs (QA-607), judged only where they touch the harness (headscale/mesh reach `clean`; five master commits edited the scenario scripts; `release.yml` names the upgrade assets). |
+| Reliability        | B | Fails closed on an empty/aborted scenario, a lost drift case, a missing log, a failed teardown and a failed `dotf` status; the main() interrupt path rests on code reading, not a test. |
+| Maintainability    | B | Small functions, `why`-comments at the trap and verdict primitives, shellcheck covers `scripts/e2e/*.sh`; the `report()` argument contract (`[RC] log…`) is sharp but documented. |
+| Handoff-readiness  | B | Spec artifacts current and digests recorded, rounds 1–2 dispositioned in verification.md, #702 open, runbook linked — held at B by F1's over-stated "Applied" and the wrong round-2 sha in the same block. |
 
 ### Verdict
 
-**PASS WITH GAPS** — minors only, no Blocker and no REAL Major; rubric has no C and no D.
-Nothing here blocks `dotf spec archive`.
+**PASS WITH GAPS** — no Blocker, no Major; two REAL Minors, one THEORETICAL, one SPECULATIVE, one
+Question; rubric all B. Per the severity × reality rule, the REAL minors are tracked gaps, not
+stop-ship defects: the ACs they touch (AC3's interrupt half) were already open at round 2 under a
+passing verdict, and nothing I ran or mutated broke the harness's behaviour.
 
-**UNVERIFIED**: the archive gate itself. `dotf spec archive` offers no dry run, and running it
-would move the folder, so whether it accepts `verdict: PASS-WITH-GAPS` as a passing verdict rests
-on its documented contract (`--help`: "refuses without a fresh, passing review.md") and on the
-adversarial-review skill's enum, not on my execution of it. The contract digests and `reviewed_sha`
-are current, which is the freshness half of that check and the half I could observe
-(`dotf spec digest` matches `review-request.json` exactly).
+**UNVERIFIED**: (1) the archive gate's execution — `dotf spec archive` has no dry run and would
+move the folder; I observed its `--help` contract (refuses without a fresh, passing `review.md`;
+freshness = the digests the launcher recorded) and satisfied both halves I can check (digests match,
+`reviewed_sha` = HEAD, no draft tags), but did not run it. (2) Full AC1/AC2 VM re-runs — artifact
+inspection only, as stated above.
 
 ### Recommended next steps
 
-Contract set (`proposal.md`, `tasks.md`, `features.json`) is **closed**: this verdict permits the
-archive, and editing any of them now would invalidate it. The items below belong in
-`verification.md` (free to edit, excluded from the staleness check) or in a follow-up ticket.
+The contract set (`proposal.md`, `tasks.md`, `features.json`) is **closed**: this verdict permits
+the archive, and editing any of them would invalidate the review. These items go to
+`verification.md` dispositions (free to edit) or follow-up work — do not head them "before archive":
 
-- **R1 (Minor, REAL)** — record in `verification.md` that the cited logs carry no candidate sha, and
-  that the link to `bbd8685` was re-established by matching case sets (77/77, 50/50) against `HEAD`.
-  Optional one-line code fix next time the harness runs: `echo … | tee -a "$log"` for the header
-  line, which needs a fresh VM run to demonstrate — not something this review can produce.
-- **R2 (Minor, REAL)** — already tracked by **#702**; no new ticket needed. Disposition it in
-  `verification.md` as covered there, naming the pre-run `down` and the SIGINT path explicitly so
-  #702's scope is not read as teardown-only.
-- **R3 (Minor, THEORETICAL)** — accept as debt in `verification.md`, or fold the `XDG_STATE_HOME`
-  half into #702 if the owner wants the false refusal gone; the false-pass argument for declining is
-  correct and need not be revisited.
-- **R4 (Minor, SPECULATIVE)** — surface only: either add `unzip`/`tar`/`shasum` to `preflight()` and
-  the runbook's prerequisites, or leave it and note in the runbook that a Linux host will fail at the
-  first download with a misleading message. Do not gate on it.
-- **Q1 (Question)** — confirm in the runbook whether `make e2e` is meant to continue to Windows after
-  a Linux failure. The current behaviour (stop) is the safer one; the wording should say which.
-- **Process note for the archive**: `tasks.md`'s "shellcheck passes" is now true of the change itself
-  (`OK (30 scripts)`, and `test-shellcheck.sh` proves the glob cannot silently empty), and
-  `verification.md`'s "Not run in CI by design" is consistent with the proposal's non-goals. Both are
-  sound; no action.
+- **F1 (Minor, REAL)** — in `verification.md`'s round-2 block, change "Applied in #705" to
+  "implemented in PR #705 (open at review round 3)" or merge #705 first, and correct
+  "at a357428" to `5c0bee8` (the sha the round-2 `review.md` actually records). One-line edits.
+- **F2 (Minor, REAL)** — no new ticket needed: #702 is open and PR #705 carries
+  `test-e2e-run-teardown.sh`; disposition it in `verification.md` naming the pre-run `down` and the
+  SIGINT path so #702's scope is not read as teardown-only. Merging #705 also closes F1's substance.
+- **F3/F4** — already declined with reasons; keep as recorded debt, revisit if a non-macOS host is
+  ever supported.
+- **Q1** — one sentence in the runbook's Run section stating whether `make e2e` stops after a Linux
+  failure (current behaviour: yes).
+
+**`dotf spec archive` is advisable in this state** (verdict passes the "fresh, passing review"
+bar). Merging #705 afterwards would clear both REAL minors retroactively; waiting for it is not
+required by this verdict.

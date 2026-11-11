@@ -54,6 +54,14 @@ owner: manu
   count to keep in step with the scripts, the drift f4 just removed; the summary line prints the
   totals, and a lost block shows in the diff of the scenario script that lost it.
 
+## Review disposition (round 3, PASS-WITH-GAPS)
+
+Reviewer `nan/mimo-v2.6-flash`, at ea0781a (`review.md`; round 2 kept as `review-round2.md`). This round re-read the contract set after the f4 replay edit, so its digests match this branch.
+
+- **Minor REAL: the round-2 dispositions cite #705, which is not on this branch.** This is accurate: they are applied there, not here. #705 carries the log header, `test-e2e-run-teardown.sh` and the CI wiring, and it is open and green.
+- **Minor REAL: AC3 has no test for `main()` at this sha.** Same as the line above: covered by `test-e2e-run-teardown.sh` in #705 (pass, fail, interrupt, failed teardown, leftover session).
+- **Minor THEORETICAL (preflight) and Minor SPECULATIVE (portability).** Declined, as in rounds 1 and 2.
+
 ## Review disposition (round 2, PASS-WITH-GAPS)
 
 Reviewer `nan/deepseek-v4-flash`, at a357428 (`review.md`). No Blocker or Major.
