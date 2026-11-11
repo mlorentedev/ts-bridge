@@ -42,14 +42,14 @@ func TestContainment_KillsChildWhenParentDies(t *testing.T) {
 		_ = parent.Process.Kill()
 		t.Fatalf("parse child pid from %q: %v", line, err)
 	}
-	if processGone(pid) {
+	if processGone(t, pid) {
 		t.Fatalf("child %d gone before the parent was killed", pid)
 	}
 
 	_ = parent.Process.Kill() // SIGKILL / TerminateProcess: no deferred cleanup runs
 	_ = parent.Wait()
 	deadline := time.Now().Add(5 * time.Second)
-	for !processGone(pid) {
+	for !processGone(t, pid) {
 		if time.Now().After(deadline) {
 			t.Fatalf("child %d outlived its killed parent", pid)
 		}

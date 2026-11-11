@@ -16,7 +16,7 @@ const baselineMarker = "// baseline #629"
 // baselineCeiling is how many functions each linter may still exempt. It can only go
 // down: fix a function, delete its directive (nolintlint fails on one that no
 // longer suppresses anything), and lower the number here in the same change.
-var baselineCeiling = map[string]int{"gocyclo": 32, "funlen": 22}
+var baselineCeiling = map[string]int{"gocyclo": 32, "funlen": 21}
 
 var nolintDirective = regexp.MustCompile(`//nolint:([a-z,]+)`)
 

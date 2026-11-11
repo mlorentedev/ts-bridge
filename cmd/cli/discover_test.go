@@ -414,3 +414,62 @@ func TestPromptEnvUpdate_DecidedByStdinNotStdout(t *testing.T) {
 		})
 	}
 }
+
+// TestChooseHost_AutoPicksFirstWithoutPrompting pins --auto as documented: the
+// first host in list order, with no read from stdin (#684).
+func TestChooseHost_AutoPicksFirstWithoutPrompting(t *testing.T) {
+	devices := []discover.Device{
+		{Hostname: "zeta", Authorized: true},
+		{Hostname: "alpha", Authorized: false},
+		{Hostname: "beta", Authorized: true},
+	}
+	got, err := chooseHost(devices, true)
+	if err != nil {
+		t.Fatalf("chooseHost(auto) = %v", err)
+	}
+	if got.Hostname != "beta" {
+		t.Errorf("chooseHost(auto) = %q, want beta, the first authorized host in list order", got.Hostname)
+	}
+}
+
+func TestChooseHost_AutoRefusesWhenNoHostIsAuthorized(t *testing.T) {
+	_, err := chooseHost([]discover.Device{{Hostname: "alpha"}}, true)
+	if err == nil || !strings.Contains(err.Error(), "authorized") {
+		t.Errorf("chooseHost(auto) error = %v, want one naming the missing authorization", err)
+	}
+}
+
+// TestDiscoverAutoWritesTheFirstHost runs the real discover command with
+// --auto against a fake Headscale API: the flag must reach the selection, so
+// .env names the first authorized host and stdin is never read (#684).
+func TestDiscoverAutoWritesTheFirstHost(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]discover.HeadscaleDevice{
+			{Name: "zeta", IPs: []string{"100.64.0.3"}, Authorized: true},
+			{Name: "beta", IPs: []string{"100.64.0.2"}, Authorized: true},
+		})
+	}))
+	defer server.Close()
+	t.Setenv("TS_CONTROL_URL", server.URL)
+	t.Setenv("TS_HEADSCALE_API_KEY", "k")
+	t.Chdir(t.TempDir())
+
+	root := NewRootCmd()
+	root.SetArgs([]string{"discover", "--auto"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("discover --auto: %v", err)
+	}
+	env, err := os.ReadFile(".env")
+	if err != nil {
+		t.Fatalf("read .env: %v", err)
+	}
+	if !strings.Contains(string(env), "TS_TARGET=beta:3389") {
+		t.Errorf(".env = %q, want TS_TARGET=beta:3389", env)
+	}
+}
+
+func TestChooseHost_AutoOnAnEmptyListIsAnError(t *testing.T) {
+	if _, err := chooseHost(nil, true); err == nil {
+		t.Error("chooseHost(nil, auto) = nil error, want one")
+	}
+}
