@@ -35,7 +35,7 @@ Portable TCP bridge over Tailscale/Headscale mesh networks using tsnet.
 | `docs/design/host-client-parity.md` | Host vs client gap inventory and per-OS host state (input to #450) |
 | `specs/` (and `specs/archive/`) | Per-feature SDD folders (proposal + tasks + verification) — see §Workflow Rules |
 | `.env.example` | Configuration reference (2 required vars + commented optionals) |
-| `scripts/e2e/` | Local e2e harness: `run.sh` drives throwaway VMs through `dotf vm`, `linux.sh` and `windows.ps1` hold the cases. It runs only on a developer machine, never in CI |
+| `scripts/e2e/` | Local e2e harness: `run.sh` drives throwaway VMs through `dotf vm`, `linux.sh` and `windows.ps1` hold the cases. The VM runs happen only on a developer machine, never in CI; the harness's own logic is tested in CI against shims (`scripts/tests/test-e2e-*.sh`, `hygiene` job) |
 | `scripts/tests/` | CLI smoke tests (`smoke.bats`, BATS) exercising the built binary. Cross-platform CLI coverage belongs in Go tests under `cmd/cli/`, which the `test-windows` job already runs on Windows. |
 | `mise.toml` | Local tool pins (golangci-lint, gosec) that CI must match; checked by `scripts/tests/test-go-toolchain.sh` (#452, #528), which also requires `docs/troubleshooting/security-audit.md` to name the same gosec |
 | `Makefile` | Dev task runner — mutation-testing targets (gremlins, install-only; see QA-014) |
@@ -61,7 +61,7 @@ golangci-lint run
 # Security scan
 gosec ./...
 
-# e2e on throwaway local VMs (dotf vm; never in CI)
+# e2e on throwaway local VMs (dotf vm; the VM runs never happen in CI, their shim suites do)
 make e2e-linux      # Ubuntu guest
 make e2e-windows    # Windows 11 guest; one guest per machine, so coordinate with other sessions
 make e2e            # both, Linux first
