@@ -31,7 +31,8 @@ owner: manu
 - f4's verification asserted 9 Windows drift lines; the script prints 12 (Major, REAL): applied. f4 now
   requires `PASS setup #2: nothing changed`, at least one `PASS drift` and no `FAIL drift` in the
   newest log of each OS, so it no longer pins a count that every new drift case breaks. Replayed at
-  bbd8685 against the two runs below: exit 0.
+  bbd8685 against the two runs below: exit 0. Superseded in round 2: "at least one" was too weak, and
+  f4 now requires floors of 4 (Linux) and 12 (Windows) `PASS drift` lines (see the round-2 entry).
 - Evidence cites 37/39 pass at 03e077c (Minor, REAL): applied. Both runs are repeated at the
   reviewed scripts' head bbd8685: `make e2e-linux` 77 pass, 0 fail, 0 xfail, 0 xpass, exit 0
   (`linux-20261110T060009Z.log`); `make e2e-windows` 50 pass, 0 fail, 0 xfail, 0 xpass, exit 0
