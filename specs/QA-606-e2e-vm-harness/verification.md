@@ -59,7 +59,7 @@ owner: manu
 
 Reviewer `nan/mimo-v2.6-flash`, at ea0781a (`review.md`; round 2 kept as `review-round2.md`). This round re-read the contract set after the f4 replay edit, so its digests match this branch.
 
-- **Minor REAL: the round-2 dispositions cite #705, which is not on this branch.** This is accurate: they are applied there, not here. #705 carries the log header, `test-e2e-run-teardown.sh` and the CI wiring, and it is open and green.
+- **Minor REAL: the round-2 dispositions cite #705, which is not on this branch.** This is accurate: they are applied there, not here. #705 carries the log header, `test-e2e-run-teardown.sh` and the CI wiring, and it was open and green at the time. #705 has since merged (2026-11-11) and reached this branch through the master merge `20b7e99`.
 - **Minor REAL: AC3 has no test for `main()` at this sha.** Same as the line above: covered by `test-e2e-run-teardown.sh` in #705 (pass, fail, interrupt, failed teardown, leftover session).
 - **Minor THEORETICAL (preflight) and Minor SPECULATIVE (portability).** Declined, as in rounds 1 and 2.
 
@@ -67,8 +67,8 @@ Reviewer `nan/mimo-v2.6-flash`, at ea0781a (`review.md`; round 2 kept as `review
 
 Reviewer `nan/deepseek-v4-flash`, at 5c0bee8 (`review-round2.md`). No Blocker or Major.
 
-- **Minor REAL, evidence provenance.** The log does not name its candidate commit or previous release: `run.sh` echoes that header before the `tee`. Implemented in #705, which was open at review rounds 2 and 3 and is not on this branch: the header goes through `tee` into the log, and `test-e2e-run-teardown.sh` asserts that the log names the candidate.
-- **Minor REAL, AC3 untested for `main()`.** Implemented in #705 (closes #702; open at review rounds 2 and 3, not on this branch): `test-e2e-run-teardown.sh` runs the real `run.sh linux` against shims. It covers pass, fail, interrupt, a failed teardown and the pre-run deletion of a leftover session.
+- **Minor REAL, evidence provenance.** The log does not name its candidate commit or previous release: `run.sh` echoes that header before the `tee`. Implemented in #705, which was open at review rounds 2 and 3 and has since merged into this branch through master (`20b7e99`): the header goes through `tee` into the log, and `test-e2e-run-teardown.sh` asserts that the log names the candidate.
+- **Minor REAL, AC3 untested for `main()`.** Implemented in #705 (closes #702; open at review rounds 2 and 3, since merged into this branch through master): `test-e2e-run-teardown.sh` runs the real `run.sh linux` against shims. It covers pass, fail, interrupt, a failed teardown and the pre-run deletion of a leftover session.
 - **Minor THEORETICAL, preflight checks only `vm up`.** Declined, as in round 1. A missing verb fails at first use with dotf's own message, so no run reads green.
 - **Minor SPECULATIVE, `unzip`/`tar`/`shasum` not preflighted.** Declined. They ship with the only supported host (macOS on Apple Silicon, per the runbook). A missing one fails closed in `die "could not verify"`.
 
@@ -102,3 +102,4 @@ PR-Agent on #703 (head 5c0bee8):
 
 - **Stale-log fail-open** (REAL): applied. `run.sh` now opens the log before `preflight`, so a run that dies early still leaves the newest log, and f4's replay fails on it instead of reading an earlier run's passing log. `preflight-failure-leaves-the-newest-log` in `scripts/tests/test-e2e-run-teardown.sh` failed before the change and passes after. f4's command, a contract file, is unchanged.
 - **Over-broad lint suppression** (THEORETICAL): declined. CI's shellcheck reports "function never invoked" as SC2317, so the file-wide disable is the form both versions accept. With shellcheck 0.11, `shellcheck -e SC2016,SC2034,SC2329 scripts/e2e/linux.sh` (SC2317 left enabled) reports nothing, so no unreachable code is hidden today.
+- **Stale branch claim in dispositions** (REAL, on `c2def72`): applied. The round-2 and round-3 bullets now say that #705 was open at those reviews and has since merged into this branch through master (`20b7e99`).
