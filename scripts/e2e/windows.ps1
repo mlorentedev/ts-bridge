@@ -90,6 +90,9 @@ Case 'init: invalid firewall rule name refused' {
 
 # Fresh guest: RDP denied, no rule, sleep on, no Tailscale.
 Case 'fresh guest denies RDP' { (Get-ItemProperty $TS).fDenyTSConnections -eq 1 }
+# The built-in group ships disabled while RDP is denied; check reports it only once someone enables it (#631 review).
+function RdGroupOn { @(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count }
+Case 'fresh guest: the built-in Remote Desktop group is disabled' { (RdGroupOn) -eq 0 }
 Tsb host setup --config $C
 Case 'setup not converged: no HOST READY banner' { $Out -notmatch 'HOST READY' }
 Case 'setup without IP: no empty TS_TARGET' { $Out -notmatch 'TS_TARGET=:' }
@@ -97,6 +100,7 @@ Case 'setup without Tailscale: unattended step says not installed' { $Out -match
 $j2 = Json setup $C
 # A negative needs a document: with no steps at all, nothing was verified.
 Case 'setup #2: nothing changed' { @($j2.steps).Count -gt 0 -and -not @($j2.steps | Where-Object { $_.outcome -eq 'changed' }) }
+Case 'setup on a fresh guest leaves the built-in group disabled' { (RdGroupOn) -eq 0 }
 Case 'setup: no Tailscale adapter is manual' { (Steps $j2 'Network profile')[0].outcome -eq 'manual' }
 Case 'RDP enabled, TermService running, listening on 3389' {
     (Get-ItemProperty $TS).fDenyTSConnections -eq 0 -and (Get-Service TermService).Status -eq 'Running' -and
@@ -113,7 +117,6 @@ Case 'firewall rule: scoped to the tailnet addresses' {
 }
 # The built-in group's rules allow any address. setup does not enable or disable it; check reports
 # it (firewall_ok false) until the operator disables it (#685, folded into #631).
-function RdGroupOn { @(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' }).Count }
 Case 'built-in Remote Desktop group enabled: check reports it, setup leaves it on' {
     Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
     $seen = -not (Json check $C).services[0].firewall_ok

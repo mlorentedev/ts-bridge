@@ -522,11 +522,16 @@ func windowsFirewallSetupStep(r Runner, ruleName string, port int) SetupStep {
 // disable the group (ADR-017 Amendment B); the operator runs the printed fix.
 func builtinGroupStep(r Runner, step SetupStep) (SetupStep, bool) {
 	out, err := outputPS(r, psReadRDGroup)
+	exposed, parseErr := strconv.Atoi(parseKeyValues(out)["exposed"])
 	if err != nil {
 		return newStep(step.Name, OutcomeUnverified, "Could not read the built-in Remote Desktop rule group",
 			"run Get-NetFirewallRule -DisplayGroup \"Remote Desktop\" to see why the read fails"), false
 	}
-	exposed, _ := strconv.Atoi(parseKeyValues(out)["exposed"])
+	if parseErr != nil {
+		// A count that does not parse proves nothing about the group, as a failed read does.
+		return newStep(step.Name, OutcomeUnverified, fmt.Sprintf("The built-in Remote Desktop rule group read returned no rule count (%q)", strings.TrimSpace(string(out))),
+			"run Get-NetFirewallRule -DisplayGroup \"Remote Desktop\" | Where-Object Enabled -eq True to list the enabled rules"), false
+	}
 	if exposed == 0 {
 		return step, true
 	}
