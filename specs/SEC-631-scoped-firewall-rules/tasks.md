@@ -59,7 +59,19 @@ the last says `Closes #631`.
 - [x] [AC6] `scripts/e2e/windows.ps1` cases written and run: `make e2e-windows` 50 pass, 0 fail at 310bfc6
 - [x] `features.json`, the Windows runbook, `Closes #631` and `Closes #685`, each on its own line
 
+## PR 5 - review round 1 (FAIL) fixes
+
+- [x] [AC7] Failing test: an iptables or ufw host whose only allow is scoped off the tailnet makes
+  setup add the `tailscale0` rule and report `changed`, and check report `changed`
+  (`TestOffTailnetOnlyAllow`, a `TestCheckForLinux` row)
+- [x] [AC7] `scripts/e2e/linux.sh` cases on both backends: check says changed, setup adds the rule
+  and keeps the operator's, check is ok afterwards
+- [x] [AC5] Failing test: a group count that does not parse is `unverified` (`TestWindowsBuiltinGroup`)
+- [x] [AC5] `scripts/e2e/windows.ps1`: the fresh guest's built-in group is disabled, and stays so
+  after setup
+- [x] `proposal.md` Risks, AC6 and `features.json` f12 agree that the Windows e2e ran
+
 ## Closing (every PR)
 
-- [ ] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`, `GOOS=windows`), `gosec ./...`
-- [ ] `verification.md` filled with the command output
+- [x] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`, `GOOS=windows`), `gosec ./...`
+- [x] `verification.md` filled with the command output
