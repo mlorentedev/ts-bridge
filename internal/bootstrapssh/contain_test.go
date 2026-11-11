@@ -79,3 +79,27 @@ func TestStartContainsTheStartedProcessAndReleasesAfterWait(t *testing.T) {
 		t.Error("containment was not released after the process was waited for")
 	}
 }
+
+// TestStartAppliesPrepareBeforeStart pins that start calls prepare, and before
+// cmd.Start: on Linux a SysProcAttr written after Start has no effect, so a
+// moved or dropped call would silently lose the containment (REL-376 round 2).
+func TestStartAppliesPrepareBeforeStart(t *testing.T) {
+	prepared, beforeStart := false, false
+	deps := waitHelperDeps(nil)
+	deps.prepare = func(cmd *exec.Cmd) {
+		prepared, beforeStart = true, cmd.Process == nil
+	}
+	tunnel, err := start(context.Background(), containCfg, deps)
+	if err != nil {
+		t.Fatalf("start() = %v", err)
+	}
+	if err := tunnel.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+	if !prepared {
+		t.Fatal("start never called prepare")
+	}
+	if !beforeStart {
+		t.Error("prepare ran after the process started")
+	}
+}
