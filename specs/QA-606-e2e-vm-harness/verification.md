@@ -97,3 +97,8 @@ PR-Agent on #703 (head 5c0bee8):
 - [ ] Folder moved: `specs/QA-606-e2e-vm-harness/` -> `specs/archive/QA-606-e2e-vm-harness/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
 - [ ] Promotions above executed (if any)
+
+## PR-Agent disposition (on `20b7e99`, after round 3)
+
+- **Stale-log fail-open** (REAL): applied. `run.sh` now opens the log before `preflight`, so a run that dies early still leaves the newest log, and f4's replay fails on it instead of reading an earlier run's passing log. `preflight-failure-leaves-the-newest-log` in `scripts/tests/test-e2e-run-teardown.sh` failed before the change and passes after. f4's command, a contract file, is unchanged.
+- **Over-broad lint suppression** (THEORETICAL): declined. CI's shellcheck reports "function never invoked" as SC2317, so the file-wide disable is the form both versions accept. With shellcheck 0.11, `shellcheck -e SC2016,SC2034,SC2329 scripts/e2e/linux.sh` (SC2317 left enabled) reports nothing, so no unreachable code is hidden today.

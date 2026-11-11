@@ -188,12 +188,15 @@ main() {
     linux | windows) ;;
     *) die "usage: $0 linux|windows|clean|headscale-up|headscale-down|mesh linux" ;;
   esac
-  preflight
   local log
-  dir="$(mktemp -d)" # global: the EXIT trap runs after main returns
-  trap 'rm -rf "$dir"' EXIT # until the session exists; replaced below
   mkdir -p "$OUT"
   log="$OUT/$OS-$(date -u +%Y%m%dT%H%M%SZ).log"
+  # Opened before anything can fail, so a run that dies early is still the
+  # newest log and an evidence replay cannot read an earlier run's as its own.
+  : >"$log" || die "could not write the log $log"
+  preflight
+  dir="$(mktemp -d)" # global: the EXIT trap runs after main returns
+  trap 'rm -rf "$dir"' EXIT # until the session exists; replaced below
   build "$dir"
   down "$OS"
   if [ "$KEEP" = 1 ]; then
