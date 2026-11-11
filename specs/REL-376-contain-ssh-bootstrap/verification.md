@@ -72,3 +72,7 @@ owner: manu
 - **Windows `processGone` reads any `OpenProcess` error as gone** (Minor, THEORETICAL): applied. Only `ERROR_INVALID_PARAMETER` (no such pid) reads as gone, and any other error fails the test. The Linux helper gets the same treatment: only `ErrNotExist` reads as gone. Both helpers now take `testing.TB`.
 - **No scanner reads `contain_windows.go`** (Minor, REAL, repo-wide): ticketed as #709. It is a CI change outside this spec, and the owner merges it.
 - **The runbook overstates the Linux Pdeathsig boundary** (Minor, THEORETICAL): applied. The Linux bullet in `docs/runbooks/guide-control-bootstrap.md` now gives the thread caveat.
+
+## PR-Agent disposition (#710)
+
+- **Vacuous wiring guard** (REAL): applied. `Start` now builds its dependencies through `startDependencies`. `TestStartWiresContainment` asserts that `startDependencies` is `defaultDependencies`, and `TestStartUsesItsDependencies` proves `Start` goes through it. The mutant PR-Agent named (`Start` passing an inline table without the hooks) now fails `TestStartUsesItsDependencies`. The contract files are unchanged.

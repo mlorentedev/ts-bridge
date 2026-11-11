@@ -1,6 +1,8 @@
 package bootstrapssh
 
 import (
+	"context"
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -10,11 +12,29 @@ import (
 // ts-bridge, and every other test injects its own, so dropping them from
 // the defaults would leave the whole suite green (#376).
 func TestStartWiresContainment(t *testing.T) {
+	if reflect.ValueOf(startDependencies).Pointer() != reflect.ValueOf(defaultDependencies).Pointer() {
+		t.Error("Start's dependencies are not defaultDependencies")
+	}
 	deps := defaultDependencies()
 	if deps.prepare == nil || reflect.ValueOf(deps.prepare).Pointer() != reflect.ValueOf(prepareContainment).Pointer() {
 		t.Error("Start does not pass prepareContainment as prepare")
 	}
 	if deps.contain == nil || reflect.ValueOf(deps.contain).Pointer() != reflect.ValueOf(containProcess).Pointer() {
 		t.Error("Start does not pass containProcess as contain")
+	}
+}
+
+// TestStartUsesItsDependencies closes the other half: Start must build its
+// dependencies through startDependencies, so an inline table that drops the
+// hooks fails here instead of leaving the suite green (REL-376 PR-Agent).
+func TestStartUsesItsDependencies(t *testing.T) {
+	sentinel := errors.New("sentinel lookPath")
+	saved := startDependencies
+	t.Cleanup(func() { startDependencies = saved })
+	startDependencies = func() dependencies {
+		return dependencies{lookPath: func(string) (string, error) { return "", sentinel }}
+	}
+	if _, err := Start(context.Background(), containCfg); !errors.Is(err, sentinel) {
+		t.Fatalf("Start() = %v, want the injected dependencies' error", err)
 	}
 }

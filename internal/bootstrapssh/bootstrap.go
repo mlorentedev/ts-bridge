@@ -45,8 +45,13 @@ type Tunnel struct {
 }
 
 func Start(ctx context.Context, cfg Config) (*Tunnel, error) {
-	return start(ctx, cfg, defaultDependencies())
+	return start(ctx, cfg, startDependencies())
 }
+
+// startDependencies is how Start builds its dependencies, so a test can prove
+// Start goes through it (TestStartUsesItsDependencies) and that it is the
+// real table (TestStartWiresContainment).
+var startDependencies = defaultDependencies
 
 // defaultDependencies are the real ones Start uses; TestStartWiresContainment
 // pins the containment hooks among them.
