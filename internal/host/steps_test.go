@@ -122,8 +122,8 @@ func serviceCalls(name string, running bool) []string {
 }
 
 func windowsSetupCalls(noSleep bool) []string {
-	calls := []string{"output tailscale debug prefs", "run tailscale set --unattended"}
-	calls = append(calls, serviceCalls("Tailscale", true)...)
+	calls := serviceCalls("Tailscale", true)
+	calls = append(calls, "output tailscale debug prefs", "run tailscale set --unattended")
 	calls = append(calls, serviceCalls("SSDPSRV", false)...)
 	calls = append(calls, serviceCalls("upnphost", false)...)
 	calls = append(calls, "output "+psPrefix+psProfileRead, "output "+psPrefix+psDeny, "output "+psPrefix+psEnable, "output "+psPrefix+psFwCheck, "run "+psPrefix+psFw, "output "+psPrefix+psReadRDGroup)
@@ -227,6 +227,16 @@ func TestCheckFor(t *testing.T) {
 			steps:    []string{"Tailscale IP=failed", "RDP configuration=failed", "Firewall rule=changed"},
 			services: []Service{{Kind: "rdp", Active: active, Unread: true}},
 			legacy:   CheckResult{},
+		},
+		{
+			// An unknown port cannot confirm the rule's port, so a matching
+			// rule is unverified, not ok (#700).
+			name: "windows, registry unreadable and a rule present", goos: "windows", cfg: Config{FirewallRule: "Rule", NoSleep: true}, // power: TestWindowsPowerCheckStep
+			runner:   &recordingRunner{fail: map[string]bool{psPrefix + psPort: true}, output: map[string]string{"tailscale ip -4": "100.64.0.9", psPrefix + psFwCheck: "count=1\r\n" + fwRule("True", "Allow", "Inbound", "3390")}},
+			calls:    []string{"output tailscale ip -4", "output " + psPrefix + psPort, "output " + psPrefix + psFwCheck, "output " + psPrefix + psReadRDGroup},
+			steps:    []string{"Tailscale IP=ok", "RDP configuration=failed", "Firewall rule=unverified"},
+			services: []Service{{Kind: "rdp", Active: active, Unread: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.9", TailscaleUp: true},
 		},
 		{
 			// readPortPS maps a read below 1 to 3389, so a successful read
