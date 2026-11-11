@@ -44,7 +44,7 @@ Non-interactive mode (--json): outputs a JSON array of devices for scripting.
 Flags:
   --json          Output devices as JSON (no interactive prompt)
   --filter TEXT   Filter by hostname or IP substring
-  --auto          Auto-select first matching host and update .env (--profile saves a profile instead)
+  --auto          Pick the first authorized matching host, no prompt, and update .env (--profile saves a profile instead)
   --profile NAME  Save the chosen host as profile NAME instead of updating .env
   --port PORT     RDP port to use with --auto or --profile (default 3389)
   --api-key KEY   Control-plane API key (overrides the environment)
@@ -66,7 +66,7 @@ Examples:
 
 	cmd.Flags().Bool("json", false, "Output devices as JSON")
 	cmd.Flags().String("filter", "", "Filter by hostname or IP substring")
-	cmd.Flags().Bool("auto", false, "Auto-select first matching host and update .env (--profile saves a profile instead)")
+	cmd.Flags().Bool("auto", false, "Pick the first authorized matching host, no prompt, and update .env (--profile saves a profile instead)")
 	cmd.Flags().Int("port", 3389, "RDP port to use with --auto or --profile")
 	cmd.Flags().String("api-key", "", "Control-plane API key (overrides TS_API_KEY / TS_HEADSCALE_API_KEY) — WARNING: visible in process list")
 	cmd.Flags().String("api-key-file", "", "Read the control-plane API key from a file (secure alternative to --api-key)")
@@ -123,8 +123,7 @@ func runDiscover(cmd *cobra.Command, args []string) error { //nolint:funlen,gocy
 		return printDevicesJSON(devices)
 	}
 
-	// Interactive selection.
-	selected, err := selectHost(devices)
+	selected, err := chooseHost(devices, flags.Auto)
 	if err != nil {
 		return err
 	}
@@ -369,6 +368,20 @@ func updateEnvFile(path, target string, port int, controlURL string) error {
 }
 
 // selectHost presents an interactive list and returns the selected device.
+// chooseHost picks the host to persist. Under --auto it takes the first
+// authorized host in list order without reading stdin, so a script with no
+// terminal never blocks (#684); otherwise it prompts.
+func chooseHost(devices []discover.Device, auto bool) (discover.Device, error) {
+	if !auto {
+		return selectHost(devices)
+	}
+	sortDevices(devices) // authorized first, then by hostname
+	if !devices[0].Authorized {
+		return discover.Device{}, fmt.Errorf("--auto found no authorized host among %d device(s); authorize one in the admin console or drop --auto to pick by hand", len(devices))
+	}
+	return devices[0], nil
+}
+
 func selectHost(devices []discover.Device) (discover.Device, error) {
 	sortDevices(devices)
 	printHostList(devices)

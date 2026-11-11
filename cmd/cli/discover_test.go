@@ -414,3 +414,27 @@ func TestPromptEnvUpdate_DecidedByStdinNotStdout(t *testing.T) {
 		})
 	}
 }
+
+// TestChooseHost_AutoPicksFirstWithoutPrompting pins --auto as documented: the
+// first host in list order, with no read from stdin (#684).
+func TestChooseHost_AutoPicksFirstWithoutPrompting(t *testing.T) {
+	devices := []discover.Device{
+		{Hostname: "zeta", Authorized: true},
+		{Hostname: "alpha", Authorized: false},
+		{Hostname: "beta", Authorized: true},
+	}
+	got, err := chooseHost(devices, true)
+	if err != nil {
+		t.Fatalf("chooseHost(auto) = %v", err)
+	}
+	if got.Hostname != "beta" {
+		t.Errorf("chooseHost(auto) = %q, want beta, the first authorized host in list order", got.Hostname)
+	}
+}
+
+func TestChooseHost_AutoRefusesWhenNoHostIsAuthorized(t *testing.T) {
+	_, err := chooseHost([]discover.Device{{Hostname: "alpha"}}, true)
+	if err == nil || !strings.Contains(err.Error(), "authorized") {
+		t.Errorf("chooseHost(auto) error = %v, want one naming the missing authorization", err)
+	}
+}
