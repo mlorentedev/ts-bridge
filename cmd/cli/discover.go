@@ -376,7 +376,7 @@ func chooseHost(devices []discover.Device, auto bool) (discover.Device, error) {
 		return selectHost(devices)
 	}
 	sortDevices(devices) // authorized first, then by hostname
-	if !devices[0].Authorized {
+	if len(devices) == 0 || !devices[0].Authorized {
 		return discover.Device{}, fmt.Errorf("--auto found no authorized host among %d device(s); authorize one in the admin console or drop --auto to pick by hand", len(devices))
 	}
 	return devices[0], nil
