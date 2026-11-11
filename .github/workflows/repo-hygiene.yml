@@ -78,6 +78,18 @@ jobs:
         run: bash scripts/check-features-selectors.sh
       - name: That guard catches a lost alternative under bash and zsh
         run: bash scripts/tests/test-features-selectors.sh
+      # The e2e harness needs VMs and runs locally, but its own logic does not: these suites
+      # drive it against fake servers and shims for docker, dotf, gh and go (#702).
+      - name: e2e verdict fails on FAIL, XPASS, an early exit or no case
+        run: bash scripts/tests/test-e2e-report.sh
+      - name: e2e protocol probe tells a confirm from garbage, a close and silence
+        run: bash scripts/tests/test-e2e-probe.sh
+      - name: e2e local Headscale helpers read what the mesh run consumes
+        run: bash scripts/tests/test-e2e-headscale.sh
+      - name: e2e mesh run checks its premise and tears down after it
+        run: bash scripts/tests/test-e2e-mesh-preflight.sh
+      - name: e2e linux run tears its guest down on pass, fail and interrupt
+        run: bash scripts/tests/test-e2e-run-teardown.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
