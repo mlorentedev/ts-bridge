@@ -171,6 +171,12 @@ func TestWindowsFirewallRule(t *testing.T) {
 	}
 }
 
+// loggedOutCaptured is `tailscale debug prefs` from a never-logged-in Windows
+// node (Tailscale 1.104.6, #740), trimmed to the fields around the two the step
+// reads: CRLF line ends, `LoggedOut` present, `ForceDaemon` absent until
+// `tailscale set --unattended` runs.
+const loggedOutCaptured = "{\r\n\t\"ControlURL\": \"\",\r\n\t\"RouteAll\": true,\r\n\t\"CorpDNS\": true,\r\n\t\"WantRunning\": false,\r\n\t\"LoggedOut\": true,\r\n\t\"ShieldsUp\": false,\r\n\t\"NetfilterMode\": 2\r\n}\r\n"
+
 // TestWindowsUnattendedStep pins W1 (#455): the step reads ForceDaemon, the
 // pref --unattended sets, and changes only that pref. It never runs
 // `tailscale up`, which refuses on a Headscale node whose login server it was
@@ -195,6 +201,29 @@ func TestWindowsUnattendedStep(t *testing.T) {
 			runner:  &recordingRunner{output: map[string]string{prefsRead: headscalePfx + `"Hostname": ""}`}},
 			calls:   []string{"output " + prefsRead, "run " + setUnattend},
 			outcome: OutcomeChanged,
+		},
+		{
+			// #740, measured on a never-logged-in guest: with no profile the
+			// set lasts until the service restarts, so no run reaches ok. The
+			// input is the guest's own output, CRLF included.
+			name:    "logged out, not unattended",
+			runner:  &recordingRunner{output: map[string]string{prefsRead: loggedOutCaptured}},
+			calls:   []string{"output " + prefsRead, "run " + setUnattend},
+			outcome: OutcomeManual,
+		},
+		{
+			name:    "logged out, unattended until the next restart",
+			runner:  &recordingRunner{output: map[string]string{prefsRead: `{"LoggedOut": true, "ForceDaemon": true}`}},
+			calls:   []string{"output " + prefsRead},
+			outcome: OutcomeManual,
+		},
+		{
+			name: "logged out, set fails",
+			runner: &recordingRunner{output: map[string]string{prefsRead: `{"LoggedOut": true}`},
+				fail: map[string]bool{setUnattend: true}, onPath: map[string]bool{"tailscale": true}},
+			calls:   []string{"output " + prefsRead, "run " + setUnattend, "lookpath tailscale"},
+			outcome: OutcomeFailed,
+			message: "Could not enable via CLI — check Tailscale GUI",
 		},
 		{
 			name:    "prefs unparseable",
@@ -246,6 +275,9 @@ func TestWindowsUnattendedStep(t *testing.T) {
 			}
 			if got.Outcome == OutcomeFailed && got.Fix == "" {
 				t.Error("failed step carries no fix")
+			}
+			if got.Outcome == OutcomeManual && (!strings.Contains(got.Message, "logs in") || !strings.Contains(got.Fix, "tailscale up") || got.Success) {
+				t.Errorf("manual step = %q, fix %q, success %v; want it to say the node must log in", got.Message, got.Fix, got.Success)
 			}
 			if tt.message != "" && got.Message != tt.message {
 				t.Errorf("message = %q, want %q", got.Message, tt.message)
