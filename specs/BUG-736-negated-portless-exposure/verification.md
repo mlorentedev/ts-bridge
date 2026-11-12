@@ -29,7 +29,7 @@ owner: manu
 - v4 scope: `iptHasScope` treats any `!` as a scope, which hid `! --dport 22`. The exposure read uses `iptScopedAllow`, where a `!` before a port flag negates the port, not the scope. The deny path keeps `iptHasScope`.
 - A negated source port (`! --sport 22`) counts as exposure: client source ports are ephemeral, so it admits nearly every client. A positive source port still narrows.
 - Removing a rule with no destination port can close SSH, so both fixes (v4 `foreignFix`, v6 `withIP6`) name the loopback, replies and SSH rules to add first; the list is shared with #691's policy fix as `keepOpenFirst`.
-- Residual: a port-less allow under a negated interface (`! -i tailscale0 -j ACCEPT`) is still not reported, because `iptPortlessCovers` treats any non-loopback negation as an unmodelled narrowing.
+- Residual: a port-less allow under a negated interface (`! -i tailscale0 -j ACCEPT`) is still not reported, because `iptPortlessCovers` treats any non-loopback negation as an unmodelled narrowing (#743).
 
 ## Promotion candidates
 
