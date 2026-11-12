@@ -176,6 +176,16 @@ ok "off-tailnet ufw allow only: setup adds the tailscale0 allow, keeps the opera
 ok "off-tailnet ufw allow only: check is ok afterwards" -- 'outcomes check "$C" | fwstep ok'
 ufw delete allow from 10.0.0.0/8 to any port 3389 proto tcp >/dev/null 2>&1
 
+# Incoming default allow on an active ufw (#735): ufw writes both INPUT policies as ACCEPT,
+# so the tailscale0 scope restricts nothing. Setup leaves the default; the guest restores it.
+ufw default allow incoming >/dev/null 2>&1
+ok "ufw incoming allow: the guest's INPUT policy is ACCEPT" -- 'iptables -S INPUT | head -1 | grep -qx -- "-P INPUT ACCEPT"'
+ok "ufw incoming allow: check says manual, naming ufw default deny incoming" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | grep -q "ufw default deny incoming"'
+ok "ufw incoming allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "ufw incoming allow: setup reports it and leaves the default" -- 'outcomes setup "$C" | fwstep manual && ufw status verbose | grep -q "allow (incoming)"'
+ufw default deny incoming >/dev/null 2>&1
+ok "ufw incoming deny: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+
 # Firewall scope (#631) on an iptables host: ufw is removed, so setup writes through iptables.
 ufw --force disable >/dev/null 2>&1
 apt-get -qq remove -y ufw >/dev/null 2>&1
@@ -193,10 +203,30 @@ iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 iptables -P INPUT DROP
 ok "closed policy: the guest's INPUT policy is DROP" -- 'iptables -S INPUT | grep -qx -- "-P INPUT DROP"'
+# The v6 policy (#733) is still ACCEPT: every port is open on every IPv6 address, so check stays
+# manual and names the ip6tables policy until the guest closes it the same way, ICMPv6 included.
+ok "v6 permissive policy: the guest's ip6tables INPUT policy is ACCEPT" -- 'ip6tables -S INPUT | grep -qx -- "-P INPUT ACCEPT"'
+ok "v6 permissive policy: check says manual, naming the ip6tables policy" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | json "\"ip6tables -P INPUT DROP\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"fix\"]"'
+ok "v6 permissive policy: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ip6tables -A INPUT -i lo -j ACCEPT
+ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+ip6tables -A INPUT -p ipv6-icmp -j ACCEPT
+ip6tables -A INPUT -p tcp --dport 22 -j ACCEPT
+ip6tables -P INPUT DROP
+ok "closed v6 policy: the guest's ip6tables INPUT policy is DROP" -- 'ip6tables -S INPUT | grep -qx -- "-P INPUT DROP"'
 ok "iptables host: setup #1 appends the rule" -- 'outcomes setup "$C" | fwstep changed'
 ok "iptables host: the rule is scoped to tailscale0, as printed" -- 'iptables -S INPUT | grep -qx -- "$SCOPED"'
 ok "iptables host: setup #2 changes nothing (the printed form agrees)" -- 'outcomes setup "$C" | fwstep ok'
 ok "iptables host: check reports firewall_ok" -- "outcomes check $C | json 'j[\"services\"][0][\"firewall_ok\"]'"
+# A native nftables table hooked on input (#739) filters traffic iptables does not read: check cannot
+# verify the port and setup writes nothing, both naming the table. Its policy accept keeps the channel.
+nft add table inet tsbe2e
+nft add chain inet tsbe2e input '{ type filter hook input priority 0; policy accept; }'
+ok "native nft table: check is unverified, naming the table" -- 'outcomes check "$C" | fwstep unverified && outcomes check "$C" | json "\"table inet tsbe2e\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"message\"]"'
+ok "native nft table: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "native nft table: setup reports manual and writes no rule" -- 'R=$(iptables -S INPUT); outcomes setup "$C" | fwstep manual && [ "$(iptables -S INPUT)" = "$R" ]'
+nft delete table inet tsbe2e
+ok "native nft table removed: check is ok again" -- 'outcomes check "$C" | fwstep ok'
 iptables -A INPUT -p tcp --dport 3389 -j ACCEPT
 ok "legacy unscoped rule: check says setup would change it" -- 'outcomes check "$C" | fwstep changed'
 ok "legacy unscoped rule: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"

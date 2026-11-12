@@ -1,0 +1,16 @@
+[
+  {
+    "id": "BUG-735-ufw-incoming-allow-f1",
+    "behavior": "AC1-AC3: an active ufw's ACCEPT INPUT policy (v4 or v6) turns ok/changed manual with ufw's own fix; inactive and unreadable ufw unchanged",
+    "verification": "go test ./internal/host/ -run 'TestUFWPolicy|TestManualRewriteClearsSuccess' -count=1",
+    "state": "done",
+    "evidence": "go test -race ./... exit 0; TestUFWPolicy, TestUFWPolicyUnread, TestUFWPolicyMessage, TestManualRewriteClearsSuccess pass"
+  },
+  {
+    "id": "BUG-735-ufw-incoming-allow-f2",
+    "behavior": "AC4: e2e on the Linux guest under ufw default allow incoming",
+    "verification": "make e2e-linux",
+    "state": "done",
+    "evidence": "make e2e-linux: 103 pass, 0 fail on 4664ba6 (ufw incoming allow: manual naming ufw default deny incoming, not firewall_ok, setup leaves the default; ufw incoming deny: ok again)"
+  }
+]
