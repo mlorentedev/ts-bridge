@@ -42,6 +42,11 @@ Round 1 (nan/deepseek-v4-flash, PASS, at 73bb484; this `review.md`):
 - Question, unmodelled jump qualifiers (`-m conntrack`, `-m mark`): the trade-off is intended and declared in the proposal (Out of scope), and inherited from `iptMatchesPort`.
 - AC2 and AC5 rest on gitignored logs: the logs are local to the run's worktree (`scripts/e2e/out/` is ignored by design). The fixture lines are quoted verbatim in AC2 above, and AC5 quotes the five new PASS lines' assertions and the 112/0 count.
 
+PR review (CodeRabbit, at 73bb484):
+
+- Major REAL, `ufw6-*` excluded without a ufw read: applied. The walk skips a `ufw6-*` chain only where the firewall is read through ufw (`readIP6(..., ufw)` from `read.backend == backendUFW`). The proposal's Out of scope line ("ufw's v6 chains are not followed") holds for ufw hosts only; this line corrects it, and the proposal is left as reviewed. Red row first: `TestIP6Jumps/a_ufw6_chain_on_a_host_ufw_does_not_read_is_walked`.
+- Minor REAL, a port jump with another qualifier was followed: applied. A port-bearing jump now passes the same unmodelled-qualifier test as a port-less one (`ip6JumpCovers`), as the proposal's Out of scope already says. Red row first: `a_port_jump_held_to_established_replies_is_not_followed`; multiport rows pin the port list.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.

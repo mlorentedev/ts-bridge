@@ -239,7 +239,7 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 	}
 	read := readLinuxFirewallV4(r, port)
 	if r.Elevated() {
-		read.v6Foreign, read.v6Open, read.v6Note = readIP6(r, port)
+		read.v6Foreign, read.v6Open, read.v6Note = readIP6(r, port, read.backend == backendUFW)
 	}
 	return read
 }
@@ -248,7 +248,7 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 // chains it jumps to (#720), and says whether INPUT's policy is ACCEPT (#733).
 // setup never writes a v6 rule, so every one of them is the operator's to
 // delete.
-func readIP6(r Runner, port int) (foreign []string, open bool, note string) {
+func readIP6(r Runner, port int, ufw bool) (foreign []string, open bool, note string) {
 	if _, err := r.LookPath(backendIP6); err != nil {
 		return nil, false, ""
 	}
@@ -256,7 +256,7 @@ func readIP6(r Runner, port int) (foreign []string, open bool, note string) {
 	if err != nil {
 		return nil, false, fmt.Sprintf("%s -S %s: %v%s", backendIP6, iptInput, err, toolSaid(err))
 	}
-	foreign, note = ip6Walk(r, iptRules(string(out)), port)
+	foreign, note = ip6Walk(r, iptRules(string(out)), port, ufw)
 	return foreign, iptPolicyAccept(string(out)), note
 }
 
@@ -266,7 +266,7 @@ func readIP6(r Runner, port int) (foreign []string, open bool, note string) {
 // is not an unknown read here, only a scope the chain's rules inherit (#720).
 // A target that is not a chain is skipped; a chain that cannot be read is a
 // note, and what the others showed is kept.
-func ip6Walk(r Runner, input string, port int) (foreign []string, note string) {
+func ip6Walk(r Runner, input string, port int, ufw bool) (foreign []string, note string) {
 	seen := map[string]bool{iptInput: true}
 	queue := []string{iptInput}
 	rules := map[string]string{iptInput: input}
@@ -276,7 +276,7 @@ func ip6Walk(r Runner, input string, port int) (foreign []string, note string) {
 		queue = queue[1:]
 		foreign = append(foreign, ip6Exposed(rules[chain], chain, port)...)
 		for _, next := range ip6Jumps(rules[chain], chain, port) {
-			if seen[next] {
+			if seen[next] || (ufw && strings.HasPrefix(next, ufw6Prefix)) {
 				continue
 			}
 			seen[next] = true
@@ -297,9 +297,10 @@ func ip6Walk(r Runner, input string, port int) (foreign []string, note string) {
 // ip6Verdicts are the targets that end a rule; none of them is a chain.
 var ip6Verdicts = []string{iptAccept, "DROP", "REJECT", "RETURN", "QUEUE", "NFQUEUE"}
 
-// ufw6Prefix names the chains ufw writes for IPv6. `ufw show added` already
-// reports an allow there, with a fix ufw keeps: an ip6tables -D would be undone
-// on ufw's next reload, so the walk leaves them to the ufw read.
+// ufw6Prefix names the chains ufw writes for IPv6. Where the firewall is read
+// through ufw, `ufw show added` already reports an allow there, with a fix ufw
+// keeps: an ip6tables -D would be undone on ufw's next reload, so the walk
+// leaves them to the ufw read. Without a ufw read the prefix excludes nothing.
 const ufw6Prefix = "ufw6-"
 
 // ip6Jumps lists the targets chain's rules jump or go to that may be chains,
@@ -324,10 +325,18 @@ func ip6Jump(f []string, chain string, port int) string {
 		return ""
 	}
 	target := cmp.Or(iptFlag(f, "-j"), iptFlag(f, "-g"))
-	if target == "" || slices.Contains(ip6Verdicts, target) || strings.HasPrefix(target, ufw6Prefix) {
+	if target == "" || slices.Contains(ip6Verdicts, target) {
 		return ""
 	}
-	return iptIfTarget(iptMatchesPort(ip6Match(f), port) && !ip6Narrowed(f) && !iptLoopback(f), target)
+	return iptIfTarget(ip6JumpCovers(f, port) && !ip6Narrowed(f) && !iptLoopback(f), target)
+}
+
+// ip6JumpCovers reports whether a jump's match, scopes aside, takes every new
+// TCP connection on port: a port match, if any, names it, and nothing else
+// narrows it.
+func ip6JumpCovers(f []string, port int) bool {
+	ported := slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) })
+	return iptPortlessCovers(ip6Match(f)) && (!ported || iptPortCovers(f, port))
 }
 
 // iptIfTarget is target when ok, else "".
@@ -342,23 +351,33 @@ func iptIfTarget(ok bool, target string) string {
 var ip6ScopeFlags = []string{"-i", "-s", "-d"}
 
 // ip6Match is a jump rule's match without its -i, -s and -d scopes, negated or
-// not, which ip6Narrowed and iptLoopback judge, and with -g read as -j, the
-// target flag iptMatchesPort knows.
+// not, which ip6Narrowed and iptLoopback judge, and without its destination
+// port match, which iptPortCovers judges; -g reads as -j, the target flag
+// iptPortlessCovers knows. Any qualifier left that it does not model (a
+// conntrack state, a mark) narrows the jump, so the chain is not followed.
 func ip6Match(f []string) []string {
 	var out []string
 	for i := 0; i < len(f); i++ {
-		switch {
-		case f[i] == "!" && i+1 < len(f) && slices.Contains(ip6ScopeFlags, f[i+1]):
-			i += 2
-		case slices.Contains(ip6ScopeFlags, f[i]):
-			i++
-		case f[i] == "-g":
-			out = append(out, "-j")
-		default:
-			out = append(out, f[i])
+		if n := ip6Dropped(f[i:]); n > 0 {
+			i += n - 1
+			continue
 		}
+		out = append(out, cmp.Or(iptIfTarget(f[i] == "-g", "-j"), f[i]))
 	}
 	return out
+}
+
+// ip6Dropped is how many fields at the start of f ip6Match drops: a scope,
+// negated or not, or a destination port match; 0 keeps the field.
+func ip6Dropped(f []string) int {
+	if len(f) > 2 && f[0] == "!" && slices.Contains(ip6ScopeFlags, f[1]) {
+		return 3
+	}
+	if len(f) < 2 {
+		return 0
+	}
+	dropped := slices.Contains(ip6ScopeFlags, f[0]) || slices.Contains(iptDestPortFlags, f[0]) || (f[0] == "-m" && f[1] == "multiport")
+	return iptIf(dropped, 2)
 }
 
 // ip6Exposed lists the v6 allows for the port in chain that are not narrowed:
