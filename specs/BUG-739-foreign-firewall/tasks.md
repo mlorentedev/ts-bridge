@@ -29,6 +29,6 @@ owner: manu
 ## Closing
 
 - [x] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`)
-- [ ] `make e2e-linux`; firewalld probed by hand with the built binary on a guest
-- [ ] verification.md filled; spec review committed
-- [ ] PR with `Closes #739`
+- [x] `make e2e-linux`; firewalld probed by hand with the built binary on a guest
+- [x] verification.md filled; spec review committed
+- [x] PR with `Closes #739`

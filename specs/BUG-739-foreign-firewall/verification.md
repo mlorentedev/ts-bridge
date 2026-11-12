@@ -31,6 +31,17 @@ owner: manu
 - **firewalld fix:** `--change-interface`, not `--add-interface`. Probed: `--add-interface` fails with `ZONE_CONFLICT` (exit 18) for an interface another zone holds, while `--change-interface` moves it and also binds an unbound one. `--new-zone` fails with `NAME_CONFLICT` when the zone exists, hence "(once)".
 - **No firewalld e2e:** it needs `apt-get update` and a package install on the guest; the hand probe stands in, as the proposal states.
 
+## Review dispositions
+
+Round 1 (nan/deepseek-v4-flash, FAIL, at 0342f1d; kept as `review-round1.md`):
+
+- Major REAL, AC5 unrun: applied. `make e2e-linux` ran on 999c0a7 (the code the review read) and passed, 107/0, see AC5. The review read the branch before the run was recorded.
+- Major THEORETICAL, no `nft list chains` capture from the tool: applied by the same run. The e2e block creates an `inet` table on the guest, and the real `nft` output then drives check to `unverified` naming `table inet tsbe2e`. A parser that misread the real format would have left check `ok`, failing the e2e. The unit fixtures follow the probe output byte for byte: tab indentation, `type filter hook input priority filter; policy accept;`, and firewalld's `priority filter + 10`.
+- Minor THEORETICAL, `not running` with exit 0: applied. The words decide and exit 252 is the convention; the new row is `TestForeignFirewall/firewalld_not_running,_exit_0`, red first.
+- Minor REAL, `mangle`/`raw` untested: applied. Two `TestNFTForeignInput` rows now pin them. They passed on arrival, since the code already excluded both, and they guard the mutation the review ran.
+- Minor REAL, bookkeeping: applied (ACs and closing tasks ticked, `features.json` ends in a newline).
+- Question, a failed `nft list chains` outranks a readable ufw: declined, decided in the proposal. An unusable `nft` on root means the ruleset that filters the host is unknown. ufw's answer would be a guess the read refuses elsewhere (#532), and setup still writes nothing.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? no: the gap (a read that assumes it is the only firewall) is recorded in the issue, ADR-017 and the runbook rows; no new mechanism to teach.

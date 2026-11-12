@@ -49,11 +49,11 @@ When one is found, the step names it and reads nothing else, since iptables is n
 
 ## Acceptance criteria
 
-- [ ] AC1: firewalld running: `check` is `unverified` naming firewalld, `setup` is `manual` naming firewalld and writes nothing, `firewall_ok` is false, and neither the v4 nor the v6 policy note appears.
-- [ ] AC2: a native nft table with an input hook (`inet filter`): the same, naming the table. An nft ruleset holding only iptables-nft or tailscaled tables, or a table with no input hook, changes nothing.
-- [ ] AC3: a failed firewalld or nft probe is an unknown read: `check` is `unverified`, `setup` writes nothing.
-- [ ] AC4: current iptables and ufw behaviour is unchanged: the existing host tests pass, with fixtures extended only to answer the new probes.
-- [ ] AC5: e2e: on the Linux guest, an `inet` table with an input hook (policy accept) gives `check` `unverified` naming nftables and setup `manual` with no rule written. Deleting the table gives `ok` again.
+- [x] AC1: firewalld running: `check` is `unverified` naming firewalld, `setup` is `manual` naming firewalld and writes nothing, `firewall_ok` is false, and neither the v4 nor the v6 policy note appears.
+- [x] AC2: a native nft table with an input hook (`inet filter`): the same, naming the table. An nft ruleset holding only iptables-nft or tailscaled tables, or a table with no input hook, changes nothing.
+- [x] AC3: a failed firewalld or nft probe is an unknown read: `check` is `unverified`, `setup` writes nothing.
+- [x] AC4: current iptables and ufw behaviour is unchanged: the existing host tests pass, with fixtures extended only to answer the new probes.
+- [x] AC5: e2e: on the Linux guest, an `inet` table with an input hook (policy accept) gives `check` `unverified` naming nftables and setup `manual` with no rule written. Deleting the table gives `ok` again.
 
 ## References
 
