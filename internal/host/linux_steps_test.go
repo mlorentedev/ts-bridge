@@ -2220,6 +2220,15 @@ func TestUFWPolicyMessage(t *testing.T) {
 	if !strings.Contains(got6.Message, "IPV6=no") || strings.Contains(got6.Message, "unless another firewall") {
 		t.Errorf("v6 message: %q", got6.Message)
 	}
+	// The runbook keys its raw-iptables rows on these phrases, and their fix is
+	// the `-P` that ufw rewrites: a ufw message must not match those rows.
+	for _, key := range []string{"the iptables INPUT policy is ACCEPT", "the ip6tables INPUT policy is ACCEPT"} {
+		for _, m := range []string{got.Message, got6.Message} {
+			if strings.Contains(m, key) {
+				t.Errorf("ufw message %q carries the iptables runbook key %q", m, key)
+			}
+		}
+	}
 }
 
 // TestUFWPolicyReadButChainUnread pins review round 2 of #735: a readable
