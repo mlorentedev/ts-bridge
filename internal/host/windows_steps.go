@@ -41,21 +41,41 @@ func setupWindows(cfg Config, r Runner) SetupResult {
 // node whose other prefs (a Headscale login server) it is not given again.
 // The read is a debug subcommand, so any output that does not parse to
 // ForceDaemon true falls through to the idempotent set rather than skipping it.
+//
+// A logged-out node has no profile, so the pref lives in memory until the
+// service restarts (#740, measured on Tailscale 1.104.6). The step still sets
+// it, in case the node logs in first, and reports manual: no run reaches ok
+// until the node logs in.
 func unattendedStep(r Runner) SetupStep {
 	const name = "Tailscale unattended mode"
-	if out, err := r.Output("tailscale", "debug", "prefs"); err == nil {
-		var prefs struct{ ForceDaemon bool }
-		if json.Unmarshal(out, &prefs) == nil && prefs.ForceDaemon {
-			return newStep(name, OutcomeOK, "Unattended mode already enabled", "")
+	var prefs struct{ ForceDaemon, LoggedOut bool }
+	if out, err := r.Output("tailscale", "debug", "prefs"); err != nil || json.Unmarshal(out, &prefs) != nil {
+		prefs.ForceDaemon, prefs.LoggedOut = false, false
+	}
+	if prefs.ForceDaemon && !prefs.LoggedOut {
+		return newStep(name, OutcomeOK, "Unattended mode already enabled", "")
+	}
+	if !prefs.ForceDaemon {
+		if step, failed := setUnattended(r, name); failed {
+			return step
 		}
 	}
-	if err := r.Run("tailscale", "set", "--unattended"); err != nil {
-		if _, lerr := r.LookPath("tailscale"); lerr != nil {
-			return newStep(name, OutcomeFailed, "Tailscale CLI not found — is Tailscale installed?", "install Tailscale")
-		}
-		return newStep(name, OutcomeFailed, "Could not enable via CLI — check Tailscale GUI", "enable unattended mode in the Tailscale GUI")
+	if prefs.LoggedOut {
+		return newStep(name, OutcomeManual, "Unattended mode set, but it does not persist until the node logs in: a logged-out node keeps no profile, so a service restart drops it",
+			"run `tailscale up` to log the node in, then `ts-bridge host setup` again")
 	}
 	return newStep(name, OutcomeChanged, "Unattended mode enabled", "")
+}
+
+// setUnattended runs `tailscale set --unattended` and reports a failure.
+func setUnattended(r Runner, name string) (SetupStep, bool) {
+	if err := r.Run("tailscale", "set", "--unattended"); err != nil {
+		if _, lerr := r.LookPath("tailscale"); lerr != nil {
+			return newStep(name, OutcomeFailed, "Tailscale CLI not found — is Tailscale installed?", "install Tailscale"), true
+		}
+		return newStep(name, OutcomeFailed, "Could not enable via CLI — check Tailscale GUI", "enable unattended mode in the Tailscale GUI"), true
+	}
+	return SetupStep{}, false
 }
 
 // actStep maps an action's error to "changed" or "failed".
