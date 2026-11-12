@@ -47,3 +47,11 @@ owner: manu
 | F5 Minor REAL: `host check` exit 2 on default-ACCEPT hosts is not stated where operators meet it | Applied in `f1170c0`, in the same runbook row. No `cmd/cli` test: `checkConvergence` already maps any non-ok step to exit 2, and its own tests cover that |
 | F6 Minor THEORETICAL: no ACCEPT row combines with the legacy/foreign paths | Applied for the legacy path: row `ACCEPT, setup's legacy rule...` in `32df2cc`. A foreign allow is already `manual` and is not promoted, so it adds no new path |
 | AC4: the e2e log is not committed | Counts are recorded under Evidence. The log lives in the untracked `scripts/e2e/out/` |
+
+## PR-Agent disposition (#734, full review at d906210)
+
+| Finding | Disposition |
+|---|---|
+| THEORETICAL: `withPolicy` appends the policy fix to a `failed`/`unverified` step, against the proposal ("only the message gains the policy note") | Applied. Red assertion in `TestPermissiveInputPolicy`, then the guard in `0341ba1`. An `ok`/`changed` step keeps its own fix before the policy fix. Not re-run on the VM: the e2e never builds an unfollowable jump under ACCEPT, so this path is unit-only. |
+| #691 "needs a human re-run of `make e2e-linux`" | Already done: 94/0 at `c2f25a5` and at `5dfdd34`, recorded under Evidence. |
+| #733 non-compliant | Expected: the PR defers #733 and does not close it. |
