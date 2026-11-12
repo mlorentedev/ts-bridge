@@ -2084,3 +2084,19 @@ func TestIP6Policy(t *testing.T) {
 		t.Errorf("a ufw host's step changed: %+v", ufw)
 	}
 }
+
+// TestPolicyFixOnManualStep pins that a step already manual for another reason
+// (a foreign unscoped allow) still gains the policy fix, for v4 as for v6.
+func TestPolicyFixOnManualStep(t *testing.T) {
+	read := firewallRead{inputOpen: true, v6Open: true, backend: backendIPT}
+	in := SetupStep{Outcome: OutcomeManual, Message: "foreign allow", Fix: "delete the foreign rule"}
+	got := withIP6(read, withPolicy(read, in), 3389)
+	if got.Outcome != OutcomeManual {
+		t.Fatalf("outcome = %s, want manual", got.Outcome)
+	}
+	for _, want := range []string{"delete the foreign rule", "`iptables -P INPUT DROP`", "`ip6tables -P INPUT DROP`"} {
+		if !strings.Contains(got.Fix, want) {
+			t.Errorf("fix lacks %q: %s", want, got.Fix)
+		}
+	}
+}
