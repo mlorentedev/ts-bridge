@@ -76,6 +76,8 @@ All four are fixed by #454 (`specs/archive/BUG-034-linux-host-idempotent/` once 
   given again (a Headscale `--login-server`), so setup fails on ADR-005 hosts.
   `tailscale set --unattended` changes only that pref. Fixed: setup reads `ForceDaemon` from
   `tailscale debug prefs` and runs `tailscale set --unattended` only when it is off.
+  On a node that has never logged in Tailscale keeps no profile, so the pref is lost on the
+  next service restart; setup still sets it and reports `manual` naming `tailscale up` (#740).
 - **W2:** `host check` sets `RDPEnabled = rdpPort > 0` and never reads
   `fDenyTSConnections` or its Group Policy copy, so it reports RDP enabled when it is off.
   Fixed: setup and check read both values, the policy value first and an absent value as
