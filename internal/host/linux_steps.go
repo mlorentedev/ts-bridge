@@ -336,7 +336,7 @@ func ip6Jump(f []string, chain string, port int) string {
 // narrows it.
 func ip6JumpCovers(f []string, port int) bool {
 	ported := slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) })
-	return iptPortlessCovers(ip6Match(f)) && (!ported || iptPortCovers(f, port))
+	return iptPortlessCovers(ip6Match(f)) && (!ported || iptPortCovers(f, port) || iptExcludesOthers(f, port))
 }
 
 // iptIfTarget is target when ok, else "".
@@ -367,10 +367,10 @@ func ip6Match(f []string) []string {
 	return out
 }
 
-// ip6Dropped is how many fields at the start of f ip6Match drops: a scope,
-// negated or not, or a destination port match; 0 keeps the field.
+// ip6Dropped is how many fields at the start of f ip6Match drops: a scope or a
+// destination port match, negated or not; 0 keeps the field.
 func ip6Dropped(f []string) int {
-	if len(f) > 2 && f[0] == "!" && slices.Contains(ip6ScopeFlags, f[1]) {
+	if len(f) > 2 && f[0] == "!" && (slices.Contains(ip6ScopeFlags, f[1]) || slices.Contains(iptDestPortFlags, f[1])) {
 		return 3
 	}
 	if len(f) < 2 {
@@ -389,7 +389,7 @@ func ip6Exposed(input, chain string, port int) []string {
 	var found []string
 	for _, line := range strings.Split(input, "\n") {
 		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
-		if len(f) > 1 && f[0] == "-A" && f[1] == chain && iptFlag(f, "-j") == iptAccept && iptPortCovers(f, port) && !iptLoopback(f) && !ip6Narrowed(f) {
+		if len(f) > 1 && f[0] == "-A" && f[1] == chain && iptFlag(f, "-j") == iptAccept && iptExposes(f, port) && !iptLoopback(f) && !ip6Narrowed(f) {
 			found = append(found, strings.TrimSpace(line))
 		}
 	}
@@ -527,6 +527,9 @@ func withIP6(read firewallRead, step SetupStep, port int) SetupStep {
 	}
 	step.Message += fmt.Sprintf("; %s admits TCP %d on every interface: %s", backendIP6, port, strings.Join(read.v6Foreign, "; "))
 	fix := fmt.Sprintf("run %s as root to delete the v6 rule (setup never writes one)", strings.Join(deletes, ", then "))
+	if slices.ContainsFunc(read.v6Foreign, iptAdmitsOthers) {
+		fix += ", after you " + keepOpenFirst(backendIP6)
+	}
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}
@@ -928,19 +931,88 @@ func iptHasScope(f []string) bool {
 }
 
 // iptUnscoped lists the INPUT rules that accept TCP port with no interface,
-// source or destination qualifier: the legacy rules of #631. A rule with no
-// port in it is the operator's posture, not a rule for the port, and is not
-// listed. Another narrowing (conntrack, a comment) is not looked at, so such a
-// rule is listed too and reported rather than deleted.
+// source or destination qualifier: the legacy rules of #631, and any rule that
+// admits the port by excluding only others or by naming no port (#736), since
+// those void the tailnet scope as a permissive policy does (#691). A port-less
+// rule counts only when iptPortlessCovers models every token in it; a
+// port-bearing rule with another narrowing (conntrack, a comment) is listed
+// and reported rather than deleted.
 func iptUnscoped(input string, port int) []string {
 	var found []string
 	for _, line := range strings.Split(input, "\n") {
 		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
-		if len(f) > 1 && f[0] == "-A" && f[1] == iptInput && iptFlag(f, "-j") == iptAccept && iptPortCovers(f, port) && !iptLoopback(f) && !iptHasScope(f) {
+		if len(f) > 1 && f[0] == "-A" && f[1] == iptInput && iptFlag(f, "-j") == iptAccept && iptExposes(f, port) && !iptLoopback(f) && !iptScopedAllow(f) {
 			found = append(found, strings.TrimSpace(line))
 		}
 	}
 	return found
+}
+
+// iptScopedAllow reports an interface, source or destination qualifier on an
+// allow, or a negation, unless the negation leaves the rule open off the
+// tailnet: one before a port list negates the port, and one before a loopback
+// scope negates only loopback (#736).
+func iptScopedAllow(f []string) bool {
+	for i, w := range f {
+		if slices.Contains(iptScopeFlags, w) && !iptOpenNegation(f, i) {
+			return true
+		}
+	}
+	return false
+}
+
+// iptOpenNegation reports whether f[i], a `!` or the flag one negates, is a
+// negated port list or a negated loopback scope.
+func iptOpenNegation(f []string, i int) bool {
+	if f[i] == "!" {
+		i++
+	} else if i == 0 || f[i-1] != "!" {
+		return false
+	}
+	if i >= len(f) {
+		return false
+	}
+	return slices.Contains(iptPortFlags, f[i]) || (i+1 < len(f) && iptLoopbackScope(f[i], f[i+1]))
+}
+
+// iptExposes reports whether an ACCEPT's match admits new TCP connections on
+// port from any client: it names the port, excludes only other ports, or has
+// no port in it (#736). Scope is the caller's to test.
+func iptExposes(f []string, port int) bool {
+	if !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptPortFlags, w) }) {
+		return iptPortlessCovers(f)
+	}
+	return iptPortCovers(f, port) || iptExcludesOthers(f, port)
+}
+
+// iptExcludesOthers reports a TCP rule that admits port from every client but
+// those it names, such as `! --dport 22`. With a destination port match, each
+// one must be negated and leave port out; a source-port match beside it does
+// not narrow, since clients connect from ephemeral ports (#736 review). With
+// none, every source-port match must be negated (`! --sport 22`).
+func iptExcludesOthers(f []string, port int) bool {
+	if iptFlag(f, "-p") != protoTCP {
+		return false
+	}
+	flags := iptDestPortFlags
+	if !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) }) {
+		flags = iptPortFlags
+	}
+	for i, w := range f {
+		if slices.Contains(flags, w) && !iptExcludes(f, i, port) {
+			return false
+		}
+	}
+	return true
+}
+
+// iptExcludes reports whether the port match at f[i] is negated and, for a
+// destination list, leaves port out.
+func iptExcludes(f []string, i, port int) bool {
+	if i == 0 || f[i-1] != "!" || i+1 == len(f) {
+		return false
+	}
+	return !slices.Contains(iptDestPortFlags, f[i]) || !portListHas(f[i+1], port)
 }
 
 // iptMatchesPort reports whether a rule's match, whatever its target, applies
@@ -1071,7 +1143,13 @@ func iptablesDelete(port int) []string {
 // legacyHeld reports whether the firewall holds an unscoped allow for the
 // port: setup replaces the ones it wrote and reports the others (#631).
 func legacyHeld(read firewallRead) bool {
-	return read.state == rulePresent && (read.ufwLegacy || read.copies > 0 || len(read.foreign) > 0)
+	switch read.state {
+	case rulePresent:
+		return read.ufwLegacy || read.copies > 0 || len(read.foreign) > 0
+	case ruleAbsent: // a wide allow iptablesDecide does not count, such as `! --dport 22` (#736)
+		return len(read.foreign) > 0
+	}
+	return false
 }
 
 // offTailnetOnly reports a port that is allowed, but only off the tailnet: every
@@ -1293,11 +1371,11 @@ func firewallSetupFrom(r Runner, read firewallRead, port int) SetupStep {
 	if inactiveUFWDecides(read) {
 		return ufwInactiveSetupStep(r, read, port)
 	}
+	if legacyHeld(read) { // present or, for a wide allow iptables does not count, absent (#736)
+		return legacySetupStep(r, read, port)
+	}
 	switch read.state {
 	case rulePresent:
-		if legacyHeld(read) {
-			return legacySetupStep(r, read, port)
-		}
 		if offTailnetOnly(read) {
 			break
 		}
@@ -1363,7 +1441,34 @@ func legacyCheckStep(read firewallRead, port int) SetupStep {
 
 // foreignFix is the operator's part: setup deletes only the rules it wrote.
 func foreignFix(read firewallRead) string {
-	return fmt.Sprintf("scope %s to %s, or remove it; setup does not delete rules it did not write", strings.Join(read.foreign, "; "), tailnetInterface)
+	fix := fmt.Sprintf("scope %s to %s, or remove it; setup does not delete rules it did not write", strings.Join(read.foreign, "; "), tailnetInterface)
+	if slices.ContainsFunc(read.foreign, iptAdmitsOthers) {
+		fix += "; the rule admits other ports too, so as root " + keepOpenFirst(backendIPT) + " before you change it"
+	}
+	return fix
+}
+
+// iptAdmitsOthers reports an iptables allow that names no destination port, so it admits
+// every port or every port but some: removing it may close SSH (#736).
+func iptAdmitsOthers(line string) bool {
+	f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+	if len(f) == 0 || f[0] != "-A" {
+		return false // a ufw line names its port in its own syntax
+	}
+	return !slices.ContainsFunc(iptDestPortFlags, func(flag string) bool { return iptFlag(f, flag) != "" })
+}
+
+// keepOpenFirst names the rules an operator adds before closing every port, so
+// loopback, replies and SSH survive the change, and on IPv6 neighbor discovery,
+// which needs ICMPv6 that no reply rule admits (#742 review).
+func keepOpenFirst(tool string) string {
+	if tool == backendIP6 {
+		return "keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`, " +
+			"`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`, " +
+			"`ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"
+	}
+	return fmt.Sprintf("keep loopback, replies and SSH open first (`%[1]s -A INPUT -i lo -j ACCEPT`, "+
+		"`%[1]s -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `%[1]s -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)", tool)
 }
 
 // firewallUnreadable is the message and fix for a firewall that could not be

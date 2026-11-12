@@ -3,6 +3,7 @@ package host
 import (
 	"cmp"
 	"errors"
+	"fmt"
 	"reflect"
 	"regexp"
 	"slices"
@@ -541,6 +542,22 @@ func TestSetupForLinux(t *testing.T) {
 			fix:      "setup does not delete",
 		},
 		{
+			name:     "iptables, an accept for every port: scoped rule added, nothing deleted, manual (#736)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + "-A INPUT -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "-A INPUT -j ACCEPT",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
+			name:     "iptables, an accept for every port but SSH is the only allow: scoped rule added, manual (#736 review round 3)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "! --dport 22",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
 			name:     "iptables, a legacy copy and a foreign rule: the copy replaced, the foreign one reported (#631)",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + iptLegacyRule + iptForeignRule, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "run "+iptDelete, "output tailscale ip -4"),
@@ -954,6 +971,36 @@ func TestCheckForLinux(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 			message:  "legacy unscoped rule: " + iptForeignPrinted,
 			fix:      "setup does not delete",
+		},
+		{
+			name:     "iptables, an accept for every port but SSH: manual (#736)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "! --dport 22",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
+			name:     "iptables, an accept off loopback beside the scoped rule: manual (#736)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT ! -i lo -p tcp -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "! -i lo",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
+			name:     "iptables, an accept for every port but SSH is the only allow: manual (#736 review round 3)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptEmpty + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "! --dport 22",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
 		},
 		{
 			name:     "iptables, a drop before two copies",
@@ -1679,7 +1726,10 @@ func TestReadIptablesUnscoped(t *testing.T) {
 		{"a negated tailnet interface does not admit the tailnet", iptEmpty + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
 		{"a negated source does not admit the tailnet", iptEmpty + "-A INPUT ! -s 100.64.0.0/10 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
 		{"a legacy copy beside an eth1 rule is not scoped", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n" + iptLegacyRule, 1, 0, false},
-		{"a port-less accept is the operator's posture", iptEmpty + "-A INPUT -p tcp -j ACCEPT\n", 0, 0, true},
+		// An unscoped port-less accept opens every port on every interface: it is
+		// reported, never deleted, and is not the scoped rule (#736).
+		{"a port-less accept is foreign", iptEmpty + "-A INPUT -p tcp -j ACCEPT\n", 0, 1, false},
+		{"an accept for every port but SSH is foreign", iptEmpty + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", 0, 1, false},
 		{"another port", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n", 0, 0, false},
 		{"a drop is not an allow", iptDropFirst, 0, 0, false},
 		{"ts-input admits the tailnet", iptEmpty + iptLegacyRule, 1, 0, true},
@@ -1821,6 +1871,84 @@ const (
 // TestIP6Exposure pins the v6 read as an exposure scan (#526): an unscoped v6
 // allow for the port is reported and never deleted; anything else in v6, or no
 // v6 read at all, leaves the IPv4 outcome as it was.
+// TestExposureShapes pins which INPUT rules both exposure reads (v4 and v6)
+// count as admitting the port off the tailnet: a rule naming it, one that
+// excludes only other ports, and one with no port at all (#736). Scoped,
+// loopback, narrowed and non-TCP rules are not counted.
+func TestExposureShapes(t *testing.T) {
+	tests := []struct {
+		rule string
+		want bool
+	}{
+		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m multiport ! --dports 22,80 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --sport 22 -j ACCEPT", true},
+		{"-A INPUT -p tcp -j ACCEPT", true},
+		{"-A INPUT -j ACCEPT", true},
+		// A negated loopback scope leaves every other interface open (#736 review round 2).
+		{"-A INPUT ! -i lo -p tcp -j ACCEPT", true},
+		{"-A INPUT ! -i lo+ -j ACCEPT", true},
+		{"-A INPUT ! -s 127.0.0.0/8 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 3389 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m multiport ! --dports 3000:4000 -j ACCEPT", false},
+		// Clients connect from ephemeral source ports, so a source-port match
+		// does not undo a negated destination port (#736 review F2).
+		{"-A INPUT -p tcp -m tcp ! --dport 22 --sport 1024:65535 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --dport 22 ! --sport 22 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --sport 22 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -j DROP", false},
+		{"-A INPUT -p udp -m udp ! --dport 53 -j ACCEPT", false},
+		{"-A INPUT -p udp -j ACCEPT", false},
+		{"-A INPUT -i lo -j ACCEPT", false},
+		{"-A INPUT -i eth0 -j ACCEPT", false},
+		{"-A INPUT -i tailscale0 -p tcp -m tcp ! --dport 22 -j ACCEPT", false},
+		{"-A INPUT -s 10.0.0.0/8 -p tcp -j ACCEPT", false},
+		{"-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A ts-input -p tcp -j ACCEPT", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.rule, func(t *testing.T) {
+			if got := len(iptUnscoped(tt.rule, 3389)) == 1; got != tt.want {
+				t.Errorf("v4 exposed = %v, want %v", got, tt.want)
+			}
+			if got := len(ip6Exposed(tt.rule, iptInput, 3389)) == 1; got != tt.want {
+				t.Errorf("v6 exposed = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestWideAllowFix pins the whole fix for an unscoped foreign allow: the SSH
+// caution is added only to an iptables rule that names no destination port,
+// never to a ufw line or to a rule that names the port (#736 review F1, F5).
+func TestWideAllowFix(t *testing.T) {
+	const keep = "keep loopback, replies and SSH open first (`%[1]s -A INPUT -i lo -j ACCEPT`, " +
+		"`%[1]s -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `%[1]s -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"
+	v4 := fmt.Sprintf(keep, "iptables")
+	tests := []struct{ rule, want string }{
+		{"ufw allow 3389", "scope ufw allow 3389 to tailscale0, or remove it; setup does not delete rules it did not write"},
+		{"ufw allow 22,3389/tcp", "scope ufw allow 22,3389/tcp to tailscale0, or remove it; setup does not delete rules it did not write"},
+		{strings.TrimSpace(iptForeignPrinted), "scope " + strings.TrimSpace(iptForeignPrinted) + " to tailscale0, or remove it; setup does not delete rules it did not write"},
+		{"-A INPUT -j ACCEPT", "scope -A INPUT -j ACCEPT to tailscale0, or remove it; setup does not delete rules it did not write; the rule admits other ports too, so as root " + v4 + " before you change it"},
+	}
+	for _, tt := range tests {
+		if got := foreignFix(firewallRead{foreign: []string{tt.rule}}); got != tt.want {
+			t.Errorf("foreignFix(%q):\n got %q\nwant %q", tt.rule, got, tt.want)
+		}
+	}
+	v6 := []struct{ rule, want string }{
+		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", "run `ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT` as root to delete the v6 rule (setup never writes one)"},
+		{"-A INPUT -p tcp -j ACCEPT", "run `ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`, " +
+			"`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`, `ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"},
+	}
+	for _, tt := range v6 {
+		if got := withIP6(firewallRead{v6Foreign: []string{tt.rule}}, SetupStep{Outcome: OutcomeOK}, 3389).Fix; got != tt.want {
+			t.Errorf("withIP6(%q):\n got %q\nwant %q", tt.rule, got, tt.want)
+		}
+	}
+}
+
 func TestIP6Exposure(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1838,7 +1966,10 @@ func TestIP6Exposure(t *testing.T) {
 		{name: "an unscoped v6 allow inside ts-input", onPath: true, v6: ip6Closed, chain: ip6TSInput + ip6InChain + "\n", want: OutcomeManual,
 			message: ip6InChain, fix: "ip6tables -D ts-input -p tcp -m tcp --dport 3389 -j ACCEPT"},
 		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Closed + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
-		{name: "a port-less v6 accept is the operator's posture", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeOK},
+		{name: "a port-less v6 accept", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeManual,
+			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
+		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
+			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Closed + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
 		// A negated scope or an explicit any prefix still opens the port off
 		// the tailnet (BUG-526 review, finding 1).
@@ -2002,7 +2133,13 @@ func TestIP6Jumps(t *testing.T) {
 			note: "ip6tables -S mine: ", said: "(" + strings.TrimSuffix(noMine, "\n") + ")", reads: []string{"mine"}},
 		// A port-less accept is the operator's posture, in a chain as in INPUT
 		// (the INPUT row in TestIP6Exposure): the scan reports allows for the port.
-		{name: "a port-less accept in a chain is the operator's posture", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j ACCEPT"}, reads: []string{"ts-input"}},
+		// A jump for every port but another one reaches the port too (#742 review).
+		{name: "a jump for every port but SSH", input: "-A INPUT -p tcp -m tcp ! --dport 22 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"},
+			want: []string{"-A wide -j ACCEPT"}, reads: []string{"wide"}},
+		{name: "a jump for every port but this one is not followed", input: "-A INPUT -p tcp -m tcp ! --dport 3389 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"}},
+		// A port-less accept opens the port in a jumped chain as in INPUT (#736, #753).
+		{name: "a port-less accept in a chain is reported", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j ACCEPT"},
+			want: []string{"-A ts-input -j ACCEPT"}, reads: []string{"ts-input"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

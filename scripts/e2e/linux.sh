@@ -253,6 +253,33 @@ ok "unscoped v6 allow: check does not report firewall_ok" -- "outcomes check $C 
 ok "unscoped v6 allow: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && ip6tables -S INPUT | grep -qx -- "$V6OPEN"'
 ip6tables -D INPUT -p tcp --dport 3389 -j ACCEPT
 ok "v6 allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+# Negated and port-less allows (#736) open the port as surely as one naming it: reported, with
+# the SSH caution in the fix, never deleted, and check is ok once the operator removes them.
+iptables -A INPUT -p tcp ! --dport 22 -j ACCEPT
+ok "v4 allow for every port but SSH: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "v4 allow for every port but SSH: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "v4 allow for every port but SSH: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT"'
+iptables -D INPUT -p tcp ! --dport 22 -j ACCEPT
+ok "v4 negated allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+# The same negated allow as the only allow: iptables does not count it, so the scoped rule is added
+# and the wide one is still reported (#736 review round 3).
+iptables -D INPUT -i tailscale0 -p tcp --dport 3389 -j ACCEPT
+iptables -A INPUT -p tcp ! --dport 22 -j ACCEPT
+ok "v4 negated allow as the only allow: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "v4 negated allow as the only allow: setup adds the scoped rule, reports manual, leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "$SCOPED" && iptables -S INPUT | grep -qx -- "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT"'
+iptables -D INPUT -p tcp ! --dport 22 -j ACCEPT
+ok "v4 negated allow removed again: check is ok" -- 'outcomes check "$C" | fwstep ok'
+iptables -A INPUT ! -i lo -p tcp -j ACCEPT
+ok "v4 allow off loopback: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "v4 allow off loopback: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+iptables -D INPUT ! -i lo -p tcp -j ACCEPT
+ok "v4 allow off loopback removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+ip6tables -A INPUT -p tcp -j ACCEPT
+ok "v6 port-less allow: check says manual, with the SSH caution in the fix" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | json "\"SSH open first\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"fix\"]"'
+ok "v6 port-less allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "v6 port-less allow: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && ip6tables -S INPUT | grep -qx -- "-A INPUT -p tcp -j ACCEPT"'
+ip6tables -D INPUT -p tcp -j ACCEPT
+ok "v6 port-less allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
 # A v6 chain INPUT jumps to (#720) is read too: tailscaled's shape (a tailscale0 accept) is ok, and an
 # unscoped allow added inside it is reported under the chain's name, never deleted.
 V6CHAINOPEN='-A tsbe2e -p tcp -m tcp --dport 3389 -j ACCEPT'

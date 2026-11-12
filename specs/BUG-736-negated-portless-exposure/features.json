@@ -1,0 +1,23 @@
+[
+  {
+    "id": "BUG-736-negated-portless-exposure-f1",
+    "behavior": "AC1+AC3 v4: negated-port and portless unscoped allows are foreign/manual; scoped, loopback, conntrack, UDP, sport and ! --dport <port> are not",
+    "verification": "go test ./internal/host/ -run 'TestReadIptablesUnscoped|TestExposureShapes' -count=1",
+    "state": "passing",
+    "evidence": "go test ./internal/host/ -run 'TestReadIptablesUnscoped|TestExposureShapes' ok"
+  },
+  {
+    "id": "BUG-736-negated-portless-exposure-f2",
+    "behavior": "AC2+AC3 v6: the exposure scan reports the same shapes and skips the same exclusions",
+    "verification": "go test ./internal/host/ -run 'TestIP6Exposure|TestExposureShapes' -count=1",
+    "state": "passing",
+    "evidence": "go test ./internal/host/ -run 'TestIP6Exposure|TestExposureShapes' ok"
+  },
+  {
+    "id": "BUG-736-negated-portless-exposure-f3",
+    "behavior": "AC4: e2e on the Linux VM",
+    "verification": "make e2e-linux",
+    "state": "passing",
+    "evidence": "make e2e-linux: see verification.md AC4"
+  }
+]
