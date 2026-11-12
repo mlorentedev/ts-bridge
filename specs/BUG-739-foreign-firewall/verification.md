@@ -15,7 +15,7 @@ owner: manu
 - [x] AC2 (native nft input table; iptables-nft, tailscaled and hookless tables ignored) -> `TestForeignFirewall/native_inet_filter`, `.../firewalld_table,_firewall-cmd_absent`, `.../iptables-nft_and_tailscaled_tables_only`, `.../table_without_an_input_hook`; parser cases in `TestNFTForeignInput`.
 - [x] AC3 (a failed probe is unknown) -> `TestForeignFirewall/firewalld_state_fails`, `.../nft_listing_fails`: check `unverified`, setup `failed`, no write.
 - [x] AC4 (iptables and ufw unchanged) -> the existing host suite passes. The only fixture change is that the call-sequence filter (`withoutIP6Probe`, now `withoutProbes`) also drops the probe's two lookups, and `TestIP6Exposure` pins them at the head of the read.
-- [x] AC5 (e2e native nft table) -> `scripts/e2e/linux.sh` "native nft table" block. `make e2e-linux` on 999c0a7: 107 pass, 0 fail, including the four native nft checks (check `unverified` naming `table inet tsbe2e`, no `firewall_ok`, setup `manual` with `iptables -S INPUT` unchanged, `ok` again once the table is deleted). The later commits on the branch change docs and the spec only.
+- [x] AC5 (e2e native nft table) -> `scripts/e2e/linux.sh` "native nft table" block. `make e2e-linux` on 999c0a7: 107 pass, 0 fail, including the four native nft checks (check `unverified` naming `table inet tsbe2e`, no `firewall_ok`, setup `manual` with `iptables -S INPUT` unchanged, `ok` again once the table is deleted). Re-run on 67fe2b2, after the round 1 fix to the firewalld probe (144d34f): 107 pass, 0 fail.
 
 ## Test status
 
@@ -41,6 +41,16 @@ Round 1 (nan/deepseek-v4-flash, FAIL, at 0342f1d; kept as `review-round1.md`):
 - Minor REAL, `mangle`/`raw` untested: applied. Two `TestNFTForeignInput` rows now pin them. They passed on arrival, since the code already excluded both, and they guard the mutation the review ran.
 - Minor REAL, bookkeeping: applied (ACs and closing tasks ticked, `features.json` ends in a newline).
 - Question, a failed `nft list chains` outranks a readable ufw: declined, decided in the proposal. An unusable `nft` on root means the ruleset that filters the host is unknown. ufw's answer would be a guess the read refuses elsewhere (#532), and setup still writes nothing.
+
+Round 2 (nan/deepseek-v4-flash, PASS, at 67fe2b2; this `review.md`):
+
+- Minor REAL, provenance: applied. AC5 now records the re-run on 67fe2b2, which carries 144d34f. The guest has no `firewall-cmd`, so that change never runs there.
+- Minor REAL, a fixture with no answer: the proposal's sentence ("shows up as a failing test") overstates it, and the code does what this file says under "Fixture with no answer". An unanswered `nft list chains` is empty stdout, which is the true "no tables" answer, not a guess. The proposal prose is left as reviewed; this line corrects it.
+- Minor REAL, no `checkFor` coverage: applied. A `TestCheckForLinux` row runs firewalld through `checkFor`, asserting `unverified`, `firewall_ok` false and no ufw read. Mutation: reading `readLinuxFirewallV4` in `checkLinux` turns the row red. It passed on arrival, being a guard.
+- Minor THEORETICAL, runbook "false alarm" rows: applied. The #691 and #733 rows (written in #734 and #746, not this diff) now say firewalld and native nftables are reported by name since #739.
+- Minor REAL, parity full stop: applied.
+- Minor SPECULATIVE, no `nft` binary on a host with a native ruleset: accepted limit, as the proposal declares. Without `nft` nothing on the host can list the ruleset; reading `/proc` or netlink directly is out of scope.
+- Question, probe precedence: unchanged from round 1.
 
 ## Promotion candidates
 
