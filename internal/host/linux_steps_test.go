@@ -1791,11 +1791,11 @@ func TestReadIptablesCapturedModes(t *testing.T) {
 // ip6tables INPUT as tailscaled 1.104.4 leaves it in netfilter mode on
 // (captured, #526), and the same chain with an unscoped v6 allow added.
 const (
-	ip6Read      = "ip6tables -S INPUT"
-	ip6Captured  = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	ip6Read     = "ip6tables -S INPUT"
+	ip6Captured = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
 	// ip6Closed is the captured chain under a DROP policy, so the exposure rows
 	// below read only the rules, not the policy (#733).
-	ip6Closed = "-P INPUT DROP\n-A INPUT -j ts-input\n"
+	ip6Closed    = "-P INPUT DROP\n-A INPUT -j ts-input\n"
 	ip6Unscoped  = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
 	ip6DeleteFix = "ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
 )
@@ -1938,7 +1938,7 @@ func withoutIP6Probe(calls []string) []string {
 func TestReadIP6NoteQuotesTheTool(t *testing.T) {
 	const said = "ip6tables v1.8.10 (nf_tables): Could not fetch rule set generation id: Address family not supported by protocol"
 	r := &recordingRunner{onPath: map[string]bool{backendIP6: true}, exit: map[string]int{"ip6tables -S INPUT": 1}, stderr: map[string]string{"ip6tables -S INPUT": said + "\n"}}
-	_, note := readIP6(r, 3389)
+	_, _, note := readIP6(r, 3389)
 	if !strings.Contains(note, "Address family not supported by protocol") {
 		t.Errorf("note = %q, want it to quote the tool's stderr", note)
 	}
