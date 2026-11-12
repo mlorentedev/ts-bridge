@@ -46,7 +46,7 @@ owner: manu
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BUG-735-ufw-incoming-allow/` -> `specs/archive/BUG-735-ufw-incoming-allow/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BUG-735-ufw-incoming-allow/` -> `specs/archive/BUG-735-ufw-incoming-allow/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
