@@ -106,4 +106,9 @@ func TestRDGroupReadUsesTheResourceID(t *testing.T) {
 			t.Errorf("%s selects the group by its localized display name: %s", name, script)
 		}
 	}
+	// builtinGroupStep reads an answer without total= as unverified, and the
+	// Go tests feed total= by hand, so only this pins the read emitting it.
+	if !strings.Contains(psReadRDGroup, "total=") {
+		t.Errorf("read does not print the group's rule count (total=): %s", psReadRDGroup)
+	}
 }

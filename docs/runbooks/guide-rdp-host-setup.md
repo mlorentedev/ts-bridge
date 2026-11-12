@@ -88,7 +88,7 @@ which works whatever the display language; `-DisplayGroup "Remote Desktop"` matc
 non-English install). Both `host check` and
 `host setup` report an enabled group as `manual` (and `firewall_ok` stays false) until you do;
 `host setup` never disables it. If the group query matches no rule at all, both report
-`unverified`: Windows ships the group with rules, so an empty answer means the read missed it. A named rule that allows any address is reported as a legacy rule,
+`unverified` once the named rule is in place: Windows ships the group with rules, so an empty answer means the read missed it. While the named rule is missing or drifted the step reports that instead, and the group is read again on the next run. A named rule that allows any address is reported as a legacy rule,
 and `host setup` recreates it scoped.
 
 ### 4. Tailscale Configuration
