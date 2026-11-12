@@ -1,0 +1,16 @@
+[
+  {
+    "id": "BUG-720-v6-jumped-chains-f1",
+    "behavior": "An unscoped v6 allow in a chain INPUT jumps to is reported manual with its ip6tables -D <chain> fix; tailscaled's ts-input reads ok; narrowed jumps are not followed; LOG skipped; a failed chain read is a note",
+    "verification": "go test ./internal/host/ -run 'TestIP6Exposure|TestIP6Jumps' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-720-v6-jumped-chains-f2",
+    "behavior": "make e2e-linux: an unscoped 3389 allow in a jumped v6 chain is manual, left in place, ok once removed",
+    "verification": "make e2e-linux",
+    "state": "pending",
+    "evidence": ""
+  }
+]

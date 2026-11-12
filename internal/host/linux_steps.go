@@ -1,6 +1,7 @@
 package host
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -238,15 +239,16 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 	}
 	read := readLinuxFirewallV4(r, port)
 	if r.Elevated() {
-		read.v6Foreign, read.v6Open, read.v6Note = readIP6(r, port)
+		read.v6Foreign, read.v6Open, read.v6Note = readIP6(r, port, read.backend == backendUFW)
 	}
 	return read
 }
 
-// readIP6 lists the unscoped allows for port in ip6tables' INPUT and says
-// whether its policy is ACCEPT (#733). setup never writes a v6 rule, so every
-// one of them is the operator's to delete.
-func readIP6(r Runner, port int) (foreign []string, open bool, note string) {
+// readIP6 lists the unscoped allows for port in ip6tables' INPUT and the
+// chains it jumps to (#720), and says whether INPUT's policy is ACCEPT (#733).
+// setup never writes a v6 rule, so every one of them is the operator's to
+// delete.
+func readIP6(r Runner, port int, ufw bool) (foreign []string, open bool, note string) {
 	if _, err := r.LookPath(backendIP6); err != nil {
 		return nil, false, ""
 	}
@@ -254,19 +256,140 @@ func readIP6(r Runner, port int) (foreign []string, open bool, note string) {
 	if err != nil {
 		return nil, false, fmt.Sprintf("%s -S %s: %v%s", backendIP6, iptInput, err, toolSaid(err))
 	}
-	return ip6Exposed(iptRules(string(out)), port), iptPolicyAccept(string(out)), ""
+	foreign, note = ip6Walk(r, iptRules(string(out)), port, ufw)
+	return foreign, iptPolicyAccept(string(out)), note
 }
 
-// ip6Exposed lists the v6 INPUT allows for the port that are not narrowed:
+// ip6Walk scores INPUT and every chain it reaches through a jump that applies
+// to all the port's traffic (ip6Jumps), reading each chain once, so a loop
+// ends. Unlike the v4 walk it decides nothing setup writes: a qualified jump
+// is not an unknown read here, only a scope the chain's rules inherit (#720).
+// A target that is not a chain is skipped; a chain that cannot be read is a
+// note, and what the others showed is kept.
+func ip6Walk(r Runner, input string, port int, ufw bool) (foreign []string, note string) {
+	seen := map[string]bool{iptInput: true}
+	queue := []string{iptInput}
+	rules := map[string]string{iptInput: input}
+	var notes []string
+	for len(queue) > 0 {
+		chain := queue[0]
+		queue = queue[1:]
+		foreign = append(foreign, ip6Exposed(rules[chain], chain, port)...)
+		for _, next := range ip6Jumps(rules[chain], chain, port) {
+			if seen[next] || (ufw && strings.HasPrefix(next, ufw6Prefix)) {
+				continue
+			}
+			seen[next] = true
+			out, err := r.Output(backendIP6, "-S", next)
+			if err != nil {
+				if !chainMissing(err, iptNoChain) {
+					notes = append(notes, fmt.Sprintf("%s -S %s: %v%s", backendIP6, next, err, toolSaid(err)))
+				}
+				continue
+			}
+			rules[next] = iptRules(string(out))
+			queue = append(queue, next)
+		}
+	}
+	return foreign, strings.Join(notes, "; ")
+}
+
+// ip6Verdicts are the targets that end a rule; none of them is a chain.
+var ip6Verdicts = []string{iptAccept, "DROP", "REJECT", "RETURN", "QUEUE", "NFQUEUE"}
+
+// ufw6Prefix names the chains ufw writes for IPv6. Where the firewall is read
+// through ufw, `ufw show added` already reports an allow there, with a fix ufw
+// keeps: an ip6tables -D would be undone on ufw's next reload, so the walk
+// leaves them to the ufw read. Without a ufw read the prefix excludes nothing.
+const ufw6Prefix = "ufw6-"
+
+// ip6Jumps lists the targets chain's rules jump or go to that may be chains,
+// for the jumps that apply to every packet for port: the match covers TCP on
+// port (iptMatchesPort), and no plain -i, -s or -d or loopback scope holds the
+// jump to part of the traffic. A chain behind a narrowed jump admits only that
+// scope, which is not exposure on every interface.
+func ip6Jumps(input, chain string, port int) []string {
+	var targets []string
+	for _, line := range strings.Split(input, "\n") {
+		if target := ip6Jump(strings.Fields(iptQuoted.ReplaceAllString(line, `""`)), chain, port); target != "" {
+			targets = append(targets, target)
+		}
+	}
+	return targets
+}
+
+// ip6Jump is the target of one rule of chain when the walk follows it, or "".
+// A verdict ends the rule and is no chain.
+func ip6Jump(f []string, chain string, port int) string {
+	if len(f) < 2 || f[0] != "-A" || f[1] != chain {
+		return ""
+	}
+	target := cmp.Or(iptFlag(f, "-j"), iptFlag(f, "-g"))
+	if target == "" || slices.Contains(ip6Verdicts, target) {
+		return ""
+	}
+	return iptIfTarget(ip6JumpCovers(f, port) && !ip6Narrowed(f) && !iptLoopback(f), target)
+}
+
+// ip6JumpCovers reports whether a jump's match, scopes aside, takes every new
+// TCP connection on port: a port match, if any, names it, and nothing else
+// narrows it.
+func ip6JumpCovers(f []string, port int) bool {
+	ported := slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) })
+	return iptPortlessCovers(ip6Match(f)) && (!ported || iptPortCovers(f, port))
+}
+
+// iptIfTarget is target when ok, else "".
+func iptIfTarget(ok bool, target string) string {
+	if ok {
+		return target
+	}
+	return ""
+}
+
+// ip6ScopeFlags are the scopes ip6Match drops from a jump's match.
+var ip6ScopeFlags = []string{"-i", "-s", "-d"}
+
+// ip6Match is a jump rule's match without its -i, -s and -d scopes, negated or
+// not, which ip6Narrowed and iptLoopback judge, and without its destination
+// port match, which iptPortCovers judges; -g reads as -j, the target flag
+// iptPortlessCovers knows. Any qualifier left that it does not model (a
+// conntrack state, a mark) narrows the jump, so the chain is not followed.
+func ip6Match(f []string) []string {
+	var out []string
+	for i := 0; i < len(f); i++ {
+		if n := ip6Dropped(f[i:]); n > 0 {
+			i += n - 1
+			continue
+		}
+		out = append(out, cmp.Or(iptIfTarget(f[i] == "-g", "-j"), f[i]))
+	}
+	return out
+}
+
+// ip6Dropped is how many fields at the start of f ip6Match drops: a scope,
+// negated or not, or a destination port match; 0 keeps the field.
+func ip6Dropped(f []string) int {
+	if len(f) > 2 && f[0] == "!" && slices.Contains(ip6ScopeFlags, f[1]) {
+		return 3
+	}
+	if len(f) < 2 {
+		return 0
+	}
+	dropped := slices.Contains(ip6ScopeFlags, f[0]) || slices.Contains(iptDestPortFlags, f[0]) || (f[0] == "-m" && f[1] == "multiport")
+	return iptIf(dropped, 2)
+}
+
+// ip6Exposed lists the v6 allows for the port in chain that are not narrowed:
 // the exposure scan, not setup's rule-shape test. A negated -i/-s/-d or an
 // explicit ::/0 still opens the port off the tailnet (BUG-526 review). The
 // scan ignores rule order, as iptUnscoped does: an allow behind an unscoped
 // deny is still listed, which over-reports a dead rule rather than miss one.
-func ip6Exposed(input string, port int) []string {
+func ip6Exposed(input, chain string, port int) []string {
 	var found []string
 	for _, line := range strings.Split(input, "\n") {
 		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
-		if len(f) > 1 && f[0] == "-A" && f[1] == iptInput && iptFlag(f, "-j") == iptAccept && iptPortCovers(f, port) && !iptLoopback(f) && !ip6Narrowed(f) {
+		if len(f) > 1 && f[0] == "-A" && f[1] == chain && iptFlag(f, "-j") == iptAccept && iptPortCovers(f, port) && !iptLoopback(f) && !ip6Narrowed(f) {
 			found = append(found, strings.TrimSpace(line))
 		}
 	}
@@ -599,7 +722,7 @@ func iptAcceptOffTailnet(line string) bool {
 func tsInputUnreached(r Runner, port int) (firewallRead, bool) {
 	out, err := r.Output(backendIPT, "-S", tsInputChain)
 	switch {
-	case err != nil && !chainMissing(err, "No chain/target/match by that name"):
+	case err != nil && !chainMissing(err, iptNoChain):
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S %s: %v", tsInputChain, err)}, true
 	case err == nil && slices.Contains(strings.Split(iptRules(string(out)), "\n"), "-N "+tsInputChain):
 		// --netfilter-mode=nodivert: iptables_runner.go creates the chain and skips AddHooks.
@@ -642,6 +765,10 @@ func toolSaid(err error) string {
 	}
 	return ""
 }
+
+// iptNoChain is what iptables and ip6tables print for a chain that does not
+// exist, and for a target that is an extension, not a chain.
+const iptNoChain = "No chain/target/match by that name"
 
 // chainMissing reports a failure that says the chain does not exist: stderr
 // carries the tool's own words for it (iptables "No chain/target/match by that
