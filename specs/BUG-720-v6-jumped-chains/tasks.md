@@ -23,11 +23,11 @@ owner: manu
 
 ## Implementation
 
-- [ ] [AC2] Capture tailscaled's v6 `ts-input` with `scripts/e2e/capture-tsfw.sh`; fixture plus the `ip6tables -S ts-input` call in `TestIP6Exposure`
-- [ ] [AC1] [AC3] [AC4] Red rows in `TestIP6Exposure` / a jump table test: allow in ts-input, narrowed jumps, two deep, loop, LOG, failed chain read
-- [ ] [AC1] [AC3] [AC4] Implement the jump walk in `readIP6`, generalise `ip6Exposed` to a chain
-- [ ] [AC5] e2e case in `scripts/e2e/linux.sh`; `make e2e-linux`
-- [ ] Runbook row for a v6 allow inside a jumped chain
+- [x] [AC2] Capture tailscaled's v6 `ts-input` with `scripts/e2e/capture-tsfw.sh`; fixture plus the `ip6tables -S ts-input` call in `TestIP6Exposure`
+- [x] [AC1] [AC3] [AC4] Red rows in `TestIP6Exposure` / a jump table test: allow in ts-input, narrowed jumps, two deep, loop, LOG, failed chain read
+- [x] [AC1] [AC3] [AC4] Implement the jump walk in `readIP6`, generalise `ip6Exposed` to a chain
+- [x] [AC5] e2e case in `scripts/e2e/linux.sh`; `make e2e-linux`
+- [x] Runbook row for a v6 allow inside a jumped chain
 
 ## Closing
 

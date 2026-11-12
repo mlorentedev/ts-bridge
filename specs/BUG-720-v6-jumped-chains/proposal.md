@@ -1,7 +1,7 @@
 ---
 id: "BUG-720-v6-jumped-chains"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-11-12"
 issue: "mlorentedev/ts-bridge#720"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -38,11 +38,11 @@ The v6 read stays an over-reporting exposure scan, not the v4 decision walk: it 
 
 ## Acceptance criteria
 
-- [ ] AC1: A `-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT` rule with no interface or source scope, behind `-A INPUT -j ts-input`, reads `manual` in check and setup, and the fix names `ip6tables -D ts-input -p tcp -m tcp --dport 3389 -j ACCEPT`.
-- [ ] AC2: tailscaled's captured v6 `ts-input` (`-A ts-input -i tailscale0 -j ACCEPT`) still reads `ok`, and the read asks `ip6tables -S ts-input` for it.
-- [ ] AC3: An unscoped allow inside a chain that INPUT reaches only through a narrowed jump (`-i eth0`, or a port match that excludes the port) reads `ok`; one in a chain two jumps deep reads `manual`; a jump loop ends.
-- [ ] AC4: A `-j LOG` target is skipped without a note; a chain whose read fails gives a v6 note naming it, and an unscoped allow in INPUT is still reported.
-- [ ] AC5: `make e2e-linux` passes with a case that puts an unscoped 3389 allow in a chain INPUT jumps to: check is `manual` naming `ip6tables -D <chain>`, setup leaves it, and check is `ok` once it is removed.
+- [x] AC1: A `-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT` rule with no interface or source scope, behind `-A INPUT -j ts-input`, reads `manual` in check and setup, and the fix names `ip6tables -D ts-input -p tcp -m tcp --dport 3389 -j ACCEPT`.
+- [x] AC2: tailscaled's captured v6 `ts-input` (`-A ts-input -i tailscale0 -j ACCEPT`) still reads `ok`, and the read asks `ip6tables -S ts-input` for it.
+- [x] AC3: An unscoped allow inside a chain that INPUT reaches only through a narrowed jump (`-i eth0`, or a port match that excludes the port) reads `ok`; one in a chain two jumps deep reads `manual`; a jump loop ends.
+- [x] AC4: A `-j LOG` target is skipped without a note; a chain whose read fails gives a v6 note naming it, and an unscoped allow in INPUT is still reported.
+- [x] AC5: `make e2e-linux` passes with a case that puts an unscoped 3389 allow in a chain INPUT jumps to: check is `manual` naming `ip6tables -D <chain>`, setup leaves it, and check is `ok` once it is removed.
 
 ## References
 
