@@ -60,7 +60,7 @@ Round 2 (nan/deepseek-v4-flash, PASS, at 67fe2b2; this `review.md`):
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BUG-739-foreign-firewall/` -> `specs/archive/BUG-739-foreign-firewall/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BUG-739-foreign-firewall/` -> `specs/archive/BUG-739-foreign-firewall/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
