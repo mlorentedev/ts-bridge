@@ -1939,7 +1939,8 @@ func TestWideAllowFix(t *testing.T) {
 	}
 	v6 := []struct{ rule, want string }{
 		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", "run `ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT` as root to delete the v6 rule (setup never writes one)"},
-		{"-A INPUT -p tcp -j ACCEPT", "run `ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you " + fmt.Sprintf(keep, "ip6tables")},
+		{"-A INPUT -p tcp -j ACCEPT", "run `ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`, " +
+			"`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`, `ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"},
 	}
 	for _, tt := range v6 {
 		if got := withIP6(firewallRead{v6Foreign: []string{tt.rule}}, SetupStep{Outcome: OutcomeOK}, 3389).Fix; got != tt.want {
@@ -1968,7 +1969,7 @@ func TestIP6Exposure(t *testing.T) {
 		{name: "a port-less v6 accept", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeManual,
 			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
-			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
+			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Closed + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
 		// A negated scope or an explicit any prefix still opens the port off
 		// the tailnet (BUG-526 review, finding 1).

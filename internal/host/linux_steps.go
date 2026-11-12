@@ -336,7 +336,7 @@ func ip6Jump(f []string, chain string, port int) string {
 // narrows it.
 func ip6JumpCovers(f []string, port int) bool {
 	ported := slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) })
-	return iptPortlessCovers(ip6Match(f)) && (!ported || iptPortCovers(f, port))
+	return iptPortlessCovers(ip6Match(f)) && (!ported || iptPortCovers(f, port) || iptExcludesOthers(f, port))
 }
 
 // iptIfTarget is target when ok, else "".
@@ -367,10 +367,10 @@ func ip6Match(f []string) []string {
 	return out
 }
 
-// ip6Dropped is how many fields at the start of f ip6Match drops: a scope,
-// negated or not, or a destination port match; 0 keeps the field.
+// ip6Dropped is how many fields at the start of f ip6Match drops: a scope or a
+// destination port match, negated or not; 0 keeps the field.
 func ip6Dropped(f []string) int {
-	if len(f) > 2 && f[0] == "!" && slices.Contains(ip6ScopeFlags, f[1]) {
+	if len(f) > 2 && f[0] == "!" && (slices.Contains(ip6ScopeFlags, f[1]) || slices.Contains(iptDestPortFlags, f[1])) {
 		return 3
 	}
 	if len(f) < 2 {
@@ -1459,8 +1459,14 @@ func iptAdmitsOthers(line string) bool {
 }
 
 // keepOpenFirst names the rules an operator adds before closing every port, so
-// loopback, replies and SSH survive the change.
+// loopback, replies and SSH survive the change, and on IPv6 neighbor discovery,
+// which needs ICMPv6 that no reply rule admits (#742 review).
 func keepOpenFirst(tool string) string {
+	if tool == backendIP6 {
+		return "keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`, " +
+			"`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`, " +
+			"`ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"
+	}
 	return fmt.Sprintf("keep loopback, replies and SSH open first (`%[1]s -A INPUT -i lo -j ACCEPT`, "+
 		"`%[1]s -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `%[1]s -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)", tool)
 }

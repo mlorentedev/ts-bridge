@@ -72,6 +72,8 @@ Merging master brought #720's jumped-chain v6 walk, which pinned a port-less acc
 
 `make e2e-linux` on the merge head a8d2121 (#720's jumped-chain block and this change's blocks together): 126 pass, 0 fail.
 
+PR review (CodeRabbit, after the merge with #720): two findings applied, red first. A v6 jump for every port but another (`-p tcp ! --dport 22 -j wide`) is now followed (`TestIP6Jumps/a_jump_for_every_port_but_SSH`; `! --dport 3389` is not); the merge had joined #720's jump walk, which only followed jumps naming the port, to this change's negated-port reading. The v6 delete fix now keeps ICMPv6 open first, as #733's policy fix does. The third finding (negated `-i` on v6) is #743. The e2e was not re-run for these: they change which v6 chains are walked and the fix text, which the unit rows pin, and the e2e's `SSH open first` assertion still holds.
+
 This spec does not archive on this `review.md` (FAIL). It archives after #757 changes AC3 and a review of the new contract passes.
 
 ## Promotion candidates
