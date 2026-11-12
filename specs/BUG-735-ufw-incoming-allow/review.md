@@ -1,84 +1,128 @@
 ---
 spec: "BUG-735-ufw-incoming-allow"
-verdict: "FAIL"
-reviewed_sha: "39beef4674bd0c9dce0eea0e6d6015cad8fc254e"
+verdict: "PASS"
+reviewed_sha: "7e036d4e3dfe52ed00a00088cf4210ac212465d1"
 reviewer: "nan/deepseek-v4-flash"
 date: "2026-11-12"
 ---
 
 ## Adversarial review
 
-**Scope**: `BUG-735-ufw-incoming-allow` (issue #735), whole change at `39beef4`, diff range `42e34ea9d5fcbd3abfcff3e9aeaadf22773d9a1b...HEAD`.
-All five commits in the range belong to this change (`a029d05` spec, `df17a28` unit test, `c8b5a57` fix, `35b258d` e2e, `39beef4` docs) — no unrelated work arrived through a merge, so nothing outside the spec was judged.
-Contract digests match: `dotf spec digest BUG-735-ufw-incoming-allow` returns exactly the `contract_digests` in `review-request.json` (`proposal.md` `91cb91f3…`, `tasks.md` `863bbd8c…`, `features.json` `a81b9a35…`).
+**Scope**: `BUG-735-ufw-incoming-allow` (issue #735), whole change at `7e036d4`, diff range
+`42e34ea9d5fcbd3abfcff3e9aeaadf22773d9a1b...HEAD`. All ten first-parent commits in the range belong
+to this change (`a029d05` spec, `df17a28`/`6e2da7a` tests, `c8b5a57`/`f66786a` fixes, `35b258d` e2e,
+`39beef4` docs, `0eee04f`/`4664ba6`/`7e036d4` spec bookkeeping) — nothing unrelated arrived through a
+merge, so nothing outside the spec was judged.
+Contract digests match: `dotf spec digest BUG-735-ufw-incoming-allow` returns exactly the
+`contract_digests` in `review-request.json` (`proposal.md` `e0ff3360…`, `tasks.md` `295dfbf0…`,
+`features.json` `a81b9a35…`, `spec.md` empty). No `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tags remain.
 
-**Sources**: `specs/BUG-735-ufw-incoming-allow/{proposal,tasks,verification}.md`, `features.json`, `review-request.json`; `git diff 42e34ea…...HEAD` over `internal/host/linux_steps.go`, `internal/host/linux_steps_test.go`, `scripts/e2e/linux.sh`, `docs/adr/adr-017-host-desired-state.md`, `docs/design/host-client-parity.md`, `docs/runbooks/guide-rdp-host-setup.md`.
+**Sources**: `specs/BUG-735-ufw-incoming-allow/{proposal,tasks,verification}.md`, `features.json`,
+`review-request.json`, `review-round1.md`; `git diff 42e34ea…...HEAD` over
+`internal/host/linux_steps.go`, `internal/host/linux_steps_test.go`, `scripts/e2e/linux.sh`,
+`docs/adr/adr-017-host-desired-state.md`, `docs/design/host-client-parity.md`,
+`docs/runbooks/guide-rdp-host-setup.md`.
 
 **What I ran (fresh, this session)**
 
 | Command | Result |
 |---|---|
-| `go build -o /tmp/tsb-bug735 ./cmd/ts-bridge/` | exit 0 |
-| `go test ./internal/host/ -run 'TestUFWPolicy\|TestManualRewriteClearsSuccess\|TestIP6Policy' -count=1` | `ok ts-bridge/internal/host` |
-| `go test ./internal/host/ -count=1 -timeout 5m` | `ok ts-bridge/internal/host` |
-| `GOOS=linux go vet ./internal/host/`, `GOOS=windows go vet ./internal/host/` | exit 0 both |
-| `gofmt -l internal/host/ scripts` | no output |
-| `shellcheck -S warning scripts/e2e/linux.sh` | clean |
-| Mutation A — delete `read.inputOpen = ipt.inputOpen` in `readUFW` | `TestUFWPolicy/incoming_allow:_both_policies_ACCEPT` FAILS (`fix lacks "`ufw allow <your SSH port>/tcp`"`) → red-green holds |
-| Mutation B — restore `read.backend != backendIPT` in `withV6Policy` | `TestUFWPolicy` AC1 **and** AC2 subtests FAIL (`outcome ok success true, want manual=true`) → red-green holds |
-| Probe (scratch test, deleted) — active ufw, its own allow decides, `iptables -S INPUT` exits 4 | `state=2 reason="" inputOpen=false outcome=ok firewall_ok=true` → see finding F3 |
-| Probe (scratch test, deleted) — AC1 fixture, AC print | `check outcome=manual ok=false`, `setup outcome=manual success=false`; message text quoted in F4 |
-| `dotf spec digest`, `dotf spec archive` pre-flights (scratch copy in `mktemp -d`) | digests match; archive refuses on promotion candidates — see F1 |
+| `go build ./...` | exit 0 |
+| `go test -race -count=1 -timeout 5m ./internal/host/` | `ok ts-bridge/internal/host 1.302s` |
+| `go test -count=1 -timeout 5m ./...` (17 packages) | every package `ok`, no failures |
+| `go test -count=1 -v -run 'TestUFWPolicy$/…|TestUFWPolicyUnread|TestUFWPolicyMessage|TestManualRewriteClearsSuccess' ./internal/host/` | all three `TestUFWPolicy` subtests, `TestUFWPolicyUnread`, `TestUFWPolicyMessage`, `TestManualRewriteClearsSuccess` PASS by name |
+| `golangci-lint run` (mise-pinned 2.14.0) | `0 issues.` |
+| `gofmt -l internal/host/`, `GOOS=linux go vet ./internal/host/` | no output / exit 0 |
+| `bash -n scripts/e2e/linux.sh`, `shellcheck -S warning scripts/e2e/linux.sh` | clean |
+| Mutation A — `policyRead` reverted to `return fw.backend == backendIPT` | `TestUFWPolicy` AC1 **and** AC2 subtests FAIL (outcome `ok success true`, fixes empty, `linuxFirewallOK = true`), `TestUFWPolicyMessage` FAILS → red-green holds for the whole feature |
+| Mutation B — drop `&& fw.policyUnread == ""` from `linuxFirewallOK` **and** the `read.policyUnread = ipt.reason` assignment | `TestUFWPolicyUnread` FAILS (`setup/check = ok`, `linuxFirewallOK = true with the policy unread`) → red-green holds for the round-1 F3 fix |
+| Probe (scratch test, deleted) — active ufw + scoped allow, `iptables -S INPUT` **succeeds** as `-P INPUT ACCEPT`, `iptables -S ts-input` exits 4 | `inputOpen=true policyUnread="iptables -S ts-input: exit status 4"`, outcome `unverified`, message says the **policy** could not be read and the fix says run `iptables -S INPUT` → see F1 |
+| Probe (scratch test, deleted) — inactive ufw + ACCEPT kernel policy, and active ufw with no port rule + ACCEPT policy | inactive: `manual` naming `ufw enable`, no ufw-policy note (unchanged, as AC3 requires); active+absent: `manual`, ufw wording + ufw fix on both `check` and `setup`, `firewall_ok=false` |
 
-`make e2e-linux` was **not** run: it drives real VMs through `dotf vm` on a developer machine and is not available in this session, so AC4 stays UNVERIFIED by me. `golangci-lint`/`gosec` were not run (the repo makes the CI `lint`/`security` jobs authoritative); `gofmt`/`vet` stand in, as `AGENTS.md` directs.
+`make e2e-linux` was **not** run: it drives a real Ubuntu guest through `dotf vm` on a developer
+machine and is not available in this session, so **AC4 stays UNVERIFIED by me** and its recorded run
+(`103 pass, 0 fail` on `4664ba6`) is the implementer's evidence, not mine. The e2e block itself is
+statically sound (assertions match the `fwstep`/`json` helper shapes, the default is restored before
+the iptables section, `shellcheck` clean).
 
 ### Spec and task alignment
 
-- **Diff matches the proposal's "What"**: `readUFW` keeps the v4 kernel policy; `policyRead` (iptables **or** active ufw) replaces the three `backend == backendIPT` gates (`withPolicy`, `withV6Policy`, `linuxFirewallOK`); the ufw fix names `ufw allow <SSH>/tcp` then `ufw default deny incoming`, and `IPV6=yes` + `ufw reload` for v6; `setup` still only rewrites step text and never writes a policy (only `addScopedRule` writes, unchanged).
-- **AC1/AC2/AC3 are covered by a named test and its red-green is real**: `TestUFWPolicy` fails under each of the two mutations above and passes on the change. That is stronger evidence than `verification.md` carries.
-- **Deviations are documented, not silent**: reading the kernel policy instead of parsing `ufw status verbose` is argued in `proposal.md` ("Deviation from the issue's proposed fix"); the `IPV6=no` reboot-dependent outcome is stated as a host truth rather than a flake. Both are defensible.
-- **No test was deleted.** `TestIP6Policy`'s ufw case was *narrowed* to `ufwInactive: true` (correct: that case's claim was that an inactive ufw's open policy is already reported), and the removed assertion's subject is now covered by `TestUFWPolicy/IPV6=no_after_a_boot`. Retention bar met.
-- **Docs follow the tasks item**: ADR-017 Amendment B line, parity-doc firewall rows, and a runbook troubleshooting row all name #735 and match the code's fix text.
-- **The spec's own bookkeeping is untouched template.** `proposal.md` AC boxes 0/4 ticked, `tasks.md` 0/8, `features.json` both features `state: "pending"` with empty `evidence`, `verification.md` still containing `<hash>`, `<command> -> <output / coverage %>` and unanswered promotion candidates. `status: implementing`.
+- **Diff matches the proposal's "What"**: `readUFW`/`withUFWIptables` keeps the v4 kernel policy on an
+  active ufw; one gate `policyRead` (raw iptables **or** active ufw) replaces the three
+  `backend == backendIPT` gates in `withPolicy`, `withV6Policy`, `linuxFirewallOK`; the v4 fix names
+  `ufw allow <SSH>/tcp` then `ufw default deny incoming` and never a raw `-P`; the v6 fix names
+  `IPV6=yes` + `ufw reload`; an inactive ufw keeps its own `manual` (probed, not just asserted).
+- **Setup writes no policy**: the only new writes are message/fix text plus the pre-existing scoped
+  `ufw allow`/`iptables -A`; no `ufw default` command exists in non-test code (grep), matching AC1's
+  "never `iptables -P`" and the e2e's "leaves the default" assertion. `iptPolicyFix` is a pure
+  literal extraction, so the iptables wording is provably unchanged.
+- **AC1/AC2/AC3/AC5 are each proven by a named test whose red-green I reproduced** (Mutations A/B
+  above) — stronger than `verification.md` claims for itself. AC4 is proven only by the implementer's
+  e2e record (UNVERIFIED here).
+- **Round-1 dispositions are real**: F1 → `verification.md` now carries per-AC evidence, commands and
+  counts; F2 → e2e record added; F3 → `policyUnread` + `TestUFWPolicyUnread`, and I confirmed it is
+  red-green; F4 → ufw-specific wording + `TestUFWPolicyMessage`; F5 declined with a recorded reason in
+  `verification.md` (unscoped `ufw allow <SSH>/tcp` kept because a LAN-only operator would be locked
+  out), which is a stated decision, not silence.
+- **No test was deleted**; `TestIP6Policy`'s ufw case was narrowed to `ufwInactive: true` — correct,
+  because that case's claim was "an inactive ufw is already reported off", and its old subject (a ufw
+  host's open v6 policy) is now covered by `TestUFWPolicy/IPV6=no_after_a_boot`.
+- **Docs follow the tasks item**: ADR-017 Amendment B, both parity-doc firewall rows, and a new runbook
+  troubleshooting row all name #735 and quote the code's own wording, so the runbook key matches the
+  message an operator actually sees (the round-1 F4 hazard).
+- **Considered and accepted, not findings**: a ufw host without the `iptables` binary goes blind
+  (`readUFW` returns before the policy read) — `proposal.md` Risks names it and ufw depends on iptables;
+  a ufw with `IPV6=no` reports a reboot-dependent kernel v6 policy — stated as host truth in both
+  `proposal.md` and the runbook row. Both are documented decisions with the safety direction intact.
 
 ### Findings
 
 | Severity | Reality | Area | Finding | Evidence | Test (named, or UNTESTED) | Fix location (code / tests / spec / vault) |
 |----------|---------|------|---------|----------|---------------------------|---------------------------------------------|
-| Major | REAL | verification artifact | `verification.md` proves nothing: it is the scaffolded template (`Criterion 1 -> commit <hash> / test <name>`, `<command> -> <output>`, three unanswered promotion candidates), and `dotf spec archive` refuses on it today. | Observable: pre-flight in a `mktemp -d` copy with an otherwise passing `review.md` + `review-request.json` returns `Error: promotion candidates in verification.md are not all answered: Lesson … unanswered; ADR-worthy … unanswered; New pattern candidate … unanswered; no flag skips this check`. | UNTESTED — no test covers spec-artifact completeness; the archive pre-flight is the only gate, demonstrated refusing. | spec (`verification.md`; outside the contract set, safe to fix now) |
-| Major | REAL | acceptance criterion | AC4 was never executed. The e2e case exists (`scripts/e2e/linux.sh:179-188`, commit `35b258d`) but no run is recorded anywhere, `tasks.md`'s `make e2e-linux` box is unticked, and the reviewer cannot run it (VM e2e, developer machine only). AC4 is therefore an unproven acceptance criterion, not a verified one. | `git show 35b258d` adds only the script; `verification.md` has no test-status line; repository doctrine states VM runs never happen in CI. | UNTESTED (by construction: `make e2e-linux`). | spec (`verification.md`) + a recorded developer-machine run, or a tracked ticket if it cannot be run |
-| Major | REAL | resilience / correctness | On an **active ufw** the exposure signal silently degrades to "safe" when the `iptables` read itself fails: `readUFW` copies `ipt.inputOpen` but drops `ipt.reason`, so with a ufw allow deciding `rulePresent` the policy is never read and `check` still reports `ok` with `firewall_ok: true`. The raw iptables backend reports `unverified` on the same failure, so an active ufw is *less* safe than an iptables host — exactly the blindness #735 is about, left open on a path the proposal's Risks section denies ("a broken install, not a mode"; it names only a **missing** binary, not a failing read such as xtables-lock contention). Not a regression (before the change ufw reported no policy at all), but an unclosed hole in the feature that claims to close it. | Probe reproduced: active ufw + `ufw allow in on tailscale0 …` + `iptables -S INPUT` exit 4 → `state=rulePresent reason="" inputOpen=false outcome=ok firewall_ok=true`; the existing fixture `linux_steps_test.go:244` ("ufw host, a ufw allow decides first", `exit: {iptRead: 4}` → `rulePresent`) pins the same state. | UNTESTED — no test asserts any exposure outcome when `readIptables` errors on a ufw host. | code (`internal/host/linux_steps.go` `readUFW`) + tests |
-| Minor | REAL | message clarity / docs | On an active ufw the step message still says "**the iptables INPUT policy is ACCEPT**, so unless another firewall filters this host every port is open…" while the same step's fix names ufw. On a ufw host the "unless another firewall filters this host" escape *is* the firewall being reported, and the runbook's #691 row is keyed on that exact sentence, so an operator (or a grep) can match the wrong troubleshooting row. | Probe output: `MSG=Firewall allows port 3389; the iptables INPUT policy is ACCEPT, so unless another firewall filters this host every port is open on every interface and the tailscale0 scope restricts nothing; …` beside `FIX=as root, allow SSH first (`ufw allow <your SSH port>/tcp`) …`. | `TestUFWPolicy` asserts the **fix** strings only; message wording is UNTESTED. | code (message text) + the runbook row key |
-| Question / assumption | THEORETICAL | operator guidance | The ufw fix unconditionally tells the operator to run `ufw allow <your SSH port>/tcp` before closing the default. On a tailnet-only host that opens SSH on every interface, which the change's own doctrine ("scope everything to `tailscale0`") argues against. It matches the pre-existing iptables advice, so it is consistent rather than new — but ufw is where the scoped form is easy to write (`ufw allow in on tailscale0 to any port <SSH> proto tcp`). Confirm this is the intended wording, or scope it. | Code read of `withPolicy` (ufw branch), no reproduction of harm. | UNTESTED | code (fix text), follow-up |
+| Minor | REAL | message clarity / resilience | On an active ufw the new `policyUnread` signal is fed by **any** iptables read failure, not only a policy-read failure. When `iptables -S INPUT` succeeds and shows `-P INPUT ACCEPT` but the `ts-input` walk fails, the step reports "the INPUT policy could not be read (iptables -S ts-input: …)" and tells the operator to run `iptables -S INPUT` — the command that just worked — while the known ACCEPT policy is downgraded from `manual` (with ufw's fix) to `unverified`. Outcome is still non-ok and `firewall_ok=false`, so the safety direction is right; the diagnosis and next action are wrong. | Probe reproduced in-process: `inputOpen=true`, `policyUnread="iptables -S ts-input: exit status 4"`, `msg="…the INPUT policy could not be read (iptables -S ts-input: exit status 4)…"`, `fix="run \`iptables -S INPUT\` as root to see why it fails…"`. Reachability on a real host rests on a transient xtables-lock/backend failure of the second read only, which I did not observe. | `TestUFWPolicyUnread` covers only the `iptables -S INPUT` failure (`exit: {iptRead: 4}`); the `iptChain`-failure-with-readable-policy path is **UNTESTED** | code (`withUFWIptables`/`withPolicyUnread`: distinguish "policy unread" from "rules unread") + tests |
+| Minor | REAL | spec accuracy (contract set) | `tasks.md` ticks "Failing table test `TestUFWPolicy`; `TestManualRewriteClearsSuccess` gains the ufw rewrites", but `TestManualRewriteClearsSuccess` is byte-identical to the base — it holds only the three iptables cases. The ufw `Success=false` property it was meant to gain **is** asserted, inside `TestUFWPolicy` (`s.Success == tt.manual`), so the behavior is proven and only the bookkeeping is wrong. | `git diff 42e34ea...HEAD -- internal/host/linux_steps_test.go` shows changes at `TestIP6Policy` plus three appended tests, none in `TestManualRewriteClearsSuccess`; that func at HEAD lists `"v4 policy"`, `"v6 policy"`, `"v6 exposure"` only. | `TestUFWPolicy` (behaviour covered); the tick itself has no matching diff — **UNTESTED as written** | spec (`tasks.md`, contract set — record in `verification.md` or carry to the next spec round; do not edit under this verdict) |
 
-No `[AGENT-DRAFT]` / `[AGENT-SUGGESTION]` tags remain in the spec folder.
+No Blocker and no REAL Major. Round-1 findings are all dispositioned (applied or declined-with-reason);
+F5's decline is a taste call the human already has a recorded reason for, so I do not re-litigate it.
 
 ### Evaluator rubric
 
 | Dimension | Grade (A-D) | Rationale (one line) |
 |-----------|-------------|----------------------|
-| Correctness        | B | AC1–AC3 verified by a named test whose red-green I reproduced with two mutations; AC4 has no behavioural proof (unit simulation only), and F3 shows a path where the new signal reports safe while unread. |
-| Verification       | C | The Go test is named and reproducible, but `verification.md` carries no evidence at all, both `features.json` entries are `pending`, and AC4 never ran. |
-| Scope              | A | The diff is exactly the proposal's "What" plus the three docs the tasks item names; no creep, no opportunistic refactor (`iptPolicyFix` is a pure extraction). |
-| Reliability        | C | Setup never writes a policy and no failure path can lock an operator out; but F3 leaves one error path both unhandled and silently optimistic. |
-| Maintainability    | B | `policyRead` names the gate, `iptPolicyFix` de-hoists a literal, comments explain *why*; `withPolicy`/`withV6Policy` stay well under CC 10; the new table test is the right shape. |
-| Handoff-readiness  | C | Implementation only: verification/tasks/AC/`features.json` untouched, so the next session inherits no recorded evidence and the archive is blocked. |
+| Correctness        | B | AC1/AC2/AC3/AC5 pass by name and fail under both of my mutations; AC4 verified only by the implementer's recorded VM run; F1 is a wrong-but-safe diagnosis on one input-failure path. |
+| Verification       | B | `verification.md` names each AC, its commit and its test, and the unit half is reproducible with commands I ran; the e2e half (AC4) cannot be reproduced from this session. |
+| Scope              | A | The diff is exactly the proposal's "What" plus the three docs the tasks item names; `iptPolicyFix` is a pure extraction, the new test case is narrowed correctly, no opportunistic refactor. |
+| Reliability        | B | Setup never writes a policy and no path can lock an operator out; the policy-unread path fails closed (`unverified`, `firewall_ok=false`), with F1 as a misleading message rather than a wrong outcome. |
+| Maintainability    | B | `policyRead` names the gate and documents why ufw counts, comments explain *why*, `withPolicy`/`withV6Policy` stay far below CC 10, the table test is the right shape; `appendFix` is a small helper with one caller-pair. |
+| Handoff-readiness  | B | Spec, `features.json` and docs are filled and the promotion candidates are answered; one `tasks.md` tick overstates the diff (F2). |
+
+Rubric aggregation: no D and no C → **PASS**; the severity axis adds no Blocker and no REAL Major, so
+it does not escalate.
 
 ### Verdict
-FAIL
+PASS
 
-- Path that decides it: three **REAL Major** findings (F1 verification artifact, F2 AC4 unproven, F3 silent `ok` on an active ufw whose policy read failed). The rubric (C in Verification and Reliability, no D) alone would put this at PASS WITH GAPS, but `severity × reality` dominates, and F3/F2 are not hypothetical.
+`dotf spec archive` is **advisable** in this state once the contract digests above still hold: the
+review is fresh for `7e036d4`, the verification artifact is filled with reproducible evidence, the
+promotion candidates are answered, and the two open findings are Minors that do not gate.
 
 ### Recommended next steps
 
-**Spec set — `verification.md` (outside the contract set; safe to edit now, no re-review cost):**
-1. Fill the evidence table with the named tests actually in the change: AC1/AC2 → `TestUFWPolicy` (`incoming_allow:_both_policies_ACCEPT`, `IPV6=no_after_a_boot:_v6_ACCEPT_only`), AC3 → `TestUFWPolicy` (`incoming_deny:_both_policies_DROP`, the `inactive`/`unreadable` loop) plus `TestManualRewriteClearsSuccess`; record `go test ./internal/host/ -run 'TestUFWPolicy|TestManualRewriteClearsSuccess' -count=1` with its output.
-2. Answer the three promotion candidates (`yes: <path>` / `no: <reason>`). `dotf spec archive` refuses until they are answered — demonstrated in this review, so it is the first thing the next session will hit.
-3. AC4: run `make e2e-linux` on a developer machine and paste the five `ufw incoming …` PASS lines, or state in `verification.md` that it is deferred with a tracked ticket number. Do not leave it silent.
-4. Set both `features.json` `state`/`evidence` entries.
+**Outside the contract set (safe to apply now; disposition each in `verification.md`):**
+- F2 — add the line the tick implies: state that a ufw manual rewrite's `Success=false` is proven by
+  `TestUFWPolicy` (`s.Success == tt.manual`) rather than by `TestManualRewriteClearsSuccess`, so the
+  next reader does not look for coverage that was never added. Ticking/rewording is a contract edit only
+  if `tasks.md` itself is touched — under this verdict it must not be.
+- AC4 — paste the five `ufw incoming …` PASS lines (or point at the log) beside the `103 pass, 0 fail`
+  line, so the only criterion this reviewer could not reproduce carries its own artifact.
 
-**Code + tests — for the re-review (F3):** on an active ufw, when `readIptables` itself fails, keep `ipt.reason` instead of discarding it and make the exposure unread rather than absent (`unverified`/a note that clears `firewall_ok`), so an active ufw is never reported safer than an iptables host on the same failure. Add the fixture to `TestUFWPolicy`: active ufw, its own scoped allow, `iptables -S INPUT` exit 4 → assert the outcome is not `ok` and `linuxFirewallOK` is false. F4's message wording (and the runbook row key) can ride along or be ticketed.
+**Code + tests (follow-up ticket, not an archive gate):**
+- F1 — in `withUFWIptables`, set `policyUnread` only when the *policy* line itself was unread (the
+  `iptables -S INPUT` failure), and let a ts-input/chain failure keep the existing unverified-rules
+  behaviour with its own reason; then a readable `-P INPUT ACCEPT` still yields `manual` with ufw's fix.
+  Add the fixture to `TestUFWPolicy`: active ufw, scoped allow, `iptRead` = `-P INPUT ACCEPT …`,
+  `exit: {iptChain: 4}` → assert `manual` and the ufw fix, not "the INPUT policy could not be read".
 
-**Contract set — only on a FAIL-resolution re-review:** `proposal.md` / `tasks.md` / `features.json` text edits invalidate this verdict. Ticking the `[ ]` boxes is normalised out of the contract digests, so ticking is safe; rewriting the Risks bullet to cover a *failing* (not merely missing) iptables read is a text edit and belongs in the re-review round.
-
-**Do not archive in this state**: the gate refuses on `verification.md` today, AC4 is unproven, and F3 is a real false-safe report on the very mode the spec targets.
+**Not recommended:** re-running the adversarial review before archiving — the contract set is unchanged
+since `review-request.json` recorded its digests, and an edit to `proposal.md`, `tasks.md` or
+`features.json` would invalidate this verdict rather than strengthen it.
