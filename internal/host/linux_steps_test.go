@@ -965,6 +965,16 @@ func TestCheckForLinux(t *testing.T) {
 			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
 		},
 		{
+			name:     "iptables, an accept off loopback beside the scoped rule: manual (#736)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT ! -i lo -p tcp -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "! -i lo",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
 			name:     "iptables, a drop before two copies",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptDropFirst + iptLegacyRule + iptLegacyRule, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
@@ -1837,6 +1847,10 @@ func TestExposureShapes(t *testing.T) {
 		{"-A INPUT -p tcp -m tcp ! --sport 22 -j ACCEPT", true},
 		{"-A INPUT -p tcp -j ACCEPT", true},
 		{"-A INPUT -j ACCEPT", true},
+		// A negated loopback scope leaves every other interface open (#736 review round 2).
+		{"-A INPUT ! -i lo -p tcp -j ACCEPT", true},
+		{"-A INPUT ! -i lo+ -j ACCEPT", true},
+		{"-A INPUT ! -s 127.0.0.0/8 -j ACCEPT", true},
 		{"-A INPUT -p tcp -m tcp ! --dport 3389 -j ACCEPT", false},
 		{"-A INPUT -p tcp -m multiport ! --dports 3000:4000 -j ACCEPT", false},
 		// Clients connect from ephemeral source ports, so a source-port match
@@ -1886,7 +1900,7 @@ func TestWideAllowFix(t *testing.T) {
 	}
 	v6 := []struct{ rule, want string }{
 		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", "run `ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT` as root to delete the v6 rule (setup never writes one)"},
-		{"-A INPUT -p tcp -j ACCEPT", "run `ip6tables -D INPUT -p tcp -j ACCEPT`, after you " + fmt.Sprintf(keep, "ip6tables") + ", as root to delete the v6 rule (setup never writes one)"},
+		{"-A INPUT -p tcp -j ACCEPT", "run `ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you " + fmt.Sprintf(keep, "ip6tables")},
 	}
 	for _, tt := range v6 {
 		if got := withIP6(firewallRead{v6Foreign: []string{tt.rule}}, SetupStep{Outcome: OutcomeOK}, 3389).Fix; got != tt.want {
@@ -1908,9 +1922,9 @@ func TestIP6Exposure(t *testing.T) {
 		{name: "captured chain", onPath: true, v6: ip6Captured, want: OutcomeOK},
 		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Captured + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
 		{name: "a port-less v6 accept", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeManual,
-			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT`, after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
+			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
-			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT`, after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
+			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Captured + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
 		// A negated scope or an explicit any prefix still opens the port off
 		// the tailnet (BUG-526 review, finding 1).
