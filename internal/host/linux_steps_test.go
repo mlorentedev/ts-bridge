@@ -2181,3 +2181,39 @@ func TestUFWPolicy(t *testing.T) {
 		}
 	}
 }
+
+// TestUFWPolicyUnread pins review F3 of #735: on an active ufw whose own allow
+// decides, a failed iptables read leaves the policy unknown, so check and setup
+// must not report the host as closed.
+func TestUFWPolicyUnread(t *testing.T) {
+	newRunner := func() *recordingRunner {
+		return &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true},
+			output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + ufwScopedAllow}, exit: map[string]int{iptRead: 4}}
+	}
+	read := readLinuxFirewall(newRunner(), 3389)
+	for name, s := range map[string]SetupStep{"setup": firewallSetupStep(newRunner(), 3389), "check": firewallCheckStep(read, 3389)} {
+		if s.Outcome != OutcomeUnverified || s.Success {
+			t.Errorf("%s = %v (success %v) %q, want unverified", name, s.Outcome, s.Success, s.Message)
+		}
+		if !strings.Contains(s.Message, "INPUT policy could not be read") {
+			t.Errorf("%s message does not say the policy is unread: %q", name, s.Message)
+		}
+	}
+	if linuxFirewallOK(read) {
+		t.Error("linuxFirewallOK = true with the policy unread")
+	}
+}
+
+// TestUFWPolicyMessage pins review F4 of #735: on a ufw host the message names
+// ufw's incoming default, not a raw iptables policy another firewall may filter.
+func TestUFWPolicyMessage(t *testing.T) {
+	ok := newStep(linuxFwName, OutcomeOK, "Firewall allows TCP 3389 (ufw)", "")
+	got := withPolicy(firewallRead{backend: backendUFW, inputOpen: true}, ok)
+	if !strings.Contains(got.Message, "ufw's incoming default is allow") || strings.Contains(got.Message, "unless another firewall") {
+		t.Errorf("v4 message: %q", got.Message)
+	}
+	got6 := withV6Policy(firewallRead{backend: backendUFW, v6Open: true}, ok)
+	if !strings.Contains(got6.Message, "IPV6=no") || strings.Contains(got6.Message, "unless another firewall") {
+		t.Errorf("v6 message: %q", got6.Message)
+	}
+}
