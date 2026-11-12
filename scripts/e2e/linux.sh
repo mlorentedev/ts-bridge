@@ -180,6 +180,19 @@ ufw delete allow from 10.0.0.0/8 to any port 3389 proto tcp >/dev/null 2>&1
 ufw --force disable >/dev/null 2>&1
 apt-get -qq remove -y ufw >/dev/null 2>&1
 ok "iptables host: ufw is gone" -- '[ ! -e /usr/sbin/ufw ]'
+# A default-ACCEPT INPUT policy (#691) opens every port on every interface, so the tailscale0 scope
+# restricts nothing: setup still writes the scoped rule, reports manual, and never changes the policy.
+ok "permissive policy: the guest's INPUT policy is ACCEPT" -- 'iptables -S INPUT | grep -qx -- "-P INPUT ACCEPT"'
+ok "permissive policy: check says manual, naming the policy" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | json "\"iptables -P INPUT DROP\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"fix\"]"'
+ok "permissive policy: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "permissive policy: setup writes the scoped rule, reports manual, leaves the policy" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "$SCOPED" && iptables -S INPUT | grep -qx -- "-P INPUT ACCEPT"'
+iptables -D INPUT -i tailscale0 -p tcp --dport 3389 -j ACCEPT
+# The cases below need a closed policy; SSH and replies stay open so the harness keeps its channel.
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+iptables -P INPUT DROP
+ok "closed policy: the guest's INPUT policy is DROP" -- 'iptables -S INPUT | grep -qx -- "-P INPUT DROP"'
 ok "iptables host: setup #1 appends the rule" -- 'outcomes setup "$C" | fwstep changed'
 ok "iptables host: the rule is scoped to tailscale0, as printed" -- 'iptables -S INPUT | grep -qx -- "$SCOPED"'
 ok "iptables host: setup #2 changes nothing (the printed form agrees)" -- 'outcomes setup "$C" | fwstep ok'
