@@ -228,9 +228,14 @@ ok "v6 allow removed by the operator: check is ok again" -- 'outcomes check "$C"
 iptables -A INPUT -p tcp ! --dport 22 -j ACCEPT
 ok "v4 allow for every port but SSH: check says manual" -- 'outcomes check "$C" | fwstep manual'
 ok "v4 allow for every port but SSH: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
-ok "v4 allow for every port but SSH: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -q -- "! --dport 22 -j ACCEPT"'
+ok "v4 allow for every port but SSH: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT"'
 iptables -D INPUT -p tcp ! --dport 22 -j ACCEPT
 ok "v4 negated allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+iptables -A INPUT ! -i lo -p tcp -j ACCEPT
+ok "v4 allow off loopback: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "v4 allow off loopback: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+iptables -D INPUT ! -i lo -p tcp -j ACCEPT
+ok "v4 allow off loopback removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
 ip6tables -A INPUT -p tcp -j ACCEPT
 ok "v6 port-less allow: check says manual, with the SSH caution in the fix" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | json "\"SSH open first\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"fix\"]"'
 ok "v6 port-less allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"

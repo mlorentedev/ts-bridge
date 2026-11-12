@@ -46,10 +46,10 @@ This reverses the documented choice in `iptUnscoped` that "a rule with no port i
 
 ## Acceptance criteria
 
-- [ ] [AC1] v4: an unscoped `! --dport 22` ACCEPT, a `-p tcp -j ACCEPT` and a bare `-j ACCEPT` in INPUT are each reported `manual` by `check` and `setup`, naming the rule, with `firewall_ok` false and the SSH caution in the fix; setup deletes none of them.
-- [ ] [AC2] v6: the same three shapes in `ip6tables -S INPUT` are reported by the exposure scan (`manual`, `firewall_ok` false).
-- [ ] [AC3] Not reported: `! --dport 3389`, a `-i lo` or `-i eth0`/`-s` scoped portless allow, a conntrack-only allow, a UDP portless allow, and `--sport`-only rules; existing step outcomes are unchanged.
-- [ ] [AC4] e2e on the Linux VM: under a DROP policy, an unscoped `! --dport 22` v4 allow and a `-p tcp -j ACCEPT` v6 allow are each reported `manual` and `firewall_ok` false, then `ok` once removed.
+- [x] [AC1] v4: an unscoped `! --dport 22` ACCEPT, a `-p tcp -j ACCEPT` and a bare `-j ACCEPT` in INPUT are each reported `manual` by `check` and `setup`, naming the rule, with `firewall_ok` false and the SSH caution in the fix; setup deletes none of them.
+- [x] [AC2] v6: the same three shapes in `ip6tables -S INPUT` are reported by the exposure scan (`manual`, `firewall_ok` false).
+- [x] [AC3] Not reported: `! --dport 3389`, a `-i lo` or `-i eth0`/`-s` scoped portless allow, a conntrack-only allow, a UDP portless allow, and `--sport`-only rules; existing step outcomes are unchanged.
+- [x] [AC4] e2e on the Linux VM: under a DROP policy, an unscoped `! --dport 22` v4 allow and a `-p tcp -j ACCEPT` v6 allow are each reported `manual` and `firewall_ok` false, then `ok` once removed.
 
 ## References
 

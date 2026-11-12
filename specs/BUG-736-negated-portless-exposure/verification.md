@@ -30,7 +30,7 @@ owner: manu
 - Source ports: clients connect from ephemeral ports, so beside a negated destination port a source-port match does not narrow (`! --dport 22 --sport 1024:65535` is reported, review F2). With no destination match, only an all-negated source match (`! --sport 22`) is reported; `--sport 22` alone is not.
 - A portless unscoped allow no longer counts as the scoped rule, so `setup` appends `-i tailscale0` beside it (review F4; proposal and ADR-017 say so).
 - Removing a rule with no destination port can close SSH, so both fixes (v4 `foreignFix`, v6 `withIP6`) name the loopback, replies and SSH rules to add first; the list is shared with #691's policy fix as `keepOpenFirst`.
-- Residual: a port-less allow under a negated interface (`! -i tailscale0 -j ACCEPT`) is still not reported, because `iptPortlessCovers` treats any non-loopback negation as an unmodelled narrowing (#743).
+- Residual: a port-less allow under a negated non-loopback scope (`! -i tailscale0 -j ACCEPT`, `! -s 100.64.0.0/10 -j ACCEPT`) is still not reported on either read, because `iptPortlessCovers` reads any non-loopback negation as an unmodelled narrowing. On v4 the same rule is also outside `iptablesDecide`, so it does not make the port read as admitted either; #743 tracks it. A negated loopback scope (`! -i lo`) is reported on both reads (round-2 F1).
 
 ## Spec review round 1 (nan/deepseek-v4-flash, FAIL at d167344)
 
@@ -41,6 +41,14 @@ owner: manu
 - F5 (Minor, REAL, substring fix assertions): applied by `TestWideAllowFix`, which compares whole strings.
 - F6 (Minor, SPECULATIVE, `! --sport` over-report): declined, accepted in the proposal; an extra `manual` on a very unusual rule.
 - Question (AC4 evidence): recorded above, `make e2e-linux` at `f8ac37b`, 102/0.
+
+## Spec review round 2 (nan/deepseek-v4-flash, FAIL at 96247de)
+
+- F1 (Major, REAL, `! -i lo -p tcp -j ACCEPT` hidden on v4, so a converged host read `ok`/`firewall_ok: true`): applied. `iptScopedAllow` no longer counts a negated loopback scope, through `iptOpenNegation`. New rows: `TestExposureShapes` for `! -i lo`, `! -i lo+` and `! -s 127.0.0.0/8` on both reads, and `TestCheckForLinux/iptables,_an_accept_off_loopback_beside_the_scoped_rule:_manual_(#736)`. Red at `9869eee`. An e2e case was added for it too.
+- F2 (Minor, REAL, "as root" on the wrong clause in the v6 fix): applied. The fix now reads "run `ip6tables -D …` as root to delete the v6 rule (setup never writes one), after you keep loopback, …"; `TestWideAllowFix` and `TestIP6Exposure` are updated.
+- F3 (Minor, REAL, v4 e2e survival check was a substring match): applied, now `grep -qx` against the printed rule.
+- F4 (Minor, REAL, unticked boxes, `features.json` not replayed): applied.
+- Question (#743's scope): #743 covers non-loopback negated scopes on both reads, so F1 was fixed here, not deferred. The residual above is restated.
 
 ## Promotion candidates
 

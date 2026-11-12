@@ -307,7 +307,7 @@ func withIP6(read firewallRead, step SetupStep, port int) SetupStep {
 	step.Message += fmt.Sprintf("; %s admits TCP %d on every interface: %s", backendIP6, port, strings.Join(read.v6Foreign, "; "))
 	fix := fmt.Sprintf("run %s as root to delete the v6 rule (setup never writes one)", strings.Join(deletes, ", then "))
 	if slices.ContainsFunc(read.v6Foreign, iptAdmitsOthers) {
-		fix = fmt.Sprintf("run %s, after you %s, as root to delete the v6 rule (setup never writes one)", strings.Join(deletes, ", then "), keepOpenFirst(backendIP6))
+		fix += ", after you " + keepOpenFirst(backendIP6)
 	}
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
@@ -713,15 +713,30 @@ func iptUnscoped(input string, port int) []string {
 }
 
 // iptScopedAllow reports an interface, source or destination qualifier on an
-// allow, negated or not, or a negation of anything but a port list: a `!`
-// before a port list negates the port, not the scope (#736).
+// allow, or a negation, unless the negation leaves the rule open off the
+// tailnet: one before a port list negates the port, and one before a loopback
+// scope negates only loopback (#736).
 func iptScopedAllow(f []string) bool {
 	for i, w := range f {
-		if slices.Contains([]string{"-i", "-s", "-d"}, w) || (w == "!" && (i+1 == len(f) || !slices.Contains(iptPortFlags, f[i+1]))) {
+		if slices.Contains(iptScopeFlags, w) && !iptOpenNegation(f, i) {
 			return true
 		}
 	}
 	return false
+}
+
+// iptOpenNegation reports whether f[i], a `!` or the flag one negates, is a
+// negated port list or a negated loopback scope.
+func iptOpenNegation(f []string, i int) bool {
+	if f[i] == "!" {
+		i++
+	} else if i == 0 || f[i-1] != "!" {
+		return false
+	}
+	if i >= len(f) {
+		return false
+	}
+	return slices.Contains(iptPortFlags, f[i]) || (i+1 < len(f) && iptLoopbackScope(f[i], f[i+1]))
 }
 
 // iptExposes reports whether an ACCEPT's match admits new TCP connections on

@@ -21,5 +21,5 @@ owner: manu
 
 - [x] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`)
 - [x] `make e2e-linux`
-- [ ] features.json replays; verification.md filled; spec review committed
+- [x] features.json replays; verification.md filled; spec review committed
 - [x] PR with `Closes #736`
