@@ -48,10 +48,10 @@ owner: manu
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/REL-376-contain-ssh-bootstrap/` -> `specs/archive/REL-376-contain-ssh-bootstrap/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/REL-376-contain-ssh-bootstrap/` -> `specs/archive/REL-376-contain-ssh-bootstrap/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
 
 ## Review disposition (round 1, FAIL)
 

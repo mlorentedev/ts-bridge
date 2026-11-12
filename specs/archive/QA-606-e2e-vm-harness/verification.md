@@ -93,10 +93,10 @@ PR-Agent on #703 (head 5c0bee8):
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/QA-606-e2e-vm-harness/` -> `specs/archive/QA-606-e2e-vm-harness/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/QA-606-e2e-vm-harness/` -> `specs/archive/QA-606-e2e-vm-harness/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
 
 ## PR-Agent disposition (on `20b7e99`, after round 3)
 

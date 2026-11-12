@@ -2,40 +2,36 @@ package discover
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
 
+// TestListHeadscaleDevices_Success serves the node list a real Headscale
+// v0.29.7 returned (keys scrubbed, nothing else changed) at the
+// path Headscale serves it. The old fixture was encoded from HeadscaleDevice
+// itself, so it agreed with the decoder whatever Headscale sent (#717).
 func TestListHeadscaleDevices_Success(t *testing.T) {
-	// Mock Headscale API server.
+	payload, err := os.ReadFile("testdata/headscale-v0.29.7-nodes.json")
+	if err != nil {
+		t.Fatal(err)
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		response := []HeadscaleDevice{
-			{
-				ID:         "hs-dev-1",
-				Name:       "linux-host",
-				User:       "alice",
-				IPs:        []string{"100.64.0.1"},
-				Authorized: true,
-			},
-			{
-				ID:         "hs-dev-2",
-				Name:       "windows-host",
-				User:       "bob",
-				IPs:        []string{"100.64.0.2"},
-				Authorized: true,
-			},
+		if r.URL.Path != "/api/v1/node" {
+			http.Error(w, `{"code":5,"message":"Not Found","details":[]}`, http.StatusNotFound)
+			return
 		}
-		_ = json.NewEncoder(w).Encode(response)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
 	}))
 	defer server.Close()
 
@@ -43,19 +39,17 @@ func TestListHeadscaleDevices_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if len(devices) != 2 {
-		t.Fatalf("expected 2 devices, got %d", len(devices))
+	want := []HeadscaleDevice{
+		{ID: "1", Name: "tsb-e2e-linux", User: "tagged-devices", IPs: []string{"100.64.0.1", "fd7a:115c:a1e0::1"},
+			LastSeen: "2026-11-11T07:42:53.725122966Z", Authorized: true, Online: true},
+		{ID: "2", Name: "tsb-e2e-client", User: "tagged-devices", IPs: []string{"100.64.0.2", "fd7a:115c:a1e0::2"},
+			LastSeen: "2026-11-11T07:43:10.255774237Z", Authorized: true},
 	}
-
-	if devices[0].Name != "linux-host" {
-		t.Errorf("device[0].Name = %q, want %q", devices[0].Name, "linux-host")
+	for i := range want {
+		devices[i].ipRaw = nil
 	}
-	if devices[0].User != "alice" {
-		t.Errorf("device[0].User = %q, want %q", devices[0].User, "alice")
-	}
-	if devices[1].Name != "windows-host" {
-		t.Errorf("device[1].Name = %q, want %q", devices[1].Name, "windows-host")
+	if !reflect.DeepEqual(devices, want) {
+		t.Errorf("devices:\n got %+v\nwant %+v", devices, want)
 	}
 }
 
@@ -78,7 +72,7 @@ func TestListHeadscaleDevices_AuthFailure(t *testing.T) {
 func TestListHeadscaleDevices_Empty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode([]HeadscaleDevice{})
+		_, _ = w.Write([]byte(`{"nodes":[]}`)) // what v0.29.7 answers with no node
 	}))
 	defer server.Close()
 
@@ -88,6 +82,44 @@ func TestListHeadscaleDevices_Empty(t *testing.T) {
 	}
 	if len(devices) != 0 {
 		t.Errorf("expected 0 devices, got %d", len(devices))
+	}
+}
+
+// TestListHeadscaleDevices_RejectsAnotherShape: a body that is not a node list
+// is an error, not an empty tailnet.
+// TestListHeadscaleDevices_RejectsAnotherShape: a body that is not a node
+// list is an error, never an empty tailnet. An object without "nodes" (the old
+// guessed shape, a proxy envelope) decodes cleanly, so it needs its own check.
+func TestListHeadscaleDevices_RejectsAnotherShape(t *testing.T) {
+	for name, body := range map[string]string{
+		"top-level array":    `[{"name":"host","ip":"100.64.0.1"}]`,
+		"old devices object": `{"devices":[{"name":"host"}]}`,
+		"empty object":       `{}`,
+		"null nodes":         `{"nodes":null}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+			if _, err := ListHeadscaleDevices(context.Background(), "test-key", server.URL); err == nil || !strings.Contains(err.Error(), "parse response") {
+				t.Errorf("err = %v, want a parse error", err)
+			}
+		})
+	}
+}
+
+// TestHeadscaleNodeName: givenName (the tailnet name) wins over the
+// client-reported name, which is the fallback when givenName is empty. The
+// captured fixture has both equal, so it cannot tell them apart.
+func TestHeadscaleNodeName(t *testing.T) {
+	for _, tt := range []struct{ name, given, want string }{
+		{"laptop-a1b2", "laptop", "laptop"},
+		{"laptop", "", "laptop"},
+	} {
+		if got := (headscaleNode{Name: tt.name, GivenName: tt.given}).device().Name; got != tt.want {
+			t.Errorf("name %q givenName %q: got %q, want %q", tt.name, tt.given, got, tt.want)
+		}
 	}
 }
 
@@ -111,30 +143,6 @@ func TestListHeadscaleDevices_MissingControlURL(t *testing.T) {
 	}
 }
 
-func TestListHeadscaleDevices_ObjectWrapper(t *testing.T) {
-	// Some Headscale versions return {"devices": [...]} instead of [...].
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string][]HeadscaleDevice{
-			"devices": {
-				{Name: "wrapped-host", User: "charlie", IPs: []string{"100.64.0.3"}},
-			},
-		})
-	}))
-	defer server.Close()
-
-	devices, err := ListHeadscaleDevices(context.Background(), "test-key", server.URL)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(devices) != 1 {
-		t.Fatalf("expected 1 device, got %d", len(devices))
-	}
-	if devices[0].Name != "wrapped-host" {
-		t.Errorf("device[0].Name = %q, want %q", devices[0].Name, "wrapped-host")
-	}
-}
-
 func TestListHeadscaleDevices_Unreachable(t *testing.T) {
 	_, err := ListHeadscaleDevices(context.Background(), "test-key", "http://127.0.0.1:1")
 	if err == nil {
@@ -145,28 +153,6 @@ func TestListHeadscaleDevices_Unreachable(t *testing.T) {
 	}
 }
 
-func TestListHeadscaleDevices_StringIP(t *testing.T) {
-	// Headscale may return ip as a string instead of array.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		// Raw JSON with ip as string.
-		_, _ = w.Write([]byte(`[{"id":"s","name":"str-ip","user":"u","ip":"100.64.0.5","authorized":true}]`))
-	}))
-	defer server.Close()
-
-	devices, err := ListHeadscaleDevices(context.Background(), "test-key", server.URL)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(devices) != 1 {
-		t.Fatalf("expected 1 device, got %d", len(devices))
-	}
-	if len(devices[0].IPs) != 1 || devices[0].IPs[0] != "100.64.0.5" {
-		t.Errorf("IPs = %v, want [100.64.0.5]", devices[0].IPs)
-	}
-}
-
-// contains is a case-insensitive substring check.
 func contains(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
