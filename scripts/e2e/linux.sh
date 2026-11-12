@@ -218,6 +218,15 @@ ok "iptables host: setup #1 appends the rule" -- 'outcomes setup "$C" | fwstep c
 ok "iptables host: the rule is scoped to tailscale0, as printed" -- 'iptables -S INPUT | grep -qx -- "$SCOPED"'
 ok "iptables host: setup #2 changes nothing (the printed form agrees)" -- 'outcomes setup "$C" | fwstep ok'
 ok "iptables host: check reports firewall_ok" -- "outcomes check $C | json 'j[\"services\"][0][\"firewall_ok\"]'"
+# A native nftables table hooked on input (#739) filters traffic iptables does not read: check cannot
+# verify the port and setup writes nothing, both naming the table. Its policy accept keeps the channel.
+nft add table inet tsbe2e
+nft add chain inet tsbe2e input '{ type filter hook input priority 0; policy accept; }'
+ok "native nft table: check is unverified, naming the table" -- 'outcomes check "$C" | fwstep unverified && outcomes check "$C" | json "\"table inet tsbe2e\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"message\"]"'
+ok "native nft table: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "native nft table: setup reports manual and writes no rule" -- 'R=$(iptables -S INPUT); outcomes setup "$C" | fwstep manual && [ "$(iptables -S INPUT)" = "$R" ]'
+nft delete table inet tsbe2e
+ok "native nft table removed: check is ok again" -- 'outcomes check "$C" | fwstep ok'
 iptables -A INPUT -p tcp --dport 3389 -j ACCEPT
 ok "legacy unscoped rule: check says setup would change it" -- 'outcomes check "$C" | fwstep changed'
 ok "legacy unscoped rule: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
