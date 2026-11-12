@@ -59,6 +59,17 @@ owner: manu
 - Question (AC4): re-run at round-4 head, see AC4.
 - Question (#743): its title is recorded in the residual line above.
 
+## Spec review round 4 (nan/deepseek-v4-flash, FAIL at 575c03d; this `review.md`)
+
+- Major REAL, a positive source-port match reads as narrowing (`--sport 1:65535` or `1024:65535` beside the scoped rule reads `ok`): ticketed as #757 by the owner's decision, not fixed here. The fix changes AC3's contract clause, which would need a fifth round; the owner chose to land this change and track the gap. Until #757 lands, `host check` can report `ok` on a host that admits the port through a positive source-port range.
+- Major REAL, v4 reads a negated scope as the operator's scope: deferred to #743 (open), as the review itself disposes. Pre-existing, not widened here.
+- Minor REAL, AC3 lists "`--sport`-only rules" as unreported although `! --sport 22` is reported: folded into #757, which rewrites the same clause.
+- Minor REAL, round 3 artifacts untracked: already committed (`review-round3.md`, `review-request-round3.json` are in the branch).
+- Minor REAL, `--dports 22,3389` fix text without the SSH caution: #745 (open).
+- Minor THEORETICAL, `-d 0.0.0.0/0` read as a scope on v4: declared in Risks; no change.
+
+This spec does not archive on this `review.md` (FAIL). It archives after #757 changes AC3 and a review of the new contract passes.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? no: lesson-055 already records the gap and is updated to say it is closed.
