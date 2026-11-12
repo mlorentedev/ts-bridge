@@ -1,7 +1,7 @@
 ---
 id: "BUG-526-tailscaled-firewall-modes"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-11-09"
 issue: "mlorentedev/ts-bridge#526"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
