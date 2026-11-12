@@ -1999,7 +1999,7 @@ func TestPermissiveInputPolicy(t *testing.T) {
 				}
 				// Closing the policy without loopback and replies cuts local DNS and
 				// tailscaled's own control connection, and with it the SSH it kept.
-				for _, keep := range []string{"-i lo -j ACCEPT", "ESTABLISHED,RELATED -j ACCEPT", "--dport 22 -j ACCEPT"} {
+				for _, keep := range []string{"-i lo -j ACCEPT", "ESTABLISHED,RELATED -j ACCEPT", "--dport <your SSH port> -j ACCEPT", "another firewall"} {
 					if s.want == OutcomeManual && !strings.Contains(s.step.Fix, keep) {
 						t.Errorf("%s fix %q closes the policy without keeping %q open", s.name, s.step.Fix, keep)
 					}
