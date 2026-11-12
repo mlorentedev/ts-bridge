@@ -70,6 +70,8 @@ owner: manu
 
 Merging master brought #720's jumped-chain v6 walk, which pinned a port-less accept in a chain as the operator's posture. This change reads it with the same predicate as INPUT, so that row now expects the rule reported (`TestIP6Jumps/a_port-less_accept_in_a_chain_is_reported`), which is option A of #753, decided by the owner.
 
+`make e2e-linux` on the merge head a8d2121 (#720's jumped-chain block and this change's blocks together): 126 pass, 0 fail.
+
 This spec does not archive on this `review.md` (FAIL). It archives after #757 changes AC3 and a review of the new contract passes.
 
 ## Promotion candidates
