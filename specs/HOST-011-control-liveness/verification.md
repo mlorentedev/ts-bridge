@@ -55,6 +55,27 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 
 PR #719 carries `Closes #565`. The spec review's Minor (the PR was unnamed here, and `tasks.md` keeps its PR box unticked) is answered by this section; `tasks.md` stays as reviewed.
 
+## Round 2 (spec review at 32b10fb, PASS) and what changed after round 1
+
+Round 1 (`review-round1.md`) passed 7ce4b45. Commits after it, answering round-1 F1-F3 and the PR reviewers:
+
+- 23221b8: each `Self.Online` read is bounded by `controlReadTimeout` (5 s) and a timeout counts as offline (`TestWatchControlOnline_BoundsEachRead`, red before the fix); the poller starts whatever the IPN bus does (`TestWatchControl_PollsSelfOnline`); `mesh_health.sh` polls every 1 s and rejects a late answer. Mesh e2e on 23221b8: 5 pass, 0 fail, 503 after 24 s, 200 after 9 s.
+- 67da1c1: `scripts/tests/test-e2e-probe.sh` runs `mesh_health.sh` against fake endpoints in the `hygiene` job.
+- b26ec4b (after round 2, test only): `TestWatchServeControl_PollsThroughTheEntryPoint` drives `watchServeControl` with a real `*local.Client` on an absent socket; replacing the `watchControl` call with nothing turns it red (checked).
+
+`features.json` f1-f3 evidence still names d308e1a; their commands pass at the head, and the contract set stays as reviewed.
+
+Round-2 dispositions:
+
+| Finding | Class | Disposition |
+|---|---|---|
+| F1 outer hop `watchServeControl` unpinned | REAL | Applied in b26ec4b |
+| F2 `mesh_outage_case` has no shim case | REAL | Ticketed #730 |
+| F3 this file described d308e1a | REAL | Applied: this section |
+| F4 40 s budget near the worst case | THEORETICAL | Declined: measured 20 s and 24 s; the bound is the AC, and a slow guest shows as a FAIL with the elapsed time, not a silent pass |
+| F5 health address duplicated in two e2e files | SPECULATIVE | Ticketed with F2 in #730 |
+| F6 `BusWatcher` exported for a seam; `controlPollInterval` blocks `t.Parallel` | THEORETICAL | Declined: source-compatible, and `cmd/cli` runs no parallel tests; revisit if it does |
+
 ## Archive checklist
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
