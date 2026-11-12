@@ -277,14 +277,14 @@ func withPolicy(read firewallRead, step SetupStep) SetupStep {
 		return step
 	}
 	step.Message += fmt.Sprintf("; the INPUT policy is ACCEPT, so every port is open on every interface and the %s scope restricts nothing", tailnetInterface)
+	if step.Outcome != OutcomeOK && step.Outcome != OutcomeChanged {
+		return step // an unverified or failed step keeps its own fix; only the message gains the note
+	}
 	fix := "enable a host firewall, or allow SSH and then run `iptables -P INPUT DROP` as root (persist it with your distribution's iptables service)"
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}
-	step.Fix = fix
-	if step.Outcome == OutcomeOK || step.Outcome == OutcomeChanged {
-		step.Outcome = OutcomeManual
-	}
+	step.Outcome, step.Fix = OutcomeManual, fix
 	return step
 }
 
