@@ -275,7 +275,7 @@ func linuxFirewallOK(fw firewallRead) bool {
 }
 
 // withPolicy reports a permissive INPUT policy on an iptables host (#691): a
-// converged or repaired step becomes manual, since the scoped rule restricts
+// converged, repaired or already manual step gains the fix and is manual (#733), since the scoped rule restricts
 // nothing while the policy admits every port. Setup never changes the policy:
 // a DROP without an SSH allow can lock the operator out.
 func withPolicy(read firewallRead, step SetupStep) SetupStep {
@@ -283,7 +283,7 @@ func withPolicy(read firewallRead, step SetupStep) SetupStep {
 		return step
 	}
 	step.Message += fmt.Sprintf("; the iptables INPUT policy is ACCEPT, so unless another firewall filters this host every port is open on every interface and the %s scope restricts nothing", tailnetInterface)
-	if step.Outcome != OutcomeOK && step.Outcome != OutcomeChanged {
+	if step.Outcome == OutcomeUnverified || step.Outcome == OutcomeFailed {
 		return step // an unverified or failed step keeps its own fix; only the message gains the note
 	}
 	fix := "enable a host firewall (ufw), or, as root, keep loopback, replies and SSH open first " +
