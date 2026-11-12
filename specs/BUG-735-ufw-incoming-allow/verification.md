@@ -11,32 +11,32 @@ owner: manu
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
-
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [x] AC1 -> commit `c8b5a57` / `TestUFWPolicy/incoming_allow:_both_policies_ACCEPT` (fix names `ufw allow <your SSH port>/tcp` and `ufw default deny incoming`, never `-P INPUT DROP`; `linuxFirewallOK` false; `Success` false)
+- [x] AC2 -> commit `c8b5a57` / `TestUFWPolicy/IPV6=no_after_a_boot:_v6_ACCEPT_only` (fix names `IPV6=yes` and `ufw reload`)
+- [x] AC3 -> `TestUFWPolicy/incoming_deny:_both_DROP`, the inactive and unreadable loop in `TestUFWPolicy`, `TestIP6Policy` (inactive ufw unchanged), `TestManualRewriteClearsSuccess`; review round 1 F3: commit `f66786a` / `TestUFWPolicyUnread`
+- [ ] AC4 -> `scripts/e2e/linux.sh` "ufw incoming allow" block (commit `35b258d`) / `make e2e-linux`: E2E_RESULT
+- [x] AC5 -> commit `f66786a` / `TestUFWPolicyMessage`
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `go test -race ./...` -> exit 0, every package ok
+- `golangci-lint run` and `GOOS=linux golangci-lint run` -> 0 issues
+- `make e2e-linux` -> 103 pass, 0 fail on `35b258d` (round 1); E2E_RESULT
+- No regressions in existing test suite: yes
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
-
--
--
+- The kernel policy, not `ufw status verbose`, is the signal (deviation from the issue). Probed on the e2e guest, ufw 0.36.2: `deny (incoming)` -> `-P INPUT DROP` on v4 and v6; `allow (incoming)` -> ACCEPT on both; inactive -> ACCEPT; `IPV6=no` + reload leaves the v6 policy as it was. No new process, and the `IPV6=no` case is covered.
+- On ufw the fix names ufw's commands, since ufw rewrites a raw `-P` on reload.
+- Review round 1, F3 (applied, `f66786a`): an active ufw whose `iptables -S INPUT` fails while its own allow decides is `unverified` with the read's error and `firewall_ok` false. Before, it read `ok`.
+- Review round 1, F4 (applied, `f66786a`): on ufw the note names ufw's incoming default (and `IPV6=no` for v6) instead of "unless another firewall filters this host"; the runbook row is keyed on that wording.
+- Review round 1, F5 (declined): the fix keeps `ufw allow <your SSH port>/tcp` unscoped. A host whose operator reaches SSH over the LAN would be locked out by a tailscale0-only allow followed by `default deny incoming`; the advice matches #691's iptables fix. An operator who wants SSH on the tailnet only can scope it.
 
 ## Promotion candidates
 
-Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
-
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? no: the policy-mirrors-default fact is recorded in ADR-017 Amendment B and the runbook row, and the bug shape is #691's
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-017 Amendment B carries the line
+- [x] New pattern candidate for `00_meta/patterns/`? no: single project
 
 ## Archive checklist
 
