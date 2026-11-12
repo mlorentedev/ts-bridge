@@ -2100,3 +2100,19 @@ func TestPolicyFixOnManualStep(t *testing.T) {
 		}
 	}
 }
+
+// TestManualRewriteClearsSuccess pins that every rewrite of an ok step to
+// manual also clears the legacy Success, so setup warns and its JSON agrees.
+func TestManualRewriteClearsSuccess(t *testing.T) {
+	ok := newStep("Firewall configuration", OutcomeOK, "Firewall allows TCP 3389", "")
+	cases := map[string]SetupStep{
+		"v4 policy":   withPolicy(firewallRead{inputOpen: true, backend: backendIPT}, ok),
+		"v6 policy":   withV6Policy(firewallRead{v6Open: true, backend: backendIPT}, ok),
+		"v6 exposure": withIP6(firewallRead{v6Foreign: []string{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"}, backend: backendIPT}, ok, 3389),
+	}
+	for name, got := range cases {
+		if got.Outcome != OutcomeManual || got.Success {
+			t.Errorf("%s: outcome %s success %v, want manual and false", name, got.Outcome, got.Success)
+		}
+	}
+}
