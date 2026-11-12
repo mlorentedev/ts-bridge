@@ -204,6 +204,9 @@ type firewallRead struct {
 	// every port is open on every interface, so the tailscale0 scope restricts
 	// nothing (#691). Set by the iptables backend only.
 	inputOpen bool
+	// v6Open means ip6tables' INPUT policy is ACCEPT: every port is open on
+	// every IPv6 address (#733). Used on the iptables backend only.
+	v6Open bool
 }
 
 // source names the tool whose rules decided the read, for messages; backend

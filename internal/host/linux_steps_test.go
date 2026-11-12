@@ -1793,6 +1793,9 @@ func TestReadIptablesCapturedModes(t *testing.T) {
 const (
 	ip6Read      = "ip6tables -S INPUT"
 	ip6Captured  = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	// ip6Closed is the captured chain under a DROP policy, so the exposure rows
+	// below read only the rules, not the policy (#733).
+	ip6Closed = "-P INPUT DROP\n-A INPUT -j ts-input\n"
 	ip6Unscoped  = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
 	ip6DeleteFix = "ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
 )
@@ -1810,19 +1813,19 @@ func TestIP6Exposure(t *testing.T) {
 		message string
 		fix     string // the -D fix a manual step names; ip6DeleteFix when empty
 	}{
-		{name: "captured chain", onPath: true, v6: ip6Captured, want: OutcomeOK},
-		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Captured + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
-		{name: "a port-less v6 accept is the operator's posture", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeOK},
-		{name: "an unscoped v6 allow", onPath: true, v6: ip6Captured + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
+		{name: "captured chain", onPath: true, v6: ip6Closed, want: OutcomeOK},
+		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Closed + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
+		{name: "a port-less v6 accept is the operator's posture", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeOK},
+		{name: "an unscoped v6 allow", onPath: true, v6: ip6Closed + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
 		// A negated scope or an explicit any prefix still opens the port off
 		// the tailnet (BUG-526 review, finding 1).
-		{name: "a v6 allow on every interface but tailscale0", onPath: true, v6: ip6Captured + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+		{name: "a v6 allow on every interface but tailscale0", onPath: true, v6: ip6Closed + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
 			message: "! -i tailscale0", fix: "ip6tables -D INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
-		{name: "a v6 allow from any source", onPath: true, v6: ip6Captured + "-A INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+		{name: "a v6 allow from any source", onPath: true, v6: ip6Closed + "-A INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
 			message: "-s ::/0", fix: "ip6tables -D INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
-		{name: "a v6 allow to any destination", onPath: true, v6: ip6Captured + "-A INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+		{name: "a v6 allow to any destination", onPath: true, v6: ip6Closed + "-A INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
 			message: "-d ::/0", fix: "ip6tables -D INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
-		{name: "a v6 allow for one LAN prefix is the operator's scope", onPath: true, v6: ip6Captured + "-A INPUT -s 2001:db8::/32 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
+		{name: "a v6 allow for one LAN prefix is the operator's scope", onPath: true, v6: ip6Closed + "-A INPUT -s 2001:db8::/32 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
 		{name: "v6 read fails", onPath: true, v6Fails: true, want: OutcomeOK, message: ip6Read},
 		{name: "no ip6tables", want: OutcomeOK},
 	}
@@ -2009,5 +2012,75 @@ func TestPermissiveInputPolicy(t *testing.T) {
 				t.Errorf("linuxFirewallOK = %v, want %v", got, want)
 			}
 		})
+	}
+}
+
+// TestIP6Policy pins the v6 INPUT policy on an iptables host (#733): ACCEPT
+// opens every port on every IPv6 address, so a converged or repaired step turns
+// manual, an unverified or failed one gains only the note, and setup never
+// changes the policy.
+func TestIP6Policy(t *testing.T) {
+	const scopedRule = "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	const v4Closed = "-P INPUT DROP\n-A INPUT -j ts-input\n"
+	tests := []struct {
+		name         string
+		v4, v6       string
+		check, setup Outcome
+		v6Fix        bool // the fix names `ip6tables -P INPUT DROP`
+		v4Fix        bool // the fix names `iptables -P INPUT DROP` too
+	}{
+		{"v4 DROP, v6 ACCEPT, rule present", v4Closed + scopedRule, ip6Captured, OutcomeManual, OutcomeManual, true, false},
+		{"v4 DROP, v6 ACCEPT, rule absent: setup adds it and reports manual", v4Closed, ip6Captured, OutcomeManual, OutcomeManual, true, false},
+		{"v4 DROP, v6 DROP", v4Closed + scopedRule, ip6Closed, OutcomeOK, OutcomeOK, false, false},
+		{"both ACCEPT: one manual step naming both policies", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n" + scopedRule, ip6Captured, OutcomeManual, OutcomeManual, true, true},
+		{"an unfollowable v4 jump keeps its outcome", "-P INPUT DROP\n-A INPUT -i eth0 -j ts-input\n", ip6Captured, OutcomeUnverified, OutcomeFailed, false, false},
+		{"a multi-line comment cannot forge the v6 policy", v4Closed + scopedRule, ip6Closed + "-A INPUT -m comment --comment \"x\n-P INPUT ACCEPT\ny\" -j LOG\n", OutcomeOK, OutcomeOK, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "ip6tables": true},
+					output: map[string]string{iptRead: tt.v4, iptChain: tsInputNoAccept, ip6Read: tt.v6}}
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.Contains(c, " -P ") }) {
+				t.Errorf("setup changed a policy: %v", r.calls)
+			}
+			read := readLinuxFirewall(newRunner(), 3389)
+			check := firewallCheckStep(read, 3389)
+			v6Open := strings.HasPrefix(tt.v6, "-P INPUT ACCEPT")
+			for _, s := range []struct {
+				name string
+				step SetupStep
+				want Outcome
+			}{{"setup", setup, tt.setup}, {"check", check, tt.check}} {
+				if s.step.Outcome != s.want {
+					t.Errorf("%s = %v %q, want %v", s.name, s.step.Outcome, s.step.Message, s.want)
+				}
+				if names := strings.Contains(s.step.Message, "ip6tables INPUT policy is ACCEPT"); names != v6Open {
+					t.Errorf("%s message %q: names the v6 policy = %v, want %v", s.name, s.step.Message, names, v6Open)
+				}
+				if got := strings.Contains(s.step.Fix, "`ip6tables -P INPUT DROP`"); got != tt.v6Fix {
+					t.Errorf("%s fix %q: names the v6 DROP = %v, want %v", s.name, s.step.Fix, got, tt.v6Fix)
+				}
+				if got := strings.Contains(s.step.Fix, "`iptables -P INPUT DROP`"); got != tt.v4Fix {
+					t.Errorf("%s fix %q: names the v4 DROP = %v, want %v", s.name, s.step.Fix, got, tt.v4Fix)
+				}
+				for _, keep := range []string{"`ip6tables -A INPUT -i lo -j ACCEPT`", "`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`", "`ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`", "IPv6 is disabled"} {
+					if tt.v6Fix && !strings.Contains(s.step.Fix, keep) {
+						t.Errorf("%s fix %q closes the v6 policy without %q", s.name, s.step.Fix, keep)
+					}
+				}
+			}
+			if got, want := linuxFirewallOK(read), tt.check == OutcomeOK; got != want {
+				t.Errorf("linuxFirewallOK = %v, want %v", got, want)
+			}
+		})
+	}
+	// ufw sets its own v6 default when enabled: the v6 policy is not read there.
+	ufw := withIP6(firewallRead{backend: backendUFW, v6Open: true}, SetupStep{Outcome: OutcomeOK}, 3389)
+	if ufw.Outcome != OutcomeOK || ufw.Fix != "" || ufw.Message != "" {
+		t.Errorf("a ufw host's step changed: %+v", ufw)
 	}
 }
