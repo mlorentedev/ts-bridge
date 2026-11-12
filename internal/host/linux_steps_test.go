@@ -2078,10 +2078,10 @@ func TestIP6Policy(t *testing.T) {
 			}
 		})
 	}
-	// ufw sets its own v6 default when enabled: the v6 policy is not read there.
-	ufw := withIP6(firewallRead{backend: backendUFW, v6Open: true}, SetupStep{Outcome: OutcomeOK}, 3389)
+	// An inactive ufw already reports itself as off: its open policy is that same fact (#735).
+	ufw := withIP6(firewallRead{backend: backendUFW, ufwInactive: true, v6Open: true}, SetupStep{Outcome: OutcomeOK}, 3389)
 	if ufw.Outcome != OutcomeOK || ufw.Fix != "" || ufw.Message != "" {
-		t.Errorf("a ufw host's step changed: %+v", ufw)
+		t.Errorf("an inactive ufw host's step changed: %+v", ufw)
 	}
 }
 
@@ -2113,6 +2113,71 @@ func TestManualRewriteClearsSuccess(t *testing.T) {
 	for name, got := range cases {
 		if got.Outcome != OutcomeManual || got.Success {
 			t.Errorf("%s: outcome %s success %v, want manual and false", name, got.Outcome, got.Success)
+		}
+	}
+}
+
+// TestUFWPolicy pins #735: an active ufw writes the kernel's INPUT policies
+// from its incoming default, so an ACCEPT policy there restricts nothing, as
+// on an iptables host. The fix names ufw's own commands, never a raw -P.
+func TestUFWPolicy(t *testing.T) {
+	policy := func(p string) string { return strings.Replace(ufwHostInput, "-P INPUT DROP", "-P INPUT "+p, 1) }
+	runner := func(status, v4, v6 string, fail bool) *recordingRunner {
+		r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true, "ip6tables": true},
+			output: map[string]string{ufwStatus: status, ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: v4, iptChain: tsInputNoAccept, ip6Read: "-P INPUT " + v6 + "\n-A INPUT -j ts-input\n"}}
+		if fail {
+			r.fail = map[string]bool{ufwStatus: true}
+		}
+		return r
+	}
+	steps := func(status, v4, v6 string, fail bool) (setup, check SetupStep, ok bool) {
+		read := readLinuxFirewall(runner(status, v4, v6, fail), 3389)
+		return firewallSetupStep(runner(status, v4, v6, fail), 3389), firewallCheckStep(read, 3389), linuxFirewallOK(read)
+	}
+	tests := []struct {
+		name     string
+		v4, v6   string
+		manual   bool
+		fixHas   []string
+		fixLacks []string
+	}{
+		{"incoming allow: both policies ACCEPT", "ACCEPT", "ACCEPT", true, []string{"`ufw allow <your SSH port>/tcp`", "`ufw default deny incoming`", "`IPV6=yes`", "`ufw reload`"}, []string{"-P INPUT DROP"}},
+		{"IPV6=no after a boot: v6 ACCEPT only", "DROP", "ACCEPT", true, []string{"`IPV6=yes`", "`ufw reload`"}, []string{"-P INPUT DROP"}},
+		{"incoming deny: both DROP", "DROP", "DROP", false, nil, []string{"ufw default deny incoming", "IPV6=yes"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setup, check, ok := steps(ufwActive, policy(tt.v4), tt.v6, false)
+			for _, s := range []SetupStep{setup, check} {
+				if (s.Outcome == OutcomeManual) != tt.manual || s.Success == tt.manual {
+					t.Errorf("outcome %v success %v, want manual=%v: %q", s.Outcome, s.Success, tt.manual, s.Message)
+				}
+				for _, want := range tt.fixHas {
+					if !strings.Contains(s.Fix, want) {
+						t.Errorf("fix lacks %q: %s", want, s.Fix)
+					}
+				}
+				for _, bad := range tt.fixLacks {
+					if strings.Contains(s.Fix, bad) {
+						t.Errorf("fix names %q: %s", bad, s.Fix)
+					}
+				}
+			}
+			if ok == tt.manual {
+				t.Errorf("linuxFirewallOK = %v, want %v", ok, !tt.manual)
+			}
+		})
+	}
+	// An inactive or unreadable ufw keeps what it reported with closed policies.
+	for _, c := range []struct {
+		name   string
+		status string
+		fail   bool
+	}{{"inactive", "Status: inactive\n", false}, {"unreadable", "", true}} {
+		openSetup, openCheck, _ := steps(c.status, policy("ACCEPT"), "ACCEPT", c.fail)
+		shutSetup, shutCheck, _ := steps(c.status, policy("DROP"), "DROP", c.fail)
+		if openSetup.Outcome != shutSetup.Outcome || openCheck.Outcome != shutCheck.Outcome || openSetup.Fix != shutSetup.Fix || openCheck.Fix != shutCheck.Fix {
+			t.Errorf("%s ufw changed with open policies: setup %v -> %v, check %v -> %v", c.name, shutSetup.Outcome, openSetup.Outcome, shutCheck.Outcome, openCheck.Outcome)
 		}
 	}
 }
