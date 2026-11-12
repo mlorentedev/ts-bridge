@@ -734,22 +734,34 @@ func iptExposes(f []string, port int) bool {
 	return iptPortCovers(f, port) || iptExcludesOthers(f, port)
 }
 
-// iptExcludesOthers reports a TCP rule whose every port match is negated and
-// none of whose negated destination lists holds port, such as `! --dport 22`:
-// it admits port from every client but those it names.
+// iptExcludesOthers reports a TCP rule that admits port from every client but
+// those it names, such as `! --dport 22`. With a destination port match, each
+// one must be negated and leave port out; a source-port match beside it does
+// not narrow, since clients connect from ephemeral ports (#736 review). With
+// none, every source-port match must be negated (`! --sport 22`).
 func iptExcludesOthers(f []string, port int) bool {
 	if iptFlag(f, "-p") != protoTCP {
 		return false
 	}
+	flags := iptDestPortFlags
+	if !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) }) {
+		flags = iptPortFlags
+	}
 	for i, w := range f {
-		if !slices.Contains(iptPortFlags, w) {
-			continue
-		}
-		if i == 0 || f[i-1] != "!" || i+1 == len(f) || (slices.Contains(iptDestPortFlags, w) && portListHas(f[i+1], port)) {
+		if slices.Contains(flags, w) && !iptExcludes(f, i, port) {
 			return false
 		}
 	}
 	return true
+}
+
+// iptExcludes reports whether the port match at f[i] is negated and, for a
+// destination list, leaves port out.
+func iptExcludes(f []string, i, port int) bool {
+	if i == 0 || f[i-1] != "!" || i+1 == len(f) {
+		return false
+	}
+	return !slices.Contains(iptDestPortFlags, f[i]) || !portListHas(f[i+1], port)
 }
 
 // iptMatchesPort reports whether a rule's match, whatever its target, applies
@@ -1176,10 +1188,13 @@ func foreignFix(read firewallRead) string {
 	return fix
 }
 
-// iptAdmitsOthers reports an allow that names no destination port, so it admits
+// iptAdmitsOthers reports an iptables allow that names no destination port, so it admits
 // every port or every port but some: removing it may close SSH (#736).
 func iptAdmitsOthers(line string) bool {
 	f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+	if len(f) == 0 || f[0] != "-A" {
+		return false // a ufw line names its port in its own syntax
+	}
 	return !slices.ContainsFunc(iptDestPortFlags, func(flag string) bool { return iptFlag(f, flag) != "" })
 }
 

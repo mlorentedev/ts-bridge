@@ -27,9 +27,20 @@ owner: manu
 
 - `iptablesDecide` is unchanged: it already counts a port-less ACCEPT as admitting the port; only the exposure reads were blind.
 - v4 scope: `iptHasScope` treats any `!` as a scope, which hid `! --dport 22`. The exposure read uses `iptScopedAllow`, where a `!` before a port flag negates the port, not the scope. The deny path keeps `iptHasScope`.
-- A negated source port (`! --sport 22`) counts as exposure: client source ports are ephemeral, so it admits nearly every client. A positive source port still narrows.
+- Source ports: clients connect from ephemeral ports, so beside a negated destination port a source-port match does not narrow (`! --dport 22 --sport 1024:65535` is reported, review F2). With no destination match, only an all-negated source match (`! --sport 22`) is reported; `--sport 22` alone is not.
+- A portless unscoped allow no longer counts as the scoped rule, so `setup` appends `-i tailscale0` beside it (review F4; proposal and ADR-017 say so).
 - Removing a rule with no destination port can close SSH, so both fixes (v4 `foreignFix`, v6 `withIP6`) name the loopback, replies and SSH rules to add first; the list is shared with #691's policy fix as `keepOpenFirst`.
 - Residual: a port-less allow under a negated interface (`! -i tailscale0 -j ACCEPT`) is still not reported, because `iptPortlessCovers` treats any non-loopback negation as an unmodelled narrowing (#743).
+
+## Spec review round 1 (nan/deepseek-v4-flash, FAIL at d167344)
+
+- F1 (Major, REAL, ufw lines given the iptables SSH caution): applied. `iptAdmitsOthers` takes only `-A` lines; `TestWideAllowFix` pins the whole fix for `ufw allow 3389`, `ufw allow 22,3389/tcp`, a port-naming iptables rule, a port-less one, and both v6 shapes. Red at `11c2906` before the fix.
+- F2 (Major, REAL, `! --dport 22 --sport 1024:65535` missed): applied, see Decisions. The `TestExposureShapes` row now expects it reported; `--dport 22 ! --sport 22` added as not reported.
+- F3 (Major, REAL, empty `verification.md`, unticked tasks): the review read `d167344`, one commit before this file was filled at `cdf6ed0`; `tasks.md` boxes now ticked.
+- F4 (Minor, REAL, the `scoped` flip undocumented): applied in `proposal.md` and ADR-017.
+- F5 (Minor, REAL, substring fix assertions): applied by `TestWideAllowFix`, which compares whole strings.
+- F6 (Minor, SPECULATIVE, `! --sport` over-report): declined, accepted in the proposal; an extra `manual` on a very unusual rule.
+- Question (AC4 evidence): recorded above, `make e2e-linux` at `f8ac37b`, 102/0.
 
 ## Promotion candidates
 

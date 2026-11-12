@@ -24,12 +24,12 @@ On v4 the miss is worse than silence: `iptablesDecide` already counts a portless
 
 One predicate, `iptExposes(f, port)`, used by both exposure reads (`iptUnscoped` for v4 INPUT, `ip6Exposed` for v6 INPUT) in place of `iptPortCovers`:
 
-- a rule with a port flag exposes the port when it names it (today's `iptPortCovers`), or, for a TCP rule, when every port match it carries is negated and no negated destination list holds the port (`! --dport 22`, `! --sport 22`);
+- a rule with a port flag exposes the port when it names it (today's `iptPortCovers`), or, for a TCP rule, when every destination port match is negated and none holds the port (`! --dport 22`; a source-port match beside it does not narrow, since clients connect from ephemeral ports), or, with no destination match, when every source-port match is negated (`! --sport 22`);
 - a rule with no port flag exposes the port when `iptPortlessCovers` already says it matches every TCP port (it rejects conntrack, state, limit and other narrowings it does not model).
 
 The existing scope tests stay: loopback, and an interface, source or destination qualifier (v4 `iptHasScope`, v6 `ip6Narrowed`), still exclude a rule. Such rules are reported as `manual` (foreign: never deleted by setup), and `firewall_ok` is false. `iptablesDecide` is unchanged: whether the tailnet reaches the port is a separate question from whether anything else does.
 
-Removing such a rule can close SSH, so the fix for a rule with no destination port (v4 and v6) adds the loopback, replies and SSH rules to keep first, the same list #691's policy fix gives (shared as `keepOpenFirst`).
+Such a rule is no longer the scoped rule either: where it was the only allow, `setup` now appends its own `-i tailscale0` rule, so the host is correct once the operator removes the wide one. Removing such a rule can close SSH, so the fix for a rule with no destination port (v4 and v6) adds the loopback, replies and SSH rules to keep first, the same list #691's policy fix gives (shared as `keepOpenFirst`).
 
 This reverses the documented choice in `iptUnscoped` that "a rule with no port in it is the operator's posture": an unscoped TCP-wide ACCEPT voids the scope exactly as a permissive policy does, and #691 decided that is reported.
 
