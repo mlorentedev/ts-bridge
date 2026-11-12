@@ -2067,7 +2067,7 @@ func TestIP6Policy(t *testing.T) {
 				if got := strings.Contains(s.step.Fix, "`iptables -P INPUT DROP`"); got != tt.v4Fix {
 					t.Errorf("%s fix %q: names the v4 DROP = %v, want %v", s.name, s.step.Fix, got, tt.v4Fix)
 				}
-				for _, keep := range []string{"`ip6tables -A INPUT -i lo -j ACCEPT`", "`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`", "`ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`", "IPv6 is disabled"} {
+				for _, keep := range []string{"`ip6tables -A INPUT -i lo -j ACCEPT`", "`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`", "`ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`", "`ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`", "IPv6 is disabled"} {
 					if tt.v6Fix && !strings.Contains(s.step.Fix, keep) {
 						t.Errorf("%s fix %q closes the v6 policy without %q", s.name, s.step.Fix, keep)
 					}
