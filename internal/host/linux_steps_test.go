@@ -1669,7 +1669,10 @@ func TestReadIptablesUnscoped(t *testing.T) {
 		{"a negated tailnet interface does not admit the tailnet", iptEmpty + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
 		{"a negated source does not admit the tailnet", iptEmpty + "-A INPUT ! -s 100.64.0.0/10 -p tcp -m tcp --dport 3389 -j ACCEPT\n", 0, 0, false},
 		{"a legacy copy beside an eth1 rule is not scoped", iptEmpty + "-A INPUT -i eth1 -p tcp -m tcp --dport 3389 -j ACCEPT\n" + iptLegacyRule, 1, 0, false},
-		{"a port-less accept is the operator's posture", iptEmpty + "-A INPUT -p tcp -j ACCEPT\n", 0, 0, true},
+		// An unscoped port-less accept opens every port on every interface: it is
+		// reported, never deleted, and is not the scoped rule (#736).
+		{"a port-less accept is foreign", iptEmpty + "-A INPUT -p tcp -j ACCEPT\n", 0, 1, false},
+		{"an accept for every port but SSH is foreign", iptEmpty + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", 0, 1, false},
 		{"another port", iptEmpty + "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT\n", 0, 0, false},
 		{"a drop is not an allow", iptDropFirst, 0, 0, false},
 		{"ts-input admits the tailnet", iptEmpty + iptLegacyRule, 1, 0, true},
@@ -1800,6 +1803,47 @@ const (
 // TestIP6Exposure pins the v6 read as an exposure scan (#526): an unscoped v6
 // allow for the port is reported and never deleted; anything else in v6, or no
 // v6 read at all, leaves the IPv4 outcome as it was.
+// TestExposureShapes pins which INPUT rules both exposure reads (v4 and v6)
+// count as admitting the port off the tailnet: a rule naming it, one that
+// excludes only other ports, and one with no port at all (#736). Scoped,
+// loopback, narrowed and non-TCP rules are not counted.
+func TestExposureShapes(t *testing.T) {
+	tests := []struct {
+		rule string
+		want bool
+	}{
+		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m multiport ! --dports 22,80 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --sport 22 -j ACCEPT", true},
+		{"-A INPUT -p tcp -j ACCEPT", true},
+		{"-A INPUT -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 3389 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m multiport ! --dports 3000:4000 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 --sport 1024:65535 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --sport 22 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -j DROP", false},
+		{"-A INPUT -p udp -m udp ! --dport 53 -j ACCEPT", false},
+		{"-A INPUT -p udp -j ACCEPT", false},
+		{"-A INPUT -i lo -j ACCEPT", false},
+		{"-A INPUT -i eth0 -j ACCEPT", false},
+		{"-A INPUT -i tailscale0 -p tcp -m tcp ! --dport 22 -j ACCEPT", false},
+		{"-A INPUT -s 10.0.0.0/8 -p tcp -j ACCEPT", false},
+		{"-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A ts-input -p tcp -j ACCEPT", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.rule, func(t *testing.T) {
+			if got := len(iptUnscoped(tt.rule, 3389)) == 1; got != tt.want {
+				t.Errorf("v4 exposed = %v, want %v", got, tt.want)
+			}
+			if got := len(ip6Exposed(tt.rule, 3389)) == 1; got != tt.want {
+				t.Errorf("v6 exposed = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIP6Exposure(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -1812,7 +1856,10 @@ func TestIP6Exposure(t *testing.T) {
 	}{
 		{name: "captured chain", onPath: true, v6: ip6Captured, want: OutcomeOK},
 		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Captured + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
-		{name: "a port-less v6 accept is the operator's posture", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeOK},
+		{name: "a port-less v6 accept", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeManual,
+			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT"},
+		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
+			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT"},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Captured + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
 		// A negated scope or an explicit any prefix still opens the port off
 		// the tailnet (BUG-526 review, finding 1).
