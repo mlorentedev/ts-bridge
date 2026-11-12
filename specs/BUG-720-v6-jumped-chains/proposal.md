@@ -26,7 +26,8 @@ The v6 read stays an over-reporting exposure scan, not the v4 decision walk: it 
 
 ## Out of scope
 
-- Following jumps from the v6 `ufw` chains: ufw's own chains are read through ufw, and ufw writes the v6 rules itself.
+- ufw's v6 chains (`ufw6-*`) are not followed. ufw writes them, and `ufw show added` already reports an allow there (one ufw rule covers both families) with a `ufw delete` fix that holds; an `ip6tables -D` would be undone on ufw's next reload.
+- A jump qualified by anything but a scope or a TCP port match (`-m conntrack`, `-m set`) is not followed, as `iptMatchesPort` reads such a qualifier as narrowing the rule.
 - Rule order inside a followed chain (`RETURN` before the allow, a deny before it). Over-reporting a dead rule is the scan's existing trade-off.
 - The v4 read, which already follows `ts-input` (#492).
 
