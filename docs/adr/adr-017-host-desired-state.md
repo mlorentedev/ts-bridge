@@ -293,7 +293,7 @@ Decision, a hybrid because the two OSes name the tailnet differently:
   any port <port> proto tcp`. The interface name is fixed at `tailscale0`; a tailscaled started
   with another `--tun` name gets a rule that matches nothing. That fails closed under a
   restrictive INPUT policy (default DROP, or active ufw); under `iptables -P INPUT ACCEPT` the scope
-  restricts nothing. Since #691, `check` and `setup` report this as `manual`, naming the policy, and `firewall_ok` is false. `setup` still writes the scoped rule and never changes the policy (the IPv6 policy is #733).
+  restricts nothing. Since #691, `check` and `setup` report this as `manual`, naming the policy, and `firewall_ok` is false. `setup` still writes the scoped rule and never changes the policy. Since #733 the same holds for `ip6tables`: an ACCEPT IPv6 INPUT policy on an iptables host is `manual` naming `ip6tables -P INPUT DROP`, with ICMPv6 kept open first because neighbor discovery needs it; a failed v6 read (IPv6 disabled at boot) stays a note.
 - **Windows scopes by address.** `-RemoteAddress 100.64.0.0/10,fd7a:115c:a1e0::/48`: Windows has
   no interface name to rely on. Setup also stops enabling the built-in `Remote Desktop` rule
   group, whose rules allow any address and would void the scope. It does not disable the group:

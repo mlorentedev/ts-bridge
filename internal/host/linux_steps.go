@@ -204,6 +204,9 @@ type firewallRead struct {
 	// every port is open on every interface, so the tailscale0 scope restricts
 	// nothing (#691). Set by the iptables backend only.
 	inputOpen bool
+	// v6Open means ip6tables' INPUT policy is ACCEPT: every port is open on
+	// every IPv6 address (#733). Used on the iptables backend only.
+	v6Open bool
 }
 
 // source names the tool whose rules decided the read, for messages; backend
@@ -221,22 +224,23 @@ func (read firewallRead) source() string {
 func readLinuxFirewall(r Runner, port int) firewallRead {
 	read := readLinuxFirewallV4(r, port)
 	if r.Elevated() {
-		read.v6Foreign, read.v6Note = readIP6(r, port)
+		read.v6Foreign, read.v6Open, read.v6Note = readIP6(r, port)
 	}
 	return read
 }
 
-// readIP6 lists the unscoped allows for port in ip6tables' INPUT. setup never
-// writes a v6 rule, so every one of them is the operator's to delete.
-func readIP6(r Runner, port int) (foreign []string, note string) {
+// readIP6 lists the unscoped allows for port in ip6tables' INPUT and says
+// whether its policy is ACCEPT (#733). setup never writes a v6 rule, so every
+// one of them is the operator's to delete.
+func readIP6(r Runner, port int) (foreign []string, open bool, note string) {
 	if _, err := r.LookPath(backendIP6); err != nil {
-		return nil, ""
+		return nil, false, ""
 	}
 	out, err := r.Output(backendIP6, "-S", iptInput)
 	if err != nil {
-		return nil, fmt.Sprintf("%s -S %s: %v%s", backendIP6, iptInput, err, toolSaid(err))
+		return nil, false, fmt.Sprintf("%s -S %s: %v%s", backendIP6, iptInput, err, toolSaid(err))
 	}
-	return ip6Exposed(iptRules(string(out)), port), ""
+	return ip6Exposed(iptRules(string(out)), port), iptPolicyAccept(string(out)), ""
 }
 
 // ip6Exposed lists the v6 INPUT allows for the port that are not narrowed:
@@ -267,11 +271,11 @@ func ip6Narrowed(f []string) bool {
 // linuxFirewallOK is check's firewall_ok: the port is admitted, through a rule
 // scoped to the tailnet, and nothing admits it on every interface (#631, #526).
 func linuxFirewallOK(fw firewallRead) bool {
-	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw) && len(fw.v6Foreign) == 0 && !(fw.inputOpen && fw.backend == backendIPT)
+	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw) && len(fw.v6Foreign) == 0 && !((fw.inputOpen || fw.v6Open) && fw.backend == backendIPT)
 }
 
 // withPolicy reports a permissive INPUT policy on an iptables host (#691): a
-// converged or repaired step becomes manual, since the scoped rule restricts
+// converged, repaired or already manual step gains the fix and is manual (#733), since the scoped rule restricts
 // nothing while the policy admits every port. Setup never changes the policy:
 // a DROP without an SSH allow can lock the operator out.
 func withPolicy(read firewallRead, step SetupStep) SetupStep {
@@ -279,7 +283,7 @@ func withPolicy(read firewallRead, step SetupStep) SetupStep {
 		return step
 	}
 	step.Message += fmt.Sprintf("; the iptables INPUT policy is ACCEPT, so unless another firewall filters this host every port is open on every interface and the %s scope restricts nothing", tailnetInterface)
-	if step.Outcome != OutcomeOK && step.Outcome != OutcomeChanged {
+	if step.Outcome == OutcomeUnverified || step.Outcome == OutcomeFailed {
 		return step // an unverified or failed step keeps its own fix; only the message gains the note
 	}
 	fix := "enable a host firewall (ufw), or, as root, keep loopback, replies and SSH open first " +
@@ -289,7 +293,32 @@ func withPolicy(read firewallRead, step SetupStep) SetupStep {
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}
-	step.Outcome, step.Fix = OutcomeManual, fix
+	step.Outcome, step.Success, step.Fix = OutcomeManual, false, fix
+	return step
+}
+
+// withV6Policy reports a permissive v6 INPUT policy on an iptables host
+// (#733), as withPolicy does for v4: a converged, repaired or already manual
+// step gains the operator's fix and is manual; an unverified or failed step
+// keeps its own fix and gains only the note. Setup never changes the policy.
+func withV6Policy(read firewallRead, step SetupStep) SetupStep {
+	if !read.v6Open || read.backend != backendIPT {
+		return step
+	}
+	step.Message += fmt.Sprintf("; the ip6tables INPUT policy is ACCEPT, so unless another firewall filters this host every port is open on every IPv6 address and the %s scope restricts nothing", tailnetInterface)
+	if step.Outcome == OutcomeUnverified || step.Outcome == OutcomeFailed {
+		return step
+	}
+	// IPv6 needs ICMPv6 for neighbor discovery: a DROP without it cuts the host off IPv6.
+	fix := "as root, keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`, " +
+		"`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`, " +
+		"`ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`) " +
+		"and then run `ip6tables -P INPUT DROP`, persisting the set with your distribution's ip6tables service; " +
+		"or confirm another firewall filters this host, or that IPv6 is disabled"
+	if step.Fix != "" {
+		fix = step.Fix + "; " + fix
+	}
+	step.Outcome, step.Success, step.Fix = OutcomeManual, false, fix
 	return step
 }
 
@@ -299,6 +328,7 @@ func withIP6(read firewallRead, step SetupStep, port int) SetupStep {
 	if read.v6Note != "" {
 		step.Message += "; IPv6 not read: " + read.v6Note
 	}
+	step = withV6Policy(read, step)
 	if len(read.v6Foreign) == 0 {
 		return step
 	}
@@ -313,7 +343,7 @@ func withIP6(read firewallRead, step SetupStep, port int) SetupStep {
 	}
 	step.Fix = fix
 	if step.Outcome == OutcomeOK || step.Outcome == OutcomeChanged {
-		step.Outcome = OutcomeManual
+		step.Outcome, step.Success = OutcomeManual, false
 	}
 	return step
 }
