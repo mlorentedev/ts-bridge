@@ -207,8 +207,9 @@ type firewallRead struct {
 	// v6Open means ip6tables' INPUT policy is ACCEPT: every port is open on
 	// every IPv6 address (#733); on ufw, incoming allow or IPV6=no (#735).
 	v6Open bool
-	// policyUnread is why the v4 INPUT policy could not be read on an active
-	// ufw whose own rules decided the state: the exposure is unknown (#735).
+	// policyUnread is why `iptables -S INPUT`, and so the v4 policy, could not
+	// be read. It decides the step on an active ufw whose own rules decided the
+	// state: the exposure is unknown (#735).
 	policyUnread string
 }
 
@@ -291,7 +292,7 @@ func policyRead(fw firewallRead) bool {
 // SSH allow can lock the operator out. On ufw the fix is ufw's own command,
 // since ufw rewrites a raw policy on its next reload.
 func withPolicy(read firewallRead, step SetupStep) SetupStep {
-	if read.policyUnread != "" {
+	if read.policyUnread != "" && read.backend == backendUFW {
 		return withPolicyUnread(read, step)
 	}
 	if !read.inputOpen || !policyRead(read) {
@@ -450,8 +451,8 @@ func readUFW(r Runner, port int) firewallRead {
 func withUFWIptables(read, ipt firewallRead) firewallRead {
 	read.copies = ipt.copies
 	read.inputOpen = ipt.inputOpen // ufw writes the policy from its incoming default (#735)
-	if ipt.reason != "" && !read.ufwInactive && read.state != ruleAbsent && read.reason == "" {
-		read.policyUnread = ipt.reason // ufw decided, but its default is unknown (#735)
+	if !read.ufwInactive && read.state != ruleAbsent && read.reason == "" {
+		read.policyUnread = ipt.policyUnread // ufw decided, but its default is unknown (#735)
 	}
 	read.foreign = append(read.foreign, ipt.foreign...)
 	read.scoped = read.scoped || ipt.scoped
@@ -495,7 +496,8 @@ var tsInputJump = []string{"-A", iptInput, "-j", tsInputChain}
 func readIptables(r Runner, port int) firewallRead {
 	out, err := r.Output(backendIPT, "-S", iptInput)
 	if err != nil {
-		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
+		reason := fmt.Sprintf("iptables -S INPUT: %v", err)
+		return firewallRead{backend: backendIPT, reason: reason, policyUnread: reason}
 	}
 	read := iptablesRead(r, port, string(out))
 	read.inputOpen = iptPolicyAccept(string(out))

@@ -2229,4 +2229,9 @@ func TestUFWPolicyReadButChainUnread(t *testing.T) {
 	if read.policyUnread != "" || check.Outcome != OutcomeManual || !strings.Contains(check.Fix, "`ufw default deny incoming`") {
 		t.Errorf("policyUnread %q, check %v %q fix %q; want manual naming ufw default deny incoming", read.policyUnread, check.Outcome, check.Message, check.Fix)
 	}
+	// A raw iptables host whose INPUT read fails says so once, without ufw's words.
+	ipt := &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, exit: map[string]int{iptRead: 4}}
+	if c := firewallCheckStep(readLinuxFirewall(ipt, 3389), 3389); strings.Contains(c.Message, "ufw") {
+		t.Errorf("an iptables host's unread step names ufw: %q", c.Message)
+	}
 }
