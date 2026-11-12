@@ -1969,6 +1969,7 @@ func TestIP6Jumps(t *testing.T) {
 		fail   map[string]string // chain -> stderr of a failed read
 		want   []string
 		note   string
+		said   string   // the tool's words the note must quote
 		reads  []string // the chains read, in order
 	}{
 		{name: "tailscaled's ts-input", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput}, reads: []string{"ts-input"}},
@@ -1987,7 +1988,11 @@ func TestIP6Jumps(t *testing.T) {
 		// ufw writes its v6 chains and `ufw show added` reports an allow there
 		// with a fix ufw keeps; an ip6tables -D would be undone on its reload.
 		{name: "ufw's chains are left to the ufw read", input: "-A INPUT -j ufw6-before-input", chains: map[string]string{"ufw6-before-input": "-A ufw6-before-input -p tcp -m tcp --dport 3389 -j ACCEPT"}},
-		{name: "a chain that cannot be read is a note, INPUT still read", input: ip6Unscoped + "\n-A INPUT -j mine", fail: map[string]string{"mine": noMine}, want: []string{ip6Unscoped}, note: "ip6tables -S mine", reads: []string{"mine"}},
+		{name: "a chain that cannot be read is a note, INPUT still read", input: ip6Unscoped + "\n-A INPUT -j mine", fail: map[string]string{"mine": noMine}, want: []string{ip6Unscoped},
+			note: "ip6tables -S mine: ", said: "(" + strings.TrimSuffix(noMine, "\n") + ")", reads: []string{"mine"}},
+		// A port-less accept is the operator's posture, in a chain as in INPUT
+		// (the INPUT row in TestIP6Exposure): the scan reports allows for the port.
+		{name: "a port-less accept in a chain is the operator's posture", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j ACCEPT"}, reads: []string{"ts-input"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2003,7 +2008,7 @@ func TestIP6Jumps(t *testing.T) {
 			if !slices.Equal(foreign, tt.want) {
 				t.Errorf("foreign = %q, want %q", foreign, tt.want)
 			}
-			if (tt.note == "") != (note == "") || !strings.Contains(note, tt.note) {
+			if (tt.note == "") != (note == "") || !strings.Contains(note, tt.note) || !strings.Contains(note, tt.said) {
 				t.Errorf("note = %q, want %q", note, tt.note)
 			}
 			var reads []string
@@ -2016,6 +2021,25 @@ func TestIP6Jumps(t *testing.T) {
 				t.Errorf("chains read = %q, want %q", reads, tt.reads)
 			}
 		})
+	}
+}
+
+// TestIP6JumpsUFWHost pins the ufw6 exclusion end to end (#720 review): on a
+// ufw host, `ufw allow 3389` also writes an unscoped v6 allow into ufw's own
+// chains. It is reported once, by the ufw read, with ufw's fix: the v6 walk
+// never reads a ufw6 chain, so no ip6tables -D that ufw would undo is named.
+func TestIP6JumpsUFWHost(t *testing.T) {
+	const ufw6 = "ip6tables -S ufw6-user-input"
+	r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true, backendIP6: true}, output: map[string]string{
+		ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + "ufw allow 3389\n", iptRead: ufwHostInput, iptChain: tsInputNoAccept,
+		ip6Read: "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -j ufw6-user-input\n", ip6ChainRead: ip6TSInput,
+		ufw6: "-N ufw6-user-input\n-A ufw6-user-input -p tcp -m tcp --dport 3389 -j ACCEPT\n"}}
+	check := firewallCheckStep(readLinuxFirewall(r, 3389), 3389)
+	if slices.Contains(r.calls, "output "+ufw6) {
+		t.Errorf("the walk read %s; ufw's chains are the ufw read's", ufw6)
+	}
+	if check.Outcome != OutcomeManual || strings.Contains(check.Fix, "ip6tables -D") || !strings.Contains(check.Fix, "ufw") {
+		t.Errorf("check = %v, fix %q; want manual with ufw's fix and no ip6tables -D", check.Outcome, check.Fix)
 	}
 }
 

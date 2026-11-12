@@ -29,12 +29,25 @@ owner: manu
 - `ufw6-*` chains are not followed (proposal, Out of scope), so a ufw host's `ufw allow 3389` is reported once, by the ufw read, with a fix ufw keeps.
 - The literal "No chain/target/match by that name" became `iptNoChain`, shared by the v4 `tsInputUnreached` and the v6 walk.
 
+## Review dispositions
+
+Round 1 (nan/deepseek-v4-flash, PASS, at 73bb484; this `review.md`):
+
+- Minor REAL, misattached doc comments: applied. `ip6Match`'s comment sits on `ip6Match`, `ip6ScopeFlags` has its own, and `iptNoChain` sits above `chainMissing`'s comment, not inside it.
+- Minor REAL, wrong ADR promotion reason: applied. The line now names the parity doc, which records the v6 scan; ADR-017 does not.
+- Minor REAL, `tasks.md` Closing unticked: applied at archive time. Checkbox ticks are normalised out of the contract digest.
+- Minor THEORETICAL, a port-less accept in a jumped chain reads `ok`: pinned and ticketed. The new row `TestIP6Jumps/a_port-less_accept_in_a_chain_is_the_operator's_posture` makes the current behaviour a stated decision, matching INPUT's row. Whether a port-less v6 accept should count as exposure, in INPUT and in chains alike, is #753.
+- Minor REAL, no step-level ufw-host test: applied. `TestIP6JumpsUFWHost` runs `ufw allow 3389` with the matching `ufw6-user-input` rule through `readLinuxFirewall` and `firewallCheckStep`: check is `manual` with ufw's fix, no `ip6tables -D`, and the walk never reads the ufw6 chain. Mutation: dropping the `ufw6-` exclusion turns it red.
+- Minor REAL, note text unasserted: applied. The row now asserts the note quotes the tool's stderr. Mutation: dropping `toolSaid` from the note turns it red. The error's `%v` is not asserted, because the fake's `*exec.ExitError` has no process state and prints `<nil>`; a real one prints `exit status 1`.
+- Question, unmodelled jump qualifiers (`-m conntrack`, `-m mark`): the trade-off is intended and declared in the proposal (Out of scope), and inherited from `iptMatchesPort`.
+- AC2 and AC5 rest on gitignored logs: the logs are local to the run's worktree (`scripts/e2e/out/` is ignored by design). The fixture lines are quoted verbatim in AC2 above, and AC5 quotes the five new PASS lines' assertions and the 112/0 count.
+
 ## Promotion candidates
 
 Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
 
 - [x] Lesson for the repo's `docs/lessons/`? no: the walk follows the existing v4 ts-input model; the fixture capture is the repo's documented practice (capture-tsfw.sh).
-- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-017 Amendment B covers the v6 exposure scan; this widens what it reads.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: the v6 exposure scan (#526) is documented in `docs/design/host-client-parity.md`, which this change updates, and no ADR records it; this widens what the scan reads, not a decision about the host's desired state.
 - [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: ts-bridge-specific.
 
 ## Archive checklist

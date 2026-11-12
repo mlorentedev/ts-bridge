@@ -330,9 +330,6 @@ func ip6Jump(f []string, chain string, port int) string {
 	return iptIfTarget(iptMatchesPort(ip6Match(f), port) && !ip6Narrowed(f) && !iptLoopback(f), target)
 }
 
-// ip6Match is a jump rule's match without its -i, -s and -d scopes, negated or
-// not, which ip6Narrowed and iptLoopback judge, and with -g read as -j, the
-// target flag iptMatchesPort knows.
 // iptIfTarget is target when ok, else "".
 func iptIfTarget(ok bool, target string) string {
 	if ok {
@@ -341,8 +338,12 @@ func iptIfTarget(ok bool, target string) string {
 	return ""
 }
 
+// ip6ScopeFlags are the scopes ip6Match drops from a jump's match.
 var ip6ScopeFlags = []string{"-i", "-s", "-d"}
 
+// ip6Match is a jump rule's match without its -i, -s and -d scopes, negated or
+// not, which ip6Narrowed and iptLoopback judge, and with -g read as -j, the
+// target flag iptMatchesPort knows.
 func ip6Match(f []string) []string {
 	var out []string
 	for i := 0; i < len(f); i++ {
@@ -746,15 +747,15 @@ func toolSaid(err error) string {
 	return ""
 }
 
+// iptNoChain is what iptables and ip6tables print for a chain that does not
+// exist, and for a target that is an extension, not a chain.
+const iptNoChain = "No chain/target/match by that name"
+
 // chainMissing reports a failure that says the chain does not exist: stderr
 // carries the tool's own words for it (iptables "No chain/target/match by that
 // name", nft "No such file or directory"). Exit status 1 is the only failure
 // code either tool has, so it cannot tell a missing chain from a refused read;
 // any other failure leaves the chain unread.
-// iptNoChain is what iptables and ip6tables print for a chain that does not
-// exist, and for a target that is an extension, not a chain.
-const iptNoChain = "No chain/target/match by that name"
-
 func chainMissing(err error, words string) bool {
 	var exit *exec.ExitError
 	return errors.As(err, &exit) && strings.Contains(string(exit.Stderr), words)
