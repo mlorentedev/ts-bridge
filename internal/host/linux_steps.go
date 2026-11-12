@@ -407,9 +407,12 @@ func readIptables(r Runner, port int) firewallRead {
 }
 
 // iptPolicyAccept reports whether `iptables -S INPUT` sets the chain policy to
-// ACCEPT. Its first line is the policy; a listing without one is not read as open.
+// ACCEPT. Only the first line is the policy: a later line can be the tail of a
+// multi-line --comment, which iptables prints raw. A listing without a policy
+// line is not read as open.
 func iptPolicyAccept(out string) bool {
-	return slices.Contains(strings.Split(out, "\n"), "-P INPUT ACCEPT")
+	first, _, _ := strings.Cut(out, "\n")
+	return strings.TrimSpace(first) == "-P INPUT ACCEPT"
 }
 
 func iptablesRead(r Runner, port int, out string) firewallRead { //nolint:gocyclo // baseline #629
