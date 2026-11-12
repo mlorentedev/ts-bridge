@@ -20,6 +20,6 @@ owner: manu
 ## Closing
 
 - [x] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`)
-- [ ] `make e2e-linux`
+- [x] `make e2e-linux`
 - [ ] verification.md filled; spec review committed
 - [x] PR with `Closes #735`

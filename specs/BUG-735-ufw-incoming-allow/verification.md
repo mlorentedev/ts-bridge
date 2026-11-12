@@ -14,14 +14,14 @@ owner: manu
 - [x] AC1 -> commit `c8b5a57` / `TestUFWPolicy/incoming_allow:_both_policies_ACCEPT` (fix names `ufw allow <your SSH port>/tcp` and `ufw default deny incoming`, never `-P INPUT DROP`; `linuxFirewallOK` false; `Success` false)
 - [x] AC2 -> commit `c8b5a57` / `TestUFWPolicy/IPV6=no_after_a_boot:_v6_ACCEPT_only` (fix names `IPV6=yes` and `ufw reload`)
 - [x] AC3 -> `TestUFWPolicy/incoming_deny:_both_DROP`, the inactive and unreadable loop in `TestUFWPolicy`, `TestIP6Policy` (inactive ufw unchanged), `TestManualRewriteClearsSuccess`; review round 1 F3: commit `f66786a` / `TestUFWPolicyUnread`
-- [ ] AC4 -> `scripts/e2e/linux.sh` "ufw incoming allow" block (commit `35b258d`) / `make e2e-linux`: E2E_RESULT
+- [x] AC4 -> `scripts/e2e/linux.sh` "ufw incoming allow" block (commit `35b258d`) / `make e2e-linux`: 103 pass, 0 fail on `4664ba6` (ufw incoming allow: manual naming `ufw default deny incoming`, not `firewall_ok`, setup leaves the default; ufw incoming deny: ok again)
 - [x] AC5 -> commit `f66786a` / `TestUFWPolicyMessage`
 
 ## Test status
 
 - `go test -race ./...` -> exit 0, every package ok
 - `golangci-lint run` and `GOOS=linux golangci-lint run` -> 0 issues
-- `make e2e-linux` -> 103 pass, 0 fail on `35b258d` (round 1); E2E_RESULT
+- `make e2e-linux` -> 103 pass, 0 fail on `35b258d` (round 1); 103 pass, 0 fail on `4664ba6` (ufw incoming allow: manual naming `ufw default deny incoming`, not `firewall_ok`, setup leaves the default; ufw incoming deny: ok again)
 - No regressions in existing test suite: yes
 
 ## Decisions made during implementation

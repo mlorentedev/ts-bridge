@@ -42,7 +42,7 @@ Deviation from the issue's proposed fix: the issue suggests parsing `Default: al
 - [x] [AC2] An active ufw with v4 DROP and v6 ACCEPT: `manual`, the fix names `IPV6=yes` and `ufw reload`, `firewall_ok` is false.
 - [x] [AC3] An active ufw with both DROP, an inactive ufw, and an unreadable ufw keep their outcome as before; a `failed` or `unverified` step gains only the note; `Success` is false on every `manual` rewrite. An active ufw whose `iptables -S INPUT` fails while its own allow decides is `unverified`, naming the error, with `firewall_ok` false.
 - [x] [AC5] On a ufw host the message names ufw's incoming default (and `IPV6=no` for v6), not "unless another firewall filters this host".
-- [ ] [AC4] e2e on the Linux guest: under `ufw default allow incoming`, `check` reads `manual` naming `ufw default deny incoming` and not `firewall_ok`; after `ufw default deny incoming`, `check` is `ok` again.
+- [x] [AC4] e2e on the Linux guest: under `ufw default allow incoming`, `check` reads `manual` naming `ufw default deny incoming` and not `firewall_ok`; after `ufw default deny incoming`, `check` is `ok` again.
 
 ## References
 
