@@ -14,7 +14,7 @@ owner: manu
 - [x] AC1 (v4 negated, `-p tcp -j ACCEPT`, `-j ACCEPT` → `manual`, rule named, `firewall_ok` false, SSH caution in the fix, nothing deleted) -> commits `18b6154` (red: 9 failures on the old code), `8ece357`; tests `TestExposureShapes`, `TestReadIptablesUnscoped/a_port-less_accept_is_foreign`, `.../an_accept_for_every_port_but_SSH_is_foreign`, `TestSetupForLinux/iptables,_an_accept_for_every_port:...(#736)` (appends the scoped rule, deletes nothing), `TestCheckForLinux/iptables,_an_accept_for_every_port_but_SSH:_manual_(#736)` (`FirewallOK` false).
 - [x] AC2 (v6 same shapes) -> `TestExposureShapes` (both reads per row), `TestIP6Exposure/a_port-less_v6_accept`, `.../a_v6_accept_for_every_port_but_SSH` (fix names the `ip6tables -D` and the SSH caution).
 - [x] AC3 (not reported: `! --dport 3389`, `! --dports 3000:4000`, mixed negated dport + positive sport, `--sport` only, DROP, UDP, `-i lo`, `-i eth0`, `-i tailscale0`, `-s` prefix, conntrack-only, a rule outside INPUT) -> the `false` rows of `TestExposureShapes`; every pre-existing step row unchanged.
-- [x] AC4 (e2e) -> `make e2e-linux` at `f8ac37b`: 102 pass, 0 fail, including the eight new #736 cases (v4 `! --dport 22`, v6 `-p tcp -j ACCEPT`: manual, not `firewall_ok`, left in place, ok once removed).
+- [x] AC4 (e2e) -> `make e2e-linux` at `8b93885` (round-4 head before this record), 108 pass, 0 fail, on the Lima Ubuntu guest, run 2026-11-12 11:23Z. The 15 #736 cases: v4 `! --dport 22` beside the scoped rule (manual, not `firewall_ok`, left in place, ok once removed); the same rule as the only allow (check manual; setup adds the scoped rule, reports manual, leaves it); v4 `! -i lo -p tcp -j ACCEPT` (manual, not `firewall_ok`, ok once removed); v6 `-p tcp -j ACCEPT` (manual with the SSH caution, not `firewall_ok`, left in place, ok once removed). An earlier run at `f8ac37b` gave 102/0 before rounds 2 and 3 added cases.
 
 ## Test status
 
@@ -30,7 +30,7 @@ owner: manu
 - Source ports: clients connect from ephemeral ports, so beside a negated destination port a source-port match does not narrow (`! --dport 22 --sport 1024:65535` is reported, review F2). With no destination match, only an all-negated source match (`! --sport 22`) is reported; `--sport 22` alone is not.
 - A portless unscoped allow no longer counts as the scoped rule, so `setup` appends `-i tailscale0` beside it (review F4; proposal and ADR-017 say so).
 - Removing a rule with no destination port can close SSH, so both fixes (v4 `foreignFix`, v6 `withIP6`) name the loopback, replies and SSH rules to add first; the list is shared with #691's policy fix as `keepOpenFirst`.
-- Residual: a port-less allow under a negated non-loopback scope (`! -i tailscale0 -j ACCEPT`, `! -s 100.64.0.0/10 -j ACCEPT`) is still not reported on either read, because `iptPortlessCovers` reads any non-loopback negation as an unmodelled narrowing. On v4 the same rule is also outside `iptablesDecide`, so it does not make the port read as admitted either; #743 tracks it. A negated loopback scope (`! -i lo`) is reported on both reads (round-2 F1).
+- Residual (#743, "fix(host): report a port-less allow under a negated scope as exposing the port", widened by comment on 2026-11-12): a negated non-loopback scope is not reported on v4. Two mechanisms are involved. For a port-less rule (`! -i tailscale0 -j ACCEPT`), `iptPortlessCovers` reads the negation as an unmodelled narrowing, so neither read reports it. For a port-bearing rule (`--dport 3389 ! -s 100.64.0.0/10`), `iptScopedAllow` counts the negated scope as the operator's, so v4 does not report it, while v6 does. With the scoped rule beside it, a v4 host then reads `ok` and `firewall_ok: true`. A negated loopback scope (`! -i lo`) is reported on both reads (round-2 F1).
 
 ## Spec review round 1 (nan/deepseek-v4-flash, FAIL at d167344)
 
@@ -49,6 +49,15 @@ owner: manu
 - F3 (Minor, REAL, v4 e2e survival check was a substring match): applied, now `grep -qx` against the printed rule.
 - F4 (Minor, REAL, unticked boxes, `features.json` not replayed): applied.
 - Question (#743's scope): #743 covers non-loopback negated scopes on both reads, so F1 was fixed here, not deferred. The residual above is restated.
+
+## Spec review round 3 (nan/deepseek-v4-flash, FAIL at b6a6c7b)
+
+- F1 (Blocker, REAL, `! --dport 22` as the only allow read "No firewall rule found"): applied. `legacyHeld` now also holds when the state is absent and a foreign rule exists, and `firewallSetupFrom` checks it before the state switch. New rows: `TestCheckForLinux/...is_the_only_allow:_manual_(#736_review_round_3)` and `TestSetupForLinux/...is_the_only_allow:_scoped_rule_added,_manual_(...)`, red at `584fcb1`. A new e2e case deletes the tailscale0 rule first, so the negated allow is the only one.
+- F2 (Major, REAL, v4/v6 asymmetry on a negated non-loopback scope): deferred to #743. It predates #736, and whether v4 should change is the decision that ticket poses. #743 was widened to name both mechanisms; `proposal.md` Risks and the residual above now state the v4 `ok`/`firewall_ok: true` consequence.
+- F3 (Minor, REAL, no SSH caution for `--dports 22,3389`): ticketed as #745 (pre-existing since #631) and named in Risks.
+- F4 (Minor, THEORETICAL, `-d 0.0.0.0/0`): declared in Risks; no code change.
+- Question (AC4): re-run at round-4 head, see AC4.
+- Question (#743): its title is recorded in the residual line above.
 
 ## Promotion candidates
 

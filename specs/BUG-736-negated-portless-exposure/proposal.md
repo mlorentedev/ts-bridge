@@ -42,6 +42,10 @@ This reverses the documented choice in `iptUnscoped` that "a rule with no port i
 ## Risks / open questions
 
 - Hosts with a deliberate unscoped `-A INPUT -j ACCEPT` turn `manual`. Intended: the scope is void there.
+- v4 and v6 still differ on a negated non-loopback scope (`! -s 100.64.0.0/10`, `! -i tailscale0`): v6 reports it, while v4 reads it as the operator's scope. This predates #736 and is the decision #743 asks for.
+- A foreign allow that also names SSH (`--dports 22,3389`) gets no SSH caution in its fix (#745, pre-existing since #631).
+- v4 has no analogue of v6's `::/0` exception: `-d 0.0.0.0/0` reads as a scope. `iptables -S` omits a default destination, so this is theoretical.
+- A wide allow that `iptablesDecide` does not count (`! --dport 22`) is reported even when it is the only allow: setup adds the scoped rule and reports `manual`, and check reports `manual`, not "no rule found".
 - Over-reporting: a portless rule narrowed in a way the parser does not model is not reported (`iptPortlessCovers` fails closed toward "narrowed"); a negated-port rule with an unmodelled narrowing is reported, as port-bearing rules already are.
 
 ## Acceptance criteria
