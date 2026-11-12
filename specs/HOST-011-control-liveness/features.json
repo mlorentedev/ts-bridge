@@ -1,0 +1,30 @@
+[
+  {
+    "id": "HOST-011-control-liveness-f1",
+    "behavior": "AC2: two offline samples keep readiness, the third marks control-online down; a status error counts as offline",
+    "verification": "go test ./internal/serve/ -run 'TestWatchControlOnline' -count=1 -v",
+    "state": "passing",
+    "evidence": "exit 0 at d308e1a: ok  \tts-bridge/internal/serve\t0.237s"
+  },
+  {
+    "id": "HOST-011-control-liveness-f2",
+    "behavior": "AC1: the first online sample after a down clears it, and /health/ready carries control_plane_unreachable while down, with or without a bootstrap source",
+    "verification": "go test ./internal/serve/ -run 'TestWatchControlOnline|TestHealth_FoldsControlOnline' -count=1 -v",
+    "state": "passing",
+    "evidence": "exit 0 at d308e1a: ok  \tts-bridge/internal/serve\t0.197s"
+  },
+  {
+    "id": "HOST-011-control-liveness-f3",
+    "behavior": "AC3: the bus watcher keeps its behavior (non-Running and a closed bus read not ready)",
+    "verification": "go test ./internal/serve/ -run 'TestServeHealth_ControlSession|TestHealth_FoldsSources' -count=1",
+    "state": "passing",
+    "evidence": "exit 0 at d308e1a: ok  \tts-bridge/internal/serve\t0.183s"
+  },
+  {
+    "id": "HOST-011-control-liveness-f4",
+    "behavior": "AC1 end to end: on the local mesh, stopping Headscale after READY gives 503 control_plane_unreachable within 40 s and 200 within 30 s of the restart",
+    "verification": "make e2e-mesh-linux",
+    "state": "passing",
+    "evidence": "make e2e-mesh-linux at d308e1a: 5 pass, 0 fail; 503 control_plane_unreachable 20 s after the stop, 200 19 s after the restart (log mesh-linux-20261111T080536Z.log)"
+  }
+]
