@@ -309,7 +309,7 @@ func withV6Policy(read firewallRead, step SetupStep) SetupStep {
 	if step.Outcome == OutcomeUnverified || step.Outcome == OutcomeFailed {
 		return step
 	}
-	// IPv6 needs ICMPv6 for neighbour discovery: a DROP without it cuts the host off IPv6.
+	// IPv6 needs ICMPv6 for neighbor discovery: a DROP without it cuts the host off IPv6.
 	fix := "as root, keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`, " +
 		"`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`, " +
 		"`ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`) " +
