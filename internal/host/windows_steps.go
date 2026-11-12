@@ -242,12 +242,18 @@ const (
 	psEnableRDP             = `Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0; ` + psReadRDPPort
 )
 
+// rdGroupID is the built-in "Remote Desktop" rule group by its resource id.
+// The display name is localized ("Escritorio remoto" on a Spanish install), so
+// a -DisplayGroup query matches nothing there and reads as no exposure (#707).
+const rdGroupID = "@FirewallAPI.dll,-28752"
+
 // The key=value reads. psReadFirewallRule takes the rule name as its %q.
 var (
 	psReadNetworkProfile = `Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match "Tailscale" -or $_.Name -match "Tailscale" } | ForEach-Object { ` + netCategory.print() + ` }`
 	psReadRDPDeny        = `$p = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; $l = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue).fDenyTSConnections; ` + printAll(denyPolicy, denyLocal)
-	psReadRDGroup        = `Write-Output "exposed=$(@(Get-NetFirewallRule -DisplayGroup 'Remote Desktop' -Enabled True -Direction Inbound -Action Allow -ErrorAction SilentlyContinue | Where-Object { ($_ | Get-NetFirewallAddressFilter).RemoteAddress -eq 'Any' }).Count)"`
-	psReadFirewallRule   = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); ` + fwCount.print() + `; foreach ($x in $r) { ` +
+	psReadRDGroup        = `$g = @(Get-NetFirewallRule -Group '` + rdGroupID + `' -ErrorAction SilentlyContinue); Write-Output "total=$($g.Count)"; ` +
+		`Write-Output "exposed=$(@($g | Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' -and ($_ | Get-NetFirewallAddressFilter).RemoteAddress -eq 'Any' }).Count)"`
+	psReadFirewallRule = `$r = @(Get-NetFirewallRule -DisplayName %q -ErrorAction SilentlyContinue); ` + fwCount.print() + `; foreach ($x in $r) { ` +
 		printAll(fwEnabled, fwAction, fwDirection, fwProfile, fwRemote) + `; $f = $x | Get-NetFirewallPortFilter; ` + printAll(fwProtocol, fwPort) + ` }`
 )
 
@@ -421,7 +427,7 @@ var hexValue = regexp.MustCompile(`0x[0-9a-fA-F]{8}`)
 
 const (
 	windowsFirewallFix     = "allow TCP %d inbound from the tailnet addresses in Windows Defender Firewall"
-	windowsGroupFix        = `Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`
+	windowsGroupFix        = `Disable-NetFirewallRule -Group "` + rdGroupID + `"`
 	windowsFirewallNameFix = "set host.firewall.rule (or --firewall-rule) to a name of A-Z, a-z, 0-9, - and _"
 )
 
@@ -523,15 +529,23 @@ func windowsFirewallSetupStep(r Runner, ruleName string, port int) SetupStep {
 // disable the group (ADR-017 Amendment B); the operator runs the printed fix.
 func builtinGroupStep(r Runner, step SetupStep) (SetupStep, bool) {
 	out, err := outputPS(r, psReadRDGroup)
-	exposed, parseErr := strconv.Atoi(parseKeyValues(out)["exposed"])
 	if err != nil {
 		return newStep(step.Name, OutcomeUnverified, "Could not read the built-in Remote Desktop rule group",
-			"run Get-NetFirewallRule -DisplayGroup \"Remote Desktop\" to see why the read fails"), false
+			"run Get-NetFirewallRule -Group \""+rdGroupID+"\" to see why the read fails"), false
 	}
-	if parseErr != nil {
+	kv := parseKeyValues(out)
+	total, totalErr := strconv.Atoi(kv["total"])
+	exposed, parseErr := strconv.Atoi(kv["exposed"])
+	if totalErr != nil || parseErr != nil {
 		// A count that does not parse proves nothing about the group, as a failed read does.
 		return newStep(step.Name, OutcomeUnverified, fmt.Sprintf("The built-in Remote Desktop rule group read returned no rule count (%q)", strings.TrimSpace(string(out))),
-			"run Get-NetFirewallRule -DisplayGroup \"Remote Desktop\" | Where-Object Enabled -eq True to list the enabled rules"), false
+			"run Get-NetFirewallRule -Group \""+rdGroupID+"\" | Where-Object Enabled -eq True to list the enabled rules"), false
+	}
+	if total == 0 {
+		// Windows ships the group with rules, so an empty answer means the query missed it,
+		// not that nothing is exposed.
+		return newStep(step.Name, OutcomeUnverified, "The built-in Remote Desktop rule group query matched no rule, so its exposure is unknown",
+			"run Get-NetFirewallRule -Group \""+rdGroupID+"\" and check the group exists on this install"), false
 	}
 	if exposed == 0 {
 		return step, true

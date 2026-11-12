@@ -30,6 +30,7 @@ host:
     hostname: tsb-e2e-linux
     state_dir: /var/lib/ts-bridge/serve
     auth_key_file: /etc/ts-bridge/authkey
+    health_addr: 127.0.0.1:9090
 YAML
 (umask 077 && printf '%s\n' "$key" >/etc/ts-bridge/authkey)
 cat >/etc/systemd/system/ts-bridge-serve.service <<'UNIT'
