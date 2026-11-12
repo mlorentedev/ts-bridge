@@ -310,7 +310,10 @@ Replacement narrows "setup does not delete firewall rules" (§3) and no further.
 only the exact rule earlier releases wrote (`ufw allow <port>/tcp`, `-A INPUT -p tcp -m tcp --dport
 <port> -j ACCEPT` as `iptables -S` prints it), after the scoped rule is in place, so the port is
 never closed in between. Any other unscoped allow that names the port is reported `manual`: setup
-cannot know it wrote it. An allow with no port in it is the operator's posture and is left alone.
+cannot know it wrote it. An allow with no port in it was first read as the operator's posture and
+left alone; since #736 an unscoped one (`-p tcp -j ACCEPT`, `-j ACCEPT`), like one excluding only
+other ports (`! --dport 22`), is reported `manual` too, because it voids the scope as a permissive
+policy does (#691). Setup still never deletes it, and the fix names the rules that keep SSH open first.
 
 Residual, accepted: the Windows scope is a range, so a local network addressed inside
 `100.64.0.0/10` is admitted as if it were the tailnet. Linux has no such residual because it
