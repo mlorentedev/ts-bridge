@@ -32,6 +32,9 @@ owner: manu
 - Review round 1, F4 (applied, `f66786a`): on ufw the note names ufw's incoming default (and `IPV6=no` for v6) instead of "unless another firewall filters this host"; the runbook row is keyed on that wording.
 - Review round 1, F5 (declined): the fix keeps `ufw allow <your SSH port>/tcp` unscoped. A host whose operator reaches SSH over the LAN would be locked out by a tailscale0-only allow followed by `default deny incoming`; the advice matches #691's iptables fix. An operator who wants SSH on the tailnet only can scope it.
 
+- Review round 2 (PASS), minor 1 (applied, `83c6623` and the commit after it): only a failed `iptables -S INPUT` marks the policy unread. A failed `ts-input` walk under a readable ACCEPT policy stays `manual` with ufw's fix (`TestUFWPolicyReadButChainUnread`), and a raw iptables host's unread step never names ufw.
+- Review round 2, minor 2 (recorded): the `tasks.md` line says `TestManualRewriteClearsSuccess` gains the ufw rewrites; the ufw `Success=false` property is asserted in `TestUFWPolicy` (`s.Success == tt.manual`) and `TestUFWPolicyUnread` instead. `tasks.md` is left as reviewed.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? no: the policy-mirrors-default fact is recorded in ADR-017 Amendment B and the runbook row, and the bug shape is #691's
