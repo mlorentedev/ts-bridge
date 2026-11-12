@@ -1994,6 +1994,8 @@ func TestPermissiveInputPolicy(t *testing.T) {
 				}
 				if s.want == OutcomeManual && !strings.Contains(s.step.Fix, "-P INPUT DROP") {
 					t.Errorf("%s fix %q does not name a DROP policy", s.name, s.step.Fix)
+				} else if s.want != OutcomeManual && strings.Contains(s.step.Fix, "-P INPUT DROP") {
+					t.Errorf("%s fix %q names the policy on a %v step, whose own fix comes first", s.name, s.step.Fix, s.want)
 				}
 			}
 			if got, want := linuxFirewallOK(read), tt.check == OutcomeOK; got != want {
