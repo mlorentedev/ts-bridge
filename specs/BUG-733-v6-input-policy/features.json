@@ -1,0 +1,16 @@
+[
+  {
+    "id": "BUG-733-v6-input-policy-f1",
+    "behavior": "AC1-AC3: the v6 INPUT policy on an iptables host turns ok/changed manual, is noted otherwise, and is ignored on ufw",
+    "verification": "go test ./internal/host/ -run 'TestIP6Policy|TestIP6Exposure' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-733-v6-input-policy-f2",
+    "behavior": "AC4: e2e on the Linux guest",
+    "verification": "make e2e-linux",
+    "state": "pending",
+    "evidence": ""
+  }
+]
