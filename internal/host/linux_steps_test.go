@@ -1959,6 +1959,8 @@ func TestPermissiveInputPolicy(t *testing.T) {
 		{"DROP, rule present", "-P INPUT DROP\n-A INPUT -j ts-input\n" + scopedRule, OutcomeOK, OutcomeOK, false},
 		{"DROP, rule absent", "-P INPUT DROP\n-A INPUT -j ts-input\n", OutcomeChanged, OutcomeChanged, true},
 		{"ACCEPT, a jump the read cannot follow stays unverified", "-P INPUT ACCEPT\n-A INPUT -i eth0 -j ts-input\n", OutcomeUnverified, OutcomeFailed, false},
+		{"ACCEPT, setup's legacy rule: the replace is still promoted to manual", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\n", OutcomeManual, OutcomeManual, true},
+		{"DROP, a multi-line comment cannot forge the policy line", "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -m comment --comment \"x\n-P INPUT ACCEPT\ny\" -j LOG\n" + scopedRule, OutcomeOK, OutcomeOK, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1984,7 +1986,7 @@ func TestPermissiveInputPolicy(t *testing.T) {
 				if s.step.Outcome != s.want {
 					t.Errorf("%s = %v %q, want %v", s.name, s.step.Outcome, s.step.Message, s.want)
 				}
-				permissive := strings.Contains(tt.input, "-P INPUT ACCEPT")
+				permissive := strings.HasPrefix(tt.input, "-P INPUT ACCEPT")
 				if names := strings.Contains(s.step.Message, "INPUT policy is ACCEPT"); permissive && s.want == OutcomeManual && !names {
 					t.Errorf("%s message %q does not name the ACCEPT policy", s.name, s.step.Message)
 				} else if !permissive && names {
