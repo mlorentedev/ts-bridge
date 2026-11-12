@@ -605,7 +605,7 @@ func TestSetupForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := setupFor("linux", Config{Port: 3389, FirewallRule: "Rule"}, tt.runner)
-			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+			if calls := withoutProbes(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
 				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			var outcomes []Outcome
@@ -687,6 +687,16 @@ func TestCheckForLinux(t *testing.T) {
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name: "firewalld running: unverified, not firewall_ok, ufw never read (#739 review)",
+			runner: &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "ufw": true, "firewall-cmd": true},
+				output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow, "firewall-cmd --state": "running\n"})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "output firewall-cmd --state"),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "firewalld is running",
 		},
 		{
 			name:     "ufw host, iptables unreadable: unverified (#530 review)",
@@ -975,7 +985,7 @@ func TestCheckForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := checkFor("linux", Config{Port: 3389}, tt.runner)
-			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+			if calls := withoutProbes(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
 				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			for _, c := range tt.runner.calls {
@@ -1846,7 +1856,7 @@ func TestIP6Exposure(t *testing.T) {
 			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") }) {
 				t.Errorf("setup wrote: %v", r.calls)
 			}
-			want := []string{"lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain, "lookpath " + backendIP6}
+			want := []string{"lookpath " + firewalldCmd, "lookpath nft", "lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain, "lookpath " + backendIP6}
 			if tt.onPath {
 				want = append(want, "output "+ip6Read)
 			}
@@ -1926,11 +1936,20 @@ func TestOffTailnetOnlyAllow(t *testing.T) {
 	}
 }
 
-// withoutIP6Probe drops the ip6tables lookup that every elevated read makes
-// (#526). These tables pin the IPv4 sequence on hosts without ip6tables;
-// TestIP6Exposure pins the v6 read itself and where it runs.
-func withoutIP6Probe(calls []string) []string {
-	return slices.DeleteFunc(slices.Clone(calls), func(c string) bool { return c == "lookpath "+backendIP6 })
+// withoutProbes drops the lookups that every elevated read makes: ip6tables
+// (#526), and the foreign-firewall probe's firewall-cmd and nft (#739), which
+// open the read. These tables pin the IPv4 sequence on hosts with neither;
+// TestIP6Exposure pins the order, TestForeignFirewall what the probe finds.
+func withoutProbes(calls []string) []string {
+	out := slices.Clone(calls)
+	if i := slices.Index(out, "lookpath "+firewalldCmd); i >= 0 {
+		end := i + 1
+		if end < len(out) && out[end] == "lookpath nft" {
+			end++
+		}
+		out = slices.Delete(out, i, end)
+	}
+	return slices.DeleteFunc(out, func(c string) bool { return c == "lookpath "+backendIP6 })
 }
 
 // TestReadIP6NoteQuotesTheTool pins that a failed v6 read says why, in the
@@ -2246,5 +2265,132 @@ func TestUFWPolicyReadButChainUnread(t *testing.T) {
 	ipt := &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, exit: map[string]int{iptRead: 4}}
 	if c := firewallCheckStep(readLinuxFirewall(ipt, 3389), 3389); strings.Contains(c.Message, "ufw") {
 		t.Errorf("an iptables host's unread step names ufw: %q", c.Message)
+	}
+}
+
+// `nft list chains` output for TestForeignFirewall, in the shape nft 1.0
+// prints it (probed on Ubuntu 24.04 for #739).
+const (
+	nftInetFilter = "table inet filter {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n\tchain output {\n\t\ttype filter hook output priority filter; policy accept;\n\t}\n}\n"
+	nftFirewalld  = "table inet firewalld {\n\tchain filter_INPUT {\n\t\ttype filter hook input priority filter + 10; policy accept;\n\t}\n}\n"
+	nftIptOnly    = "table ip filter {\n\tchain INPUT {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n\tchain ts-input {\n\t}\n}\n" +
+		"table ip6 filter {\n\tchain INPUT {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n}\n" +
+		"table ip nat {\n\tchain POSTROUTING {\n\t\ttype nat hook postrouting priority srcnat; policy accept;\n\t}\n}\n"
+	nftNoInput = "table inet natonly {\n\tchain post {\n\t\ttype nat hook postrouting priority srcnat; policy accept;\n\t}\n}\n"
+)
+
+// TestForeignFirewall pins #739: where firewalld or a native nftables ruleset
+// filters inbound traffic, iptables is not authoritative. check is unverified
+// and setup manual, both naming that firewall; setup writes nothing, and
+// neither the v4 nor the v6 policy is read. A failed probe is an unknown read.
+func TestForeignFirewall(t *testing.T) {
+	const fwState, nftChains = "firewall-cmd --state", "nft list chains"
+	tests := []struct {
+		name          string
+		firewalld     bool // firewall-cmd on PATH
+		fwOut         string
+		fwExit        int
+		nft           bool // nft on PATH
+		nftOut        string
+		nftFails      bool
+		want, fixWant string // "" in want: no foreign firewall, the iptables read decides
+		unknown       bool
+	}{
+		{name: "firewalld running", firewalld: true, fwOut: "running\n", want: "firewalld", fixWant: "--change-interface=tailscale0"},
+		{name: "firewalld running wins over its nft table", firewalld: true, fwOut: "running\n", nft: true, nftOut: nftFirewalld, want: "firewalld is running", fixWant: "firewall-cmd --reload"},
+		{name: "firewalld not running", firewalld: true, fwOut: "not running\n", fwExit: 252},
+		{name: "firewalld not running, exit 0", firewalld: true, fwOut: "not running\n"},
+		{name: "firewalld state fails", firewalld: true, fwExit: 1, want: fwState, unknown: true},
+		{name: "native inet filter", nft: true, nftOut: nftInetFilter, want: "table inet filter", fixWant: "`nft insert rule inet filter input iifname \"tailscale0\" tcp dport 3389 accept`"},
+		{name: "firewalld table, firewall-cmd absent", nft: true, nftOut: nftFirewalld, want: "table inet firewalld", fixWant: "nft insert rule inet firewalld filter_INPUT"},
+		{name: "iptables-nft and tailscaled tables only", nft: true, nftOut: nftIptOnly},
+		{name: "table without an input hook", nft: true, nftOut: nftNoInput},
+		{name: "nft listing fails", nft: true, nftFails: true, want: nftChains, unknown: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				r := &recordingRunner{elevated: true,
+					onPath: map[string]bool{"iptables": true, "ip6tables": true, "firewall-cmd": tt.firewalld, "nft": tt.nft},
+					output: map[string]string{iptRead: "-P INPUT ACCEPT\n", ip6Read: "-P INPUT ACCEPT\n", fwState: tt.fwOut, nftChains: tt.nftOut},
+					exit:   map[string]int{}, fail: map[string]bool{nftChains: tt.nftFails}}
+				if tt.fwExit != 0 {
+					r.exit[fwState] = tt.fwExit
+				}
+				return r
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			wrote := slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") })
+			cr := newRunner()
+			read := readLinuxFirewall(cr, 3389)
+			check := firewallCheckStep(read, 3389)
+			if tt.want == "" {
+				if !wrote || !strings.Contains(check.Message, "the iptables INPUT policy is ACCEPT") {
+					t.Errorf("no foreign firewall: setup wrote = %v, check %q; want the iptables read to decide", wrote, check.Message)
+				}
+				return
+			}
+			setupWant := OutcomeManual
+			if tt.unknown {
+				setupWant = OutcomeFailed
+			}
+			for _, s := range []struct {
+				name string
+				step SetupStep
+				want Outcome
+			}{{"setup", setup, setupWant}, {"check", check, OutcomeUnverified}} {
+				if s.step.Outcome != s.want || s.step.Success {
+					t.Errorf("%s = %v (success %v) %q, want %v", s.name, s.step.Outcome, s.step.Success, s.step.Message, s.want)
+				}
+				if !strings.Contains(s.step.Message, tt.want) {
+					t.Errorf("%s message %q does not name %q", s.name, s.step.Message, tt.want)
+				}
+				if !strings.Contains(s.step.Fix, tt.fixWant) {
+					t.Errorf("%s fix %q lacks %q", s.name, s.step.Fix, tt.fixWant)
+				}
+				if strings.Contains(s.step.Message, "INPUT policy is ACCEPT") {
+					t.Errorf("%s message %q reads a policy iptables does not decide", s.name, s.step.Message)
+				}
+			}
+			if wrote {
+				t.Errorf("setup wrote a rule: %v", r.calls)
+			}
+			if slices.Contains(cr.calls, "output "+ip6Read) {
+				t.Errorf("the v6 read ran: %v", cr.calls)
+			}
+			if linuxFirewallOK(read) {
+				t.Error("linuxFirewallOK = true")
+			}
+		})
+	}
+}
+
+// TestNFTForeignInput pins which `nft list chains` tables the #739 probe
+// counts: an input hook outside iptables-nft's own ip/ip6 tables.
+func TestNFTForeignInput(t *testing.T) {
+	hook := func(family, table, chain, h string) string {
+		return "table " + family + " " + table + " {\n\tchain " + chain + " {\n\t\ttype filter hook " + h + " priority filter; policy accept;\n\t}\n}\n"
+	}
+	tests := []struct{ name, out, want string }{
+		{"inet table", hook("inet", "filter", "input", "input"), "inet filter input"},
+		{"ip table of another tool", hook("ip", "myfw", "in", "input"), "ip myfw in"},
+		{"ip6 filter is iptables-nft's", hook("ip6", "filter", "INPUT", "input"), ""},
+		{"ip security is iptables-nft's", hook("ip", "security", "INPUT", "input"), ""},
+		{"ip mangle is iptables-nft's", hook("ip", "mangle", "INPUT", "input"), ""},
+		{"ip6 raw is iptables-nft's", hook("ip6", "raw", "PREROUTING", "input"), ""},
+		{"inet output hook only", hook("inet", "filter", "output", "output"), ""},
+		{"bridge family", hook("bridge", "filter", "input", "input"), ""},
+		{"regular chain, no hook", "table inet filter {\n\tchain allow {\n\t}\n}\n", ""},
+		{"second table", hook("ip", "filter", "INPUT", "input") + hook("inet", "fw", "in", "input"), "inet fw in"},
+		{"empty listing", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			family, table, chain := nftForeignInput(tt.out)
+			if got := strings.TrimSpace(strings.Join([]string{family, table, chain}, " ")); got != tt.want {
+				t.Errorf("nftForeignInput = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

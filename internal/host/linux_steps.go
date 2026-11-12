@@ -211,6 +211,10 @@ type firewallRead struct {
 	// be read. It decides the step on an active ufw whose own rules decided the
 	// state: the exposure is unknown (#735).
 	policyUnread string
+	// other names a firewall the read does not parse, firewalld or a native
+	// nftables ruleset, that filters inbound traffic; fix says how to open the
+	// port in it. Nothing else is read: iptables is not authoritative (#739).
+	other string
 }
 
 // source names the tool whose rules decided the read, for messages; backend
@@ -222,10 +226,16 @@ func (read firewallRead) source() string {
 	return read.backend
 }
 
-// readLinuxFirewall reads with ufw when it is installed, otherwise iptables.
+// readLinuxFirewall reads with ufw when it is installed, otherwise iptables,
+// unless a firewall it does not parse filters the host (#739).
 // Every read needs root, so it runs nothing unprivileged: some iptables
 // backends exit 1, the "absent" answer, on permission denied.
 func readLinuxFirewall(r Runner, port int) firewallRead {
+	if r.Elevated() {
+		if read, found := readForeignFirewall(r, port); found {
+			return read
+		}
+	}
 	read := readLinuxFirewallV4(r, port)
 	if r.Elevated() {
 		read.v6Foreign, read.v6Open, read.v6Note = readIP6(r, port)
@@ -1146,6 +1156,9 @@ func portListHas(list string, port int) bool {
 
 func firewallSetupStep(r Runner, port int) SetupStep {
 	read := readLinuxFirewall(r, port)
+	if read.other != "" {
+		return foreignStep(read, port, "setup")
+	}
 	return withIP6(read, withPolicy(read, firewallSetupFrom(r, read, port)), port)
 }
 
@@ -1331,6 +1344,9 @@ func ufwInactiveStep(read firewallRead, port int, state string) SetupStep {
 }
 
 func firewallCheckStep(read firewallRead, port int) SetupStep {
+	if read.other != "" {
+		return foreignStep(read, port, "check")
+	}
 	return withIP6(read, withPolicy(read, firewallCheckV4(read, port)), port)
 }
 
