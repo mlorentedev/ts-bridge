@@ -253,6 +253,20 @@ ok "unscoped v6 allow: check does not report firewall_ok" -- "outcomes check $C 
 ok "unscoped v6 allow: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && ip6tables -S INPUT | grep -qx -- "$V6OPEN"'
 ip6tables -D INPUT -p tcp --dport 3389 -j ACCEPT
 ok "v6 allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+# A v6 chain INPUT jumps to (#720) is read too: tailscaled's shape (a tailscale0 accept) is ok, and an
+# unscoped allow added inside it is reported under the chain's name, never deleted.
+V6CHAINOPEN='-A tsbe2e -p tcp -m tcp --dport 3389 -j ACCEPT'
+ip6tables -N tsbe2e
+ip6tables -A tsbe2e -i tailscale0 -j ACCEPT
+ip6tables -I INPUT -j tsbe2e
+ok "v6 jumped chain, tailscaled's shape: check is ok" -- 'outcomes check "$C" | fwstep ok'
+ip6tables -A tsbe2e -p tcp --dport 3389 -j ACCEPT
+ok "unscoped v6 allow in a jumped chain: check says manual, naming ip6tables -D tsbe2e" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | json "\"ip6tables -D tsbe2e\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"fix\"]"'
+ok "unscoped v6 allow in a jumped chain: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "unscoped v6 allow in a jumped chain: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && ip6tables -S tsbe2e | grep -qx -- "$V6CHAINOPEN"'
+ip6tables -D tsbe2e -p tcp --dport 3389 -j ACCEPT
+ok "v6 jumped-chain allow removed: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+ip6tables -D INPUT -j tsbe2e && ip6tables -F tsbe2e && ip6tables -X tsbe2e
 # POSIX ACLs on a state_dir ancestor (#598). setfacl raises the mask with a named entry and the group
 # bits mirror it, so the mode check alone already refuses that; the ACL read names the principal, and is
 # the only layer that sees an entry the mask hides (setfacl -n).

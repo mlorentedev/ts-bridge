@@ -1808,6 +1808,14 @@ const (
 	ip6Closed    = "-P INPUT DROP\n-A INPUT -j ts-input\n"
 	ip6Unscoped  = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
 	ip6DeleteFix = "ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
+	// ip6TSInput is tailscaled's v6 ts-input as `ip6tables -S ts-input` printed
+	// it in --netfilter-mode=on, captured with scripts/e2e/capture-tsfw.sh on
+	// 2026-11-12 (tailscale 1.104.4); ip6TSInputNFT is the same chain under
+	// iptables-nft, which prints the interfaces as wildcards (#720).
+	ip6ChainRead  = "ip6tables -S ts-input"
+	ip6TSInput    = "-N ts-input\n-A ts-input -s fd7a:115c:a1e0::1/128 -i lo -j ACCEPT\n-A ts-input -i tailscale0 -j ACCEPT\n"
+	ip6TSInputNFT = "-N ts-input\n-A ts-input -s fd7a:115c:a1e0::1/128 -i lo+ -j ACCEPT\n-A ts-input -i tailscale0+ -j ACCEPT\n"
+	ip6InChain    = "-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT"
 )
 
 // TestIP6Exposure pins the v6 read as an exposure scan (#526): an unscoped v6
@@ -1822,8 +1830,13 @@ func TestIP6Exposure(t *testing.T) {
 		want    Outcome
 		message string
 		fix     string // the -D fix a manual step names; ip6DeleteFix when empty
+		chain   string // what ip6tables -S ts-input prints; ip6TSInput when empty
 	}{
 		{name: "captured chain", onPath: true, v6: ip6Closed, want: OutcomeOK},
+		{name: "captured chain, iptables-nft", onPath: true, v6: ip6Closed, chain: ip6TSInputNFT, want: OutcomeOK},
+		// An allow inside the chain INPUT jumps to opens the port as one in INPUT does (#720).
+		{name: "an unscoped v6 allow inside ts-input", onPath: true, v6: ip6Closed, chain: ip6TSInput + ip6InChain + "\n", want: OutcomeManual,
+			message: ip6InChain, fix: "ip6tables -D ts-input -p tcp -m tcp --dport 3389 -j ACCEPT"},
 		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Closed + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
 		{name: "a port-less v6 accept is the operator's posture", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeOK},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Closed + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
@@ -1848,7 +1861,7 @@ func TestIP6Exposure(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			newRunner := func() *recordingRunner {
 				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "ip6tables": tt.onPath},
-					output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: tt.v6},
+					output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: tt.v6, ip6ChainRead: cmp.Or(tt.chain, ip6TSInput)},
 					fail:   map[string]bool{ip6Read: tt.v6Fails}}
 			}
 			r := newRunner()
@@ -1859,6 +1872,9 @@ func TestIP6Exposure(t *testing.T) {
 			want := []string{"lookpath " + firewalldCmd, "lookpath nft", "lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain, "lookpath " + backendIP6}
 			if tt.onPath {
 				want = append(want, "output "+ip6Read)
+			}
+			if tt.onPath && !tt.v6Fails {
+				want = append(want, "output "+ip6ChainRead)
 			}
 			if !reflect.DeepEqual(r.calls, want) {
 				t.Errorf("calls:\n got %q\nwant %q", r.calls, want)
@@ -1936,6 +1952,107 @@ func TestOffTailnetOnlyAllow(t *testing.T) {
 	}
 }
 
+// TestIP6Jumps pins the walk into the chains INPUT jumps to (#720): a chain is
+// followed when the jump applies to every packet for the port, once, however
+// deep, and its unscoped allows are reported under the chain's own name. A
+// target that is no chain is skipped; a chain that cannot be read is a note.
+func TestIP6Jumps(t *testing.T) {
+	const (
+		open   = "-A mine -p tcp -m tcp --dport 3389 -j ACCEPT"
+		noMine = "ip6tables v1.8.10 (nf_tables): chain `mine' in table `filter' is incompatible, use 'nft' tool.\n"
+	)
+	missing := "ip6tables: No chain/target/match by that name.\n"
+	tests := []struct {
+		name   string
+		input  string
+		chains map[string]string // chain -> what ip6tables -S <chain> prints
+		fail   map[string]string // chain -> stderr of a failed read
+		want   []string
+		note   string
+		said   string   // the tool's words the note must quote
+		ufw    bool     // the host's firewall is read through ufw
+		reads  []string // the chains read, in order
+	}{
+		{name: "tailscaled's ts-input", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput}, reads: []string{"ts-input"}},
+		{name: "an allow in ts-input", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + ip6InChain}, want: []string{ip6InChain}, reads: []string{"ts-input"}},
+		{name: "a jump through goto", input: "-A INPUT -g mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "a jump for the port", input: "-A INPUT -p tcp -m tcp --dport 3389 -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "a jump for another port is not followed", input: "-A INPUT -p tcp -m tcp --dport 22 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a jump held to one interface is not followed", input: "-A INPUT -i eth0 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a loopback jump is not followed", input: "-A INPUT -i lo -j mine", chains: map[string]string{"mine": open}},
+		{name: "a jump on every interface but one is followed", input: "-A INPUT ! -i tailscale0 -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "two jumps deep", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j mine", "mine": open}, want: []string{open}, reads: []string{"ts-input", "mine"}},
+		{name: "a loop ends", input: "-A INPUT -j mine", chains: map[string]string{"mine": open + "\n-A mine -j other", "other": "-A other -j mine\n-A other -j INPUT"}, want: []string{open}, reads: []string{"mine", "other"}},
+		{name: "a chain jumped to twice is read once", input: "-A INPUT -j mine\n-A INPUT -p tcp -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "verdicts are not chains", input: "-A INPUT -p tcp -j DROP\n-A INPUT -j RETURN\n-A INPUT -p tcp -j REJECT --reject-with tcp-reset"},
+		{name: "a target that is no chain is skipped without a note", input: "-A INPUT -j LOG", fail: map[string]string{"LOG": missing}, reads: []string{"LOG"}},
+		// ufw writes its v6 chains and `ufw show added` reports an allow there
+		// with a fix ufw keeps; an ip6tables -D would be undone on its reload.
+		{name: "ufw's chains are left to the ufw read", ufw: true, input: "-A INPUT -j ufw6-before-input", chains: map[string]string{"ufw6-before-input": "-A ufw6-before-input -p tcp -m tcp --dport 3389 -j ACCEPT"}},
+		// Without a ufw read nothing accounts for a ufw6 chain, so the prefix
+		// alone excludes nothing (#752 review).
+		{name: "a ufw6 chain on a host ufw does not read is walked", input: "-A INPUT -j ufw6-custom", chains: map[string]string{"ufw6-custom": "-A ufw6-custom -p tcp -m tcp --dport 3389 -j ACCEPT"},
+			want: []string{"-A ufw6-custom -p tcp -m tcp --dport 3389 -j ACCEPT"}, reads: []string{"ufw6-custom"}},
+		// A qualifier beyond a scope or the port narrows a port jump as it does a
+		// port-less one: replies only are no new connection (#752 review).
+		{name: "a port jump held to established replies is not followed", input: "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j mine", chains: map[string]string{"mine": open}},
+		{name: "a multiport jump naming the port", input: "-A INPUT -p tcp -m multiport --dports 22,3389 -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "a multiport jump not naming the port", input: "-A INPUT -p tcp -m multiport --dports 22,80 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a chain that cannot be read is a note, INPUT still read", input: ip6Unscoped + "\n-A INPUT -j mine", fail: map[string]string{"mine": noMine}, want: []string{ip6Unscoped},
+			note: "ip6tables -S mine: ", said: "(" + strings.TrimSuffix(noMine, "\n") + ")", reads: []string{"mine"}},
+		// A port-less accept is the operator's posture, in a chain as in INPUT
+		// (the INPUT row in TestIP6Exposure): the scan reports allows for the port.
+		{name: "a port-less accept in a chain is the operator's posture", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j ACCEPT"}, reads: []string{"ts-input"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{elevated: true, onPath: map[string]bool{backendIP6: true}, output: map[string]string{ip6Read: "-P INPUT DROP\n" + tt.input + "\n"},
+				exit: map[string]int{}, stderr: map[string]string{}}
+			for chain, out := range tt.chains {
+				r.output["ip6tables -S "+chain] = out + "\n"
+			}
+			for chain, said := range tt.fail {
+				r.exit["ip6tables -S "+chain], r.stderr["ip6tables -S "+chain] = 1, said
+			}
+			foreign, _, note := readIP6(r, 3389, tt.ufw)
+			if !slices.Equal(foreign, tt.want) {
+				t.Errorf("foreign = %q, want %q", foreign, tt.want)
+			}
+			if (tt.note == "") != (note == "") || !strings.Contains(note, tt.note) || !strings.Contains(note, tt.said) {
+				t.Errorf("note = %q, want %q", note, tt.note)
+			}
+			var reads []string
+			for _, c := range r.calls {
+				if chain, ok := strings.CutPrefix(c, "output ip6tables -S "); ok && chain != iptInput {
+					reads = append(reads, chain)
+				}
+			}
+			if !slices.Equal(reads, tt.reads) {
+				t.Errorf("chains read = %q, want %q", reads, tt.reads)
+			}
+		})
+	}
+}
+
+// TestIP6JumpsUFWHost pins the ufw6 exclusion end to end (#720 review): on a
+// ufw host, `ufw allow 3389` also writes an unscoped v6 allow into ufw's own
+// chains. It is reported once, by the ufw read, with ufw's fix: the v6 walk
+// never reads a ufw6 chain, so no ip6tables -D that ufw would undo is named.
+func TestIP6JumpsUFWHost(t *testing.T) {
+	const ufw6 = "ip6tables -S ufw6-user-input"
+	r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true, backendIP6: true}, output: map[string]string{
+		ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + "ufw allow 3389\n", iptRead: ufwHostInput, iptChain: tsInputNoAccept,
+		ip6Read: "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -j ufw6-user-input\n", ip6ChainRead: ip6TSInput,
+		ufw6: "-N ufw6-user-input\n-A ufw6-user-input -p tcp -m tcp --dport 3389 -j ACCEPT\n"}}
+	check := firewallCheckStep(readLinuxFirewall(r, 3389), 3389)
+	if slices.Contains(r.calls, "output "+ufw6) {
+		t.Errorf("the walk read %s; ufw's chains are the ufw read's", ufw6)
+	}
+	if check.Outcome != OutcomeManual || strings.Contains(check.Fix, "ip6tables -D") || !strings.Contains(check.Fix, "ufw") {
+		t.Errorf("check = %v, fix %q; want manual with ufw's fix and no ip6tables -D", check.Outcome, check.Fix)
+	}
+}
+
 // withoutProbes drops the lookups that every elevated read makes: ip6tables
 // (#526), and the foreign-firewall probe's firewall-cmd and nft (#739), which
 // open the read. These tables pin the IPv4 sequence on hosts with neither;
@@ -1957,7 +2074,7 @@ func withoutProbes(calls []string) []string {
 func TestReadIP6NoteQuotesTheTool(t *testing.T) {
 	const said = "ip6tables v1.8.10 (nf_tables): Could not fetch rule set generation id: Address family not supported by protocol"
 	r := &recordingRunner{onPath: map[string]bool{backendIP6: true}, exit: map[string]int{"ip6tables -S INPUT": 1}, stderr: map[string]string{"ip6tables -S INPUT": said + "\n"}}
-	_, _, note := readIP6(r, 3389)
+	_, _, note := readIP6(r, 3389, false)
 	if !strings.Contains(note, "Address family not supported by protocol") {
 		t.Errorf("note = %q, want it to quote the tool's stderr", note)
 	}
