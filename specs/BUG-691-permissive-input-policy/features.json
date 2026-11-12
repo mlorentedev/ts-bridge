@@ -1,0 +1,30 @@
+[
+  {
+    "id": "BUG-691-permissive-input-policy-f1",
+    "behavior": "AC1: iptables backend, policy ACCEPT, rule present: check and setup report manual naming the policy and the DROP/firewall fix, firewall_ok false",
+    "verification": "go test ./internal/host/ -run 'TestPermissiveInputPolicy' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-691-permissive-input-policy-f2",
+    "behavior": "AC2: iptables backend, policy ACCEPT, rule absent: setup adds the scoped rule, reports manual, and runs no iptables -P",
+    "verification": "go test ./internal/host/ -run 'TestPermissiveInputPolicy' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-691-permissive-input-policy-f3",
+    "behavior": "AC3: policy DROP, the ufw backend, or an already unverified/failed step keep their outcomes",
+    "verification": "go test ./internal/host/ -run 'TestPermissiveInputPolicy|TestFirewallStepsTailscaledModes|TestIP6Exposure' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-691-permissive-input-policy-f4",
+    "behavior": "AC4: e2e on the Linux VM: default-ACCEPT iptables guest is manual with firewall_ok false; under DROP the iptables cases pass",
+    "verification": "make e2e-linux",
+    "state": "pending",
+    "evidence": ""
+  }
+]
