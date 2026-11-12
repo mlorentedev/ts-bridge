@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -175,7 +174,7 @@ func TestDiscoverList_ReadsAPIKeyFromFile(t *testing.T) {
 	var gotAuth string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
-		_ = json.NewEncoder(w).Encode([]discover.HeadscaleDevice{{Name: "host-a", IPs: []string{"100.64.0.1"}, Authorized: true}})
+		_, _ = w.Write([]byte(`{"nodes":[{"givenName":"host-a","ipAddresses":["100.64.0.1"]}]}`))
 	}))
 	defer server.Close()
 
@@ -444,10 +443,7 @@ func TestChooseHost_AutoRefusesWhenNoHostIsAuthorized(t *testing.T) {
 // .env names the first authorized host and stdin is never read (#684).
 func TestDiscoverAutoWritesTheFirstHost(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode([]discover.HeadscaleDevice{
-			{Name: "zeta", IPs: []string{"100.64.0.3"}, Authorized: true},
-			{Name: "beta", IPs: []string{"100.64.0.2"}, Authorized: true},
-		})
+		_, _ = w.Write([]byte(`{"nodes":[{"givenName":"zeta","ipAddresses":["100.64.0.3"]},{"givenName":"beta","ipAddresses":["100.64.0.2"]}]}`))
 	}))
 	defer server.Close()
 	t.Setenv("TS_CONTROL_URL", server.URL)
