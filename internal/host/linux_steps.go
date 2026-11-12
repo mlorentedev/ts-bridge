@@ -276,14 +276,14 @@ func withPolicy(read firewallRead, step SetupStep) SetupStep {
 	if !read.inputOpen || read.backend != backendIPT {
 		return step
 	}
-	step.Message += fmt.Sprintf("; the INPUT policy is ACCEPT, so every port is open on every interface and the %s scope restricts nothing", tailnetInterface)
+	step.Message += fmt.Sprintf("; the iptables INPUT policy is ACCEPT, so unless another firewall filters this host every port is open on every interface and the %s scope restricts nothing", tailnetInterface)
 	if step.Outcome != OutcomeOK && step.Outcome != OutcomeChanged {
 		return step // an unverified or failed step keeps its own fix; only the message gains the note
 	}
 	fix := "enable a host firewall (ufw), or, as root, keep loopback, replies and SSH open first " +
 		"(`iptables -A INPUT -i lo -j ACCEPT`, `iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, " +
-		"`iptables -A INPUT -p tcp --dport 22 -j ACCEPT`) and then run `iptables -P INPUT DROP`; " +
-		"persist the set with your distribution's iptables service"
+		"`iptables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`) and then run `iptables -P INPUT DROP`, " +
+		"persisting the set with your distribution's iptables service; or confirm another firewall (firewalld, nftables) filters this host"
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}
