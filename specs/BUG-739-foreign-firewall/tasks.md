@@ -17,18 +17,18 @@ owner: manu
 
 ## Implementation
 
-- [ ] [AC1] [AC3] Failing table test `TestForeignFirewall`: firewalld running / not running (252) / absent / failing, through `firewallCheckStep` and `firewallSetupStep`, asserting the outcome, the name, no write, no policy note, `linuxFirewallOK` false
-- [ ] [AC1] [AC3] `readForeignFirewall` (firewalld probe) ahead of the backend choice in `readLinuxFirewall`; the v6 read is skipped when found; a dedicated step in setup and check
-- [ ] [AC2] [AC3] Failing rows for nft: `inet filter` with an input hook, iptables-nft and tailscaled tables only, a table with no input hook, a failed listing; plus `nftForeignTable` parser cases
-- [ ] [AC2] nft probe in `readForeignFirewall`
-- [ ] [AC4] Existing fixtures that put `nft` or `firewall-cmd` on PATH answer the new probes; the full host suite passes
-- [ ] The runbook-key test covers the new messages
-- [ ] [AC5] `scripts/e2e/linux.sh`: native `inet` table case in the iptables section
-- [ ] Docs: ADR-017 Amendment B line, parity doc, runbook troubleshooting rows (firewalld, nftables)
+- [x] [AC1] [AC3] Failing table test `TestForeignFirewall`: firewalld running / not running (252) / absent / failing, through `firewallCheckStep` and `firewallSetupStep`, asserting the outcome, the name, no write, no policy note, `linuxFirewallOK` false
+- [x] [AC1] [AC3] `readForeignFirewall` (firewalld probe) ahead of the backend choice in `readLinuxFirewall`; the v6 read is skipped when found; a dedicated step in setup and check
+- [x] [AC2] [AC3] Failing rows for nft: `inet filter` with an input hook, iptables-nft and tailscaled tables only, a table with no input hook, a failed listing; plus `nftForeignTable` parser cases
+- [x] [AC2] nft probe in `readForeignFirewall`
+- [x] [AC4] Existing fixtures that put `nft` or `firewall-cmd` on PATH answer the new probes; the full host suite passes
+- [x] The runbook-key test covers the new messages
+- [x] [AC5] `scripts/e2e/linux.sh`: native `inet` table case in the iptables section
+- [x] Docs: ADR-017 Amendment B line, parity doc, runbook troubleshooting rows (firewalld, nftables)
 
 ## Closing
 
-- [ ] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`)
+- [x] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`)
 - [ ] `make e2e-linux`; firewalld probed by hand with the built binary on a guest
 - [ ] verification.md filled; spec review committed
 - [ ] PR with `Closes #739`
