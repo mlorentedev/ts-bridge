@@ -61,8 +61,8 @@ func unattendedStep(r Runner) SetupStep {
 		}
 	}
 	if prefs.LoggedOut {
-		return newStep(name, OutcomeManual, "Unattended mode set, but it does not persist until the node logs in: a logged-out node keeps no profile, so a service restart drops it",
-			"run `tailscale up` to log the node in, then `ts-bridge host setup` again")
+		return newStep(name, OutcomeManual, "Unattended mode is on, but it does not persist until the node logs in: a logged-out node keeps no profile, so a service restart drops it",
+			"run `tailscale up` (with `--login-server <url>` on Headscale) to log the node in, then `ts-bridge host setup` again")
 	}
 	return newStep(name, OutcomeChanged, "Unattended mode enabled", "")
 }
