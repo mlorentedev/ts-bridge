@@ -2078,10 +2078,10 @@ func TestIP6Policy(t *testing.T) {
 			}
 		})
 	}
-	// ufw sets its own v6 default when enabled: the v6 policy is not read there.
-	ufw := withIP6(firewallRead{backend: backendUFW, v6Open: true}, SetupStep{Outcome: OutcomeOK}, 3389)
+	// An inactive ufw already reports itself as off: its open policy is that same fact (#735).
+	ufw := withIP6(firewallRead{backend: backendUFW, ufwInactive: true, v6Open: true}, SetupStep{Outcome: OutcomeOK}, 3389)
 	if ufw.Outcome != OutcomeOK || ufw.Fix != "" || ufw.Message != "" {
-		t.Errorf("a ufw host's step changed: %+v", ufw)
+		t.Errorf("an inactive ufw host's step changed: %+v", ufw)
 	}
 }
 
@@ -2114,5 +2114,137 @@ func TestManualRewriteClearsSuccess(t *testing.T) {
 		if got.Outcome != OutcomeManual || got.Success {
 			t.Errorf("%s: outcome %s success %v, want manual and false", name, got.Outcome, got.Success)
 		}
+	}
+}
+
+// TestUFWPolicy pins #735: an active ufw writes the kernel's INPUT policies
+// from its incoming default, so an ACCEPT policy there restricts nothing, as
+// on an iptables host. The fix names ufw's own commands, never a raw -P.
+func TestUFWPolicy(t *testing.T) {
+	// With IPV6=no, ufw stored only the v4 copy of every allow: SSH over IPv6 needs
+	// its v6 copy before the v6 deny applies, and `ufw allow` adds it cleanly only
+	// while ufw is disabled (probed on ufw 0.36.2; review of #748).
+	const v6UFWSteps = "run `ufw disable`, set `IPV6=yes` in /etc/default/ufw, run `ufw allow <your SSH port>/tcp` so ufw adds the IPv6 copy of the SSH allow, then `ufw enable`"
+	policy := func(p string) string { return strings.Replace(ufwHostInput, "-P INPUT DROP", "-P INPUT "+p, 1) }
+	runner := func(status, v4, v6 string, fail bool) *recordingRunner {
+		r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true, "ip6tables": true},
+			output: map[string]string{ufwStatus: status, ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: v4, iptChain: tsInputNoAccept, ip6Read: "-P INPUT " + v6 + "\n-A INPUT -j ts-input\n"}}
+		if fail {
+			r.fail = map[string]bool{ufwStatus: true}
+		}
+		return r
+	}
+	steps := func(status, v4, v6 string, fail bool) (setup, check SetupStep, ok bool) {
+		read := readLinuxFirewall(runner(status, v4, v6, fail), 3389)
+		return firewallSetupStep(runner(status, v4, v6, fail), 3389), firewallCheckStep(read, 3389), linuxFirewallOK(read)
+	}
+	tests := []struct {
+		name     string
+		v4, v6   string
+		manual   bool
+		fixHas   []string
+		fixLacks []string
+	}{
+		{"incoming allow: both policies ACCEPT", "ACCEPT", "ACCEPT", true, []string{"`ufw allow <your SSH port>/tcp`", "`ufw default deny incoming`", v6UFWSteps}, []string{"-P INPUT DROP", "`ufw reload`"}},
+		{"IPV6=no after a boot: v6 ACCEPT only", "DROP", "ACCEPT", true, []string{v6UFWSteps}, []string{"-P INPUT DROP", "`ufw reload`"}},
+		{"incoming deny: both DROP", "DROP", "DROP", false, nil, []string{"ufw default deny incoming", "IPV6=yes"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setup, check, ok := steps(ufwActive, policy(tt.v4), tt.v6, false)
+			for _, s := range []SetupStep{setup, check} {
+				if (s.Outcome == OutcomeManual) != tt.manual || s.Success == tt.manual {
+					t.Errorf("outcome %v success %v, want manual=%v: %q", s.Outcome, s.Success, tt.manual, s.Message)
+				}
+				for _, want := range tt.fixHas {
+					if !strings.Contains(s.Fix, want) {
+						t.Errorf("fix lacks %q: %s", want, s.Fix)
+					}
+				}
+				for _, bad := range tt.fixLacks {
+					if strings.Contains(s.Fix, bad) {
+						t.Errorf("fix names %q: %s", bad, s.Fix)
+					}
+				}
+			}
+			if ok == tt.manual {
+				t.Errorf("linuxFirewallOK = %v, want %v", ok, !tt.manual)
+			}
+		})
+	}
+	// An inactive or unreadable ufw keeps what it reported with closed policies.
+	for _, c := range []struct {
+		name   string
+		status string
+		fail   bool
+	}{{"inactive", "Status: inactive\n", false}, {"unreadable", "", true}} {
+		openSetup, openCheck, _ := steps(c.status, policy("ACCEPT"), "ACCEPT", c.fail)
+		shutSetup, shutCheck, _ := steps(c.status, policy("DROP"), "DROP", c.fail)
+		if openSetup.Outcome != shutSetup.Outcome || openCheck.Outcome != shutCheck.Outcome || openSetup.Fix != shutSetup.Fix || openCheck.Fix != shutCheck.Fix {
+			t.Errorf("%s ufw changed with open policies: setup %v -> %v, check %v -> %v", c.name, shutSetup.Outcome, openSetup.Outcome, shutCheck.Outcome, openCheck.Outcome)
+		}
+	}
+}
+
+// TestUFWPolicyUnread pins review F3 of #735: on an active ufw whose own allow
+// decides, a failed iptables read leaves the policy unknown, so check and setup
+// must not report the host as closed.
+func TestUFWPolicyUnread(t *testing.T) {
+	newRunner := func() *recordingRunner {
+		return &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true},
+			output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + ufwScopedAllow}, exit: map[string]int{iptRead: 4}}
+	}
+	read := readLinuxFirewall(newRunner(), 3389)
+	for name, s := range map[string]SetupStep{"setup": firewallSetupStep(newRunner(), 3389), "check": firewallCheckStep(read, 3389)} {
+		if s.Outcome != OutcomeUnverified || s.Success {
+			t.Errorf("%s = %v (success %v) %q, want unverified", name, s.Outcome, s.Success, s.Message)
+		}
+		if !strings.Contains(s.Message, "INPUT policy could not be read") {
+			t.Errorf("%s message does not say the policy is unread: %q", name, s.Message)
+		}
+	}
+	if linuxFirewallOK(read) {
+		t.Error("linuxFirewallOK = true with the policy unread")
+	}
+}
+
+// TestUFWPolicyMessage pins review F4 of #735: on a ufw host the message names
+// ufw's incoming default, not a raw iptables policy another firewall may filter.
+func TestUFWPolicyMessage(t *testing.T) {
+	ok := newStep(linuxFwName, OutcomeOK, "Firewall allows TCP 3389 (ufw)", "")
+	got := withPolicy(firewallRead{backend: backendUFW, inputOpen: true}, ok)
+	if !strings.Contains(got.Message, "ufw's incoming default is allow") || strings.Contains(got.Message, "unless another firewall") {
+		t.Errorf("v4 message: %q", got.Message)
+	}
+	got6 := withV6Policy(firewallRead{backend: backendUFW, v6Open: true}, ok)
+	if !strings.Contains(got6.Message, "IPV6=no") || strings.Contains(got6.Message, "unless another firewall") {
+		t.Errorf("v6 message: %q", got6.Message)
+	}
+	// The runbook keys its raw-iptables rows on these phrases, and their fix is
+	// the `-P` that ufw rewrites: a ufw message must not match those rows.
+	for _, key := range []string{"the iptables INPUT policy is ACCEPT", "the ip6tables INPUT policy is ACCEPT"} {
+		for _, m := range []string{got.Message, got6.Message} {
+			if strings.Contains(m, key) {
+				t.Errorf("ufw message %q carries the iptables runbook key %q", m, key)
+			}
+		}
+	}
+}
+
+// TestUFWPolicyReadButChainUnread pins review round 2 of #735: a readable
+// ACCEPT policy stays manual with ufw's fix when only the ts-input walk fails.
+func TestUFWPolicyReadButChainUnread(t *testing.T) {
+	r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true},
+		output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: strings.Replace(ufwHostInput, "-P INPUT DROP", "-P INPUT ACCEPT", 1)},
+		exit:   map[string]int{iptChain: 4}}
+	read := readLinuxFirewall(r, 3389)
+	check := firewallCheckStep(read, 3389)
+	if read.policyUnread != "" || check.Outcome != OutcomeManual || !strings.Contains(check.Fix, "`ufw default deny incoming`") {
+		t.Errorf("policyUnread %q, check %v %q fix %q; want manual naming ufw default deny incoming", read.policyUnread, check.Outcome, check.Message, check.Fix)
+	}
+	// A raw iptables host whose INPUT read fails says so once, without ufw's words.
+	ipt := &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, exit: map[string]int{iptRead: 4}}
+	if c := firewallCheckStep(readLinuxFirewall(ipt, 3389), 3389); strings.Contains(c.Message, "ufw") {
+		t.Errorf("an iptables host's unread step names ufw: %q", c.Message)
 	}
 }

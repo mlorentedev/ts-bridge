@@ -176,6 +176,16 @@ ok "off-tailnet ufw allow only: setup adds the tailscale0 allow, keeps the opera
 ok "off-tailnet ufw allow only: check is ok afterwards" -- 'outcomes check "$C" | fwstep ok'
 ufw delete allow from 10.0.0.0/8 to any port 3389 proto tcp >/dev/null 2>&1
 
+# Incoming default allow on an active ufw (#735): ufw writes both INPUT policies as ACCEPT,
+# so the tailscale0 scope restricts nothing. Setup leaves the default; the guest restores it.
+ufw default allow incoming >/dev/null 2>&1
+ok "ufw incoming allow: the guest's INPUT policy is ACCEPT" -- 'iptables -S INPUT | head -1 | grep -qx -- "-P INPUT ACCEPT"'
+ok "ufw incoming allow: check says manual, naming ufw default deny incoming" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | grep -q "ufw default deny incoming"'
+ok "ufw incoming allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "ufw incoming allow: setup reports it and leaves the default" -- 'outcomes setup "$C" | fwstep manual && ufw status verbose | grep -q "allow (incoming)"'
+ufw default deny incoming >/dev/null 2>&1
+ok "ufw incoming deny: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+
 # Firewall scope (#631) on an iptables host: ufw is removed, so setup writes through iptables.
 ufw --force disable >/dev/null 2>&1
 apt-get -qq remove -y ufw >/dev/null 2>&1
