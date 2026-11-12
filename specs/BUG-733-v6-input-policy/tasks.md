@@ -11,14 +11,14 @@ owner: manu
 
 ## Implementation
 
-- [ ] [AC1] [AC2] [AC3] Failing table test `TestIP6Policy`; `TestIP6Exposure` moves to a v6 DROP fixture
-- [ ] [AC1] `readIP6` returns the v6 policy; `withIP6` (or a sibling) applies it; `linuxFirewallOK` reads it
-- [ ] [AC4] `scripts/e2e/linux.sh`: v6 ACCEPT case, then close v6 with keep-open rules first
-- [ ] Docs: ADR-017 Amendment B line, parity doc firewall row, troubleshooting row
+- [x] [AC1] [AC2] [AC3] Failing table test `TestIP6Policy`; `TestIP6Exposure` moves to a v6 DROP fixture
+- [x] [AC1] `readIP6` returns the v6 policy; `withIP6` (or a sibling) applies it; `linuxFirewallOK` reads it
+- [x] [AC4] `scripts/e2e/linux.sh`: v6 ACCEPT case, then close v6 with keep-open rules first
+- [x] Docs: ADR-017 Amendment B line, parity doc firewall row, troubleshooting row
 
 ## Closing
 
-- [ ] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`)
+- [x] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`)
 - [ ] `make e2e-linux`
 - [ ] verification.md filled; spec review committed
 - [ ] PR with `Closes #733`

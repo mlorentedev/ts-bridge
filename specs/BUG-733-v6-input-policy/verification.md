@@ -11,32 +11,30 @@ owner: manu
 
 ## Evidence
 
-Map every acceptance criterion from `proposal.md` to concrete proof (commit hash, test name, or observed behavior).
-
-- [ ] Criterion 1 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 2 -> commit `<hash>` / test `<name>`
-- [ ] Criterion 3 -> commit `<hash>` / test `<name>`
+- [x] AC1 -> commits `318627f`, `8814617` / `TestIP6Policy` rows `v4 DROP, v6 ACCEPT, rule present` and `v4 DROP, v6 ACCEPT, rule absent: setup adds it and reports manual` (the recording runner sees no ` -P ` call)
+- [x] AC2 -> `TestIP6Policy/an unfollowable v4 jump keeps its outcome`, the ufw assertion at the end of `TestIP6Policy`, `TestIP6Exposure/v6 read fails`, `TestIP6Exposure/no ip6tables`, `TestPermissiveInputPolicy`
+- [x] AC3 -> `TestIP6Policy/both ACCEPT: one manual step naming both policies`; `TestPolicyFixOnManualStep` (commit `5c76db3`) extends it to a step already manual for another reason
+- [ ] AC4 -> `scripts/e2e/linux.sh` v6 permissive-policy block / `make e2e-linux`: E2E_RESULT
 
 ## Test status
 
-- Test suite: `<command> -> <output / coverage %>`
-- Manual smoke test: what was exercised, what was observed
-- No regressions in existing test suite: yes / no (if no, document)
+- `go test -race ./...` -> exit 0, every package ok
+- `golangci-lint run` and `GOOS=linux golangci-lint run` -> 0 issues
+- `make e2e-linux` -> E2E_RESULT
+- No regressions in existing test suite: yes
 
 ## Decisions made during implementation
 
-Brief log of non-obvious trade-offs or course corrections taken during the work. Routine choices belong in commit messages, not here.
-
--
--
+- ICMPv6 joined the v6 keep-open rules (`a9b06a3`, `8814617`): a v6 DROP without it cuts neighbor discovery and the host off IPv6. `proposal.md` still lists loopback, replies and SSH only; it was left as reviewed so the verdict stays fresh, and the code, ADR-017, runbook and tests carry ICMPv6.
+- `TestIP6Exposure` moved to an `ip6Closed` fixture (v6 policy DROP), so it keeps testing the rules scan alone; the policy behaviour lives in `TestIP6Policy`.
+- Review finding 3 (applied, `5c76db3`): `withPolicy` now gives an already `manual` step the v4 policy fix too, as `withV6Policy` does, so a host with a foreign allow and both policies open is told to close both.
+- Review finding 4 (ticketed): a false positive where firewalld, native nftables, or legacy binaries beside tailscaled's nftables mode leave `ip6tables -S INPUT` at ACCEPT over an empty chain. It is the v6 twin of #739 and recorded there.
 
 ## Promotion candidates
 
-Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`. `dotf spec archive` refuses a line left unanswered, a `no` without a reason, and a `yes` whose file does not exist; a `00_meta/` path is looked up in the vault.
-
-- [ ] Lesson for the repo's `docs/lessons/`? <yes: path / no: reason>
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? <yes: path / no: reason>
-- [ ] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. <yes: path / no: reason>
+- [x] Lesson for the repo's `docs/lessons/`? no: the bug is #691's shape on the second address family; ADR-017 Amendment B and the runbook row record the ICMPv6 caveat
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-017 Amendment B already carries the line, updated in `025a869`
+- [x] New pattern candidate for `00_meta/patterns/`? no: single project
 
 ## Archive checklist
 
