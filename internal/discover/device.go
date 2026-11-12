@@ -3,8 +3,8 @@ package discover
 
 import "encoding/json"
 
-// HeadscaleDevice represents a device as returned by the Headscale API v1.
-// Headscale's /api/v1/device returns a different shape than Tailscale's API v2.
+// HeadscaleDevice is a Headscale node in discover's terms. ListHeadscaleDevices
+// fills it from /api/v1/node; its JSON tags are not Headscale's wire shape.
 type HeadscaleDevice struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -18,6 +18,7 @@ type HeadscaleDevice struct {
 
 	Authorized bool `json:"authorized"`
 	IsExternal bool `json:"isExternal"`
+	Online     bool `json:"online"`
 }
 
 // UnmarshalJSON handles the fact that Headscale returns "ip" as either a
