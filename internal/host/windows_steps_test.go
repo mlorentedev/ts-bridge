@@ -171,6 +171,12 @@ func TestWindowsFirewallRule(t *testing.T) {
 	}
 }
 
+// loggedOutCaptured is `tailscale debug prefs` from a never-logged-in Windows
+// node (Tailscale 1.104.6, #740), trimmed to the fields around the two the step
+// reads: CRLF line ends, `LoggedOut` present, `ForceDaemon` absent until
+// `tailscale set --unattended` runs.
+const loggedOutCaptured = "{\r\n\t\"ControlURL\": \"\",\r\n\t\"RouteAll\": true,\r\n\t\"CorpDNS\": true,\r\n\t\"WantRunning\": false,\r\n\t\"LoggedOut\": true,\r\n\t\"ShieldsUp\": false,\r\n\t\"NetfilterMode\": 2\r\n}\r\n"
+
 // TestWindowsUnattendedStep pins W1 (#455): the step reads ForceDaemon, the
 // pref --unattended sets, and changes only that pref. It never runs
 // `tailscale up`, which refuses on a Headscale node whose login server it was
@@ -198,9 +204,10 @@ func TestWindowsUnattendedStep(t *testing.T) {
 		},
 		{
 			// #740, measured on a never-logged-in guest: with no profile the
-			// set lasts until the service restarts, so no run reaches ok.
+			// set lasts until the service restarts, so no run reaches ok. The
+			// input is the guest's own output, CRLF included.
 			name:    "logged out, not unattended",
-			runner:  &recordingRunner{output: map[string]string{prefsRead: `{"LoggedOut": true}`}},
+			runner:  &recordingRunner{output: map[string]string{prefsRead: loggedOutCaptured}},
 			calls:   []string{"output " + prefsRead, "run " + setUnattend},
 			outcome: OutcomeManual,
 		},
