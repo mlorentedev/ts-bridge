@@ -19,6 +19,10 @@ const controlSource = "control"
 // controlOnlineSource names the node's own view of its control connection.
 const controlOnlineSource = "control-online"
 
+// controlReadTimeout bounds each Self.Online read: the local API client has no
+// deadline of its own, and a read that never answers must count as offline.
+var controlReadTimeout = 5 * time.Second
+
 // ControlPollInterval is how often serve reads the node's Self.Online, and
 // offlineSamplesDown how many offline reads in a row mark it down: about 30 s,
 // so one late map response does not flap readiness (HOST-011).
@@ -59,9 +63,14 @@ func WatchControlSession(ctx context.Context, states <-chan string, r Readiness)
 	}
 }
 
+// BusWatcher is the local API call NodeStates needs (*local.Client has it).
+type BusWatcher interface {
+	WatchIPNBus(context.Context, ipn.NotifyWatchOpt) (*local.IPNBusWatcher, error)
+}
+
 // NodeStates streams the node's backend states from its IPN bus, starting
 // with the current one. The channel closes when ctx ends or the bus fails.
-func NodeStates(ctx context.Context, lc *local.Client) (<-chan string, error) {
+func NodeStates(ctx context.Context, lc BusWatcher) (<-chan string, error) {
 	w, err := lc.WatchIPNBus(ctx, ipn.NotifyInitialState)
 	if err != nil {
 		return nil, err
@@ -138,6 +147,8 @@ func (s *onlineDebounce) observe(online bool, r Readiness) {
 }
 
 func nodeOnline(ctx context.Context, status func(context.Context) (*ipnstate.Status, error)) bool {
+	ctx, cancel := context.WithTimeout(ctx, controlReadTimeout)
+	defer cancel()
 	st, err := status(ctx)
 	return err == nil && st != nil && st.Self != nil && st.Self.Online
 }

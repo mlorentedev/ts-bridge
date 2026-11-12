@@ -142,3 +142,31 @@ func TestHealth_FoldsControlOnline(t *testing.T) {
 		t.Error("every source up: want ready")
 	}
 }
+
+// TestWatchControlOnline_BoundsEachRead: a status read that never answers
+// must count as offline after controlReadTimeout, not hold the watcher on
+// its last answer until shutdown.
+func TestWatchControlOnline_BoundsEachRead(t *testing.T) {
+	defer func(d time.Duration) { controlReadTimeout = d }(controlReadTimeout)
+	controlReadTimeout = 10 * time.Millisecond
+	ready := &fakeReadiness{}
+	ticks := make(chan time.Time)
+	done := make(chan struct{})
+	stall := func(ctx context.Context) (*ipnstate.Status, error) { <-ctx.Done(); return nil, ctx.Err() }
+	go func() { defer close(done); WatchControlOnline(context.Background(), stall, ticks, ready) }()
+	for i := 0; i < offlineSamplesDown; i++ {
+		select {
+		case ticks <- time.Time{}:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("tick %d not consumed: a stalled status read holds the watcher", i)
+		}
+	}
+	close(ticks)
+	<-done
+	want := []string{"down " + controlOnlineSource + " " + ReasonControlPlaneUnreachable}
+	ready.mu.Lock()
+	defer ready.mu.Unlock()
+	if !slices.Equal(ready.events, want) {
+		t.Errorf("events = %v, want %v", ready.events, want)
+	}
+}
