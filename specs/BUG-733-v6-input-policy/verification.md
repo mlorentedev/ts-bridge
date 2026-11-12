@@ -14,13 +14,13 @@ owner: manu
 - [x] AC1 -> commits `318627f`, `8814617` / `TestIP6Policy` rows `v4 DROP, v6 ACCEPT, rule present` and `v4 DROP, v6 ACCEPT, rule absent: setup adds it and reports manual` (the recording runner sees no ` -P ` call)
 - [x] AC2 -> `TestIP6Policy/an unfollowable v4 jump keeps its outcome`, the ufw assertion at the end of `TestIP6Policy`, `TestIP6Exposure/v6 read fails`, `TestIP6Exposure/no ip6tables`, `TestPermissiveInputPolicy`
 - [x] AC3 -> `TestIP6Policy/both ACCEPT: one manual step naming both policies`; `TestPolicyFixOnManualStep` (commit `5c76db3`) extends it to a step already manual for another reason
-- [ ] AC4 -> `scripts/e2e/linux.sh` v6 permissive-policy block / `make e2e-linux`: E2E_RESULT
+- [x] AC4 -> `scripts/e2e/linux.sh` v6 permissive-policy block / `make e2e-linux`: 98 pass, 0 fail, 0 xfail, 0 xpass on candidate `8814617` (v6 permissive policy: manual naming the ip6tables policy, not `firewall_ok`; closed v6 policy: DROP after the keep-open rules)
 
 ## Test status
 
 - `go test -race ./...` -> exit 0, every package ok
 - `golangci-lint run` and `GOOS=linux golangci-lint run` -> 0 issues
-- `make e2e-linux` -> E2E_RESULT
+- `make e2e-linux` -> 98 pass, 0 fail, 0 xfail, 0 xpass on candidate `8814617` (v6 permissive policy: manual naming the ip6tables policy, not `firewall_ok`; closed v6 policy: DROP after the keep-open rules)
 - No regressions in existing test suite: yes
 
 ## Decisions made during implementation

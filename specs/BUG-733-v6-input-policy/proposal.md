@@ -40,7 +40,7 @@ owner: manu
 - [x] [AC1] v4 `DROP` with v6 `ACCEPT` on an iptables host: `check` and `setup` report `manual`, the message names the ip6tables policy, the fix names `ip6tables -P INPUT DROP` with the keep-open rules, `firewall_ok` is false, and setup runs no `-P`.
 - [x] [AC2] v6 `DROP`, a failed v6 read, no `ip6tables`, a ufw backend, or an `unverified` v4 step: the outcome is as before. A failed or unverified step gains only the note.
 - [x] [AC3] v4 and v6 both `ACCEPT`: one `manual` step whose fix names both policies.
-- [ ] [AC4] e2e on the Linux guest: with v4 closed and v6 `ACCEPT`, check reads `manual` and `firewall_ok` false; after the guest closes v6 (keep-open rules first), check is `ok` again.
+- [x] [AC4] e2e on the Linux guest: with v4 closed and v6 `ACCEPT`, check reads `manual` and `firewall_ok` false; after the guest closes v6 (keep-open rules first), check is `ok` again.
 
 ## References
 
