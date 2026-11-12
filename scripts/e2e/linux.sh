@@ -223,6 +223,20 @@ ok "unscoped v6 allow: check does not report firewall_ok" -- "outcomes check $C 
 ok "unscoped v6 allow: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && ip6tables -S INPUT | grep -qx -- "$V6OPEN"'
 ip6tables -D INPUT -p tcp --dport 3389 -j ACCEPT
 ok "v6 allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+# Negated and port-less allows (#736) open the port as surely as one naming it: reported, with
+# the SSH caution in the fix, never deleted, and check is ok once the operator removes them.
+iptables -A INPUT -p tcp ! --dport 22 -j ACCEPT
+ok "v4 allow for every port but SSH: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "v4 allow for every port but SSH: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "v4 allow for every port but SSH: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -q -- "! --dport 22 -j ACCEPT"'
+iptables -D INPUT -p tcp ! --dport 22 -j ACCEPT
+ok "v4 negated allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+ip6tables -A INPUT -p tcp -j ACCEPT
+ok "v6 port-less allow: check says manual, with the SSH caution in the fix" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | json "\"SSH open first\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"fix\"]"'
+ok "v6 port-less allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "v6 port-less allow: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && ip6tables -S INPUT | grep -qx -- "-A INPUT -p tcp -j ACCEPT"'
+ip6tables -D INPUT -p tcp -j ACCEPT
+ok "v6 port-less allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
 # POSIX ACLs on a state_dir ancestor (#598). setfacl raises the mask with a named entry and the group
 # bits mirror it, so the mode check alone already refuses that; the ACL read names the principal, and is
 # the only layer that sees an entry the mask hides (setfacl -n).
