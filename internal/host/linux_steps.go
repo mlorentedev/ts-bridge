@@ -200,12 +200,12 @@ type firewallRead struct {
 	// not a reachability decision: the descriptor dials the IPv4 address (#526).
 	v6Foreign []string
 	v6Note    string
-	// inputOpen means iptables' INPUT policy is ACCEPT on a host without ufw:
-	// every port is open on every interface, so the tailscale0 scope restricts
-	// nothing (#691). Set by the iptables backend only.
+	// inputOpen means iptables' INPUT policy is ACCEPT: every port is open on
+	// every interface, so the tailscale0 scope restricts nothing (#691). An
+	// active ufw writes it from its incoming default (#735). See policyRead.
 	inputOpen bool
 	// v6Open means ip6tables' INPUT policy is ACCEPT: every port is open on
-	// every IPv6 address (#733). Used on the iptables backend only.
+	// every IPv6 address (#733); on ufw, incoming allow or IPV6=no (#735).
 	v6Open bool
 }
 
@@ -271,25 +271,34 @@ func ip6Narrowed(f []string) bool {
 // linuxFirewallOK is check's firewall_ok: the port is admitted, through a rule
 // scoped to the tailnet, and nothing admits it on every interface (#631, #526).
 func linuxFirewallOK(fw firewallRead) bool {
-	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw) && len(fw.v6Foreign) == 0 && !((fw.inputOpen || fw.v6Open) && fw.backend == backendIPT)
+	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw) && len(fw.v6Foreign) == 0 && !((fw.inputOpen || fw.v6Open) && policyRead(fw))
 }
 
-// withPolicy reports a permissive INPUT policy on an iptables host (#691): a
-// converged, repaired or already manual step gains the fix and is manual (#733), since the scoped rule restricts
-// nothing while the policy admits every port. Setup never changes the policy:
-// a DROP without an SSH allow can lock the operator out.
+// policyRead reports whether the INPUT policies decide the host's exposure:
+// on raw iptables, and on an active ufw, which writes them from its incoming
+// default (#735). An inactive ufw already reports itself as off.
+func policyRead(fw firewallRead) bool {
+	return fw.backend == backendIPT || (fw.backend == backendUFW && !fw.ufwInactive)
+}
+
+// withPolicy reports a permissive INPUT policy on an iptables host (#691) or
+// an active ufw (#735): a converged, repaired or already manual step gains the
+// fix and is manual (#733), since the scoped rule restricts nothing while the
+// policy admits every port. Setup never changes the policy: a DROP without an
+// SSH allow can lock the operator out. On ufw the fix is ufw's own command,
+// since ufw rewrites a raw policy on its next reload.
 func withPolicy(read firewallRead, step SetupStep) SetupStep {
-	if !read.inputOpen || read.backend != backendIPT {
+	if !read.inputOpen || !policyRead(read) {
 		return step
 	}
 	step.Message += fmt.Sprintf("; the iptables INPUT policy is ACCEPT, so unless another firewall filters this host every port is open on every interface and the %s scope restricts nothing", tailnetInterface)
 	if step.Outcome == OutcomeUnverified || step.Outcome == OutcomeFailed {
 		return step // an unverified or failed step keeps its own fix; only the message gains the note
 	}
-	fix := "enable a host firewall (ufw), or, as root, keep loopback, replies and SSH open first " +
-		"(`iptables -A INPUT -i lo -j ACCEPT`, `iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, " +
-		"`iptables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`) and then run `iptables -P INPUT DROP`, " +
-		"persisting the set with your distribution's iptables service; or confirm another firewall (firewalld, nftables) filters this host"
+	fix := "as root, allow SSH first (`ufw allow <your SSH port>/tcp`) and then run `ufw default deny incoming`; ufw keeps loopback and replies open in its own rules"
+	if read.backend == backendIPT {
+		fix = iptPolicyFix
+	}
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}
@@ -297,12 +306,18 @@ func withPolicy(read firewallRead, step SetupStep) SetupStep {
 	return step
 }
 
+// iptPolicyFix closes a raw iptables INPUT policy without locking out the operator.
+const iptPolicyFix = "enable a host firewall (ufw), or, as root, keep loopback, replies and SSH open first " +
+	"(`iptables -A INPUT -i lo -j ACCEPT`, `iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, " +
+	"`iptables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`) and then run `iptables -P INPUT DROP`, " +
+	"persisting the set with your distribution's iptables service; or confirm another firewall (firewalld, nftables) filters this host"
+
 // withV6Policy reports a permissive v6 INPUT policy on an iptables host
 // (#733), as withPolicy does for v4: a converged, repaired or already manual
 // step gains the operator's fix and is manual; an unverified or failed step
 // keeps its own fix and gains only the note. Setup never changes the policy.
 func withV6Policy(read firewallRead, step SetupStep) SetupStep {
-	if !read.v6Open || read.backend != backendIPT {
+	if !read.v6Open || !policyRead(read) {
 		return step
 	}
 	step.Message += fmt.Sprintf("; the ip6tables INPUT policy is ACCEPT, so unless another firewall filters this host every port is open on every IPv6 address and the %s scope restricts nothing", tailnetInterface)
@@ -315,6 +330,9 @@ func withV6Policy(read firewallRead, step SetupStep) SetupStep {
 		"`ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`) " +
 		"and then run `ip6tables -P INPUT DROP`, persisting the set with your distribution's ip6tables service; " +
 		"or confirm another firewall filters this host, or that IPv6 is disabled"
+	if read.backend == backendUFW {
+		fix = "as root, set `IPV6=yes` in /etc/default/ufw and run `ufw reload`, keeping `ufw default deny incoming`; or confirm that IPv6 is disabled"
+	}
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}
@@ -392,6 +410,7 @@ func readUFW(r Runner, port int) firewallRead {
 	// port on every interface whatever ufw would have said.
 	ipt := readIptables(r, port)
 	read.copies = ipt.copies
+	read.inputOpen = ipt.inputOpen // ufw writes the policy from its incoming default (#735)
 	read.foreign = append(read.foreign, ipt.foreign...)
 	read.scoped = read.scoped || ipt.scoped
 	// Only a ufw allow of its own makes the copies redundant; an unreadable ufw proves none (#576).
