@@ -193,6 +193,17 @@ iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 iptables -P INPUT DROP
 ok "closed policy: the guest's INPUT policy is DROP" -- 'iptables -S INPUT | grep -qx -- "-P INPUT DROP"'
+# The v6 policy (#733) is still ACCEPT: every port is open on every IPv6 address, so check stays
+# manual and names the ip6tables policy until the guest closes it the same way, ICMPv6 included.
+ok "v6 permissive policy: the guest's ip6tables INPUT policy is ACCEPT" -- 'ip6tables -S INPUT | grep -qx -- "-P INPUT ACCEPT"'
+ok "v6 permissive policy: check says manual, naming the ip6tables policy" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | json "\"ip6tables -P INPUT DROP\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"fix\"]"'
+ok "v6 permissive policy: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ip6tables -A INPUT -i lo -j ACCEPT
+ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+ip6tables -A INPUT -p ipv6-icmp -j ACCEPT
+ip6tables -A INPUT -p tcp --dport 22 -j ACCEPT
+ip6tables -P INPUT DROP
+ok "closed v6 policy: the guest's ip6tables INPUT policy is DROP" -- 'ip6tables -S INPUT | grep -qx -- "-P INPUT DROP"'
 ok "iptables host: setup #1 appends the rule" -- 'outcomes setup "$C" | fwstep changed'
 ok "iptables host: the rule is scoped to tailscale0, as printed" -- 'iptables -S INPUT | grep -qx -- "$SCOPED"'
 ok "iptables host: setup #2 changes nothing (the printed form agrees)" -- 'outcomes setup "$C" | fwstep ok'
