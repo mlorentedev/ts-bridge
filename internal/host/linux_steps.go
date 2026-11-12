@@ -292,7 +292,7 @@ func policyRead(fw firewallRead) bool {
 // SSH allow can lock the operator out. On ufw the fix is ufw's own command,
 // since ufw rewrites a raw policy on its next reload.
 func withPolicy(read firewallRead, step SetupStep) SetupStep {
-	if read.policyUnread != "" && read.backend == backendUFW {
+	if read.policyUnread != "" { // the policy is unknown, so inputOpen is false
 		return withPolicyUnread(read, step)
 	}
 	if !read.inputOpen || !policyRead(read) {
@@ -321,6 +321,9 @@ func withPolicy(read firewallRead, step SetupStep) SetupStep {
 // ufw's own allow decided the state, but whether ufw's default opens every
 // port is unknown, so a converged step is unverified, never ok (#735).
 func withPolicyUnread(read firewallRead, step SetupStep) SetupStep {
+	if read.backend != backendUFW {
+		return step // a raw iptables host whose INPUT read failed is already unverified
+	}
 	step.Message += fmt.Sprintf("; the INPUT policy could not be read (%s), so whether ufw's incoming default opens every port is unknown", read.policyUnread)
 	if step.Outcome == OutcomeOK || step.Outcome == OutcomeChanged {
 		step.Outcome, step.Success = OutcomeUnverified, false
