@@ -231,6 +231,14 @@ ok "v4 allow for every port but SSH: check does not report firewall_ok" -- "outc
 ok "v4 allow for every port but SSH: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT"'
 iptables -D INPUT -p tcp ! --dport 22 -j ACCEPT
 ok "v4 negated allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+# The same negated allow as the only allow: iptables does not count it, so the scoped rule is added
+# and the wide one is still reported (#736 review round 3).
+iptables -D INPUT -i tailscale0 -p tcp --dport 3389 -j ACCEPT
+iptables -A INPUT -p tcp ! --dport 22 -j ACCEPT
+ok "v4 negated allow as the only allow: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "v4 negated allow as the only allow: setup adds the scoped rule, reports manual, leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "$SCOPED" && iptables -S INPUT | grep -qx -- "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT"'
+iptables -D INPUT -p tcp ! --dport 22 -j ACCEPT
+ok "v4 negated allow removed again: check is ok" -- 'outcomes check "$C" | fwstep ok'
 iptables -A INPUT ! -i lo -p tcp -j ACCEPT
 ok "v4 allow off loopback: check says manual" -- 'outcomes check "$C" | fwstep manual'
 ok "v4 allow off loopback: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
