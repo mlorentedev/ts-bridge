@@ -197,6 +197,28 @@ func TestWindowsUnattendedStep(t *testing.T) {
 			outcome: OutcomeChanged,
 		},
 		{
+			// #740, measured on a never-logged-in guest: with no profile the
+			// set lasts until the service restarts, so no run reaches ok.
+			name:    "logged out, not unattended",
+			runner:  &recordingRunner{output: map[string]string{prefsRead: `{"LoggedOut": true}`}},
+			calls:   []string{"output " + prefsRead, "run " + setUnattend},
+			outcome: OutcomeManual,
+		},
+		{
+			name:    "logged out, unattended until the next restart",
+			runner:  &recordingRunner{output: map[string]string{prefsRead: `{"LoggedOut": true, "ForceDaemon": true}`}},
+			calls:   []string{"output " + prefsRead},
+			outcome: OutcomeManual,
+		},
+		{
+			name: "logged out, set fails",
+			runner: &recordingRunner{output: map[string]string{prefsRead: `{"LoggedOut": true}`},
+				fail: map[string]bool{setUnattend: true}, onPath: map[string]bool{"tailscale": true}},
+			calls:   []string{"output " + prefsRead, "run " + setUnattend, "lookpath tailscale"},
+			outcome: OutcomeFailed,
+			message: "Could not enable via CLI — check Tailscale GUI",
+		},
+		{
 			name:    "prefs unparseable",
 			runner:  &recordingRunner{output: map[string]string{prefsRead: "not json"}},
 			calls:   []string{"output " + prefsRead, "run " + setUnattend},
@@ -246,6 +268,9 @@ func TestWindowsUnattendedStep(t *testing.T) {
 			}
 			if got.Outcome == OutcomeFailed && got.Fix == "" {
 				t.Error("failed step carries no fix")
+			}
+			if got.Outcome == OutcomeManual && (!strings.Contains(got.Message, "logs in") || !strings.Contains(got.Fix, "tailscale up") || got.Success) {
+				t.Errorf("manual step = %q, fix %q, success %v; want it to say the node must log in", got.Message, got.Fix, got.Success)
 			}
 			if tt.message != "" && got.Message != tt.message {
 				t.Errorf("message = %q, want %q", got.Message, tt.message)
