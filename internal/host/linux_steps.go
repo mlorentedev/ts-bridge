@@ -280,7 +280,10 @@ func withPolicy(read firewallRead, step SetupStep) SetupStep {
 	if step.Outcome != OutcomeOK && step.Outcome != OutcomeChanged {
 		return step // an unverified or failed step keeps its own fix; only the message gains the note
 	}
-	fix := "enable a host firewall, or allow SSH and then run `iptables -P INPUT DROP` as root (persist it with your distribution's iptables service)"
+	fix := "enable a host firewall (ufw), or, as root, keep loopback, replies and SSH open first " +
+		"(`iptables -A INPUT -i lo -j ACCEPT`, `iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, " +
+		"`iptables -A INPUT -p tcp --dport 22 -j ACCEPT`) and then run `iptables -P INPUT DROP`; " +
+		"persist the set with your distribution's iptables service"
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}

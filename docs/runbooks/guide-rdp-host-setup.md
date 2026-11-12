@@ -160,7 +160,7 @@ If using tagged auth keys (e.g., `tag:bridge`), the source must match the tag.
 | Third-party AV blocking | AV conflicts with Tailscale WFP | Add Tailscale exception |
 | RDP works locally, not over Tailscale | ACLs restricting | Check ACL rules |
 | Host disappears from tailnet | Key expired | Disable key expiry in admin console |
-| Linux: `host check` exits 2, `Firewall configuration` is `manual` and says "the INPUT policy is ACCEPT" | An iptables host (no ufw) whose INPUT policy is ACCEPT: every port is open on every interface, so the `tailscale0` rule restricts nothing (#691). `host setup` still writes that rule, but never changes the policy | Enable a host firewall (ufw), or allow SSH first and then run `iptables -P INPUT DROP` as root and persist it with your distribution's iptables service. `host check` returns 0 again once the policy is closed |
+| Linux: `host check` exits 2, `Firewall configuration` is `manual` and says "the INPUT policy is ACCEPT" | An iptables host (no ufw) whose INPUT policy is ACCEPT: every port is open on every interface, so the `tailscale0` rule restricts nothing (#691). `host setup` still writes that rule, but never changes the policy | Enable a host firewall (ufw), or, as root, keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`, `iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `iptables -A INPUT -p tcp --dport 22 -j ACCEPT`), then run `iptables -P INPUT DROP` and persist the set with your distribution's iptables service. Without the first two, local DNS and tailscaled's own control connection stop working. `host check` returns 0 again once the policy is closed |
 
 ## References
 
