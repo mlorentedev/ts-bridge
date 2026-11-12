@@ -51,6 +51,10 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 - [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: a second readiness source inside the existing fold, no new contract
 - [x] New pattern candidate for `00_meta/patterns/`? Only if this recurs in >1 project. no: seen in one project
 
+## Pull request
+
+PR #719 carries `Closes #565`. The spec review's Minor (the PR was unnamed here, and `tasks.md` keeps its PR box unticked) is answered by this section; `tasks.md` stays as reviewed.
+
 ## Archive checklist
 
 - [ ] `proposal.md` frontmatter set to `status: archived`
