@@ -13,6 +13,7 @@ owner: manu
 
 - [ ] [AC1] [AC2] [AC3] Failing table test `TestUFWPolicy`; `TestManualRewriteClearsSuccess` gains the ufw rewrites
 - [ ] [AC1] `readUFW` keeps the v4 policy; one gate (iptables or active ufw) replaces `backend == backendIPT` in `withPolicy`, `withV6Policy`, `linuxFirewallOK`; ufw-specific fix text
+- [ ] [AC3] [AC5] Review round 1: `TestUFWPolicyUnread`, `TestUFWPolicyMessage`; an unread policy on an active ufw is unverified; the note names ufw
 - [ ] [AC4] `scripts/e2e/linux.sh`: `ufw default allow incoming` case before ufw is removed, then restore `deny`
 - [ ] Docs: ADR-017 Amendment B line, parity doc firewall rows, runbook troubleshooting row
 
