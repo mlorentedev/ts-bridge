@@ -1997,6 +1997,13 @@ func TestPermissiveInputPolicy(t *testing.T) {
 				} else if s.want != OutcomeManual && strings.Contains(s.step.Fix, "-P INPUT DROP") {
 					t.Errorf("%s fix %q names the policy on a %v step, whose own fix comes first", s.name, s.step.Fix, s.want)
 				}
+				// Closing the policy without loopback and replies cuts local DNS and
+				// tailscaled's own control connection, and with it the SSH it kept.
+				for _, keep := range []string{"-i lo -j ACCEPT", "ESTABLISHED,RELATED -j ACCEPT", "--dport 22 -j ACCEPT"} {
+					if s.want == OutcomeManual && !strings.Contains(s.step.Fix, keep) {
+						t.Errorf("%s fix %q closes the policy without keeping %q open", s.name, s.step.Fix, keep)
+					}
+				}
 			}
 			if got, want := linuxFirewallOK(read), tt.check == OutcomeOK; got != want {
 				t.Errorf("linuxFirewallOK = %v, want %v", got, want)
