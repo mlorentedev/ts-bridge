@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -64,5 +65,37 @@ func TestWatchControl_PollsSelfOnline(t *testing.T) {
 	}
 	if ready.count() == 0 {
 		t.Fatal("an offline node never reached readiness: the Self.Online poller did not start")
+	}
+}
+
+// apiNode is a serve node whose local API is a real *local.Client on a socket
+// nothing listens on, so watchServeControl runs as in production and every
+// local API call fails.
+type apiNode struct {
+	serveNode
+	socket string
+}
+
+func (n apiNode) LocalClient() (*local.Client, error) {
+	return &local.Client{Socket: n.socket, UseSocketOnly: true}, nil
+}
+
+// TestWatchServeControl_PollsThroughTheEntryPoint drives the production entry
+// point: a node whose local API does not answer must reach readiness as down,
+// which only the Self.Online poller reports (the bus watch fails at once).
+func TestWatchServeControl_PollsThroughTheEntryPoint(t *testing.T) {
+	defer func(d time.Duration) { controlPollInterval = d }(controlPollInterval)
+	controlPollInterval = 5 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready := &recordedReadiness{}
+	node := apiNode{socket: filepath.Join(t.TempDir(), "absent.sock")}
+	watchServeControl(ctx, node, ready, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	deadline := time.Now().Add(5 * time.Second)
+	for ready.count() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if ready.count() == 0 {
+		t.Fatal("watchServeControl never reported an unreachable local API: the Self.Online poller is not wired")
 	}
 }
