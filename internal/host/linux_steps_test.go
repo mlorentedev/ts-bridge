@@ -1939,3 +1939,63 @@ func TestReadIP6NoteQuotesTheTool(t *testing.T) {
 		t.Errorf("note = %q, want it to quote the tool's stderr", note)
 	}
 }
+
+// TestPermissiveInputPolicy: on an iptables host with no ufw, an INPUT policy
+// of ACCEPT opens every port on every interface, so the tailscale0 scope
+// restricts nothing. A step that would be ok or changed is manual instead,
+// firewall_ok is false, and setup never touches the policy (#691).
+func TestPermissiveInputPolicy(t *testing.T) {
+	const scopedRule = "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	tests := []struct {
+		name    string
+		input   string
+		check   Outcome
+		setup   Outcome
+		appends bool
+	}{
+		{"ACCEPT, rule present", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n" + scopedRule, OutcomeManual, OutcomeManual, false},
+		{"ACCEPT, rule absent: setup adds it and still reports manual", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n", OutcomeManual, OutcomeManual, true},
+		{"DROP, rule present", "-P INPUT DROP\n-A INPUT -j ts-input\n" + scopedRule, OutcomeOK, OutcomeOK, false},
+		{"DROP, rule absent", "-P INPUT DROP\n-A INPUT -j ts-input\n", OutcomeChanged, OutcomeChanged, true},
+		{"ACCEPT, a jump the read cannot follow stays unverified", "-P INPUT ACCEPT\n-A INPUT -i eth0 -j ts-input\n", OutcomeUnverified, OutcomeFailed, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true},
+					output: map[string]string{iptRead: tt.input, iptChain: tsInputNoAccept}}
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.Contains(c, " -P ") }) {
+				t.Errorf("setup changed the policy: %v", r.calls)
+			}
+			if got := slices.Contains(r.calls, "run "+iptAppend); got != tt.appends {
+				t.Errorf("setup appended the scoped rule = %v, want %v (calls %v)", got, tt.appends, r.calls)
+			}
+			read := readLinuxFirewall(newRunner(), 3389)
+			check := firewallCheckStep(read, 3389)
+			for _, s := range []struct {
+				name string
+				step SetupStep
+				want Outcome
+			}{{"setup", setup, tt.setup}, {"check", check, tt.check}} {
+				if s.step.Outcome != s.want {
+					t.Errorf("%s = %v %q, want %v", s.name, s.step.Outcome, s.step.Message, s.want)
+				}
+				permissive := strings.Contains(tt.input, "-P INPUT ACCEPT")
+				if names := strings.Contains(s.step.Message, "INPUT policy is ACCEPT"); permissive && s.want == OutcomeManual && !names {
+					t.Errorf("%s message %q does not name the ACCEPT policy", s.name, s.step.Message)
+				} else if !permissive && names {
+					t.Errorf("%s message %q names a policy the host does not have", s.name, s.step.Message)
+				}
+				if s.want == OutcomeManual && !strings.Contains(s.step.Fix, "-P INPUT DROP") {
+					t.Errorf("%s fix %q does not name a DROP policy", s.name, s.step.Fix)
+				}
+			}
+			if got, want := linuxFirewallOK(read), tt.check == OutcomeOK; got != want {
+				t.Errorf("linuxFirewallOK = %v, want %v", got, want)
+			}
+		})
+	}
+}
