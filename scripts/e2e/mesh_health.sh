@@ -3,14 +3,17 @@
 # wanted answer and a budget in seconds: "503 40" waits for a 503 naming
 # control_plane_unreachable, "200 30" for a 200. Exits 0 once seen inside the budget, 1 when the
 # budget runs out. Polls every second with a 1 s request timeout, so the probe adds at most ~2 s to
-# what it measures, and an answer that arrives after the deadline does not count.
+# what it measures, and an answer that arrives after the deadline does not count. HEALTH_URL
+# overrides the endpoint for scripts/tests/test-e2e-probe.sh.
 set -u
 read -r want budget
+url="${HEALTH_URL:-http://127.0.0.1:9090/health/ready}"
+export url
 start=$(date +%s)
 while [ $(( $(date +%s) - start )) -le "$budget" ]; do
-  got=$(python3 -c 'import urllib.request, urllib.error
+  got=$(python3 -c 'import os, urllib.request, urllib.error
 try:
-    r = urllib.request.urlopen("http://127.0.0.1:9090/health/ready", timeout=1)
+    r = urllib.request.urlopen(os.environ["url"], timeout=1)
     print(r.status, r.read().decode().strip())
 except urllib.error.HTTPError as e:
     print(e.code, e.read().decode().strip())
