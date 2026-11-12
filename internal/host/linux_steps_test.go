@@ -541,6 +541,14 @@ func TestSetupForLinux(t *testing.T) {
 			fix:      "setup does not delete",
 		},
 		{
+			name:     "iptables, an accept for every port: scoped rule added, nothing deleted, manual (#736)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + "-A INPUT -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "-A INPUT -j ACCEPT",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
 			name:     "iptables, a legacy copy and a foreign rule: the copy replaced, the foreign one reported (#631)",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + iptLegacyRule + iptForeignRule, iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "run "+iptDelete, "output tailscale ip -4"),
@@ -944,6 +952,16 @@ func TestCheckForLinux(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 			message:  "legacy unscoped rule: " + iptForeignPrinted,
 			fix:      "setup does not delete",
+		},
+		{
+			name:     "iptables, an accept for every port but SSH: manual (#736)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "! --dport 22",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
 		},
 		{
 			name:     "iptables, a drop before two copies",
@@ -1857,9 +1875,9 @@ func TestIP6Exposure(t *testing.T) {
 		{name: "captured chain", onPath: true, v6: ip6Captured, want: OutcomeOK},
 		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Captured + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
 		{name: "a port-less v6 accept", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeManual,
-			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT"},
+			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT`, after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
-			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT"},
+			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT`, after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Captured + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
 		// A negated scope or an explicit any prefix still opens the port off
 		// the tailnet (BUG-526 review, finding 1).
