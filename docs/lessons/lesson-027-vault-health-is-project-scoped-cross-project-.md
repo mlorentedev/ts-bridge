@@ -1,7 +1,8 @@
 ---
-id: lesson-027-vault-health-is-project-scoped-cross-project-
+id: "lesson-027-vault-health-is-project-scoped-cross-project-"
 type: lesson
 status: active
+title: "vault_health is project-scoped — cross-project wikilinks need markdown link form"
 created: "2026-05-18"
 owner: manu
 tags: [ts-bridge, lesson, vault, obsidian, tooling, wikilinks, hive]

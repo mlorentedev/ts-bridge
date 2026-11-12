@@ -1,7 +1,8 @@
 ---
-id: lesson-024-half-close-idleconn-embedding-type-assertions
+id: "lesson-024-half-close-idleconn-embedding-type-assertions"
 type: lesson
 status: active
+title: "Half-close + idleConn embedding: type assertions need unwrap"
 created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, go, interfaces, embedding, net-conn]

@@ -8,7 +8,7 @@ owner: manu
 tags: [ts-bridge, lesson, profiles, configuration]
 ---
 
-# Preserve the Original Profile Target at the Resolution Boundary
+# Preserve the original profile target at the resolution boundary
 
 `connect` fills empty YAML fields from the selected profile before merging
 environment and flags. Once those layers are flattened, the effective target

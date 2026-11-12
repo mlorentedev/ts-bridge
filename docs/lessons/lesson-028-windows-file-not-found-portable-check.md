@@ -1,7 +1,8 @@
 ---
-id: lesson-028-windows-file-not-found-portable-check
+id: "lesson-028-windows-file-not-found-portable-check"
 type: lesson
 status: active
+title: "Windows file not found portable check"
 created: "2026-08-13"
 owner: manu
 tags: [ts-bridge, lesson]

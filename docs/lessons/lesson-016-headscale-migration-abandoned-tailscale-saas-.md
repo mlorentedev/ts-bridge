@@ -1,7 +1,8 @@
 ---
-id: lesson-016-headscale-migration-abandoned-tailscale-saas-
+id: "lesson-016-headscale-migration-abandoned-tailscale-saas-"
 type: lesson
 status: active
+title: "Headscale Migration Abandoned — Tailscale SaaS is the Correct Solution for Corporate Networks"
 created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, headscale, tailscale, corporate-firewall, tls-inspection, decision]

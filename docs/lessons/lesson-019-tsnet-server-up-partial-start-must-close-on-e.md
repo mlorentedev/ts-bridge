@@ -1,7 +1,8 @@
 ---
-id: lesson-019-tsnet-server-up-partial-start-must-close-on-e
+id: "lesson-019-tsnet-server-up-partial-start-must-close-on-e"
 type: lesson
 status: active
+title: "tsnet.Server.Up() partial-start: must Close() on error or Windows cleanup leaks"
 created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, go, tsnet, windows, file-locking, error-handling]

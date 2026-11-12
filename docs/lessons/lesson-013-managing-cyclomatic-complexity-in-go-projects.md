@@ -1,7 +1,8 @@
 ---
-id: lesson-013-managing-cyclomatic-complexity-in-go-projects
+id: "lesson-013-managing-cyclomatic-complexity-in-go-projects"
 type: lesson
 status: active
+title: "Managing Cyclomatic Complexity in Go projects"
 created: "2026-03-07"
 owner: manu
 tags: [ts-bridge, lesson, go, refactoring, clean-architecture, ci-cd, linter]

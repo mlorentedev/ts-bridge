@@ -1,7 +1,8 @@
 ---
-id: lesson-014-corporate-tls-inspection-breaks-headscale-tcp
+id: "lesson-014-corporate-tls-inspection-breaks-headscale-tcp"
 type: lesson
 status: active
+title: "Corporate TLS Inspection Breaks Headscale TCP Passthrough"
 created: "2026-03-13"
 owner: manu
 tags: [ts-bridge, lesson, headscale, tailscale, corporate-firewall, tls-inspection, networking, traefik, tcp-passthrough]

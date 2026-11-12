@@ -1,7 +1,8 @@
 ---
-id: lesson-023-pinning-the-linter-version-surfaces-accumulat
+id: "lesson-023-pinning-the-linter-version-surfaces-accumulat"
 type: lesson
 status: active
+title: "Pinning the linter version surfaces accumulated deferred debt"
 created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, linter, golangci-lint, technical-debt, ci]

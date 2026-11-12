@@ -1,7 +1,8 @@
 ---
-id: lesson-026-multi-dimensional-audits-4-agents-converge-fa
+id: "lesson-026-multi-dimensional-audits-4-agents-converge-fa"
 type: lesson
 status: active
+title: "Multi-dimensional audits: 4 agents converge faster than 1 agent on 4 passes"
 created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, audit, agents, process, code-quality]
