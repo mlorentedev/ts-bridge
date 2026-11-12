@@ -15,7 +15,7 @@ owner: manu
 - [x] AC2 (native nft input table; iptables-nft, tailscaled and hookless tables ignored) -> `TestForeignFirewall/native_inet_filter`, `.../firewalld_table,_firewall-cmd_absent`, `.../iptables-nft_and_tailscaled_tables_only`, `.../table_without_an_input_hook`; parser cases in `TestNFTForeignInput`.
 - [x] AC3 (a failed probe is unknown) -> `TestForeignFirewall/firewalld_state_fails`, `.../nft_listing_fails`: check `unverified`, setup `failed`, no write.
 - [x] AC4 (iptables and ufw unchanged) -> the existing host suite passes. The only fixture change is that the call-sequence filter (`withoutIP6Probe`, now `withoutProbes`) also drops the probe's two lookups, and `TestIP6Exposure` pins them at the head of the read.
-- [ ] AC5 (e2e native nft table) -> `scripts/e2e/linux.sh` "native nft table" block; run pending.
+- [x] AC5 (e2e native nft table) -> `scripts/e2e/linux.sh` "native nft table" block. `make e2e-linux` on 999c0a7: 107 pass, 0 fail, including the four native nft checks (check `unverified` naming `table inet tsbe2e`, no `firewall_ok`, setup `manual` with `iptables -S INPUT` unchanged, `ok` again once the table is deleted). The later commits on the branch change docs and the spec only.
 
 ## Test status
 

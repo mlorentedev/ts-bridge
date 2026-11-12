@@ -3,14 +3,14 @@
     "id": "BUG-739-foreign-firewall-f1",
     "behavior": "AC1-AC4: firewalld or a native nft input table makes check unverified and setup manual naming it, with no write and no policy read; a failed probe is unknown; iptables and ufw unchanged",
     "verification": "go test ./internal/host/ -count=1",
-    "state": "pending",
-    "evidence": ""
+    "state": "done",
+    "evidence": "go test -race ./... exit 0; TestForeignFirewall (9 rows), TestNFTForeignInput pass; firewalld probed by hand on an Ubuntu 24.04 guest with the built binary"
   },
   {
     "id": "BUG-739-foreign-firewall-f2",
     "behavior": "AC5: e2e on the Linux guest with a native inet table holding an input hook",
     "verification": "make e2e-linux",
-    "state": "pending",
-    "evidence": ""
+    "state": "done",
+    "evidence": "make e2e-linux: 107 pass, 0 fail on 999c0a7 (native nft table: unverified naming the table, setup manual with no write, ok after deletion)"
   }
 ]
