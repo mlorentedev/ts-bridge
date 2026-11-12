@@ -10,7 +10,7 @@ import (
 const (
 	firewalldCmd = "firewall-cmd"
 	// firewalldNotRunning is the exit status of `firewall-cmd --state` when
-	// firewalld is stopped; it prints "not running" (probed for #739).
+	// firewalld is stopped, beside the words "not running" (probed for #739).
 	firewalldNotRunning = 252
 )
 
@@ -35,7 +35,7 @@ func readFirewalld(r Runner, port int) (firewallRead, bool) {
 	switch {
 	case err == nil && state == "running":
 		return firewallRead{other: "firewalld is running", fix: firewalldFix(port)}, true
-	case exitStatus(err) == firewalldNotRunning:
+	case state == "not running" || exitStatus(err) == firewalldNotRunning: // the words decide; 252 is the convention
 		return firewallRead{}, false
 	case err == nil:
 		err = fmt.Errorf("printed %q, neither running nor not running", state)
