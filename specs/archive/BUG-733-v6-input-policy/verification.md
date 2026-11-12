@@ -38,7 +38,7 @@ owner: manu
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BUG-733-v6-input-policy/` -> `specs/archive/BUG-733-v6-input-policy/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BUG-733-v6-input-policy/` -> `specs/archive/BUG-733-v6-input-policy/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
