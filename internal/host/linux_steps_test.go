@@ -2217,3 +2217,16 @@ func TestUFWPolicyMessage(t *testing.T) {
 		t.Errorf("v6 message: %q", got6.Message)
 	}
 }
+
+// TestUFWPolicyReadButChainUnread pins review round 2 of #735: a readable
+// ACCEPT policy stays manual with ufw's fix when only the ts-input walk fails.
+func TestUFWPolicyReadButChainUnread(t *testing.T) {
+	r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true},
+		output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: strings.Replace(ufwHostInput, "-P INPUT DROP", "-P INPUT ACCEPT", 1)},
+		exit:   map[string]int{iptChain: 4}}
+	read := readLinuxFirewall(r, 3389)
+	check := firewallCheckStep(read, 3389)
+	if read.policyUnread != "" || check.Outcome != OutcomeManual || !strings.Contains(check.Fix, "`ufw default deny incoming`") {
+		t.Errorf("policyUnread %q, check %v %q fix %q; want manual naming ufw default deny incoming", read.policyUnread, check.Outcome, check.Message, check.Fix)
+	}
+}
