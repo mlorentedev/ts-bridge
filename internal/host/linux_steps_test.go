@@ -3,6 +3,7 @@ package host
 import (
 	"cmp"
 	"errors"
+	"fmt"
 	"reflect"
 	"regexp"
 	"slices"
@@ -1838,7 +1839,10 @@ func TestExposureShapes(t *testing.T) {
 		{"-A INPUT -j ACCEPT", true},
 		{"-A INPUT -p tcp -m tcp ! --dport 3389 -j ACCEPT", false},
 		{"-A INPUT -p tcp -m multiport ! --dports 3000:4000 -j ACCEPT", false},
-		{"-A INPUT -p tcp -m tcp ! --dport 22 --sport 1024:65535 -j ACCEPT", false},
+		// Clients connect from ephemeral source ports, so a source-port match
+		// does not undo a negated destination port (#736 review F2).
+		{"-A INPUT -p tcp -m tcp ! --dport 22 --sport 1024:65535 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --dport 22 ! --sport 22 -j ACCEPT", false},
 		{"-A INPUT -p tcp -m tcp --sport 22 -j ACCEPT", false},
 		{"-A INPUT -p tcp -m tcp ! --dport 22 -j DROP", false},
 		{"-A INPUT -p udp -m udp ! --dport 53 -j ACCEPT", false},
@@ -1859,6 +1863,35 @@ func TestExposureShapes(t *testing.T) {
 				t.Errorf("v6 exposed = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestWideAllowFix pins the whole fix for an unscoped foreign allow: the SSH
+// caution is added only to an iptables rule that names no destination port,
+// never to a ufw line or to a rule that names the port (#736 review F1, F5).
+func TestWideAllowFix(t *testing.T) {
+	const keep = "keep loopback, replies and SSH open first (`%[1]s -A INPUT -i lo -j ACCEPT`, " +
+		"`%[1]s -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `%[1]s -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"
+	v4 := fmt.Sprintf(keep, "iptables")
+	tests := []struct{ rule, want string }{
+		{"ufw allow 3389", "scope ufw allow 3389 to tailscale0, or remove it; setup does not delete rules it did not write"},
+		{"ufw allow 22,3389/tcp", "scope ufw allow 22,3389/tcp to tailscale0, or remove it; setup does not delete rules it did not write"},
+		{strings.TrimSpace(iptForeignPrinted), "scope " + strings.TrimSpace(iptForeignPrinted) + " to tailscale0, or remove it; setup does not delete rules it did not write"},
+		{"-A INPUT -j ACCEPT", "scope -A INPUT -j ACCEPT to tailscale0, or remove it; setup does not delete rules it did not write; the rule admits other ports too, so as root " + v4 + " before you change it"},
+	}
+	for _, tt := range tests {
+		if got := foreignFix(firewallRead{foreign: []string{tt.rule}}); got != tt.want {
+			t.Errorf("foreignFix(%q):\n got %q\nwant %q", tt.rule, got, tt.want)
+		}
+	}
+	v6 := []struct{ rule, want string }{
+		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", "run `ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT` as root to delete the v6 rule (setup never writes one)"},
+		{"-A INPUT -p tcp -j ACCEPT", "run `ip6tables -D INPUT -p tcp -j ACCEPT`, after you " + fmt.Sprintf(keep, "ip6tables") + ", as root to delete the v6 rule (setup never writes one)"},
+	}
+	for _, tt := range v6 {
+		if got := withIP6(firewallRead{v6Foreign: []string{tt.rule}}, SetupStep{Outcome: OutcomeOK}, 3389).Fix; got != tt.want {
+			t.Errorf("withIP6(%q):\n got %q\nwant %q", tt.rule, got, tt.want)
+		}
 	}
 }
 
