@@ -146,6 +146,20 @@ mesh_outage_case() {
   return "$rc"
 }
 
+# mesh_discover_case lists the tailnet through the Headscale API from this host and finds the
+# guest (#717: discover asked for /api/v1/device, which Headscale does not serve). The API key
+# is a 0600 file; nothing secret reaches argv.
+mesh_discover_case() {
+  local dir="$1" out
+  (umask 077 && hs_mint_api_key | tail -1 >"$dir/apikey") || return 1
+  # stdout carries the JSON; logs go to stderr, which only a failure prints.
+  out="$(cd "$dir" && TS_CONTROL_URL="http://$(hs_host_ip):8080" "$dir/tsb-client" discover --json --api-key-file "$dir/apikey" 2>"$dir/discover.err")" || {
+    tail -3 "$dir/discover.err" | sed 's/^/discover: /'
+    return 1
+  }
+  printf '%s' "$out" | python3 -c 'import json, sys; sys.exit(not any(d["hostname"] == "tsb-e2e-linux" and "100.64.0.1" in d["addresses"] for d in json.load(sys.stdin)))'
+}
+
 run_mesh_linux() {
   local dir="$1" url
   url="http://$(hs_host_ip):8080" || return 1
@@ -155,6 +169,7 @@ run_mesh_linux() {
   { echo "$url"; hs_mint_key tag:e2e-host; } |
     dotf vm linux exec --session "$SESSION" --elevated --timeout 20m --script "$HERE/mesh_linux.sh" || return 1
   if mesh_rdp_case "$dir"; then echo "PASS mesh rdp: X.224 confirm through connect"; else echo "FAIL mesh rdp: X.224 confirm through connect"; return 1; fi
+  if mesh_discover_case "$dir"; then echo "PASS mesh discover: the Headscale API lists the guest"; else echo "FAIL mesh discover: the Headscale API lists the guest"; return 1; fi
   mesh_outage_case
 }
 
