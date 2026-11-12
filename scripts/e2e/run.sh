@@ -130,20 +130,32 @@ mesh_rdp_case() {
 # control_plane_unreachable within 40 s, then ready within 30 s of the restart (HOST-011, #565):
 # the IPN bus stays Running through an outage, so this proves the Self.Online watcher.
 mesh_outage_case() {
-  local rc=0
+  local rc=0 t0
+  t0=$(date +%s)
   docker stop "$HS_NAME" >/dev/null || return 1
-  if echo "503 40" | dotf vm linux exec --session "$SESSION" --timeout 2m --script "$HERE/mesh_health.sh"; then
+  if health_within 503 40 "$t0"; then
     echo "PASS mesh outage: /health/ready reads control_plane_unreachable"
   else
     echo "FAIL mesh outage: /health/ready reads control_plane_unreachable"; rc=1
   fi
+  t0=$(date +%s)
   docker start "$HS_NAME" >/dev/null || return 1
-  if echo "200 30" | dotf vm linux exec --session "$SESSION" --timeout 2m --script "$HERE/mesh_health.sh"; then
+  if health_within 200 30 "$t0"; then
     echo "PASS mesh outage: ready again after the control plane returns"
   else
     echo "FAIL mesh outage: ready again after the control plane returns"; rc=1
   fi
   return "$rc"
+}
+
+# health_within <want> <budget s> <event epoch> polls the guest's /health/ready for <want> and,
+# since the guest poll's clock starts only once `dotf vm linux exec` dispatches it, checks the
+# budget again on this host from the control-plane event itself.
+health_within() {
+  local took
+  echo "$1 $2" | dotf vm linux exec --session "$SESSION" --timeout 2m --script "$HERE/mesh_health.sh" || return 1
+  took=$(($(date +%s) - $3))
+  [ "$took" -le "$2" ] || { echo "health: $1 seen ${took}s after the event, budget ${2}s"; return 1; }
 }
 
 # mesh_discover_case lists the tailnet through the Headscale API from this host and finds the
