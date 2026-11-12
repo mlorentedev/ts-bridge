@@ -35,6 +35,8 @@ owner: manu
 - Review round 2 (PASS), minor 1 (applied, `83c6623` and the commit after it): only a failed `iptables -S INPUT` marks the policy unread. A failed `ts-input` walk under a readable ACCEPT policy stays `manual` with ufw's fix (`TestUFWPolicyReadButChainUnread`), and a raw iptables host's unread step never names ufw.
 - Review round 2, minor 2 (recorded): the `tasks.md` line says `TestManualRewriteClearsSuccess` gains the ufw rewrites; the ufw `Success=false` property is asserted in `TestUFWPolicy` (`s.Success == tt.manual`) and `TestUFWPolicyUnread` instead. `tasks.md` is left as reviewed.
 
+- CodeRabbit on #748 (Major, applied): with `IPV6=no`, ufw stored only the v4 copy of each allow, so `IPV6=yes` and `ufw reload` would cut SSH over IPv6. Probed on the guest (ufw 0.36.2): `ufw allow` with `IPV6=yes` while ufw runs prints "ERROR: problem running"; while ufw is disabled it prints "Rules updated (v6)", and `ufw enable` then loads the v6 SSH allow. The v6 fix is now `ufw disable`, `IPV6=yes`, `ufw allow <your SSH port>/tcp`, `ufw enable`. `proposal.md` still says `IPV6=yes` and `ufw reload`; it is left as reviewed, and the code, runbook, ADR and `TestUFWPolicy` carry the new order.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? no: the policy-mirrors-default fact is recorded in ADR-017 Amendment B and the runbook row, and the bug shape is #691's

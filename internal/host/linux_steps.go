@@ -368,7 +368,8 @@ func withV6Policy(read firewallRead, step SetupStep) SetupStep {
 		"and then run `ip6tables -P INPUT DROP`, persisting the set with your distribution's ip6tables service; " +
 		"or confirm another firewall filters this host, or that IPv6 is disabled"
 	if read.backend == backendUFW {
-		fix = "as root, set `IPV6=yes` in /etc/default/ufw and run `ufw reload`, keeping `ufw default deny incoming`; or confirm that IPv6 is disabled"
+		// With IPV6=no ufw stored only v4 allows; `ufw allow` adds the v6 copy cleanly only while ufw is disabled.
+		fix = "as root, run `ufw disable`, set `IPV6=yes` in /etc/default/ufw, run `ufw allow <your SSH port>/tcp` so ufw adds the IPv6 copy of the SSH allow, then `ufw enable`, keeping `ufw default deny incoming`; or confirm that IPv6 is disabled"
 	}
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
