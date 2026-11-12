@@ -83,9 +83,12 @@ New-NetFirewallRule -DisplayName "Tailscale-RDP-Ingress" `
 Restricting to the tailnet addresses ensures RDP is only accessible via Tailscale, not the local LAN.
 `host setup` no longer enables the built-in `Remote Desktop` rule group: its rules allow any
 address and would void that scope. If an earlier setup or an operator enabled the group, disable
-it yourself (`Disable-NetFirewallRule -DisplayGroup "Remote Desktop"`). Both `host check` and
+it yourself (`Disable-NetFirewallRule -Group "@FirewallAPI.dll,-28752"`, the group's resource id,
+which works whatever the display language; `-DisplayGroup "Remote Desktop"` matches nothing on a
+non-English install). Both `host check` and
 `host setup` report an enabled group as `manual` (and `firewall_ok` stays false) until you do;
-`host setup` never disables it. A named rule that allows any address is reported as a legacy rule,
+`host setup` never disables it. If the group query matches no rule at all, both report
+`unverified` once the named rule is in place: Windows ships the group with rules, so an empty answer means the read missed it. While the named rule is missing or drifted the step reports that instead, and the group is read again on the next run. A named rule that allows any address is reported as a legacy rule,
 and `host setup` recreates it scoped.
 
 ### 4. Tailscale Configuration
@@ -157,6 +160,7 @@ If using tagged auth keys (e.g., `tag:bridge`), the source must match the tag.
 | Third-party AV blocking | AV conflicts with Tailscale WFP | Add Tailscale exception |
 | RDP works locally, not over Tailscale | ACLs restricting | Check ACL rules |
 | Host disappears from tailnet | Key expired | Disable key expiry in admin console |
+| Linux: `host check` exits 2, `Firewall configuration` is `manual` and says "the iptables INPUT policy is ACCEPT" | An iptables host (no ufw) whose INPUT policy is ACCEPT: every port is open on every interface, so the `tailscale0` rule restricts nothing (#691). `host setup` still writes that rule, but never changes the policy | Enable a host firewall (ufw), or, as root, keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`, `iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `iptables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`), then run `iptables -P INPUT DROP` and persist the set with your distribution's iptables service. Without the first two, local DNS and tailscaled's own control connection stop working. On a host filtered by firewalld or nftables instead, the report is a false alarm: confirm that firewall closes the port (#739). `host check` returns 0 again once the policy is closed |
 
 ## References
 

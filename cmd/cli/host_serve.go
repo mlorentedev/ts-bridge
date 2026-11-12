@@ -16,6 +16,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"tailscale.com/client/local"
+	"tailscale.com/ipn"
+	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/tsnet"
 
 	"ts-bridge/internal/bootstrapssh"
@@ -252,7 +254,16 @@ type localAPINode interface {
 
 var _ localAPINode = (*tsnet.Server)(nil)
 
-// watchServeControl reports the node's control session on readiness when the
+// controlPollInterval is how often serve reads Self.Online; a var so tests can shorten it.
+var controlPollInterval = serve.ControlPollInterval
+
+// controlClient is the part of the local API serve's control watchers use.
+type controlClient interface {
+	Status(context.Context) (*ipnstate.Status, error)
+	WatchIPNBus(context.Context, ipn.NotifyWatchOpt) (*local.IPNBusWatcher, error)
+}
+
+// watchServeControl reports the node's control session (bus state and Self.Online) on readiness when the
 // node exposes its local API (a tsnet.Server does).
 func watchServeControl(ctx context.Context, node serveNode, ready serve.Readiness, logger *slog.Logger) {
 	n, ok := node.(localAPINode)
@@ -260,19 +271,33 @@ func watchServeControl(ctx context.Context, node serveNode, ready serve.Readines
 		return
 	}
 	lc, err := n.LocalClient()
-	if err == nil {
-		var states <-chan string
-		if states, err = serve.NodeStates(ctx, lc); err == nil {
-			go func() {
-				serve.WatchControlSession(ctx, states, ready)
-				if ctx.Err() == nil {
-					logger.Warn("control session watch ended; /health/ready reads control_plane_unreachable")
-				}
-			}()
-			return
-		}
+	if err != nil {
+		logger.Warn("control session not watched; /health/ready will not report its loss", "error", err)
+		return
 	}
-	logger.Warn("control session not watched; /health/ready will not report its loss", "error", err)
+	watchControl(ctx, lc, ready, logger)
+}
+
+// watchControl starts both control watchers. The Self.Online poller needs only Status and fails closed on
+// its own, so it runs even when the bus cannot be watched: the bus stays Running through an outage anyway
+// (HOST-011).
+func watchControl(ctx context.Context, lc controlClient, ready serve.Readiness, logger *slog.Logger) {
+	ticker := time.NewTicker(controlPollInterval)
+	go func() {
+		defer ticker.Stop()
+		serve.WatchControlOnline(ctx, lc.Status, ticker.C, ready)
+	}()
+	states, err := serve.NodeStates(ctx, lc)
+	if err != nil {
+		logger.Warn("control session bus not watched; /health/ready reads control loss from Self.Online only", "error", err)
+		return
+	}
+	go func() {
+		serve.WatchControlSession(ctx, states, ready)
+		if ctx.Err() == nil {
+			logger.Warn("control session watch ended; /health/ready reads control_plane_unreachable")
+		}
+	}()
 }
 
 func shutdownHealth(srv *http.Server) {

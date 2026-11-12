@@ -180,6 +180,19 @@ ufw delete allow from 10.0.0.0/8 to any port 3389 proto tcp >/dev/null 2>&1
 ufw --force disable >/dev/null 2>&1
 apt-get -qq remove -y ufw >/dev/null 2>&1
 ok "iptables host: ufw is gone" -- '[ ! -e /usr/sbin/ufw ]'
+# A default-ACCEPT INPUT policy (#691) opens every port on every interface, so the tailscale0 scope
+# restricts nothing: setup still writes the scoped rule, reports manual, and never changes the policy.
+ok "permissive policy: the guest's INPUT policy is ACCEPT" -- 'iptables -S INPUT | grep -qx -- "-P INPUT ACCEPT"'
+ok "permissive policy: check says manual, naming the policy" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | json "\"iptables -P INPUT DROP\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"fix\"]"'
+ok "permissive policy: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "permissive policy: setup writes the scoped rule, reports manual, leaves the policy" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "$SCOPED" && iptables -S INPUT | grep -qx -- "-P INPUT ACCEPT"'
+iptables -D INPUT -i tailscale0 -p tcp --dport 3389 -j ACCEPT
+# The cases below need a closed policy; SSH and replies stay open so the harness keeps its channel.
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+iptables -P INPUT DROP
+ok "closed policy: the guest's INPUT policy is DROP" -- 'iptables -S INPUT | grep -qx -- "-P INPUT DROP"'
 ok "iptables host: setup #1 appends the rule" -- 'outcomes setup "$C" | fwstep changed'
 ok "iptables host: the rule is scoped to tailscale0, as printed" -- 'iptables -S INPUT | grep -qx -- "$SCOPED"'
 ok "iptables host: setup #2 changes nothing (the printed form agrees)" -- 'outcomes setup "$C" | fwstep ok'
@@ -201,6 +214,15 @@ ok "off-tailnet iptables allow only: check says setup would change it" -- 'outco
 ok "off-tailnet iptables allow only: setup adds the tailscale0 rule, keeps the operator's" -- 'outcomes setup "$C" | fwstep changed && iptables -S INPUT | grep -qx -- "$SCOPED" && iptables -S INPUT | grep -qx -- "$OFFNET"'
 ok "off-tailnet iptables allow only: check is ok afterwards" -- 'outcomes check "$C" | fwstep ok'
 iptables -D INPUT -s 10.0.0.0/8 -p tcp --dport 3389 -j ACCEPT
+# IPv6 exposure (#526): an unscoped v6 allow for the port is reported, never deleted, and check
+# returns ok once the operator removes it.
+V6OPEN='-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT'
+ip6tables -A INPUT -p tcp --dport 3389 -j ACCEPT
+ok "unscoped v6 allow: check says manual, naming the ip6tables fix" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | json "\"ip6tables -D INPUT\" in [s for s in j[\"steps\"] if s[\"name\"]==\"Firewall configuration\"][0][\"fix\"]"'
+ok "unscoped v6 allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "unscoped v6 allow: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && ip6tables -S INPUT | grep -qx -- "$V6OPEN"'
+ip6tables -D INPUT -p tcp --dport 3389 -j ACCEPT
+ok "v6 allow removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
 # POSIX ACLs on a state_dir ancestor (#598). setfacl raises the mask with a named entry and the group
 # bits mirror it, so the mode check alone already refuses that; the ACL read names the principal, and is
 # the only layer that sees an entry the mask hides (setfacl -n).

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"ts-bridge/internal/discover"
 	"ts-bridge/internal/profile"
 )
 
@@ -33,7 +31,7 @@ func TestDiscoverSavesTheSelectionAsAProfile(t *testing.T) {
 			t.Cleanup(func() { defaultProfileStorePath = old })
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_ = json.NewEncoder(w).Encode([]discover.HeadscaleDevice{{Name: "acemagic", IPs: []string{"100.64.0.7"}, Authorized: true}})
+				_, _ = w.Write([]byte(`{"nodes":[{"givenName":"acemagic","ipAddresses":["100.64.0.7"]}]}`))
 			}))
 			t.Cleanup(server.Close)
 			t.Setenv("TS_CONTROL_URL", server.URL)

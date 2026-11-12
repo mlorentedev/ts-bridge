@@ -58,7 +58,7 @@ func TestWindowsReadsReachTheirParsers(t *testing.T) {
 		}
 	})
 	t.Run("built-in group", func(t *testing.T) {
-		step, ok := builtinGroupStep(scriptRunner{&recordingRunner{}, map[string]string{"exposed": "2"}}, SetupStep{Name: "Firewall configuration", Outcome: OutcomeOK})
+		step, ok := builtinGroupStep(scriptRunner{&recordingRunner{}, map[string]string{"total": "3", "exposed": "2"}}, SetupStep{Name: "Firewall configuration", Outcome: OutcomeOK})
 		if ok || step.Outcome != OutcomeManual {
 			t.Fatalf("exposed group read: ok=%v outcome=%v, want manual", ok, step.Outcome)
 		}
@@ -92,4 +92,23 @@ func TestWindowsReadsReachTheirParsers(t *testing.T) {
 			t.Fatalf("a Private profile read as %s (%s), want %s", step.Outcome, step.Message, OutcomeOK)
 		}
 	})
+}
+
+// TestRDGroupReadUsesTheResourceID pins the query itself: the Go tests feed
+// canned output, so without this a revert to the localized display name
+// (#707) would only fail on a Windows VM.
+func TestRDGroupReadUsesTheResourceID(t *testing.T) {
+	for name, script := range map[string]string{"read": psReadRDGroup, "fix": windowsGroupFix} {
+		if !strings.Contains(script, "-Group '"+rdGroupID+"'") && !strings.Contains(script, `-Group "`+rdGroupID+`"`) {
+			t.Errorf("%s does not select the group by %s: %s", name, rdGroupID, script)
+		}
+		if strings.Contains(script, "DisplayGroup") {
+			t.Errorf("%s selects the group by its localized display name: %s", name, script)
+		}
+	}
+	// builtinGroupStep reads an answer without total= as unverified, and the
+	// Go tests feed total= by hand, so only this pins the read emitting it.
+	if !strings.Contains(psReadRDGroup, "total=") {
+		t.Errorf("read does not print the group's rule count (total=): %s", psReadRDGroup)
+	}
 }

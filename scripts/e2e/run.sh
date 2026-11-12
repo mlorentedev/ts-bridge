@@ -126,6 +126,52 @@ mesh_rdp_case() {
   return "$ok"
 }
 
+# mesh_outage_case stops the control plane after READY. host serve's /health/ready must read
+# control_plane_unreachable within 40 s, then ready within 30 s of the restart (HOST-011, #565):
+# the IPN bus stays Running through an outage, so this proves the Self.Online watcher.
+mesh_outage_case() {
+  local rc=0 t0
+  t0=$(date +%s)
+  docker stop "$HS_NAME" >/dev/null || return 1
+  if health_within 503 40 "$t0"; then
+    echo "PASS mesh outage: /health/ready reads control_plane_unreachable"
+  else
+    echo "FAIL mesh outage: /health/ready reads control_plane_unreachable"; rc=1
+  fi
+  t0=$(date +%s)
+  docker start "$HS_NAME" >/dev/null || return 1
+  if health_within 200 30 "$t0"; then
+    echo "PASS mesh outage: ready again after the control plane returns"
+  else
+    echo "FAIL mesh outage: ready again after the control plane returns"; rc=1
+  fi
+  return "$rc"
+}
+
+# health_within <want> <budget s> <event epoch> polls the guest's /health/ready for <want> and,
+# since the guest poll's clock starts only once `dotf vm linux exec` dispatches it, checks the
+# budget again on this host from the control-plane event itself.
+health_within() {
+  local took
+  echo "$1 $2" | dotf vm linux exec --session "$SESSION" --timeout 2m --script "$HERE/mesh_health.sh" || return 1
+  took=$(($(date +%s) - $3))
+  [ "$took" -le "$2" ] || { echo "health: $1 seen ${took}s after the event, budget ${2}s"; return 1; }
+}
+
+# mesh_discover_case lists the tailnet through the Headscale API from this host and finds the
+# guest (#717: discover asked for /api/v1/device, which Headscale does not serve). The API key
+# is a 0600 file; nothing secret reaches argv.
+mesh_discover_case() {
+  local dir="$1" out
+  (umask 077 && hs_mint_api_key | tail -1 >"$dir/apikey") || return 1
+  # stdout carries the JSON; logs go to stderr, which only a failure prints.
+  out="$(cd "$dir" && TS_CONTROL_URL="http://$(hs_host_ip):8080" "$dir/tsb-client" discover --json --api-key-file "$dir/apikey" 2>"$dir/discover.err")" || {
+    tail -3 "$dir/discover.err" | sed 's/^/discover: /'
+    return 1
+  }
+  printf '%s' "$out" | python3 -c 'import json, sys; sys.exit(not any(d["hostname"] == "tsb-e2e-linux" and "100.64.0.1" in d["addresses"] for d in json.load(sys.stdin)))'
+}
+
 run_mesh_linux() {
   local dir="$1" url
   url="http://$(hs_host_ip):8080" || return 1
@@ -135,6 +181,8 @@ run_mesh_linux() {
   { echo "$url"; hs_mint_key tag:e2e-host; } |
     dotf vm linux exec --session "$SESSION" --elevated --timeout 20m --script "$HERE/mesh_linux.sh" || return 1
   if mesh_rdp_case "$dir"; then echo "PASS mesh rdp: X.224 confirm through connect"; else echo "FAIL mesh rdp: X.224 confirm through connect"; return 1; fi
+  if mesh_discover_case "$dir"; then echo "PASS mesh discover: the Headscale API lists the guest"; else echo "FAIL mesh discover: the Headscale API lists the guest"; return 1; fi
+  mesh_outage_case
 }
 
 # teardown_mesh is the EXIT trap of a mesh run. bash runs it when SIGINT or SIGTERM ends the

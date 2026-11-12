@@ -85,15 +85,16 @@ const (
 	enableXRDP = "systemctl enable --now xrdp"
 )
 
-// Verbatim `iptables -S INPUT` output: a Tailscale-scoped allow, a chain
-// holding only tailscaled's jump, a port-less tailnet allow, and a hardened
-// chain whose only allows are loopback and established traffic.
+// `iptables -S INPUT` output: a Tailscale-scoped allow, a chain holding only
+// tailscaled's jump, a port-less tailnet allow, and a hardened chain whose only
+// allows are loopback and established traffic. The policy is DROP: under ACCEPT
+// every step is manual (#691), which TestPermissiveInputPolicy covers.
 const (
-	iptScoped       = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
-	iptEmpty        = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
-	iptQualified    = "-P INPUT ACCEPT\n-A INPUT -i tailscale0 -j ts-input\n"
+	iptScoped       = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	iptEmpty        = "-P INPUT DROP\n-A INPUT -j ts-input\n"
+	iptQualified    = "-P INPUT DROP\n-A INPUT -i tailscale0 -j ts-input\n"
 	iptTailnet      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -i tailscale0 -j ACCEPT\n"
-	iptDropFirst    = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n"
+	iptDropFirst    = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n"
 	iptAckOnly      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK -j ACCEPT\n"
 	iptLoopbackOnly = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n"
 )
@@ -114,13 +115,18 @@ const (
 )
 
 // tsInputDefault is tailscaled's ts-input chain as `iptables -S ts-input`
-// prints it: tailscale.com v1.104.2's AddChains, addBase4, AddExternalCGNATRules,
-// AddLoopbackRule and AddMagicsockPortRule replayed in that order with iptables
-// 1.8.10 (nf_tables) in ubuntu:24.04 (#492). tsInputNoAccept is the same chain
-// without the tailnet ACCEPT, so only rules that never decide remain.
+// prints it, verbatim from tailscaled 1.104.4 (the tailscale.com of go.mod) in
+// netfilter mode on, iptables 1.8.10 (nf_tables), Ubuntu 24.04, enrolled against
+// a local Headscale (scripts/e2e/capture-tsfw.sh, #526). tsInputNoAccept is the
+// same chain without the tailnet ACCEPT, so only rules that never decide remain.
+// tsInputNFTMode is the chain tailscaled builds in nftables mode
+// (TS_DEBUG_FIREWALL_MODE=nftables), as iptables-nft prints it: the interface
+// is the wildcard tailscale0+, and INPUT jumps to it as in mode on.
 const (
-	tsInputDefault  = "-N ts-input\n-A ts-input -s 100.64.0.5/32 -i lo -j ACCEPT\n-A ts-input -i tailscale0 -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n-A ts-input -p udp -m udp --dport 41641 -j ACCEPT\n"
-	tsInputNoAccept = "-N ts-input\n-A ts-input -s 100.64.0.5/32 -i lo -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n-A ts-input -p udp -m udp --dport 41641 -j ACCEPT\n"
+	tsInputDefault   = "-N ts-input\n-A ts-input -s 100.64.0.1/32 -i lo -j ACCEPT\n-A ts-input -i tailscale0 -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n"
+	tsInputNoAccept  = "-N ts-input\n-A ts-input -s 100.64.0.1/32 -i lo -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n"
+	tsInputNFTMode   = "-N ts-input\n-A ts-input -s 100.64.0.1/32 -i lo+ -j ACCEPT\n-A ts-input -i tailscale0+ -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0+ -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0+ -j DROP\n"
+	iptTSInputJumped = "-P INPUT DROP\n-A INPUT -j ts-input\n"
 )
 
 // A ufw host's `iptables -S INPUT` with tailscaled's jump inserted, verbatim
@@ -559,7 +565,7 @@ func TestSetupForLinux(t *testing.T) {
 		},
 		{
 			name:     "iptables, no ts-input jump and no chain: appended",
-			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT DROP\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "lookpath nft", "run "+iptAppend, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
@@ -599,8 +605,8 @@ func TestSetupForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := setupFor("linux", Config{Port: 3389, FirewallRule: "Rule"}, tt.runner)
-			if !reflect.DeepEqual(tt.runner.calls, tt.calls) {
-				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
+			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			var outcomes []Outcome
 			for _, s := range got.Steps {
@@ -873,7 +879,7 @@ func TestCheckForLinux(t *testing.T) {
 		},
 		{
 			name:     "iptables, no ts-input jump and no chain",
-			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: "-P INPUT DROP\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "lookpath nft"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
@@ -969,8 +975,8 @@ func TestCheckForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := checkFor("linux", Config{Port: 3389}, tt.runner)
-			if !reflect.DeepEqual(tt.runner.calls, tt.calls) {
-				t.Errorf("calls:\n got %q\nwant %q", tt.runner.calls, tt.calls)
+			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			for _, c := range tt.runner.calls {
 				if c == "run "+iptAppend || c == "run "+enableXRDP || c == "run "+ufwAllowCmd || c == "run "+ufwDeleteCmd || c == "run "+iptDelete {
@@ -1309,6 +1315,10 @@ func TestReadIptablesMultilineComment(t *testing.T) {
 		{"a comment that spells an allow", "-P INPUT ACCEPT\n-A INPUT -m comment --comment \"see\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT \" -j LOG\n", ""},
 		{"a comment that spells a qualified jump", "-P INPUT ACCEPT\n-A INPUT -m comment --comment \"see\n-A INPUT -i eth0 -j ts-input \" -j LOG\n-A INPUT -j ts-input\n", tsInputNoAccept},
 		{"a comment in ts-input that spells an allow", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n", tsInputNoAccept + "-A ts-input -m comment --comment \"see\n-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT \" -j LOG\n"},
+		// Verbatim from `iptables -S INPUT` (iptables v1.8.10 nf_tables and legacy, Ubuntu 24.04),
+		// after `iptables -A INPUT ... -m comment --comment "$(printf 'x\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\ny')" -j DROP`:
+		// the newline prints raw, so the middle line is a whole allow of its own (#526).
+		{"captured: a comment that prints a whole allow line", "-P INPUT ACCEPT\n-A INPUT -s 192.0.2.1/32 -p tcp -m tcp --dport 9 -m comment --comment \"x\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\ny\" -j DROP\n", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1388,13 +1398,13 @@ func TestReadUFWCopiesAdmit(t *testing.T) {
 }
 
 // nftTSInputRead is the command that finds tailscaled's ts-input in the nftables
-// table it shares with iptables-nft; nftTSInput is what it prints, rendered
-// from the rule tailscale.com v1.104.4 builds (util/linuxfw/nftables_runner.go,
-// AddChains and createAcceptIncomingPacketRule). Not captured from a live host:
-// #526 keeps the capture open.
+// table it shares with iptables-nft; nftTSInput is what it prints, verbatim from
+// tailscaled 1.104.4 in nftables mode with nftables 1.0.9 (capture-tsfw.sh, #526).
+// On that host iptables-nft prints the chain and INPUT's jump to it as well, so
+// the nft read matters only where the iptables binary is iptables-legacy.
 const (
 	nftTSInputRead = "nft list chain ip filter ts-input"
-	nftTSInput     = "table ip filter {\n\tchain ts-input {\n\t\tiifname \"tailscale0\" counter packets 0 bytes 0 accept\n\t}\n}\n"
+	nftTSInput     = "table ip filter {\n\tchain ts-input {\n\t\tiifname \"lo*\" ip saddr 100.64.0.1 counter packets 0 bytes 0 accept\n\t\tiifname \"tailscale0*\" counter packets 0 bytes 0 accept\n\t\tiifname != \"tailscale0*\" ip saddr 100.115.92.0/23 counter packets 0 bytes 0 return\n\t\tiifname != \"tailscale0*\" ip saddr 100.64.0.0/10 counter packets 0 bytes 0 drop\n\t}\n}\n"
 	iptNoJump      = "-P INPUT ACCEPT\n"
 )
 
@@ -1753,6 +1763,120 @@ func TestUnreadStepFixesDoNotBlamePrivilege(t *testing.T) {
 	}
 }
 
+// TestReadIptablesCapturedModes reads what tailscaled 1.104.4 leaves in
+// iptables in each netfilter mode, captured live (capture-tsfw.sh, #526):
+// mode on and nftables mode admit the port through ts-input, and nodivert
+// leaves the chain unreached, which is unknown, never absent.
+func TestReadIptablesCapturedModes(t *testing.T) {
+	tests := []struct {
+		name, input, chain string
+		want               ruleState
+		reason             string
+	}{
+		{"netfilter-mode on", iptTSInputJumped, tsInputDefault, rulePresent, ""},
+		{"netfilter-mode nodivert", iptNoJump, tsInputDefault, ruleUnknown, "nodivert"},
+		{"nftables mode, read through iptables-nft", iptTSInputJumped, tsInputNFTMode, rulePresent, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{output: map[string]string{iptRead: tt.input, iptChain: tt.chain}}
+			got := readIptables(r, 3389)
+			if got.state != tt.want || !strings.Contains(got.reason, tt.reason) {
+				t.Fatalf("got state %v reason %q, want %v with %q", got.state, got.reason, tt.want, tt.reason)
+			}
+		})
+	}
+}
+
+// ip6tables INPUT as tailscaled 1.104.4 leaves it in netfilter mode on
+// (captured, #526), and the same chain with an unscoped v6 allow added.
+const (
+	ip6Read      = "ip6tables -S INPUT"
+	ip6Captured  = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	ip6Unscoped  = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
+	ip6DeleteFix = "ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
+)
+
+// TestIP6Exposure pins the v6 read as an exposure scan (#526): an unscoped v6
+// allow for the port is reported and never deleted; anything else in v6, or no
+// v6 read at all, leaves the IPv4 outcome as it was.
+func TestIP6Exposure(t *testing.T) {
+	tests := []struct {
+		name    string
+		onPath  bool
+		v6      string
+		v6Fails bool
+		want    Outcome
+		message string
+		fix     string // the -D fix a manual step names; ip6DeleteFix when empty
+	}{
+		{name: "captured chain", onPath: true, v6: ip6Captured, want: OutcomeOK},
+		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Captured + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
+		{name: "a port-less v6 accept is the operator's posture", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeOK},
+		{name: "an unscoped v6 allow", onPath: true, v6: ip6Captured + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
+		// A negated scope or an explicit any prefix still opens the port off
+		// the tailnet (BUG-526 review, finding 1).
+		{name: "a v6 allow on every interface but tailscale0", onPath: true, v6: ip6Captured + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+			message: "! -i tailscale0", fix: "ip6tables -D INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
+		{name: "a v6 allow from any source", onPath: true, v6: ip6Captured + "-A INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+			message: "-s ::/0", fix: "ip6tables -D INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
+		{name: "a v6 allow to any destination", onPath: true, v6: ip6Captured + "-A INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+			message: "-d ::/0", fix: "ip6tables -D INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
+		{name: "a v6 allow for one LAN prefix is the operator's scope", onPath: true, v6: ip6Captured + "-A INPUT -s 2001:db8::/32 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
+		{name: "v6 read fails", onPath: true, v6Fails: true, want: OutcomeOK, message: ip6Read},
+		{name: "no ip6tables", want: OutcomeOK},
+	}
+	unprivileged := &recordingRunner{onPath: map[string]bool{"iptables": true, "ip6tables": true}}
+	readLinuxFirewall(unprivileged, 3389)
+	if len(unprivileged.calls) != 0 {
+		t.Errorf("an unprivileged read ran %v; every firewall read needs root", unprivileged.calls)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "ip6tables": tt.onPath},
+					output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: tt.v6},
+					fail:   map[string]bool{ip6Read: tt.v6Fails}}
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") }) {
+				t.Errorf("setup wrote: %v", r.calls)
+			}
+			want := []string{"lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain, "lookpath " + backendIP6}
+			if tt.onPath {
+				want = append(want, "output "+ip6Read)
+			}
+			if !reflect.DeepEqual(r.calls, want) {
+				t.Errorf("calls:\n got %q\nwant %q", r.calls, want)
+			}
+			cr := newRunner()
+			read := readLinuxFirewall(cr, 3389)
+			if !reflect.DeepEqual(cr.calls, want) {
+				t.Errorf("check calls:\n got %q\nwant %q", cr.calls, want)
+			}
+			check := firewallCheckStep(read, 3389)
+			for _, step := range []SetupStep{setup, check} {
+				if step.Outcome != tt.want || !strings.Contains(step.Message, tt.message) {
+					t.Errorf("outcome %v message %q, want %v naming %q", step.Outcome, step.Message, tt.want, tt.message)
+				}
+				// A row with no expected v6 text must stay silent about v6 (AC4: no
+				// ip6tables, or nothing to report, reads as before).
+				if tt.message == "" && (strings.Contains(step.Message, "ip6tables") || strings.Contains(step.Message, "IPv6")) {
+					t.Errorf("message %q mentions IPv6, want the IPv4 report alone", step.Message)
+				}
+				fix := cmp.Or(tt.fix, ip6DeleteFix)
+				if tt.want == OutcomeManual && !strings.Contains(step.Fix, fix) {
+					t.Errorf("fix %q lacks %q", step.Fix, fix)
+				}
+			}
+			if got := linuxFirewallOK(read); got != (tt.want == OutcomeOK) {
+				t.Errorf("linuxFirewallOK = %v, want %v", got, tt.want == OutcomeOK)
+			}
+		})
+	}
+}
+
 // TestOffTailnetOnlyAllow pins that an allow scoped to something other than the
 // tailnet does not converge the host: the port is open, but not from the
 // tailnet, so setup adds the tailscale0 rule and check reports it (#631).
@@ -1794,6 +1918,95 @@ func TestOffTailnetOnlyAllow(t *testing.T) {
 			check := firewallCheckStep(readLinuxFirewall(tt.runner(), 3389), 3389)
 			if check.Outcome != OutcomeChanged || !strings.Contains(check.Message, tailnetInterface) {
 				t.Errorf("check = %v %q, want changed naming %s", check.Outcome, check.Message, tailnetInterface)
+			}
+		})
+	}
+}
+
+// withoutIP6Probe drops the ip6tables lookup that every elevated read makes
+// (#526). These tables pin the IPv4 sequence on hosts without ip6tables;
+// TestIP6Exposure pins the v6 read itself and where it runs.
+func withoutIP6Probe(calls []string) []string {
+	return slices.DeleteFunc(slices.Clone(calls), func(c string) bool { return c == "lookpath "+backendIP6 })
+}
+
+// TestReadIP6NoteQuotesTheTool pins that a failed v6 read says why, in the
+// tool's own words, as on a host booted with ipv6.disable=1 (BUG-526 review).
+func TestReadIP6NoteQuotesTheTool(t *testing.T) {
+	const said = "ip6tables v1.8.10 (nf_tables): Could not fetch rule set generation id: Address family not supported by protocol"
+	r := &recordingRunner{onPath: map[string]bool{backendIP6: true}, exit: map[string]int{"ip6tables -S INPUT": 1}, stderr: map[string]string{"ip6tables -S INPUT": said + "\n"}}
+	_, note := readIP6(r, 3389)
+	if !strings.Contains(note, "Address family not supported by protocol") {
+		t.Errorf("note = %q, want it to quote the tool's stderr", note)
+	}
+}
+
+// TestPermissiveInputPolicy: on an iptables host with no ufw, an INPUT policy
+// of ACCEPT opens every port on every interface, so the tailscale0 scope
+// restricts nothing. A step that would be ok or changed is manual instead,
+// firewall_ok is false, and setup never touches the policy (#691).
+func TestPermissiveInputPolicy(t *testing.T) {
+	const scopedRule = "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	tests := []struct {
+		name    string
+		input   string
+		check   Outcome
+		setup   Outcome
+		appends bool
+	}{
+		{"ACCEPT, rule present", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n" + scopedRule, OutcomeManual, OutcomeManual, false},
+		{"ACCEPT, rule absent: setup adds it and still reports manual", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n", OutcomeManual, OutcomeManual, true},
+		{"DROP, rule present", "-P INPUT DROP\n-A INPUT -j ts-input\n" + scopedRule, OutcomeOK, OutcomeOK, false},
+		{"DROP, rule absent", "-P INPUT DROP\n-A INPUT -j ts-input\n", OutcomeChanged, OutcomeChanged, true},
+		{"ACCEPT, a jump the read cannot follow stays unverified", "-P INPUT ACCEPT\n-A INPUT -i eth0 -j ts-input\n", OutcomeUnverified, OutcomeFailed, false},
+		{"ACCEPT, setup's legacy rule: the replace is still promoted to manual", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT\n", OutcomeManual, OutcomeManual, true},
+		{"DROP, a multi-line comment cannot forge the policy line", "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -m comment --comment \"x\n-P INPUT ACCEPT\ny\" -j LOG\n" + scopedRule, OutcomeOK, OutcomeOK, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true},
+					output: map[string]string{iptRead: tt.input, iptChain: tsInputNoAccept}}
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.Contains(c, " -P ") }) {
+				t.Errorf("setup changed the policy: %v", r.calls)
+			}
+			if got := slices.Contains(r.calls, "run "+iptAppend); got != tt.appends {
+				t.Errorf("setup appended the scoped rule = %v, want %v (calls %v)", got, tt.appends, r.calls)
+			}
+			read := readLinuxFirewall(newRunner(), 3389)
+			check := firewallCheckStep(read, 3389)
+			for _, s := range []struct {
+				name string
+				step SetupStep
+				want Outcome
+			}{{"setup", setup, tt.setup}, {"check", check, tt.check}} {
+				if s.step.Outcome != s.want {
+					t.Errorf("%s = %v %q, want %v", s.name, s.step.Outcome, s.step.Message, s.want)
+				}
+				permissive := strings.HasPrefix(tt.input, "-P INPUT ACCEPT")
+				if names := strings.Contains(s.step.Message, "INPUT policy is ACCEPT"); permissive && s.want == OutcomeManual && !names {
+					t.Errorf("%s message %q does not name the ACCEPT policy", s.name, s.step.Message)
+				} else if !permissive && names {
+					t.Errorf("%s message %q names a policy the host does not have", s.name, s.step.Message)
+				}
+				if s.want == OutcomeManual && !strings.Contains(s.step.Fix, "-P INPUT DROP") {
+					t.Errorf("%s fix %q does not name a DROP policy", s.name, s.step.Fix)
+				} else if s.want != OutcomeManual && strings.Contains(s.step.Fix, "-P INPUT DROP") {
+					t.Errorf("%s fix %q names the policy on a %v step, whose own fix comes first", s.name, s.step.Fix, s.want)
+				}
+				// Closing the policy without loopback and replies cuts local DNS and
+				// tailscaled's own control connection, and with it the SSH it kept.
+				for _, keep := range []string{"-i lo -j ACCEPT", "ESTABLISHED,RELATED -j ACCEPT", "--dport <your SSH port> -j ACCEPT", "another firewall"} {
+					if s.want == OutcomeManual && !strings.Contains(s.step.Fix, keep) {
+						t.Errorf("%s fix %q closes the policy without keeping %q open", s.name, s.step.Fix, keep)
+					}
+				}
+			}
+			if got, want := linuxFirewallOK(read), tt.check == OutcomeOK; got != want {
+				t.Errorf("linuxFirewallOK = %v, want %v", got, want)
 			}
 		})
 	}
