@@ -237,7 +237,9 @@ func readIP6(r Runner, port int) (foreign []string, note string) {
 
 // ip6Exposed lists the v6 INPUT allows for the port that are not narrowed:
 // the exposure scan, not setup's rule-shape test. A negated -i/-s/-d or an
-// explicit ::/0 still opens the port off the tailnet (BUG-526 review).
+// explicit ::/0 still opens the port off the tailnet (BUG-526 review). The
+// scan ignores rule order, as iptUnscoped does: an allow behind an unscoped
+// deny is still listed, which over-reports a dead rule rather than miss one.
 func ip6Exposed(input string, port int) []string {
 	var found []string
 	for _, line := range strings.Split(input, "\n") {
@@ -479,11 +481,6 @@ func tsInputInNFT(r Runner, port int) (firewallRead, bool) {
 	return firewallRead{}, false
 }
 
-// chainMissing reports a failure that says the chain does not exist: stderr
-// carries the tool's own words for it (iptables "No chain/target/match by that
-// name", nft "No such file or directory"). Exit status 1 is the only failure
-// code either tool has, so it cannot tell a missing chain from a refused read;
-// any other failure leaves the chain unread.
 // toolSaid quotes the first stderr line of a failed command, so a note says
 // why the read failed and not only that it did.
 func toolSaid(err error) string {
@@ -497,6 +494,11 @@ func toolSaid(err error) string {
 	return ""
 }
 
+// chainMissing reports a failure that says the chain does not exist: stderr
+// carries the tool's own words for it (iptables "No chain/target/match by that
+// name", nft "No such file or directory"). Exit status 1 is the only failure
+// code either tool has, so it cannot tell a missing chain from a refused read;
+// any other failure leaves the chain unread.
 func chainMissing(err error, words string) bool {
 	var exit *exec.ExitError
 	return errors.As(err, &exit) && strings.Contains(string(exit.Stderr), words)

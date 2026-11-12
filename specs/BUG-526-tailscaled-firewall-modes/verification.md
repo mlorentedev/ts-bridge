@@ -67,3 +67,15 @@ Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
 
 - *Vacuous verification* (REAL): applied. `f1` now replays `TestFirewallStepsTailscaledModes/nodivert` (setup writes nothing) beside the read test. This changes `features.json`, so the spec review runs again as round 2 before archive.
 - *v6 scan skips jumped chains* (THEORETICAL): ticketed as #720. tailscaled's own v6 `ts-input` rules are interface-scoped; the gap needs a rule someone added inside a jumped chain.
+
+## Review disposition (round 2, PASS-WITH-GAPS at the merged #714 head)
+
+| Finding | Disposition |
+|---|---|
+| F1 Major THEORETICAL: a negated destination port (`! --dport 22`) is invisible to the v6 scan, and to the v4 unscoped read too | Ticketed #736. This predates the PR: the v4 read shares `iptPortCovers`. |
+| F2 Minor REAL: `chainMissing`'s doc comment sits on `toolSaid` | Applied in the archive PR |
+| F3 Minor REAL: lesson 055 says "off the tailnet"; the code reports unscoped allows only | Applied in the archive PR. The lesson now says "unscoped", and that an allow scoped to another interface or LAN prefix is not reported |
+| F4 Minor REAL: `capture-tsfw.sh` has no shim test | Ticketed #737 |
+| F5 Minor REAL: `f5` replays only where the gitignored e2e log exists | Recorded. The log is deliberately not committed (`scripts/e2e/out/` is gitignored); a reviewer reproduces it with `make e2e-linux` |
+| F6 Minor THEORETICAL: the v6 scan ignores rule order | Applied as a comment beside `ip6Exposed`. Over-reporting a dead rule is the chosen direction, the same as `iptUnscoped` |
+| Q7 SPECULATIVE: the captured `ts-input` has no magicsock UDP rule | Answered from the capture log `tsfw-linux-20261110T054239Z.log`. Lines 17–22 (iptables `ts-input`) and 28–31 (ip6tables) are the verbatim chain, with no `-p udp` rule. That run published no magicsock port when the chain was read. The fixtures copy those lines. A UDP rule cannot change the read in either case, because both reads skip non-TCP rules. |
