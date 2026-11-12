@@ -85,15 +85,16 @@ const (
 	enableXRDP = "systemctl enable --now xrdp"
 )
 
-// Verbatim `iptables -S INPUT` output: a Tailscale-scoped allow, a chain
-// holding only tailscaled's jump, a port-less tailnet allow, and a hardened
-// chain whose only allows are loopback and established traffic.
+// `iptables -S INPUT` output: a Tailscale-scoped allow, a chain holding only
+// tailscaled's jump, a port-less tailnet allow, and a hardened chain whose only
+// allows are loopback and established traffic. The policy is DROP: under ACCEPT
+// every step is manual (#691), which TestPermissiveInputPolicy covers.
 const (
-	iptScoped       = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
-	iptEmpty        = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
-	iptQualified    = "-P INPUT ACCEPT\n-A INPUT -i tailscale0 -j ts-input\n"
+	iptScoped       = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	iptEmpty        = "-P INPUT DROP\n-A INPUT -j ts-input\n"
+	iptQualified    = "-P INPUT DROP\n-A INPUT -i tailscale0 -j ts-input\n"
 	iptTailnet      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -i tailscale0 -j ACCEPT\n"
-	iptDropFirst    = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n"
+	iptDropFirst    = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n"
 	iptAckOnly      = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK ACK -j ACCEPT\n"
 	iptLoopbackOnly = "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -i lo -j ACCEPT\n-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n"
 )
@@ -125,7 +126,7 @@ const (
 	tsInputDefault   = "-N ts-input\n-A ts-input -s 100.64.0.1/32 -i lo -j ACCEPT\n-A ts-input -i tailscale0 -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n"
 	tsInputNoAccept  = "-N ts-input\n-A ts-input -s 100.64.0.1/32 -i lo -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0 -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0 -j DROP\n"
 	tsInputNFTMode   = "-N ts-input\n-A ts-input -s 100.64.0.1/32 -i lo+ -j ACCEPT\n-A ts-input -i tailscale0+ -j ACCEPT\n-A ts-input -s 100.115.92.0/23 ! -i tailscale0+ -j RETURN\n-A ts-input -s 100.64.0.0/10 ! -i tailscale0+ -j DROP\n"
-	iptTSInputJumped = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	iptTSInputJumped = "-P INPUT DROP\n-A INPUT -j ts-input\n"
 )
 
 // A ufw host's `iptables -S INPUT` with tailscaled's jump inserted, verbatim
@@ -564,7 +565,7 @@ func TestSetupForLinux(t *testing.T) {
 		},
 		{
 			name:     "iptables, no ts-input jump and no chain: appended",
-			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: "-P INPUT DROP\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "lookpath nft", "run "+iptAppend, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeChanged, OutcomeOK},
 		},
@@ -878,7 +879,7 @@ func TestCheckForLinux(t *testing.T) {
 		},
 		{
 			name:     "iptables, no ts-input jump and no chain",
-			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: "-P INPUT ACCEPT\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: "-P INPUT DROP\n"}), exit: map[string]int{iptChain: 1}, stderr: noIptChain},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "lookpath nft"),
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},

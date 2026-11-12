@@ -200,6 +200,10 @@ type firewallRead struct {
 	// not a reachability decision: the descriptor dials the IPv4 address (#526).
 	v6Foreign []string
 	v6Note    string
+	// inputOpen means iptables' INPUT policy is ACCEPT on a host without ufw:
+	// every port is open on every interface, so the tailscale0 scope restricts
+	// nothing (#691). Set by the iptables backend only.
+	inputOpen bool
 }
 
 // source names the tool whose rules decided the read, for messages; backend
@@ -261,7 +265,27 @@ func ip6Narrowed(f []string) bool {
 // linuxFirewallOK is check's firewall_ok: the port is admitted, through a rule
 // scoped to the tailnet, and nothing admits it on every interface (#631, #526).
 func linuxFirewallOK(fw firewallRead) bool {
-	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw) && len(fw.v6Foreign) == 0
+	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw) && len(fw.v6Foreign) == 0 && !(fw.inputOpen && fw.backend == backendIPT)
+}
+
+// withPolicy reports a permissive INPUT policy on an iptables host (#691): a
+// converged or repaired step becomes manual, since the scoped rule restricts
+// nothing while the policy admits every port. Setup never changes the policy:
+// a DROP without an SSH allow can lock the operator out.
+func withPolicy(read firewallRead, step SetupStep) SetupStep {
+	if !read.inputOpen || read.backend != backendIPT {
+		return step
+	}
+	step.Message += fmt.Sprintf("; the INPUT policy is ACCEPT, so every port is open on every interface and the %s scope restricts nothing", tailnetInterface)
+	fix := "enable a host firewall, or allow SSH and then run `iptables -P INPUT DROP` as root (persist it with your distribution's iptables service)"
+	if step.Fix != "" {
+		fix = step.Fix + "; " + fix
+	}
+	step.Fix = fix
+	if step.Outcome == OutcomeOK || step.Outcome == OutcomeChanged {
+		step.Outcome = OutcomeManual
+	}
+	return step
 }
 
 // withIP6 adds the v6 read to a firewall step. An unscoped v6 allow turns a
@@ -372,12 +396,24 @@ var tsInputJump = []string{"-A", iptInput, "-j", tsInputChain}
 // ts-input chain. A failed read of either is an unknown state, and so is a
 // qualified jump into ts-input that the walk reaches with nothing decided:
 // setup never appends an open rule on a guess (#532).
-func readIptables(r Runner, port int) firewallRead { //nolint:gocyclo // baseline #629
+func readIptables(r Runner, port int) firewallRead {
 	out, err := r.Output(backendIPT, "-S", iptInput)
 	if err != nil {
 		return firewallRead{backend: backendIPT, reason: fmt.Sprintf("iptables -S INPUT: %v", err)}
 	}
-	input := iptRules(string(out))
+	read := iptablesRead(r, port, string(out))
+	read.inputOpen = iptPolicyAccept(string(out))
+	return read
+}
+
+// iptPolicyAccept reports whether `iptables -S INPUT` sets the chain policy to
+// ACCEPT. Its first line is the policy; a listing without one is not read as open.
+func iptPolicyAccept(out string) bool {
+	return slices.Contains(strings.Split(out, "\n"), "-P INPUT ACCEPT")
+}
+
+func iptablesRead(r Runner, port int, out string) firewallRead { //nolint:gocyclo // baseline #629
+	input := iptRules(out)
 	rules, jump := iptBeforeQualifiedJump(input)
 	diverted := slices.ContainsFunc(strings.Split(rules, "\n"), iptTSInputJump)
 	if diverted {
@@ -1005,7 +1041,7 @@ func portListHas(list string, port int) bool {
 
 func firewallSetupStep(r Runner, port int) SetupStep {
 	read := readLinuxFirewall(r, port)
-	return withIP6(read, firewallSetupFrom(r, read, port), port)
+	return withIP6(read, withPolicy(read, firewallSetupFrom(r, read, port)), port)
 }
 
 func firewallSetupFrom(r Runner, read firewallRead, port int) SetupStep {
@@ -1190,7 +1226,7 @@ func ufwInactiveStep(read firewallRead, port int, state string) SetupStep {
 }
 
 func firewallCheckStep(read firewallRead, port int) SetupStep {
-	return withIP6(read, firewallCheckV4(read, port), port)
+	return withIP6(read, withPolicy(read, firewallCheckV4(read, port)), port)
 }
 
 func firewallCheckV4(read firewallRead, port int) SetupStep {
