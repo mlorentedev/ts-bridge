@@ -2248,3 +2248,100 @@ func TestUFWPolicyReadButChainUnread(t *testing.T) {
 		t.Errorf("an iptables host's unread step names ufw: %q", c.Message)
 	}
 }
+
+// `nft list chains` output for TestForeignFirewall, in the shape nft 1.0
+// prints it (probed on Ubuntu 24.04 for #739).
+const (
+	nftInetFilter = "table inet filter {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n\tchain output {\n\t\ttype filter hook output priority filter; policy accept;\n\t}\n}\n"
+	nftFirewalld  = "table inet firewalld {\n\tchain filter_INPUT {\n\t\ttype filter hook input priority filter + 10; policy accept;\n\t}\n}\n"
+	nftIptOnly    = "table ip filter {\n\tchain INPUT {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n\tchain ts-input {\n\t}\n}\n" +
+		"table ip6 filter {\n\tchain INPUT {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n}\n" +
+		"table ip nat {\n\tchain POSTROUTING {\n\t\ttype nat hook postrouting priority srcnat; policy accept;\n\t}\n}\n"
+	nftNoInput = "table inet natonly {\n\tchain post {\n\t\ttype nat hook postrouting priority srcnat; policy accept;\n\t}\n}\n"
+)
+
+// TestForeignFirewall pins #739: where firewalld or a native nftables ruleset
+// filters inbound traffic, iptables is not authoritative. check is unverified
+// and setup manual, both naming that firewall; setup writes nothing, and
+// neither the v4 nor the v6 policy is read. A failed probe is an unknown read.
+func TestForeignFirewall(t *testing.T) {
+	const fwState, nftChains = "firewall-cmd --state", "nft list chains"
+	tests := []struct {
+		name          string
+		firewalld     bool // firewall-cmd on PATH
+		fwOut         string
+		fwExit        int
+		nft           bool // nft on PATH
+		nftOut        string
+		nftFails      bool
+		want, fixWant string // "" in want: no foreign firewall, the iptables read decides
+		unknown       bool
+	}{
+		{name: "firewalld running", firewalld: true, fwOut: "running\n", want: "firewalld", fixWant: "--change-interface=tailscale0"},
+		{name: "firewalld running wins over its nft table", firewalld: true, fwOut: "running\n", nft: true, nftOut: nftFirewalld, want: "firewalld is running", fixWant: "firewall-cmd --reload"},
+		{name: "firewalld not running", firewalld: true, fwOut: "not running\n", fwExit: 252},
+		{name: "firewalld state fails", firewalld: true, fwExit: 1, want: fwState, unknown: true},
+		{name: "native inet filter", nft: true, nftOut: nftInetFilter, want: "table inet filter", fixWant: "`nft insert rule inet filter input iifname \"tailscale0\" tcp dport 3389 accept`"},
+		{name: "firewalld table, firewall-cmd absent", nft: true, nftOut: nftFirewalld, want: "table inet firewalld", fixWant: "nft insert rule inet firewalld filter_INPUT"},
+		{name: "iptables-nft and tailscaled tables only", nft: true, nftOut: nftIptOnly},
+		{name: "table without an input hook", nft: true, nftOut: nftNoInput},
+		{name: "nft listing fails", nft: true, nftFails: true, want: nftChains, unknown: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				r := &recordingRunner{elevated: true,
+					onPath: map[string]bool{"iptables": true, "ip6tables": true, "firewall-cmd": tt.firewalld, "nft": tt.nft},
+					output: map[string]string{iptRead: "-P INPUT ACCEPT\n", ip6Read: "-P INPUT ACCEPT\n", fwState: tt.fwOut, nftChains: tt.nftOut},
+					exit:   map[string]int{}, fail: map[string]bool{nftChains: tt.nftFails}}
+				if tt.fwExit != 0 {
+					r.exit[fwState] = tt.fwExit
+				}
+				return r
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			wrote := slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") })
+			cr := newRunner()
+			read := readLinuxFirewall(cr, 3389)
+			check := firewallCheckStep(read, 3389)
+			if tt.want == "" {
+				if !wrote || !strings.Contains(check.Message, "the iptables INPUT policy is ACCEPT") {
+					t.Errorf("no foreign firewall: setup wrote = %v, check %q; want the iptables read to decide", wrote, check.Message)
+				}
+				return
+			}
+			setupWant := OutcomeManual
+			if tt.unknown {
+				setupWant = OutcomeFailed
+			}
+			for _, s := range []struct {
+				name string
+				step SetupStep
+				want Outcome
+			}{{"setup", setup, setupWant}, {"check", check, OutcomeUnverified}} {
+				if s.step.Outcome != s.want || s.step.Success {
+					t.Errorf("%s = %v (success %v) %q, want %v", s.name, s.step.Outcome, s.step.Success, s.step.Message, s.want)
+				}
+				if !strings.Contains(s.step.Message, tt.want) {
+					t.Errorf("%s message %q does not name %q", s.name, s.step.Message, tt.want)
+				}
+				if !strings.Contains(s.step.Fix, tt.fixWant) {
+					t.Errorf("%s fix %q lacks %q", s.name, s.step.Fix, tt.fixWant)
+				}
+				if strings.Contains(s.step.Message, "INPUT policy is ACCEPT") {
+					t.Errorf("%s message %q reads a policy iptables does not decide", s.name, s.step.Message)
+				}
+			}
+			if wrote {
+				t.Errorf("setup wrote a rule: %v", r.calls)
+			}
+			if slices.Contains(cr.calls, "output "+ip6Read) {
+				t.Errorf("the v6 read ran: %v", cr.calls)
+			}
+			if linuxFirewallOK(read) {
+				t.Error("linuxFirewallOK = true")
+			}
+		})
+	}
+}
