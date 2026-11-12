@@ -1,0 +1,16 @@
+[
+  {
+    "id": "BUG-733-v6-input-policy-f1",
+    "behavior": "AC1-AC3: the v6 INPUT policy on an iptables host turns ok/changed manual, is noted otherwise, and is ignored on ufw",
+    "verification": "go test ./internal/host/ -run 'TestIP6Policy|TestIP6Exposure' -count=1",
+    "state": "done",
+    "evidence": "go test -race ./... exit 0; TestIP6Policy, TestIP6Exposure, TestPolicyFixOnManualStep pass"
+  },
+  {
+    "id": "BUG-733-v6-input-policy-f2",
+    "behavior": "AC4: e2e on the Linux guest",
+    "verification": "make e2e-linux",
+    "state": "done",
+    "evidence": "make e2e-linux: 98 pass, 0 fail, 0 xfail, 0 xpass on candidate 8814617 (v6 permissive policy: manual naming the ip6tables policy, not firewall_ok; closed v6 policy: DROP after the keep-open rules)"
+  }
+]

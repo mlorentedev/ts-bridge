@@ -622,7 +622,7 @@ func TestSetupForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := setupFor("linux", Config{Port: 3389, FirewallRule: "Rule"}, tt.runner)
-			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+			if calls := withoutProbes(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
 				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			var outcomes []Outcome
@@ -704,6 +704,16 @@ func TestCheckForLinux(t *testing.T) {
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name: "firewalld running: unverified, not firewall_ok, ufw never read (#739 review)",
+			runner: &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "ufw": true, "firewall-cmd": true},
+				output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow, "firewall-cmd --state": "running\n"})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "output firewall-cmd --state"),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "firewalld is running",
 		},
 		{
 			name:     "ufw host, iptables unreadable: unverified (#530 review)",
@@ -1022,7 +1032,7 @@ func TestCheckForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := checkFor("linux", Config{Port: 3389}, tt.runner)
-			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+			if calls := withoutProbes(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
 				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			for _, c := range tt.runner.calls {
@@ -1841,10 +1851,21 @@ func TestReadIptablesCapturedModes(t *testing.T) {
 // ip6tables INPUT as tailscaled 1.104.4 leaves it in netfilter mode on
 // (captured, #526), and the same chain with an unscoped v6 allow added.
 const (
-	ip6Read      = "ip6tables -S INPUT"
-	ip6Captured  = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	ip6Read     = "ip6tables -S INPUT"
+	ip6Captured = "-P INPUT ACCEPT\n-A INPUT -j ts-input\n"
+	// ip6Closed is the captured chain under a DROP policy, so the exposure rows
+	// below read only the rules, not the policy (#733).
+	ip6Closed    = "-P INPUT DROP\n-A INPUT -j ts-input\n"
 	ip6Unscoped  = "-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
 	ip6DeleteFix = "ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"
+	// ip6TSInput is tailscaled's v6 ts-input as `ip6tables -S ts-input` printed
+	// it in --netfilter-mode=on, captured with scripts/e2e/capture-tsfw.sh on
+	// 2026-11-12 (tailscale 1.104.4); ip6TSInputNFT is the same chain under
+	// iptables-nft, which prints the interfaces as wildcards (#720).
+	ip6ChainRead  = "ip6tables -S ts-input"
+	ip6TSInput    = "-N ts-input\n-A ts-input -s fd7a:115c:a1e0::1/128 -i lo -j ACCEPT\n-A ts-input -i tailscale0 -j ACCEPT\n"
+	ip6TSInputNFT = "-N ts-input\n-A ts-input -s fd7a:115c:a1e0::1/128 -i lo+ -j ACCEPT\n-A ts-input -i tailscale0+ -j ACCEPT\n"
+	ip6InChain    = "-A ts-input -p tcp -m tcp --dport 3389 -j ACCEPT"
 )
 
 // TestIP6Exposure pins the v6 read as an exposure scan (#526): an unscoped v6
@@ -1891,7 +1912,7 @@ func TestExposureShapes(t *testing.T) {
 			if got := len(iptUnscoped(tt.rule, 3389)) == 1; got != tt.want {
 				t.Errorf("v4 exposed = %v, want %v", got, tt.want)
 			}
-			if got := len(ip6Exposed(tt.rule, 3389)) == 1; got != tt.want {
+			if got := len(ip6Exposed(tt.rule, iptInput, 3389)) == 1; got != tt.want {
 				t.Errorf("v6 exposed = %v, want %v", got, tt.want)
 			}
 		})
@@ -1936,23 +1957,28 @@ func TestIP6Exposure(t *testing.T) {
 		want    Outcome
 		message string
 		fix     string // the -D fix a manual step names; ip6DeleteFix when empty
+		chain   string // what ip6tables -S ts-input prints; ip6TSInput when empty
 	}{
-		{name: "captured chain", onPath: true, v6: ip6Captured, want: OutcomeOK},
-		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Captured + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
-		{name: "a port-less v6 accept", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeManual,
+		{name: "captured chain", onPath: true, v6: ip6Closed, want: OutcomeOK},
+		{name: "captured chain, iptables-nft", onPath: true, v6: ip6Closed, chain: ip6TSInputNFT, want: OutcomeOK},
+		// An allow inside the chain INPUT jumps to opens the port as one in INPUT does (#720).
+		{name: "an unscoped v6 allow inside ts-input", onPath: true, v6: ip6Closed, chain: ip6TSInput + ip6InChain + "\n", want: OutcomeManual,
+			message: ip6InChain, fix: "ip6tables -D ts-input -p tcp -m tcp --dport 3389 -j ACCEPT"},
+		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Closed + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
+		{name: "a port-less v6 accept", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeManual,
 			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
-		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Captured + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
+		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
 			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
-		{name: "an unscoped v6 allow", onPath: true, v6: ip6Captured + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
+		{name: "an unscoped v6 allow", onPath: true, v6: ip6Closed + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
 		// A negated scope or an explicit any prefix still opens the port off
 		// the tailnet (BUG-526 review, finding 1).
-		{name: "a v6 allow on every interface but tailscale0", onPath: true, v6: ip6Captured + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+		{name: "a v6 allow on every interface but tailscale0", onPath: true, v6: ip6Closed + "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
 			message: "! -i tailscale0", fix: "ip6tables -D INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
-		{name: "a v6 allow from any source", onPath: true, v6: ip6Captured + "-A INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+		{name: "a v6 allow from any source", onPath: true, v6: ip6Closed + "-A INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
 			message: "-s ::/0", fix: "ip6tables -D INPUT -s ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
-		{name: "a v6 allow to any destination", onPath: true, v6: ip6Captured + "-A INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
+		{name: "a v6 allow to any destination", onPath: true, v6: ip6Closed + "-A INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeManual,
 			message: "-d ::/0", fix: "ip6tables -D INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
-		{name: "a v6 allow for one LAN prefix is the operator's scope", onPath: true, v6: ip6Captured + "-A INPUT -s 2001:db8::/32 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
+		{name: "a v6 allow for one LAN prefix is the operator's scope", onPath: true, v6: ip6Closed + "-A INPUT -s 2001:db8::/32 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
 		{name: "v6 read fails", onPath: true, v6Fails: true, want: OutcomeOK, message: ip6Read},
 		{name: "no ip6tables", want: OutcomeOK},
 	}
@@ -1965,7 +1991,7 @@ func TestIP6Exposure(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			newRunner := func() *recordingRunner {
 				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "ip6tables": tt.onPath},
-					output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: tt.v6},
+					output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: tt.v6, ip6ChainRead: cmp.Or(tt.chain, ip6TSInput)},
 					fail:   map[string]bool{ip6Read: tt.v6Fails}}
 			}
 			r := newRunner()
@@ -1973,9 +1999,12 @@ func TestIP6Exposure(t *testing.T) {
 			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") }) {
 				t.Errorf("setup wrote: %v", r.calls)
 			}
-			want := []string{"lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain, "lookpath " + backendIP6}
+			want := []string{"lookpath " + firewalldCmd, "lookpath nft", "lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain, "lookpath " + backendIP6}
 			if tt.onPath {
 				want = append(want, "output "+ip6Read)
+			}
+			if tt.onPath && !tt.v6Fails {
+				want = append(want, "output "+ip6ChainRead)
 			}
 			if !reflect.DeepEqual(r.calls, want) {
 				t.Errorf("calls:\n got %q\nwant %q", r.calls, want)
@@ -2053,11 +2082,123 @@ func TestOffTailnetOnlyAllow(t *testing.T) {
 	}
 }
 
-// withoutIP6Probe drops the ip6tables lookup that every elevated read makes
-// (#526). These tables pin the IPv4 sequence on hosts without ip6tables;
-// TestIP6Exposure pins the v6 read itself and where it runs.
-func withoutIP6Probe(calls []string) []string {
-	return slices.DeleteFunc(slices.Clone(calls), func(c string) bool { return c == "lookpath "+backendIP6 })
+// TestIP6Jumps pins the walk into the chains INPUT jumps to (#720): a chain is
+// followed when the jump applies to every packet for the port, once, however
+// deep, and its unscoped allows are reported under the chain's own name. A
+// target that is no chain is skipped; a chain that cannot be read is a note.
+func TestIP6Jumps(t *testing.T) {
+	const (
+		open   = "-A mine -p tcp -m tcp --dport 3389 -j ACCEPT"
+		noMine = "ip6tables v1.8.10 (nf_tables): chain `mine' in table `filter' is incompatible, use 'nft' tool.\n"
+	)
+	missing := "ip6tables: No chain/target/match by that name.\n"
+	tests := []struct {
+		name   string
+		input  string
+		chains map[string]string // chain -> what ip6tables -S <chain> prints
+		fail   map[string]string // chain -> stderr of a failed read
+		want   []string
+		note   string
+		said   string   // the tool's words the note must quote
+		ufw    bool     // the host's firewall is read through ufw
+		reads  []string // the chains read, in order
+	}{
+		{name: "tailscaled's ts-input", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput}, reads: []string{"ts-input"}},
+		{name: "an allow in ts-input", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + ip6InChain}, want: []string{ip6InChain}, reads: []string{"ts-input"}},
+		{name: "a jump through goto", input: "-A INPUT -g mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "a jump for the port", input: "-A INPUT -p tcp -m tcp --dport 3389 -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "a jump for another port is not followed", input: "-A INPUT -p tcp -m tcp --dport 22 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a jump held to one interface is not followed", input: "-A INPUT -i eth0 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a loopback jump is not followed", input: "-A INPUT -i lo -j mine", chains: map[string]string{"mine": open}},
+		{name: "a jump on every interface but one is followed", input: "-A INPUT ! -i tailscale0 -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "two jumps deep", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j mine", "mine": open}, want: []string{open}, reads: []string{"ts-input", "mine"}},
+		{name: "a loop ends", input: "-A INPUT -j mine", chains: map[string]string{"mine": open + "\n-A mine -j other", "other": "-A other -j mine\n-A other -j INPUT"}, want: []string{open}, reads: []string{"mine", "other"}},
+		{name: "a chain jumped to twice is read once", input: "-A INPUT -j mine\n-A INPUT -p tcp -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "verdicts are not chains", input: "-A INPUT -p tcp -j DROP\n-A INPUT -j RETURN\n-A INPUT -p tcp -j REJECT --reject-with tcp-reset"},
+		{name: "a target that is no chain is skipped without a note", input: "-A INPUT -j LOG", fail: map[string]string{"LOG": missing}, reads: []string{"LOG"}},
+		// ufw writes its v6 chains and `ufw show added` reports an allow there
+		// with a fix ufw keeps; an ip6tables -D would be undone on its reload.
+		{name: "ufw's chains are left to the ufw read", ufw: true, input: "-A INPUT -j ufw6-before-input", chains: map[string]string{"ufw6-before-input": "-A ufw6-before-input -p tcp -m tcp --dport 3389 -j ACCEPT"}},
+		// Without a ufw read nothing accounts for a ufw6 chain, so the prefix
+		// alone excludes nothing (#752 review).
+		{name: "a ufw6 chain on a host ufw does not read is walked", input: "-A INPUT -j ufw6-custom", chains: map[string]string{"ufw6-custom": "-A ufw6-custom -p tcp -m tcp --dport 3389 -j ACCEPT"},
+			want: []string{"-A ufw6-custom -p tcp -m tcp --dport 3389 -j ACCEPT"}, reads: []string{"ufw6-custom"}},
+		// A qualifier beyond a scope or the port narrows a port jump as it does a
+		// port-less one: replies only are no new connection (#752 review).
+		{name: "a port jump held to established replies is not followed", input: "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j mine", chains: map[string]string{"mine": open}},
+		{name: "a multiport jump naming the port", input: "-A INPUT -p tcp -m multiport --dports 22,3389 -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "a multiport jump not naming the port", input: "-A INPUT -p tcp -m multiport --dports 22,80 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a chain that cannot be read is a note, INPUT still read", input: ip6Unscoped + "\n-A INPUT -j mine", fail: map[string]string{"mine": noMine}, want: []string{ip6Unscoped},
+			note: "ip6tables -S mine: ", said: "(" + strings.TrimSuffix(noMine, "\n") + ")", reads: []string{"mine"}},
+		// A port-less accept is the operator's posture, in a chain as in INPUT
+		// (the INPUT row in TestIP6Exposure): the scan reports allows for the port.
+		// A port-less accept opens the port in a jumped chain as in INPUT (#736, #753).
+		{name: "a port-less accept in a chain is reported", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j ACCEPT"},
+			want: []string{"-A ts-input -j ACCEPT"}, reads: []string{"ts-input"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{elevated: true, onPath: map[string]bool{backendIP6: true}, output: map[string]string{ip6Read: "-P INPUT DROP\n" + tt.input + "\n"},
+				exit: map[string]int{}, stderr: map[string]string{}}
+			for chain, out := range tt.chains {
+				r.output["ip6tables -S "+chain] = out + "\n"
+			}
+			for chain, said := range tt.fail {
+				r.exit["ip6tables -S "+chain], r.stderr["ip6tables -S "+chain] = 1, said
+			}
+			foreign, _, note := readIP6(r, 3389, tt.ufw)
+			if !slices.Equal(foreign, tt.want) {
+				t.Errorf("foreign = %q, want %q", foreign, tt.want)
+			}
+			if (tt.note == "") != (note == "") || !strings.Contains(note, tt.note) || !strings.Contains(note, tt.said) {
+				t.Errorf("note = %q, want %q", note, tt.note)
+			}
+			var reads []string
+			for _, c := range r.calls {
+				if chain, ok := strings.CutPrefix(c, "output ip6tables -S "); ok && chain != iptInput {
+					reads = append(reads, chain)
+				}
+			}
+			if !slices.Equal(reads, tt.reads) {
+				t.Errorf("chains read = %q, want %q", reads, tt.reads)
+			}
+		})
+	}
+}
+
+// TestIP6JumpsUFWHost pins the ufw6 exclusion end to end (#720 review): on a
+// ufw host, `ufw allow 3389` also writes an unscoped v6 allow into ufw's own
+// chains. It is reported once, by the ufw read, with ufw's fix: the v6 walk
+// never reads a ufw6 chain, so no ip6tables -D that ufw would undo is named.
+func TestIP6JumpsUFWHost(t *testing.T) {
+	const ufw6 = "ip6tables -S ufw6-user-input"
+	r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true, backendIP6: true}, output: map[string]string{
+		ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + "ufw allow 3389\n", iptRead: ufwHostInput, iptChain: tsInputNoAccept,
+		ip6Read: "-P INPUT DROP\n-A INPUT -j ts-input\n-A INPUT -j ufw6-user-input\n", ip6ChainRead: ip6TSInput,
+		ufw6: "-N ufw6-user-input\n-A ufw6-user-input -p tcp -m tcp --dport 3389 -j ACCEPT\n"}}
+	check := firewallCheckStep(readLinuxFirewall(r, 3389), 3389)
+	if slices.Contains(r.calls, "output "+ufw6) {
+		t.Errorf("the walk read %s; ufw's chains are the ufw read's", ufw6)
+	}
+	if check.Outcome != OutcomeManual || strings.Contains(check.Fix, "ip6tables -D") || !strings.Contains(check.Fix, "ufw") {
+		t.Errorf("check = %v, fix %q; want manual with ufw's fix and no ip6tables -D", check.Outcome, check.Fix)
+	}
+}
+
+// withoutProbes drops the lookups that every elevated read makes: ip6tables
+// (#526), and the foreign-firewall probe's firewall-cmd and nft (#739), which
+// open the read. These tables pin the IPv4 sequence on hosts with neither;
+// TestIP6Exposure pins the order, TestForeignFirewall what the probe finds.
+func withoutProbes(calls []string) []string {
+	out := slices.Clone(calls)
+	if i := slices.Index(out, "lookpath "+firewalldCmd); i >= 0 {
+		end := i + 1
+		if end < len(out) && out[end] == "lookpath nft" {
+			end++
+		}
+		out = slices.Delete(out, i, end)
+	}
+	return slices.DeleteFunc(out, func(c string) bool { return c == "lookpath "+backendIP6 })
 }
 
 // TestReadIP6NoteQuotesTheTool pins that a failed v6 read says why, in the
@@ -2065,7 +2206,7 @@ func withoutIP6Probe(calls []string) []string {
 func TestReadIP6NoteQuotesTheTool(t *testing.T) {
 	const said = "ip6tables v1.8.10 (nf_tables): Could not fetch rule set generation id: Address family not supported by protocol"
 	r := &recordingRunner{onPath: map[string]bool{backendIP6: true}, exit: map[string]int{"ip6tables -S INPUT": 1}, stderr: map[string]string{"ip6tables -S INPUT": said + "\n"}}
-	_, note := readIP6(r, 3389)
+	_, _, note := readIP6(r, 3389, false)
 	if !strings.Contains(note, "Address family not supported by protocol") {
 		t.Errorf("note = %q, want it to quote the tool's stderr", note)
 	}
@@ -2137,6 +2278,367 @@ func TestPermissiveInputPolicy(t *testing.T) {
 			}
 			if got, want := linuxFirewallOK(read), tt.check == OutcomeOK; got != want {
 				t.Errorf("linuxFirewallOK = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+// TestIP6Policy pins the v6 INPUT policy on an iptables host (#733): ACCEPT
+// opens every port on every IPv6 address, so a converged or repaired step turns
+// manual, an unverified or failed one gains only the note, and setup never
+// changes the policy.
+func TestIP6Policy(t *testing.T) {
+	const scopedRule = "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n"
+	const v4Closed = "-P INPUT DROP\n-A INPUT -j ts-input\n"
+	tests := []struct {
+		name         string
+		v4, v6       string
+		check, setup Outcome
+		v6Fix        bool // the fix names `ip6tables -P INPUT DROP`
+		v4Fix        bool // the fix names `iptables -P INPUT DROP` too
+	}{
+		{"v4 DROP, v6 ACCEPT, rule present", v4Closed + scopedRule, ip6Captured, OutcomeManual, OutcomeManual, true, false},
+		{"v4 DROP, v6 ACCEPT, rule absent: setup adds it and reports manual", v4Closed, ip6Captured, OutcomeManual, OutcomeManual, true, false},
+		{"v4 DROP, v6 DROP", v4Closed + scopedRule, ip6Closed, OutcomeOK, OutcomeOK, false, false},
+		{"both ACCEPT: one manual step naming both policies", "-P INPUT ACCEPT\n-A INPUT -j ts-input\n" + scopedRule, ip6Captured, OutcomeManual, OutcomeManual, true, true},
+		{"an unfollowable v4 jump keeps its outcome", "-P INPUT DROP\n-A INPUT -i eth0 -j ts-input\n", ip6Captured, OutcomeUnverified, OutcomeFailed, false, false},
+		{"a multi-line comment cannot forge the v6 policy", v4Closed + scopedRule, ip6Closed + "-A INPUT -m comment --comment \"x\n-P INPUT ACCEPT\ny\" -j LOG\n", OutcomeOK, OutcomeOK, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "ip6tables": true},
+					output: map[string]string{iptRead: tt.v4, iptChain: tsInputNoAccept, ip6Read: tt.v6}}
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.Contains(c, " -P ") }) {
+				t.Errorf("setup changed a policy: %v", r.calls)
+			}
+			read := readLinuxFirewall(newRunner(), 3389)
+			check := firewallCheckStep(read, 3389)
+			v6Open := strings.HasPrefix(tt.v6, "-P INPUT ACCEPT")
+			for _, s := range []struct {
+				name string
+				step SetupStep
+				want Outcome
+			}{{"setup", setup, tt.setup}, {"check", check, tt.check}} {
+				if s.step.Outcome != s.want {
+					t.Errorf("%s = %v %q, want %v", s.name, s.step.Outcome, s.step.Message, s.want)
+				}
+				if names := strings.Contains(s.step.Message, "ip6tables INPUT policy is ACCEPT"); names != v6Open {
+					t.Errorf("%s message %q: names the v6 policy = %v, want %v", s.name, s.step.Message, names, v6Open)
+				}
+				if got := strings.Contains(s.step.Fix, "`ip6tables -P INPUT DROP`"); got != tt.v6Fix {
+					t.Errorf("%s fix %q: names the v6 DROP = %v, want %v", s.name, s.step.Fix, got, tt.v6Fix)
+				}
+				if got := strings.Contains(s.step.Fix, "`iptables -P INPUT DROP`"); got != tt.v4Fix {
+					t.Errorf("%s fix %q: names the v4 DROP = %v, want %v", s.name, s.step.Fix, got, tt.v4Fix)
+				}
+				for _, keep := range []string{"`ip6tables -A INPUT -i lo -j ACCEPT`", "`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`", "`ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`", "`ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`", "IPv6 is disabled"} {
+					if tt.v6Fix && !strings.Contains(s.step.Fix, keep) {
+						t.Errorf("%s fix %q closes the v6 policy without %q", s.name, s.step.Fix, keep)
+					}
+				}
+			}
+			if got, want := linuxFirewallOK(read), tt.check == OutcomeOK; got != want {
+				t.Errorf("linuxFirewallOK = %v, want %v", got, want)
+			}
+		})
+	}
+	// An inactive ufw already reports itself as off: its open policy is that same fact (#735).
+	ufw := withIP6(firewallRead{backend: backendUFW, ufwInactive: true, v6Open: true}, SetupStep{Outcome: OutcomeOK}, 3389)
+	if ufw.Outcome != OutcomeOK || ufw.Fix != "" || ufw.Message != "" {
+		t.Errorf("an inactive ufw host's step changed: %+v", ufw)
+	}
+}
+
+// TestPolicyFixOnManualStep pins that a step already manual for another reason
+// (a foreign unscoped allow) still gains the policy fix, for v4 as for v6.
+func TestPolicyFixOnManualStep(t *testing.T) {
+	read := firewallRead{inputOpen: true, v6Open: true, backend: backendIPT}
+	in := SetupStep{Outcome: OutcomeManual, Message: "foreign allow", Fix: "delete the foreign rule"}
+	got := withIP6(read, withPolicy(read, in), 3389)
+	if got.Outcome != OutcomeManual {
+		t.Fatalf("outcome = %s, want manual", got.Outcome)
+	}
+	for _, want := range []string{"delete the foreign rule", "`iptables -P INPUT DROP`", "`ip6tables -P INPUT DROP`"} {
+		if !strings.Contains(got.Fix, want) {
+			t.Errorf("fix lacks %q: %s", want, got.Fix)
+		}
+	}
+}
+
+// TestManualRewriteClearsSuccess pins that every rewrite of an ok step to
+// manual also clears the legacy Success, so setup warns and its JSON agrees.
+func TestManualRewriteClearsSuccess(t *testing.T) {
+	ok := newStep("Firewall configuration", OutcomeOK, "Firewall allows TCP 3389", "")
+	cases := map[string]SetupStep{
+		"v4 policy":   withPolicy(firewallRead{inputOpen: true, backend: backendIPT}, ok),
+		"v6 policy":   withV6Policy(firewallRead{v6Open: true, backend: backendIPT}, ok),
+		"v6 exposure": withIP6(firewallRead{v6Foreign: []string{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT"}, backend: backendIPT}, ok, 3389),
+	}
+	for name, got := range cases {
+		if got.Outcome != OutcomeManual || got.Success {
+			t.Errorf("%s: outcome %s success %v, want manual and false", name, got.Outcome, got.Success)
+		}
+	}
+}
+
+// TestUFWPolicy pins #735: an active ufw writes the kernel's INPUT policies
+// from its incoming default, so an ACCEPT policy there restricts nothing, as
+// on an iptables host. The fix names ufw's own commands, never a raw -P.
+func TestUFWPolicy(t *testing.T) {
+	// With IPV6=no, ufw stored only the v4 copy of every allow: SSH over IPv6 needs
+	// its v6 copy before the v6 deny applies, and `ufw allow` adds it cleanly only
+	// while ufw is disabled (probed on ufw 0.36.2; review of #748).
+	const v6UFWSteps = "run `ufw disable`, set `IPV6=yes` in /etc/default/ufw, run `ufw allow <your SSH port>/tcp` so ufw adds the IPv6 copy of the SSH allow, then `ufw enable`"
+	policy := func(p string) string { return strings.Replace(ufwHostInput, "-P INPUT DROP", "-P INPUT "+p, 1) }
+	runner := func(status, v4, v6 string, fail bool) *recordingRunner {
+		r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true, "ip6tables": true},
+			output: map[string]string{ufwStatus: status, ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: v4, iptChain: tsInputNoAccept, ip6Read: "-P INPUT " + v6 + "\n-A INPUT -j ts-input\n"}}
+		if fail {
+			r.fail = map[string]bool{ufwStatus: true}
+		}
+		return r
+	}
+	steps := func(status, v4, v6 string, fail bool) (setup, check SetupStep, ok bool) {
+		read := readLinuxFirewall(runner(status, v4, v6, fail), 3389)
+		return firewallSetupStep(runner(status, v4, v6, fail), 3389), firewallCheckStep(read, 3389), linuxFirewallOK(read)
+	}
+	tests := []struct {
+		name     string
+		v4, v6   string
+		manual   bool
+		fixHas   []string
+		fixLacks []string
+	}{
+		{"incoming allow: both policies ACCEPT", "ACCEPT", "ACCEPT", true, []string{"`ufw allow <your SSH port>/tcp`", "`ufw default deny incoming`", v6UFWSteps}, []string{"-P INPUT DROP", "`ufw reload`"}},
+		{"IPV6=no after a boot: v6 ACCEPT only", "DROP", "ACCEPT", true, []string{v6UFWSteps}, []string{"-P INPUT DROP", "`ufw reload`"}},
+		{"incoming deny: both DROP", "DROP", "DROP", false, nil, []string{"ufw default deny incoming", "IPV6=yes"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setup, check, ok := steps(ufwActive, policy(tt.v4), tt.v6, false)
+			for _, s := range []SetupStep{setup, check} {
+				if (s.Outcome == OutcomeManual) != tt.manual || s.Success == tt.manual {
+					t.Errorf("outcome %v success %v, want manual=%v: %q", s.Outcome, s.Success, tt.manual, s.Message)
+				}
+				for _, want := range tt.fixHas {
+					if !strings.Contains(s.Fix, want) {
+						t.Errorf("fix lacks %q: %s", want, s.Fix)
+					}
+				}
+				for _, bad := range tt.fixLacks {
+					if strings.Contains(s.Fix, bad) {
+						t.Errorf("fix names %q: %s", bad, s.Fix)
+					}
+				}
+			}
+			if ok == tt.manual {
+				t.Errorf("linuxFirewallOK = %v, want %v", ok, !tt.manual)
+			}
+		})
+	}
+	// An inactive or unreadable ufw keeps what it reported with closed policies.
+	for _, c := range []struct {
+		name   string
+		status string
+		fail   bool
+	}{{"inactive", "Status: inactive\n", false}, {"unreadable", "", true}} {
+		openSetup, openCheck, _ := steps(c.status, policy("ACCEPT"), "ACCEPT", c.fail)
+		shutSetup, shutCheck, _ := steps(c.status, policy("DROP"), "DROP", c.fail)
+		if openSetup.Outcome != shutSetup.Outcome || openCheck.Outcome != shutCheck.Outcome || openSetup.Fix != shutSetup.Fix || openCheck.Fix != shutCheck.Fix {
+			t.Errorf("%s ufw changed with open policies: setup %v -> %v, check %v -> %v", c.name, shutSetup.Outcome, openSetup.Outcome, shutCheck.Outcome, openCheck.Outcome)
+		}
+	}
+}
+
+// TestUFWPolicyUnread pins review F3 of #735: on an active ufw whose own allow
+// decides, a failed iptables read leaves the policy unknown, so check and setup
+// must not report the host as closed.
+func TestUFWPolicyUnread(t *testing.T) {
+	newRunner := func() *recordingRunner {
+		return &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true},
+			output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + ufwScopedAllow}, exit: map[string]int{iptRead: 4}}
+	}
+	read := readLinuxFirewall(newRunner(), 3389)
+	for name, s := range map[string]SetupStep{"setup": firewallSetupStep(newRunner(), 3389), "check": firewallCheckStep(read, 3389)} {
+		if s.Outcome != OutcomeUnverified || s.Success {
+			t.Errorf("%s = %v (success %v) %q, want unverified", name, s.Outcome, s.Success, s.Message)
+		}
+		if !strings.Contains(s.Message, "INPUT policy could not be read") {
+			t.Errorf("%s message does not say the policy is unread: %q", name, s.Message)
+		}
+	}
+	if linuxFirewallOK(read) {
+		t.Error("linuxFirewallOK = true with the policy unread")
+	}
+}
+
+// TestUFWPolicyMessage pins review F4 of #735: on a ufw host the message names
+// ufw's incoming default, not a raw iptables policy another firewall may filter.
+func TestUFWPolicyMessage(t *testing.T) {
+	ok := newStep(linuxFwName, OutcomeOK, "Firewall allows TCP 3389 (ufw)", "")
+	got := withPolicy(firewallRead{backend: backendUFW, inputOpen: true}, ok)
+	if !strings.Contains(got.Message, "ufw's incoming default is allow") || strings.Contains(got.Message, "unless another firewall") {
+		t.Errorf("v4 message: %q", got.Message)
+	}
+	got6 := withV6Policy(firewallRead{backend: backendUFW, v6Open: true}, ok)
+	if !strings.Contains(got6.Message, "IPV6=no") || strings.Contains(got6.Message, "unless another firewall") {
+		t.Errorf("v6 message: %q", got6.Message)
+	}
+	// The runbook keys its raw-iptables rows on these phrases, and their fix is
+	// the `-P` that ufw rewrites: a ufw message must not match those rows.
+	for _, key := range []string{"the iptables INPUT policy is ACCEPT", "the ip6tables INPUT policy is ACCEPT"} {
+		for _, m := range []string{got.Message, got6.Message} {
+			if strings.Contains(m, key) {
+				t.Errorf("ufw message %q carries the iptables runbook key %q", m, key)
+			}
+		}
+	}
+}
+
+// TestUFWPolicyReadButChainUnread pins review round 2 of #735: a readable
+// ACCEPT policy stays manual with ufw's fix when only the ts-input walk fails.
+func TestUFWPolicyReadButChainUnread(t *testing.T) {
+	r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true},
+		output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: strings.Replace(ufwHostInput, "-P INPUT DROP", "-P INPUT ACCEPT", 1)},
+		exit:   map[string]int{iptChain: 4}}
+	read := readLinuxFirewall(r, 3389)
+	check := firewallCheckStep(read, 3389)
+	if read.policyUnread != "" || check.Outcome != OutcomeManual || !strings.Contains(check.Fix, "`ufw default deny incoming`") {
+		t.Errorf("policyUnread %q, check %v %q fix %q; want manual naming ufw default deny incoming", read.policyUnread, check.Outcome, check.Message, check.Fix)
+	}
+	// A raw iptables host whose INPUT read fails says so once, without ufw's words.
+	ipt := &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, exit: map[string]int{iptRead: 4}}
+	if c := firewallCheckStep(readLinuxFirewall(ipt, 3389), 3389); strings.Contains(c.Message, "ufw") {
+		t.Errorf("an iptables host's unread step names ufw: %q", c.Message)
+	}
+}
+
+// `nft list chains` output for TestForeignFirewall, in the shape nft 1.0
+// prints it (probed on Ubuntu 24.04 for #739).
+const (
+	nftInetFilter = "table inet filter {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n\tchain output {\n\t\ttype filter hook output priority filter; policy accept;\n\t}\n}\n"
+	nftFirewalld  = "table inet firewalld {\n\tchain filter_INPUT {\n\t\ttype filter hook input priority filter + 10; policy accept;\n\t}\n}\n"
+	nftIptOnly    = "table ip filter {\n\tchain INPUT {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n\tchain ts-input {\n\t}\n}\n" +
+		"table ip6 filter {\n\tchain INPUT {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n}\n" +
+		"table ip nat {\n\tchain POSTROUTING {\n\t\ttype nat hook postrouting priority srcnat; policy accept;\n\t}\n}\n"
+	nftNoInput = "table inet natonly {\n\tchain post {\n\t\ttype nat hook postrouting priority srcnat; policy accept;\n\t}\n}\n"
+)
+
+// TestForeignFirewall pins #739: where firewalld or a native nftables ruleset
+// filters inbound traffic, iptables is not authoritative. check is unverified
+// and setup manual, both naming that firewall; setup writes nothing, and
+// neither the v4 nor the v6 policy is read. A failed probe is an unknown read.
+func TestForeignFirewall(t *testing.T) {
+	const fwState, nftChains = "firewall-cmd --state", "nft list chains"
+	tests := []struct {
+		name          string
+		firewalld     bool // firewall-cmd on PATH
+		fwOut         string
+		fwExit        int
+		nft           bool // nft on PATH
+		nftOut        string
+		nftFails      bool
+		want, fixWant string // "" in want: no foreign firewall, the iptables read decides
+		unknown       bool
+	}{
+		{name: "firewalld running", firewalld: true, fwOut: "running\n", want: "firewalld", fixWant: "--change-interface=tailscale0"},
+		{name: "firewalld running wins over its nft table", firewalld: true, fwOut: "running\n", nft: true, nftOut: nftFirewalld, want: "firewalld is running", fixWant: "firewall-cmd --reload"},
+		{name: "firewalld not running", firewalld: true, fwOut: "not running\n", fwExit: 252},
+		{name: "firewalld not running, exit 0", firewalld: true, fwOut: "not running\n"},
+		{name: "firewalld state fails", firewalld: true, fwExit: 1, want: fwState, unknown: true},
+		{name: "native inet filter", nft: true, nftOut: nftInetFilter, want: "table inet filter", fixWant: "`nft insert rule inet filter input iifname \"tailscale0\" tcp dport 3389 accept`"},
+		{name: "firewalld table, firewall-cmd absent", nft: true, nftOut: nftFirewalld, want: "table inet firewalld", fixWant: "nft insert rule inet firewalld filter_INPUT"},
+		{name: "iptables-nft and tailscaled tables only", nft: true, nftOut: nftIptOnly},
+		{name: "table without an input hook", nft: true, nftOut: nftNoInput},
+		{name: "nft listing fails", nft: true, nftFails: true, want: nftChains, unknown: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				r := &recordingRunner{elevated: true,
+					onPath: map[string]bool{"iptables": true, "ip6tables": true, "firewall-cmd": tt.firewalld, "nft": tt.nft},
+					output: map[string]string{iptRead: "-P INPUT ACCEPT\n", ip6Read: "-P INPUT ACCEPT\n", fwState: tt.fwOut, nftChains: tt.nftOut},
+					exit:   map[string]int{}, fail: map[string]bool{nftChains: tt.nftFails}}
+				if tt.fwExit != 0 {
+					r.exit[fwState] = tt.fwExit
+				}
+				return r
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			wrote := slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") })
+			cr := newRunner()
+			read := readLinuxFirewall(cr, 3389)
+			check := firewallCheckStep(read, 3389)
+			if tt.want == "" {
+				if !wrote || !strings.Contains(check.Message, "the iptables INPUT policy is ACCEPT") {
+					t.Errorf("no foreign firewall: setup wrote = %v, check %q; want the iptables read to decide", wrote, check.Message)
+				}
+				return
+			}
+			setupWant := OutcomeManual
+			if tt.unknown {
+				setupWant = OutcomeFailed
+			}
+			for _, s := range []struct {
+				name string
+				step SetupStep
+				want Outcome
+			}{{"setup", setup, setupWant}, {"check", check, OutcomeUnverified}} {
+				if s.step.Outcome != s.want || s.step.Success {
+					t.Errorf("%s = %v (success %v) %q, want %v", s.name, s.step.Outcome, s.step.Success, s.step.Message, s.want)
+				}
+				if !strings.Contains(s.step.Message, tt.want) {
+					t.Errorf("%s message %q does not name %q", s.name, s.step.Message, tt.want)
+				}
+				if !strings.Contains(s.step.Fix, tt.fixWant) {
+					t.Errorf("%s fix %q lacks %q", s.name, s.step.Fix, tt.fixWant)
+				}
+				if strings.Contains(s.step.Message, "INPUT policy is ACCEPT") {
+					t.Errorf("%s message %q reads a policy iptables does not decide", s.name, s.step.Message)
+				}
+			}
+			if wrote {
+				t.Errorf("setup wrote a rule: %v", r.calls)
+			}
+			if slices.Contains(cr.calls, "output "+ip6Read) {
+				t.Errorf("the v6 read ran: %v", cr.calls)
+			}
+			if linuxFirewallOK(read) {
+				t.Error("linuxFirewallOK = true")
+			}
+		})
+	}
+}
+
+// TestNFTForeignInput pins which `nft list chains` tables the #739 probe
+// counts: an input hook outside iptables-nft's own ip/ip6 tables.
+func TestNFTForeignInput(t *testing.T) {
+	hook := func(family, table, chain, h string) string {
+		return "table " + family + " " + table + " {\n\tchain " + chain + " {\n\t\ttype filter hook " + h + " priority filter; policy accept;\n\t}\n}\n"
+	}
+	tests := []struct{ name, out, want string }{
+		{"inet table", hook("inet", "filter", "input", "input"), "inet filter input"},
+		{"ip table of another tool", hook("ip", "myfw", "in", "input"), "ip myfw in"},
+		{"ip6 filter is iptables-nft's", hook("ip6", "filter", "INPUT", "input"), ""},
+		{"ip security is iptables-nft's", hook("ip", "security", "INPUT", "input"), ""},
+		{"ip mangle is iptables-nft's", hook("ip", "mangle", "INPUT", "input"), ""},
+		{"ip6 raw is iptables-nft's", hook("ip6", "raw", "PREROUTING", "input"), ""},
+		{"inet output hook only", hook("inet", "filter", "output", "output"), ""},
+		{"bridge family", hook("bridge", "filter", "input", "input"), ""},
+		{"regular chain, no hook", "table inet filter {\n\tchain allow {\n\t}\n}\n", ""},
+		{"second table", hook("ip", "filter", "INPUT", "input") + hook("inet", "fw", "in", "input"), "inet fw in"},
+		{"empty listing", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			family, table, chain := nftForeignInput(tt.out)
+			if got := strings.TrimSpace(strings.Join([]string{family, table, chain}, " ")); got != tt.want {
+				t.Errorf("nftForeignInput = %q, want %q", got, tt.want)
 			}
 		})
 	}
