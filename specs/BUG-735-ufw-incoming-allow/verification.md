@@ -36,6 +36,7 @@ owner: manu
 - Review round 2, minor 2 (recorded): the `tasks.md` line says `TestManualRewriteClearsSuccess` gains the ufw rewrites; the ufw `Success=false` property is asserted in `TestUFWPolicy` (`s.Success == tt.manual`) and `TestUFWPolicyUnread` instead. `tasks.md` is left as reviewed.
 
 - CodeRabbit on #748 (Major, applied): with `IPV6=no`, ufw stored only the v4 copy of each allow, so `IPV6=yes` and `ufw reload` would cut SSH over IPv6. Probed on the guest (ufw 0.36.2): `ufw allow` with `IPV6=yes` while ufw runs prints "ERROR: problem running"; while ufw is disabled it prints "Rules updated (v6)", and `ufw enable` then loads the v6 SSH allow. The v6 fix is now `ufw disable`, `IPV6=yes`, `ufw allow <your SSH port>/tcp`, `ufw enable`. `proposal.md` still says `IPV6=yes` and `ufw reload`; it is left as reviewed, and the code, runbook, ADR and `TestUFWPolicy` carry the new order.
+- PR-Agent on #748, full run on cb00719 (THEORETICAL, applied): the v6 ufw note carried "the ip6tables INPUT policy is ACCEPT", the key of the raw-iptables runbook row whose fix is the `-P` that ufw rewrites. The note now leads with ufw's default; a test asserts no ufw message carries either iptables row key. The v4 half did not hold: that note already read "the INPUT policy is ACCEPT".
 
 ## Promotion candidates
 

@@ -355,7 +355,7 @@ func withV6Policy(read firewallRead, step SetupStep) SetupStep {
 	}
 	note := fmt.Sprintf("; the ip6tables INPUT policy is ACCEPT, so unless another firewall filters this host every port is open on every IPv6 address and the %s scope restricts nothing", tailnetInterface)
 	if read.backend == backendUFW {
-		note = fmt.Sprintf("; the ip6tables INPUT policy is ACCEPT (ufw's incoming default is allow, or IPV6=no), so every port is open on every IPv6 address and the %s scope restricts nothing", tailnetInterface)
+		note = fmt.Sprintf("; ufw's incoming default is allow, or IPV6=no (the IPv6 INPUT policy is ACCEPT), so every port is open on every IPv6 address and the %s scope restricts nothing", tailnetInterface)
 	}
 	step.Message += note
 	if step.Outcome == OutcomeUnverified || step.Outcome == OutcomeFailed {
