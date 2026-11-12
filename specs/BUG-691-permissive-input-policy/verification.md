@@ -55,3 +55,10 @@ owner: manu
 | THEORETICAL: `withPolicy` appends the policy fix to a `failed`/`unverified` step, against the proposal ("only the message gains the policy note") | Applied. Red assertion in `TestPermissiveInputPolicy`, then the guard in `0341ba1`. An `ok`/`changed` step keeps its own fix before the policy fix. Not re-run on the VM: the e2e never builds an unfollowable jump under ACCEPT, so this path is unit-only. |
 | #691 "needs a human re-run of `make e2e-linux`" | Already done: 94/0 at `c2f25a5` and at `5dfdd34`, recorded under Evidence. |
 | #733 non-compliant | Expected: the PR defers #733 and does not close it. |
+
+## PR-Agent disposition (#734, full review at 8a9abc0)
+
+| Finding | Disposition |
+|---|---|
+| REAL: the fix text says "allow SSH, then `-P INPUT DROP`" and leaves out loopback and ESTABLISHED/RELATED. On a real host that cuts local DNS and tailscaled's control replies. | Applied. The red assertion is in `1f920a4` (it failed 18 times against the old fix text). The fix text in `a06816b` names all three rules before the DROP, and the runbook row is updated to match. |
+| THEORETICAL: the parity doc's "Idempotent re-run" row lists no ACCEPT-policy exception | Applied in `a06816b` |
