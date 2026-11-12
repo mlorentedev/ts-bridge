@@ -293,7 +293,7 @@ func withPolicy(read firewallRead, step SetupStep) SetupStep {
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}
-	step.Outcome, step.Fix = OutcomeManual, fix
+	step.Outcome, step.Success, step.Fix = OutcomeManual, false, fix
 	return step
 }
 
@@ -318,7 +318,7 @@ func withV6Policy(read firewallRead, step SetupStep) SetupStep {
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}
-	step.Outcome, step.Fix = OutcomeManual, fix
+	step.Outcome, step.Success, step.Fix = OutcomeManual, false, fix
 	return step
 }
 
@@ -343,7 +343,7 @@ func withIP6(read firewallRead, step SetupStep, port int) SetupStep {
 	}
 	step.Fix = fix
 	if step.Outcome == OutcomeOK || step.Outcome == OutcomeChanged {
-		step.Outcome = OutcomeManual
+		step.Outcome, step.Success = OutcomeManual, false
 	}
 	return step
 }
