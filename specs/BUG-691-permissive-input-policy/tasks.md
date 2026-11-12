@@ -22,16 +22,16 @@ owner: manu
 
 ## Implementation
 
-- [ ] [AC1] [AC2] [AC3] Failing table test: policy ACCEPT/DROP x rule present/absent x iptables/ufw, plus an already-unverified step
-- [ ] [AC1] [AC2] Read `-P INPUT <policy>` in `readIptables`; `withPolicy` promotes `ok`/`changed` to `manual` and adds the note and fix; `linuxFirewallOK` false under ACCEPT on the iptables backend
-- [ ] [AC2] Assert setup runs no `iptables -P` command
-- [ ] [AC4] `scripts/e2e/linux.sh`: `manual` under the default ACCEPT, then DROP (loopback, established, SSH first) before the existing iptables cases
-- [ ] Docs: `docs/design/host-client-parity.md` and the Linux notes say what a permissive policy reports
-- [ ] File the IPv6 policy ticket
+- [x] [AC1] [AC2] [AC3] Failing table test: policy ACCEPT/DROP x rule present/absent x iptables/ufw, plus an already-unverified step
+- [x] [AC1] [AC2] Read `-P INPUT <policy>` in `readIptables`; `withPolicy` promotes `ok`/`changed` to `manual` and adds the note and fix; `linuxFirewallOK` false under ACCEPT on the iptables backend
+- [x] [AC2] Assert setup runs no `iptables -P` command
+- [x] [AC4] `scripts/e2e/linux.sh`: `manual` under the default ACCEPT, then DROP (loopback, established, SSH first) before the existing iptables cases
+- [x] Docs: `docs/design/host-client-parity.md` and the Linux notes say what a permissive policy reports
+- [x] File the IPv6 policy ticket
 
 ## Closing
 
-- [ ] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`), `gosec ./...`
-- [ ] `make e2e-linux` on the VM
-- [ ] `features.json` verifications replay with exit 0; `verification.md` filled
-- [ ] PR opened with `Closes #691`
+- [x] `go test -race ./...`, `golangci-lint run` (host, `GOOS=linux`); `gosec` is not installed locally, the CI `security` job runs it
+- [x] `make e2e-linux` on the VM
+- [x] `features.json` verifications replay with exit 0; `verification.md` filled
+- [x] PR opened with `Closes #691`

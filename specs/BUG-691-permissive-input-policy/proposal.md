@@ -1,7 +1,7 @@
 ---
 id: "BUG-691-permissive-input-policy"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-11-11"
 issue: "mlorentedev/ts-bridge#691"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
