@@ -907,7 +907,13 @@ func iptablesDelete(port int) []string {
 // legacyHeld reports whether the firewall holds an unscoped allow for the
 // port: setup replaces the ones it wrote and reports the others (#631).
 func legacyHeld(read firewallRead) bool {
-	return read.state == rulePresent && (read.ufwLegacy || read.copies > 0 || len(read.foreign) > 0)
+	switch read.state {
+	case rulePresent:
+		return read.ufwLegacy || read.copies > 0 || len(read.foreign) > 0
+	case ruleAbsent: // a wide allow iptablesDecide does not count, such as `! --dport 22` (#736)
+		return len(read.foreign) > 0
+	}
+	return false
 }
 
 // offTailnetOnly reports a port that is allowed, but only off the tailnet: every
@@ -1126,11 +1132,11 @@ func firewallSetupFrom(r Runner, read firewallRead, port int) SetupStep {
 	if inactiveUFWDecides(read) {
 		return ufwInactiveSetupStep(r, read, port)
 	}
+	if legacyHeld(read) { // present or, for a wide allow iptables does not count, absent (#736)
+		return legacySetupStep(r, read, port)
+	}
 	switch read.state {
 	case rulePresent:
-		if legacyHeld(read) {
-			return legacySetupStep(r, read, port)
-		}
 		if offTailnetOnly(read) {
 			break
 		}
