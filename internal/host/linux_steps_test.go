@@ -2121,6 +2121,10 @@ func TestManualRewriteClearsSuccess(t *testing.T) {
 // from its incoming default, so an ACCEPT policy there restricts nothing, as
 // on an iptables host. The fix names ufw's own commands, never a raw -P.
 func TestUFWPolicy(t *testing.T) {
+	// With IPV6=no, ufw stored only the v4 copy of every allow: SSH over IPv6 needs
+	// its v6 copy before the v6 deny applies, and `ufw allow` adds it cleanly only
+	// while ufw is disabled (probed on ufw 0.36.2; review of #748).
+	const v6UFWSteps = "run `ufw disable`, set `IPV6=yes` in /etc/default/ufw, run `ufw allow <your SSH port>/tcp` so ufw adds the IPv6 copy of the SSH allow, then `ufw enable`"
 	policy := func(p string) string { return strings.Replace(ufwHostInput, "-P INPUT DROP", "-P INPUT "+p, 1) }
 	runner := func(status, v4, v6 string, fail bool) *recordingRunner {
 		r := &recordingRunner{elevated: true, onPath: map[string]bool{"ufw": true, "iptables": true, "ip6tables": true},
@@ -2141,8 +2145,8 @@ func TestUFWPolicy(t *testing.T) {
 		fixHas   []string
 		fixLacks []string
 	}{
-		{"incoming allow: both policies ACCEPT", "ACCEPT", "ACCEPT", true, []string{"`ufw allow <your SSH port>/tcp`", "`ufw default deny incoming`", "`IPV6=yes`", "`ufw reload`"}, []string{"-P INPUT DROP"}},
-		{"IPV6=no after a boot: v6 ACCEPT only", "DROP", "ACCEPT", true, []string{"`IPV6=yes`", "`ufw reload`"}, []string{"-P INPUT DROP"}},
+		{"incoming allow: both policies ACCEPT", "ACCEPT", "ACCEPT", true, []string{"`ufw allow <your SSH port>/tcp`", "`ufw default deny incoming`", v6UFWSteps}, []string{"-P INPUT DROP", "`ufw reload`"}},
+		{"IPV6=no after a boot: v6 ACCEPT only", "DROP", "ACCEPT", true, []string{v6UFWSteps}, []string{"-P INPUT DROP", "`ufw reload`"}},
 		{"incoming deny: both DROP", "DROP", "DROP", false, nil, []string{"ufw default deny incoming", "IPV6=yes"}},
 	}
 	for _, tt := range tests {
