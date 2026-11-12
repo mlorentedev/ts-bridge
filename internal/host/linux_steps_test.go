@@ -605,7 +605,7 @@ func TestSetupForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := setupFor("linux", Config{Port: 3389, FirewallRule: "Rule"}, tt.runner)
-			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+			if calls := withoutProbes(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
 				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			var outcomes []Outcome
@@ -975,7 +975,7 @@ func TestCheckForLinux(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := checkFor("linux", Config{Port: 3389}, tt.runner)
-			if calls := withoutIP6Probe(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
+			if calls := withoutProbes(tt.runner.calls); !reflect.DeepEqual(calls, tt.calls) {
 				t.Errorf("calls:\n got %q\nwant %q", calls, tt.calls)
 			}
 			for _, c := range tt.runner.calls {
@@ -1846,7 +1846,7 @@ func TestIP6Exposure(t *testing.T) {
 			if slices.ContainsFunc(r.calls, func(c string) bool { return strings.HasPrefix(c, "run ") }) {
 				t.Errorf("setup wrote: %v", r.calls)
 			}
-			want := []string{"lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain, "lookpath " + backendIP6}
+			want := []string{"lookpath " + firewalldCmd, "lookpath nft", "lookpath ufw", "lookpath iptables", "output " + iptRead, "output " + iptChain, "lookpath " + backendIP6}
 			if tt.onPath {
 				want = append(want, "output "+ip6Read)
 			}
@@ -1926,11 +1926,20 @@ func TestOffTailnetOnlyAllow(t *testing.T) {
 	}
 }
 
-// withoutIP6Probe drops the ip6tables lookup that every elevated read makes
-// (#526). These tables pin the IPv4 sequence on hosts without ip6tables;
-// TestIP6Exposure pins the v6 read itself and where it runs.
-func withoutIP6Probe(calls []string) []string {
-	return slices.DeleteFunc(slices.Clone(calls), func(c string) bool { return c == "lookpath "+backendIP6 })
+// withoutProbes drops the lookups that every elevated read makes: ip6tables
+// (#526), and the foreign-firewall probe's firewall-cmd and nft (#739), which
+// open the read. These tables pin the IPv4 sequence on hosts with neither;
+// TestIP6Exposure pins the order, TestForeignFirewall what the probe finds.
+func withoutProbes(calls []string) []string {
+	out := slices.Clone(calls)
+	if i := slices.Index(out, "lookpath "+firewalldCmd); i >= 0 {
+		end := i + 1
+		if end < len(out) && out[end] == "lookpath nft" {
+			end++
+		}
+		out = slices.Delete(out, i, end)
+	}
+	return slices.DeleteFunc(out, func(c string) bool { return c == "lookpath "+backendIP6 })
 }
 
 // TestReadIP6NoteQuotesTheTool pins that a failed v6 read says why, in the
@@ -2341,6 +2350,33 @@ func TestForeignFirewall(t *testing.T) {
 			}
 			if linuxFirewallOK(read) {
 				t.Error("linuxFirewallOK = true")
+			}
+		})
+	}
+}
+
+// TestNFTForeignInput pins which `nft list chains` tables the #739 probe
+// counts: an input hook outside iptables-nft's own ip/ip6 tables.
+func TestNFTForeignInput(t *testing.T) {
+	hook := func(family, table, chain, h string) string {
+		return "table " + family + " " + table + " {\n\tchain " + chain + " {\n\t\ttype filter hook " + h + " priority filter; policy accept;\n\t}\n}\n"
+	}
+	tests := []struct{ name, out, want string }{
+		{"inet table", hook("inet", "filter", "input", "input"), "inet filter input"},
+		{"ip table of another tool", hook("ip", "myfw", "in", "input"), "ip myfw in"},
+		{"ip6 filter is iptables-nft's", hook("ip6", "filter", "INPUT", "input"), ""},
+		{"ip security is iptables-nft's", hook("ip", "security", "INPUT", "input"), ""},
+		{"inet output hook only", hook("inet", "filter", "output", "output"), ""},
+		{"bridge family", hook("bridge", "filter", "input", "input"), ""},
+		{"regular chain, no hook", "table inet filter {\n\tchain allow {\n\t}\n}\n", ""},
+		{"second table", hook("ip", "filter", "INPUT", "input") + hook("inet", "fw", "in", "input"), "inet fw in"},
+		{"empty listing", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			family, table, chain := nftForeignInput(tt.out)
+			if got := strings.TrimSpace(strings.Join([]string{family, table, chain}, " ")); got != tt.want {
+				t.Errorf("nftForeignInput = %q, want %q", got, tt.want)
 			}
 		})
 	}
