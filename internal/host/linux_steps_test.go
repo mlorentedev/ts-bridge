@@ -1966,7 +1966,7 @@ func TestIP6Exposure(t *testing.T) {
 			message: ip6InChain, fix: "ip6tables -D ts-input -p tcp -m tcp --dport 3389 -j ACCEPT"},
 		{name: "a tailnet-scoped v6 allow", onPath: true, v6: ip6Closed + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
 		{name: "a port-less v6 accept", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -j ACCEPT\n", want: OutcomeManual,
-			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
+			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
 			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Closed + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
@@ -2132,6 +2132,10 @@ func TestIP6Jumps(t *testing.T) {
 			note: "ip6tables -S mine: ", said: "(" + strings.TrimSuffix(noMine, "\n") + ")", reads: []string{"mine"}},
 		// A port-less accept is the operator's posture, in a chain as in INPUT
 		// (the INPUT row in TestIP6Exposure): the scan reports allows for the port.
+		// A jump for every port but another one reaches the port too (#742 review).
+		{name: "a jump for every port but SSH", input: "-A INPUT -p tcp -m tcp ! --dport 22 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"},
+			want: []string{"-A wide -j ACCEPT"}, reads: []string{"wide"}},
+		{name: "a jump for every port but this one is not followed", input: "-A INPUT -p tcp -m tcp ! --dport 3389 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"}},
 		// A port-less accept opens the port in a jumped chain as in INPUT (#736, #753).
 		{name: "a port-less accept in a chain is reported", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j ACCEPT"},
 			want: []string{"-A ts-input -j ACCEPT"}, reads: []string{"ts-input"}},
