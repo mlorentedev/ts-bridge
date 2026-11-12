@@ -1,0 +1,16 @@
+[
+  {
+    "id": "BUG-735-ufw-incoming-allow-f1",
+    "behavior": "AC1-AC3: an active ufw's ACCEPT INPUT policy (v4 or v6) turns ok/changed manual with ufw's own fix; inactive and unreadable ufw unchanged",
+    "verification": "go test ./internal/host/ -run 'TestUFWPolicy|TestManualRewriteClearsSuccess' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "BUG-735-ufw-incoming-allow-f2",
+    "behavior": "AC4: e2e on the Linux guest under ufw default allow incoming",
+    "verification": "make e2e-linux",
+    "state": "pending",
+    "evidence": ""
+  }
+]
