@@ -67,14 +67,19 @@ func ListHeadscaleDevices(ctx context.Context, apiKey, controlURL string) ([]Hea
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
+	// A pointer tells {"nodes":[]} (an empty tailnet) from a body with no node
+	// list at all, which would otherwise decode to zero nodes and no error.
 	var list struct {
-		Nodes []headscaleNode `json:"nodes"`
+		Nodes *[]headscaleNode `json:"nodes"`
 	}
 	if err := json.Unmarshal(body, &list); err != nil {
 		return nil, fmt.Errorf("parse response: %w", err)
 	}
-	devices := make([]HeadscaleDevice, 0, len(list.Nodes))
-	for _, n := range list.Nodes {
+	if list.Nodes == nil {
+		return nil, fmt.Errorf("parse response: no \"nodes\" list in the body")
+	}
+	devices := make([]HeadscaleDevice, 0, len(*list.Nodes))
+	for _, n := range *list.Nodes {
 		devices = append(devices, n.device())
 	}
 	return devices, nil

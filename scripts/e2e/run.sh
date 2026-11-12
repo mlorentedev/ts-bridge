@@ -132,8 +132,9 @@ mesh_rdp_case() {
 mesh_discover_case() {
   local dir="$1" out
   (umask 077 && hs_mint_api_key | tail -1 >"$dir/apikey") || return 1
-  out="$(cd "$dir" && TS_CONTROL_URL="http://$(hs_host_ip):8080" "$dir/tsb-client" discover --json --api-key-file "$dir/apikey" 2>&1)" || {
-    printf '%s\n' "$out" | tail -3 | sed 's/^/discover: /'
+  # stdout carries the JSON; logs go to stderr, which only a failure prints.
+  out="$(cd "$dir" && TS_CONTROL_URL="http://$(hs_host_ip):8080" "$dir/tsb-client" discover --json --api-key-file "$dir/apikey" 2>"$dir/discover.err")" || {
+    tail -3 "$dir/discover.err" | sed 's/^/discover: /'
     return 1
   }
   printf '%s' "$out" | python3 -c 'import json, sys; sys.exit(not any(d["hostname"] == "tsb-e2e-linux" and "100.64.0.1" in d["addresses"] for d in json.load(sys.stdin)))'

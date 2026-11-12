@@ -87,13 +87,39 @@ func TestListHeadscaleDevices_Empty(t *testing.T) {
 
 // TestListHeadscaleDevices_RejectsAnotherShape: a body that is not a node list
 // is an error, not an empty tailnet.
+// TestListHeadscaleDevices_RejectsAnotherShape: a body that is not a node
+// list is an error, never an empty tailnet. An object without "nodes" (the old
+// guessed shape, a proxy envelope) decodes cleanly, so it needs its own check.
 func TestListHeadscaleDevices_RejectsAnotherShape(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`[{"name":"host","ip":"100.64.0.1"}]`))
-	}))
-	defer server.Close()
-	if _, err := ListHeadscaleDevices(context.Background(), "test-key", server.URL); err == nil || !strings.Contains(err.Error(), "parse response") {
-		t.Errorf("err = %v, want a parse error", err)
+	for name, body := range map[string]string{
+		"top-level array":    `[{"name":"host","ip":"100.64.0.1"}]`,
+		"old devices object": `{"devices":[{"name":"host"}]}`,
+		"empty object":       `{}`,
+		"null nodes":         `{"nodes":null}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+			if _, err := ListHeadscaleDevices(context.Background(), "test-key", server.URL); err == nil || !strings.Contains(err.Error(), "parse response") {
+				t.Errorf("err = %v, want a parse error", err)
+			}
+		})
+	}
+}
+
+// TestHeadscaleNodeName: givenName (the tailnet name) wins over the
+// client-reported name, which is the fallback when givenName is empty. The
+// captured fixture has both equal, so it cannot tell them apart.
+func TestHeadscaleNodeName(t *testing.T) {
+	for _, tt := range []struct{ name, given, want string }{
+		{"laptop-a1b2", "laptop", "laptop"},
+		{"laptop", "", "laptop"},
+	} {
+		if got := (headscaleNode{Name: tt.name, GivenName: tt.given}).device().Name; got != tt.want {
+			t.Errorf("name %q givenName %q: got %q, want %q", tt.name, tt.given, got, tt.want)
+		}
 	}
 }
 
