@@ -1,0 +1,61 @@
+# Arming envelope for the unattended run. Committed on the run branch, never merged;
+# the run reads the committed copy and halts if the working tree differs.
+version: 1
+run_id: "ts-bridge-autopilot-2026-11-12"
+armed_by: manu
+armed_at: 2026-11-12T07:10:00Z
+expires_at: 2026-11-12T19:10:00Z
+objective: "Make the Linux firewall read tell the truth: close #736, #733, #735, #739 and #720 one at a time (then #740 if time remains), each to a merged or clearly parked PR, and keep reviewer output on open PRs dispositioned."
+scope:
+  write_paths:
+    - "cmd/**"
+    - "internal/**"
+    - "scripts/**"
+    - "docs/**"
+    - "specs/**"
+    - "Makefile"
+    - "README.md"
+  frozen_paths:
+    - ".github/**"
+    - "harness/**"
+    - ".agent/**"          # frozen for PRs; this run branch is the envelope's only home
+    - "**/AGENTS.md"
+    - "site/**"
+    - "go.mod"
+    - "go.sum"
+    - "mise.toml"
+  max_files: 12
+  max_loc: 300
+allowed_commands: [dotf, gh, git, go, golangci-lint, gosec, bats, shellcheck, bash, zsh, make, mise, jq, python3, docker, curl]
+queue:
+  source: bitacora
+  filter: "Linux firewall-read correctness (host check/setup), then #740"
+  order: ["triage-open-prs", 736, 733, 735, 739, 720, 740]
+  notes:
+    triage-open-prs: "Every tick first: disposition reviewer output on open PRs this run opened, plus #722 (Dependabot, asked to recreate on master 2026-11-12T07:05Z because #729 made its PR-Agent bump obsolete; land it once recreated, green and triaged). Never #523."
+    736: "Negated (`! --dport 22`) and portless (`-p tcp -j ACCEPT`, `-j ACCEPT`) allows are invisible to both exposure reads (`ip6Exposed`, `iptUnscoped`) because both gate on `iptPortCovers`. Keep `iptablesDecide` unchanged. Rows per the ticket and its 2026-11-12 comment. e2e: add v6 cases to scripts/e2e/linux.sh."
+    733: "Read the v6 INPUT policy: the first line of `ip6tables -S INPUT` through `iptPolicyAccept`; `-P INPUT ACCEPT` on v6 promotes ok/changed to manual (fix names `ip6tables -P INPUT DROP` with the same loopback/ESTABLISHED/SSH-port preamble as #691), unverified/failed keep their own fix, firewall_ok false. A failed or absent v6 read keeps #526's behaviour."
+    735: "ufw with an incoming default of allow: read `ufw status verbose` `Default: <in> (incoming)`; allow -> manual with `ufw default deny incoming` (allow SSH first), never changed by setup."
+    739: "Detect firewalld (`firewall-cmd --state`) and a native nftables ruleset; report `unverified` naming it rather than reading iptables as authoritative. Design-heaviest: if the outcome is not obvious from #691's model, ask the advisor; park (ERROR/WHY/FIX, two options) rather than guess."
+    720: "The v6 exposure scan does not follow INPUT's jumps into other chains. Follow the iptables v4 jump model already in the code."
+    740: "Windows: unattended step reports changed every run on a logged-out node. Measure on a Windows guest first (set --unattended, debug prefs, net stop/start, debug prefs); fix the parse only if ForceDaemon persists."
+  rules:
+    pr_agent_round_cap: "After 3 complete full PR-Agent runs on one PR, remaining THEORETICAL findings are ticketed and the PR lands; REAL ones are applied. A head that only ever gets partial runs stays open for Manu, recorded in the ledger."
+    durability: "After EACH item: one ledger line in .agent/runs/ts-bridge-autopilot-2026-11-12/report.md (commit + push the run branch) and `dotf mem handoff-write` to thread run-autopilot-2026-11-12. Never batch to the end."
+    spec_review: "SDD for 50-300 LOC. `dotf spec review <id> --reviewer nan/deepseek-v4-flash`; commit review.md and review-request.json into the PR; archive in a follow-up or the same PR once the code merges."
+    tdd: "Red test first, committed, then the fix. go test -race ./..., golangci-lint (host and GOOS=linux), make e2e-linux for any linux_steps.go change."
+    vm: "Both VMs are this run's (feat-vm-linux-exec-3c confirmed 2026-11-12T07:07Z, no guest planned). Still message it before each guest run; `make e2e-clean` after every kept run."
+  exclude_note: "Not this run's: #523 (release 2.0.0, Manu only, never merge), #428 and #420 (never close). HOST-008 handoff dropped: it awaits Manu's activation-compatibility decision. Never enrol a key for hs-bootstrap on this Mac."
+  max_items: 6
+budget:
+  max_iterations: 20
+  max_minutes_per_iteration: 60
+  max_consecutive_failures: 2
+authority:
+  merge: standing-grant          # .github/merge-grant.yml exists on master (checked at arming)
+  owner_extension: "Manu authorised on 2026-11-12 (session chat) merging PRs that touch .github/, harness/, .agent/, site/ or AGENTS.md. Same conditions as the grant (CI green, CLEAN, ## Review triage), merged by hand with `gh pr merge --squash --match-head-commit <sha>` because `dotf pr land` excludes those paths. Never under it: release-please PRs (#523), any PR changing .github/merge-grant.yml or .agent/unattended.yml."
+  push: true
+  open_pr: true
+  advisor_tier: top
+host:
+  wake_lock: "caffeinate -dimsu for the run's lifetime; on AC power, lid must stay open"
