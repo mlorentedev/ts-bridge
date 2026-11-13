@@ -18,6 +18,6 @@
     "behavior": "AC4: e2e on the Linux VM",
     "verification": "make e2e-linux",
     "state": "passing",
-    "evidence": "make e2e-linux on c4d8077: 135 pass, 0 fail; see verification.md AC4"
+    "evidence": "make e2e-linux on 51d753f: 135 pass, 0 fail; see verification.md AC4"
   }
 ]

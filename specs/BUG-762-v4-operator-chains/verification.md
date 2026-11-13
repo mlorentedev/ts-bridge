@@ -24,7 +24,7 @@ owner: manu
   - The loop row ends, through `fw-open` → `fw-deep` → `fw-open`.
 - **AC3.** Covered by the rows "an operator chain that cannot be read: unverified" (check), "the scoped rule in place and a chain that cannot be read: unverified" (setup) and "a jump to a missing chain: ok". Each of these is red if `chainUnread` is dropped from `linuxFirewallOK` or `withChains` is short-circuited. On a ufw host, the rows "ufw host, an operator chain that cannot be read: unverified (#762 review)" (check) and "ufw, the scoped allow in place and an operator chain that cannot be read: unverified (#762 review)" (setup) cover it. Both are red if `withUFWIptables` drops `chainUnread`.
 - **AC5.** "an allow two jumps deep, through a loop: manual" covers both the nesting and the loop. "a jump from any address is a jump for every packet: manual (#762 review)" records the `iptables -S fw-open` read and the exposure, and it is red if `iptNarrowed` loses `0.0.0.0/0`.
-- **AC4.** `make e2e-linux` on c4d8077 gave 135 pass, 0 fail. The code is the same as in 9414418; the commits after it change docs and the spec only. The v4 jumped-chain cases all passed:
+- **AC4.** `make e2e-linux` on 51d753f, the round 1 fixes, gave 135 pass, 0 fail. The first run, on c4d8077, gave the same. The code is the same as in 9414418; the commits after it change docs and the spec only. The v4 jumped-chain cases all passed:
   - a tailnet accept is ok;
   - an unscoped allow is `manual`, its message names `-A tsbe2e4 -p tcp -m tcp --dport 3389 -j ACCEPT`, and `firewall_ok` is false;
   - setup reports it and leaves it;
@@ -34,7 +34,7 @@ owner: manu
 
 - `go test -race ./...`: ok.
 - `golangci-lint run` (darwin, linux and windows): 0 issues.
-- `make e2e-linux`: 135 pass, 0 fail. `make e2e-clean` reported no session left.
+- `make e2e-linux` on 51d753f: 135 pass, 0 fail. `make e2e-clean` reported no session left.
 
 ## Decision side
 
