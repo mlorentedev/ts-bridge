@@ -360,3 +360,21 @@ func TestSSHPortDefaultAndMissingReadNothing(t *testing.T) {
 		t.Error("sshd -T was read although no OpenSSH server is installed")
 	}
 }
+
+// TestLinuxKindWithNoStepFails pins #768: the loader admits only kinds with a
+// Linux step, but a kind that reaches the steps without one must fail loudly,
+// never converge nothing while the summary reads ready.
+func TestLinuxKindWithNoStepFails(t *testing.T) {
+	cfg := Config{Port: 3389, Services: []DeclaredService{{Kind: "vnc", Port: 5900}}}
+	check := checkFor("linux", cfg, &recordingRunner{elevated: true, onPath: sshOnPath, output: sshUp(nil)})
+	setup := setupFor("linux", cfg, &recordingRunner{elevated: true, onPath: sshOnPath, output: sshUp(nil)})
+	for name, steps := range map[string][]SetupStep{"check": check.Steps, "setup": setup.Steps} {
+		i := slices.IndexFunc(steps, func(s SetupStep) bool { return s.Name == "vnc service" })
+		if i < 0 || steps[i].Outcome != OutcomeFailed || !strings.Contains(steps[i].Message, "vnc") {
+			t.Errorf("%s steps = %q, want a failed \"vnc service\" step naming the kind", name, outcomesOf(steps))
+		}
+	}
+	if want := []Service{{Kind: "vnc", Port: 5900, Unread: true}}; !reflect.DeepEqual(check.Services, want) {
+		t.Errorf("services = %+v, want %+v: an unhandled kind is listed and unread, never left out", check.Services, want)
+	}
+}

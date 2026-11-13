@@ -56,6 +56,8 @@ func setupLinux(cfg Config, r Runner) SetupResult {
 			result.Steps = append(result.Steps, rdpSetupSteps(cfg, r, port)...)
 		case ServiceSSH:
 			result.Steps = append(result.Steps, sshSetupSteps(r, svc.Port)...)
+		default:
+			result.Steps = append(result.Steps, noLinuxStep(svc.Kind))
 		}
 	}
 	result.Steps = append(result.Steps, tailscaleIPStep(r))
@@ -80,8 +82,20 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 			checkRDP(cfg, r, linuxPort(cfg), result)
 		case ServiceSSH:
 			checkSSH(r, svc.Port, result)
+		default:
+			result.Steps = append(result.Steps, noLinuxStep(svc.Kind))
+			result.Services = append(result.Services, Service{Kind: svc.Kind, Port: svc.Port, Unread: true})
 		}
 	}
+}
+
+// noLinuxStep fails a declared kind that has no Linux step (#768). The loader
+// admits only kinds with one, so this is reached only when a loader change
+// outruns the steps; it must fail, never converge nothing and read ready.
+func noLinuxStep(kind string) SetupStep {
+	return newStep(kind+" service", OutcomeFailed,
+		fmt.Sprintf("ts-bridge has no Linux step for the declared service kind %q", kind),
+		"remove the service from the host file, or use a ts-bridge release that supports it on Linux")
 }
 
 func checkRDP(cfg Config, r Runner, port int, result *CheckResult) {
