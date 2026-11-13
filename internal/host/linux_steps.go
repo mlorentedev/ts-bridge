@@ -1032,7 +1032,7 @@ func iptExcludes(f []string, i, port int) bool {
 // to new TCP connections on port.
 func iptMatchesPort(f []string, port int) bool {
 	if slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptPortFlags, w) }) {
-		return iptPortCovers(f, port)
+		return iptPortCovers(f, port) && !iptRepliesOnly(f)
 	}
 	return iptPortlessCovers(f)
 }
