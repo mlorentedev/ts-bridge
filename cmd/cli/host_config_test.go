@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -151,12 +152,35 @@ func testHostCmdConfig(t *testing.T, name string) {
 // naming the OS before any step runs (AC4 wiring guard).
 func TestHostSetupCmd_ConfigOSCapability(t *testing.T) {
 	dir := isolateHostEnv(t)
-	path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  services:\n    - kind: ssh\n")
+	path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  services:\n    - kind: vnc\n")
 	run := runHostCmd(t, "setup", "linux", []string{"--json", "--config", path}, host.CheckResult{})
 	if run.calls != 0 {
 		t.Fatalf("setup ran %d time(s), want 0", run.calls)
 	}
 	assertExit1Naming(t, run.err, "linux")
+}
+
+// TestHostCmd_ConfigSSHOnLinux: an ssh service reaches the step runner on
+// linux (#521), and windows, which has no ssh step yet, still stops it.
+func TestHostCmd_ConfigSSHOnLinux(t *testing.T) {
+	for _, name := range []string{"setup", "check"} {
+		t.Run(name, func(t *testing.T) {
+			dir := isolateHostEnv(t)
+			path := writeTestFile(t, filepath.Join(dir, "host.yaml"), "host:\n  services:\n    - kind: ssh\n      port: 2222\n")
+			run := runHostCmd(t, name, "linux", []string{"--json", "--config", path}, host.CheckResult{})
+			if run.calls != 1 {
+				t.Fatalf("calls = %d, want 1 (err %v)", run.calls, run.err)
+			}
+			if want := []host.DeclaredService{{Kind: host.ServiceSSH, Port: 2222}}; !reflect.DeepEqual(run.cfg.Services, want) {
+				t.Errorf("Services = %+v, want %+v", run.cfg.Services, want)
+			}
+			win := runHostCmd(t, name, "windows", []string{"--json", "--config", path}, host.CheckResult{})
+			if win.calls != 0 {
+				t.Errorf("windows ran %d time(s), want 0: it has no ssh step", win.calls)
+			}
+			assertExit1Naming(t, win.err, "windows")
+		})
+	}
 }
 
 func assertExit1Naming(t *testing.T, err error, want string) {
