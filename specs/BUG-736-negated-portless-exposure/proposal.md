@@ -24,8 +24,8 @@ On v4 the miss is worse than silence: `iptablesDecide` already counts a portless
 
 One predicate, `iptExposes(f, port)`, used by both exposure reads (`iptUnscoped` for v4 INPUT, `ip6Exposed` for v6 INPUT) in place of `iptPortCovers`:
 
-- a rule with a port flag exposes the port when it names it (today's `iptPortCovers`), or, for a TCP rule, when every destination port match is negated and none holds the port (`! --dport 22`; a source-port match beside it does not narrow, since clients connect from ephemeral ports), or, with no destination match, when every source-port match is negated (`! --sport 22`);
-- a rule with no port flag exposes the port when `iptPortlessCovers` already says it matches every TCP port (it rejects conntrack, state, limit and other narrowings it does not model).
+- a rule with a port flag exposes the port when it names it (today's `iptPortCovers`), or, for a TCP rule, when every destination port match is negated and none holds the port (`! --dport 22`; a source-port match beside it does not narrow, since clients connect from ephemeral ports);
+- a rule with no destination port flag exposes the port when `iptPortlessCovers` already says it matches every TCP port (it rejects conntrack, state, limit and other narrowings it does not model). A source-port match, negated or not, is one it models as narrowing nothing: the client picks its source port, so `--sport 22`, `--sport 1024:65535` and `! --sport 22` all expose the port, while `--sport 22 -m state --state ESTABLISHED` does not (#757, review round 4).
 
 The existing scope tests stay: loopback, and an interface, source or destination qualifier (v4 `iptHasScope`, v6 `ip6Narrowed`), still exclude a rule. Such rules are reported as `manual` (foreign: never deleted by setup), and `firewall_ok` is false. `iptablesDecide` is unchanged: whether the tailnet reaches the port is a separate question from whether anything else does.
 
@@ -52,7 +52,7 @@ This reverses the documented choice in `iptUnscoped` that "a rule with no port i
 
 - [x] [AC1] v4: an unscoped `! --dport 22` ACCEPT, a `-p tcp -j ACCEPT` and a bare `-j ACCEPT` in INPUT are each reported `manual` by `check` and `setup`, naming the rule, with `firewall_ok` false and the SSH caution in the fix; setup deletes none of them.
 - [x] [AC2] v6: the same three shapes in `ip6tables -S INPUT` are reported by the exposure scan (`manual`, `firewall_ok` false).
-- [x] [AC3] Not reported: `! --dport 3389`, a `-i lo` or `-i eth0`/`-s` scoped portless allow, a conntrack-only allow, a UDP portless allow, and `--sport`-only rules; existing step outcomes are unchanged.
+- [x] [AC3] Not reported: `! --dport 3389`, a `-i lo` or `-i eth0`/`-s` scoped portless allow, a conntrack-only allow, and a UDP portless allow; a source-port-only TCP allow is reported like a portless one (#757); existing step outcomes are unchanged.
 - [x] [AC4] e2e on the Linux VM: under a DROP policy, an unscoped `! --dport 22` v4 allow and a `-p tcp -j ACCEPT` v6 allow are each reported `manual` and `firewall_ok` false, then `ok` once removed.
 
 ## References
