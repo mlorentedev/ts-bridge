@@ -30,8 +30,10 @@ recipes below register it.
 - Windows and Linux. macOS refuses `host.mesh` until #459.
 - SSH and RDP must already be provisioned and listening locally. Serve can publish
   both on Windows and Linux, but does not install or configure either service.
-  `host setup` and `host check` retain their stricter OS-step contract and reject
-  SSH declarations until #521 adds those convergence steps. `host init` still
+  `host setup` and `host check` retain their stricter OS-step contract: on Linux they
+  converge and check `ssh` (#521: the OpenSSH unit, its port and a `tailscale0`-scoped
+  firewall rule; a missing OpenSSH server is reported `manual`, never installed), and on
+  Windows they reject SSH declarations until that step lands. `host init` still
   generates an RDP-only file.
 
 ## 1. Write the host file

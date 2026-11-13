@@ -148,7 +148,8 @@ host check`. Before this amendment `setup` exited 0 even when a step failed.
 unreliable, not a reading of "off", and `unread` is what tells the two apart. The step's `fix`
 names the cause.
 The existing keys stay and are derived (C2): `rdp_port` / `rdp_enabled` from the `rdp`
-service (zero/false when absent or `unread`), `firewall_ok` true only when at least one service is
+service (zero/false when absent or `unread`; an ssh-only host reports `rdp_port: 0` in
+`host check --json` and `host setup --json` alike), `firewall_ok` true only when at least one service is
 declared and every declared service has `firewall_ok == true` (an `unverified` firewall
 read counts as false). `steps[].success` stays as `outcome in {ok, changed}`.
 
@@ -170,7 +171,7 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 | OS | Services | Automated | Verified and guided only |
 | --- | --- | --- | --- |
 | Windows | `rdp` (`ssh` via OpenSSH Server is planned, #521; its firewall rule must be scoped or reported like the RDP group) | RDP enable honouring Group Policy precedence, firewall rule scoped to the tailnet ranges (state-first, Amendment B), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
-| Linux | `rdp` (xrdp) (`ssh` is planned, #521; its rule takes the same `tailscale0` scope) | `systemctl enable --now`, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule scoped to `tailscale0` (ufw `allow in on` / iptables `-i`, Amendment B) | none |
+| Linux | `rdp` (xrdp), `ssh` (OpenSSH, #521) | `systemctl enable --now` on the unit systemd has (`ssh` on Debian and Ubuntu, `sshd` elsewhere), the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule scoped to `tailscale0` (ufw `allow in on` / iptables `-i`, Amendment B) for each service's port | A missing OpenSSH server (`manual`, ts-bridge installs no package); a declared non-default ssh port is compared with `sshd -T` and a mismatch is `manual` (`sshd_config` is never written); an unscoped allow for the ssh port, which is the operator's and is reported, never deleted |
 | macOS | `ssh` (Remote Login), `vnc` (Screen Sharing) | Remote Login when elevated and Full Disk Access is granted | Screen Sharing; Remote Login without Full Disk Access; application-firewall "block all" |
 
 A declared RDP port is applied where the OS lets a CLI move the listener and reported
@@ -268,10 +269,11 @@ Decision:
   2026-11-06). On Windows and Linux, serve may publish an already-provisioned `ssh`
   service alongside `rdp`; it does not install or configure OpenSSH. The strict
   step-capability check in §1 remains on `setup` and `check`: they still reject
-  SSH declarations until #521 supplies those OS steps. `init` still generates an
+  SSH declarations where #521 has not supplied the OS step (Linux does since #521;
+  Windows does not yet). `init` still generates an
   RDP-only file and validates it through the convergence loader. A combined SSH/RDP
-  serve file therefore cannot yet be used with `host check`; its publication
-  diagnostic is serve's health endpoint. This does not add VNC or macOS support.
+  serve file can be used with `host check` on Linux; on Windows its publication
+  diagnostic is serve's health endpoint until the Windows `ssh` step lands. This does not add VNC or macOS support.
 
 Rejected for this amendment: an OS service inside ts-bridge (Windows SCM or systemd
 integration in the binary), which is #451's question and would add a supervisor before

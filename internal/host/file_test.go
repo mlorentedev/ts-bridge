@@ -218,7 +218,7 @@ func TestLoadFile_OSCapability(t *testing.T) {
 		{"linux", svc("rdp"), nil, ""},
 		{"windows", power, nil, ""},
 		{"windows", firewall, nil, ""},
-		{"linux", svc("ssh"), []string{"host.services[0].kind", `"ssh"`, "linux", "#521"}, "#454"},
+		{"linux", svc("ssh"), nil, ""},
 		{"linux", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "linux", "ADR-017 §5"}, "#454"},
 		{"windows", svc("ssh"), []string{"host.services[0].kind", `"ssh"`, "windows", "#521"}, "#455"},
 		{"windows", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "windows", "ADR-017 §5"}, "#455"},

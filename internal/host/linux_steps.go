@@ -13,19 +13,18 @@ import (
 )
 
 const (
-	xrdpName      = "xrdp service"
-	linuxFwName   = "Firewall configuration"
-	xrdpFixUnmask = "sudo systemctl unmask xrdp, then run ts-bridge host setup"
-	xrdpFixSetup  = "run ts-bridge host setup as root"
-	backendUFW    = "ufw"
-	backendIPT    = "iptables"
-	backendIP6    = "ip6tables"
-	protoTCP      = "tcp"
-	iptAccept     = "ACCEPT"
-	iptInput      = "INPUT"
-	iptDport      = "--dport"
-	ufwAllow      = "allow"
-	ufwPort       = "port"
+	xrdpName     = "xrdp service"
+	linuxFwName  = "Firewall configuration"
+	unitFixSetup = "run ts-bridge host setup as root"
+	backendUFW   = "ufw"
+	backendIPT   = "iptables"
+	backendIP6   = "ip6tables"
+	protoTCP     = "tcp"
+	iptAccept    = "ACCEPT"
+	iptInput     = "INPUT"
+	iptDport     = "--dport"
+	ufwAllow     = "allow"
+	ufwPort      = "port"
 )
 
 func linuxPort(cfg Config) int {
@@ -35,10 +34,35 @@ func linuxPort(cfg Config) int {
 	return cfg.Port
 }
 
+// linuxServices is what the Linux steps converge. A host that declares nothing
+// is the xrdp host of the default (ADR-017 §1).
+func linuxServices(cfg Config) []DeclaredService {
+	if len(cfg.Services) == 0 {
+		return []DeclaredService{{Kind: ServiceRDP, Port: linuxPort(cfg)}}
+	}
+	return cfg.Services
+}
+
 // setupLinux reads each state first and acts only on a difference, so a second
-// run on a converged host changes nothing (#454, ADR-017).
+// run on a converged host changes nothing (#454, ADR-017). The steps follow the
+// declared services in order.
 func setupLinux(cfg Config, r Runner) SetupResult {
-	port := linuxPort(cfg)
+	var result SetupResult
+	for _, svc := range linuxServices(cfg) {
+		switch svc.Kind {
+		case ServiceRDP:
+			port := linuxPort(cfg)
+			result.RDPPort = port
+			result.Steps = append(result.Steps, rdpSetupSteps(cfg, r, port)...)
+		case ServiceSSH:
+			result.Steps = append(result.Steps, sshSetupSteps(r, svc.Port)...)
+		}
+	}
+	result.Steps = append(result.Steps, tailscaleIPStep(r))
+	return result
+}
+
+func rdpSetupSteps(cfg Config, r Runner, port int) []SetupStep {
 	steps := []SetupStep{xrdpSetupStep(r)}
 	// Only a declared port moves xrdp; an undeclared one is the operator's (#557).
 	if cfg.PortDeclared {
@@ -46,12 +70,21 @@ func setupLinux(cfg Config, r Runner) SetupResult {
 			steps = append(steps, s)
 		}
 	}
-	steps = append(steps, firewallSetupStep(r, port), tailscaleIPStep(r))
-	return SetupResult{RDPPort: port, Steps: steps}
+	return append(steps, firewallSetupStep(r, port))
 }
 
 func checkLinux(cfg Config, r Runner, result *CheckResult) {
-	port := linuxPort(cfg)
+	for _, svc := range linuxServices(cfg) {
+		switch svc.Kind {
+		case ServiceRDP:
+			checkRDP(cfg, r, linuxPort(cfg), result)
+		case ServiceSSH:
+			checkSSH(r, svc.Port, result)
+		}
+	}
+}
+
+func checkRDP(cfg Config, r Runner, port int, result *CheckResult) {
 	x := readXRDP(r)
 	fw := readLinuxFirewall(r, port)
 	xrdp := xrdpCheckStep(x)
@@ -67,7 +100,7 @@ func checkLinux(cfg Config, r Runner, result *CheckResult) {
 		active := x.active
 		svc.Active = &active
 	}
-	result.Services = []Service{svc}
+	result.Services = append(result.Services, svc)
 }
 
 // xrdpState is the xrdp service as systemd reports it. readable is false when
@@ -78,22 +111,25 @@ type xrdpState struct {
 	undecided                                    string
 }
 
-// readXRDP asks systemd for the unit, not PATH for the binary: xrdp lives in
-// /usr/sbin, which a non-root PATH often lacks. Without systemctl the binary on
-// PATH is the only evidence left.
-func readXRDP(r Runner) xrdpState {
+// readXRDP is readUnit for xrdp.
+func readXRDP(r Runner) xrdpState { return readUnit(r, "xrdp", "xrdp") }
+
+// readUnit asks systemd for the unit, not PATH for the binary: xrdp and sshd
+// live in /usr/sbin, which a non-root PATH often lacks. Without systemctl the
+// binary on PATH is the only evidence left.
+func readUnit(r Runner, unit, binary string) xrdpState {
 	if _, err := r.LookPath("systemctl"); err != nil {
-		_, err := r.LookPath("xrdp")
+		_, err := r.LookPath(binary)
 		return xrdpState{installed: err == nil}
 	}
 	// is-enabled and is-active exit non-zero when the answer is "no", and
 	// still print it, so the printed word decides, not the exit status.
-	enabled, _ := r.Output("systemctl", "is-enabled", "xrdp")
+	enabled, _ := r.Output("systemctl", "is-enabled", unit)
 	e := strings.TrimSpace(string(enabled))
 	if e == "not-found" {
 		return xrdpState{}
 	}
-	active, _ := r.Output("systemctl", "is-active", "xrdp")
+	active, _ := r.Output("systemctl", "is-active", unit)
 	a := strings.TrimSpace(string(active))
 	if e == "" || a == "" {
 		return xrdpState{installed: true}
@@ -106,59 +142,82 @@ func readXRDP(r Runner) xrdpState {
 		x.masked = true
 	case "disabled", "enabled-runtime": // enabled-runtime lasts until the next boot
 	default:
-		// indirect, generated, alias, transient, linked...: whether xrdp starts
+		// indirect, generated, alias, transient, linked...: whether the unit starts
 		// at boot depends on another unit, so ts-bridge does not guess.
 		return xrdpState{installed: true, active: x.active, undecided: e}
 	}
 	return x
 }
 
-// xrdpUnmet returns the step for an xrdp that is missing or unreadable;
-// unreadable is the outcome to report when systemd cannot be asked.
-func xrdpUnmet(x xrdpState, unreadable Outcome) (SetupStep, bool) {
+// linuxUnit is a systemd service one Linux step converges. missing is the step
+// reported when it is not installed: failed for xrdp, manual for sshd, whose
+// package ts-bridge does not install.
+type linuxUnit struct {
+	name, label, unit string
+	missing           SetupStep
+}
+
+var xrdpUnit = linuxUnit{name: xrdpName, label: "xrdp", unit: "xrdp",
+	missing: newStep(xrdpName, OutcomeFailed, "xrdp is not installed", "sudo apt install xrdp")}
+
+// unmet returns the step for a unit that is missing or unreadable; unreadable
+// is the outcome to report when systemd cannot be asked.
+func (u linuxUnit) unmet(x xrdpState, unreadable Outcome) (SetupStep, bool) {
 	if !x.installed {
-		return newStep(xrdpName, OutcomeFailed, "xrdp is not installed", "sudo apt install xrdp"), true
+		return u.missing, true
 	}
 	if x.undecided != "" {
-		return newStep(xrdpName, unreadable, fmt.Sprintf("systemctl is-enabled answered %q, which ts-bridge does not interpret", x.undecided),
-			"check systemctl status xrdp, and enable it by hand if it does not start at boot"), true
+		return newStep(u.name, unreadable, fmt.Sprintf("systemctl is-enabled answered %q, which ts-bridge does not interpret", x.undecided),
+			fmt.Sprintf("check systemctl status %s, and enable it by hand if it does not start at boot", u.unit)), true
 	}
 	if !x.readable {
-		return newStep(xrdpName, unreadable, "Cannot read the xrdp service state: ts-bridge reads it with systemctl",
-			"enable and start xrdp with your init system"), true
+		return newStep(u.name, unreadable, fmt.Sprintf("Cannot read the %s service state: ts-bridge reads it with systemctl", u.label),
+			fmt.Sprintf("enable and start %s with your init system", u.label)), true
 	}
 	return SetupStep{}, false
 }
 
-func xrdpSetupStep(r Runner) SetupStep {
-	x := readXRDP(r)
-	if step, done := xrdpUnmet(x, OutcomeFailed); done {
-		return step
-	}
-	if x.enabled && x.active {
-		return newStep(xrdpName, OutcomeOK, "xrdp is enabled and running", "")
-	}
-	if x.masked {
-		return newStep(xrdpName, OutcomeFailed, "xrdp is masked, so it cannot be enabled", xrdpFixUnmask)
-	}
-	if err := r.Run("systemctl", "enable", "--now", "xrdp"); err != nil {
-		return newStep(xrdpName, OutcomeFailed, fmt.Sprintf("Could not enable xrdp: %v", err), "sudo systemctl enable --now xrdp")
-	}
-	return newStep(xrdpName, OutcomeChanged, "xrdp enabled and started", "")
+func (u linuxUnit) unmaskFix() string {
+	return fmt.Sprintf("sudo systemctl unmask %s, then run ts-bridge host setup", u.unit)
 }
 
-func xrdpCheckStep(x xrdpState) SetupStep {
-	if step, done := xrdpUnmet(x, OutcomeUnverified); done {
+func (u linuxUnit) setupStep(r Runner, x xrdpState) SetupStep {
+	if step, done := u.unmet(x, OutcomeFailed); done {
 		return step
 	}
 	if x.enabled && x.active {
-		return newStep(xrdpName, OutcomeOK, "xrdp is enabled and running", "")
+		return newStep(u.name, OutcomeOK, u.label+" is enabled and running", "")
 	}
 	if x.masked {
-		return newStep(xrdpName, OutcomeManual, "xrdp is masked, and setup does not unmask units", xrdpFixUnmask)
+		return newStep(u.name, OutcomeFailed, u.label+" is masked, so it cannot be enabled", u.unmaskFix())
 	}
-	return newStep(xrdpName, OutcomeChanged, fmt.Sprintf("xrdp is not enabled and running (enabled=%t, active=%t)", x.enabled, x.active), xrdpFixSetup)
+	if err := r.Run("systemctl", "enable", "--now", u.unit); err != nil {
+		return newStep(u.name, OutcomeFailed, fmt.Sprintf("Could not enable %s: %v", u.label, err), "sudo systemctl enable --now "+u.unit)
+	}
+	return newStep(u.name, OutcomeChanged, u.label+" enabled and started", "")
 }
+
+func (u linuxUnit) checkStep(x xrdpState) SetupStep {
+	if step, done := u.unmet(x, OutcomeUnverified); done {
+		return step
+	}
+	if x.enabled && x.active {
+		return newStep(u.name, OutcomeOK, u.label+" is enabled and running", "")
+	}
+	if x.masked {
+		return newStep(u.name, OutcomeManual, u.label+" is masked, and setup does not unmask units", u.unmaskFix())
+	}
+	return newStep(u.name, OutcomeChanged, fmt.Sprintf("%s is not enabled and running (enabled=%t, active=%t)", u.label, x.enabled, x.active), unitFixSetup)
+}
+
+// xrdpUnmet is unmet for xrdp.
+func xrdpUnmet(x xrdpState, unreadable Outcome) (SetupStep, bool) {
+	return xrdpUnit.unmet(x, unreadable)
+}
+
+func xrdpSetupStep(r Runner) SetupStep { return xrdpUnit.setupStep(r, readXRDP(r)) }
+
+func xrdpCheckStep(x xrdpState) SetupStep { return xrdpUnit.checkStep(x) }
 
 type ruleState int
 
@@ -1463,7 +1522,11 @@ func portListHas(list string, port int) bool {
 }
 
 func firewallSetupStep(r Runner, port int) SetupStep {
-	read := readLinuxFirewall(r, port)
+	return firewallSetupFor(r, readLinuxFirewall(r, port), port)
+}
+
+// firewallSetupFor is firewallSetupStep over a read the caller has already made.
+func firewallSetupFor(r Runner, read firewallRead, port int) SetupStep {
 	if read.other != "" {
 		return foreignStep(read, port, "setup")
 	}

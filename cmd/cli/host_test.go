@@ -704,3 +704,59 @@ func TestHostSetupCmd_NotConvergedBanner(t *testing.T) {
 		t.Errorf("stdout names a target without an address:\n%s", out.String())
 	}
 }
+
+// TestPrintCheckText_ServiceLines pins that the service lines come from
+// services[], not from the RDP-shaped legacy keys: an ssh-only host must not
+// print an rdp line, and a host declaring both prints one line each (#521).
+func TestPrintCheckText_ServiceLines(t *testing.T) {
+	yes := true
+	ssh := host.Service{Kind: host.ServiceSSH, Port: 22, Enabled: true, Active: &yes, FirewallOK: true}
+	tests := []struct {
+		name    string
+		result  host.CheckResult
+		want    []string
+		notWant []string
+	}{
+		{"ssh only, running", host.CheckResult{FirewallOK: true, Services: []host.Service{ssh}},
+			[]string{"SSH:           ✓ OK (port 22)", "Firewall:      ✓ OK"}, []string{"RDP", "no service declared", "rdp"}},
+		{"ssh only, stopped", host.CheckResult{Services: []host.Service{{Kind: host.ServiceSSH, Port: 22, Enabled: true, Active: new(bool)}}},
+			[]string{"SSH:           ✗ NOT OK (ssh, port 22)"}, []string{"RDP", "no service declared"}},
+		{"ssh only, unread", host.CheckResult{Elevated: true, Services: []host.Service{{Kind: host.ServiceSSH, Port: 22, Unread: true}}},
+			[]string{"SSH:           unread (ssh, port 22): see the steps below for the cause"}, []string{"RDP", "may help"}},
+		{"rdp and ssh", host.CheckResult{RDPPort: 3389, RDPEnabled: true, Services: []host.Service{{Kind: host.ServiceRDP, Port: 3389, Enabled: true}, ssh}},
+			[]string{"RDP:           ✓ OK (port 3389)", "SSH:           ✓ OK (port 22)"}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			cmdpkg.PrintCheckTextForTest(&buf, tt.result)
+			got := buf.String()
+			for _, want := range tt.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("output lacks %q:\n%s", want, got)
+				}
+			}
+			for _, bad := range tt.notWant {
+				if strings.Contains(got, bad) {
+					t.Errorf("output contains %q:\n%s", bad, got)
+				}
+			}
+		})
+	}
+}
+
+// An ssh-only host declares no RDP port, so the summary must not print "RDP
+// Port: 0" or a TS_TARGET that points at port 0 (#521).
+func TestPrintSetupSummary_NoRDPPort(t *testing.T) {
+	var buf bytes.Buffer
+	cmdpkg.PrintSetupSummaryForTest(&buf, "100.64.0.1", host.SetupResult{Steps: []host.SetupStep{{Name: "SSH server", Outcome: host.OutcomeOK, Success: true}}})
+	got := buf.String()
+	if !strings.Contains(got, "HOST READY") {
+		t.Errorf("summary lacks the verdict:\n%s", got)
+	}
+	for _, bad := range []string{"RDP Port", "TS_TARGET", ":0"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("summary contains %q:\n%s", bad, got)
+		}
+	}
+}
