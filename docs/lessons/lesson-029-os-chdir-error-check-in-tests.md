@@ -1,7 +1,8 @@
 ---
-id: lesson-029-os-chdir-error-check-in-tests
+id: "lesson-029-os-chdir-error-check-in-tests"
 type: lesson
 status: active
+title: "os.Chdir error check in tests"
 created: "2026-08-13"
 owner: manu
 tags: [ts-bridge, lesson]

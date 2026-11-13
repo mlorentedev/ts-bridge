@@ -1,7 +1,8 @@
 ---
-id: lesson-020-tsnet-server-self-heals-across-derp-magicsock
+id: "lesson-020-tsnet-server-self-heals-across-derp-magicsock"
 type: lesson
 status: active
+title: "tsnet.Server self-heals across DERP/magicsock transients via awaitRunning"
 created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, tsnet, tailscale, self-healing, design-investigation]

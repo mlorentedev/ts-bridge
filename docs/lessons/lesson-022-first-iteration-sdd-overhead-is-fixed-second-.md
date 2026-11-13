@@ -1,7 +1,8 @@
 ---
-id: lesson-022-first-iteration-sdd-overhead-is-fixed-second-
+id: "lesson-022-first-iteration-sdd-overhead-is-fixed-second-"
 type: lesson
 status: active
+title: "First-iteration SDD overhead is fixed; second iteration is trivially cheap"
 created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, sdd, process, workflow, meta]

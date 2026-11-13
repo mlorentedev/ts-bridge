@@ -1,7 +1,8 @@
 ---
-id: lesson-018-ephemeral-mode-mandates-auth-key-rotation-on-
+id: "lesson-018-ephemeral-mode-mandates-auth-key-rotation-on-"
 type: lesson
 status: active
+title: "Ephemeral mode mandates auth-key rotation on every client (operational reality)"
 created: "2026-05-28"
 owner: manu
 tags: [ts-bridge, lesson, tailscale, ephemeral, auth-key, operational]
