@@ -1,7 +1,7 @@
 ---
 id: "HOST-007-ssh-service-linux"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-11-12"
 issue: "mlorentedev/ts-bridge#521"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
