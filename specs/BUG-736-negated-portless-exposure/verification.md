@@ -13,7 +13,7 @@ owner: manu
 
 - [x] AC1 (v4 negated, `-p tcp -j ACCEPT`, `-j ACCEPT` → `manual`, rule named, `firewall_ok` false, SSH caution in the fix, nothing deleted) -> commits `18b6154` (red: 9 failures on the old code), `8ece357`; tests `TestExposureShapes`, `TestReadIptablesUnscoped/a_port-less_accept_is_foreign`, `.../an_accept_for_every_port_but_SSH_is_foreign`, `TestSetupForLinux/iptables,_an_accept_for_every_port:...(#736)` (appends the scoped rule, deletes nothing), `TestCheckForLinux/iptables,_an_accept_for_every_port_but_SSH:_manual_(#736)` (`FirewallOK` false).
 - [x] AC2 (v6 same shapes) -> `TestExposureShapes` (both reads per row), `TestIP6Exposure/a_port-less_v6_accept`, `.../a_v6_accept_for_every_port_but_SSH` (fix names the `ip6tables -D` and the SSH caution).
-- [x] AC3 (not reported: `! --dport 3389`, `! --dports 3000:4000`, mixed negated dport + positive sport, `--sport` only, DROP, UDP, `-i lo`, `-i eth0`, `-i tailscale0`, `-s` prefix, conntrack-only, a rule outside INPUT) -> the `false` rows of `TestExposureShapes`; every pre-existing step row unchanged.
+- [x] AC3 (not reported: `! --dport 3389`, `! --dports 3000:4000`, mixed negated dport + positive sport, `--sport` only, DROP, UDP, `-i lo`, `-i eth0`, `-i tailscale0`, `-s` prefix, conntrack-only, a rule outside INPUT) -> the `false` rows of `TestExposureShapes`. Two pre-existing rows change on purpose, as Decisions records: `TestReadIptablesUnscoped`'s port-less accept (no longer the operator's posture: foreign, not `firewall_ok`) and `TestIP6Exposure`'s port-less v6 accept (`ok` -> `manual`). AC3's "existing step outcomes are unchanged" is read as scoped to the shapes it lists. Since #757, `--sport` only is reported, not in this list (see the #757 section).
 - [x] AC4 (e2e) -> `make e2e-linux` at `8b93885` (round-4 head before this record), 108 pass, 0 fail, on the Lima Ubuntu guest, run 2026-11-12 11:23Z. The 15 #736 cases: v4 `! --dport 22` beside the scoped rule (manual, not `firewall_ok`, left in place, ok once removed); the same rule as the only allow (check manual; setup adds the scoped rule, reports manual, leaves it); v4 `! -i lo -p tcp -j ACCEPT` (manual, not `firewall_ok`, ok once removed); v6 `-p tcp -j ACCEPT` (manual with the SSH caution, not `firewall_ok`, left in place, ok once removed). An earlier run at `f8ac37b` gave 102/0 before rounds 2 and 3 added cases.
 
 ## Test status
@@ -85,6 +85,15 @@ The owner chose to report every source-port-only allow, `--sport 22` included. C
 - `go test -race ./...`: ok. `golangci-lint run`: 0 issues on darwin and `GOOS=linux`.
 - `make e2e-linux` at ddd7e21: 129 pass, 0 fail. New: v4 `--sport 1024:65535` beside the scoped rule reads `manual`, not `firewall_ok`, and `ok` once removed.
 - Known over-report, unchanged here: an allow held to replies that names a destination port (`--dport 3389 --ctstate RELATED,ESTABLISHED`) is still reported; #758.
+
+## Spec review round 5 (nan/deepseek-v4-flash, PASS at dcea7d4; this `review.md`)
+
+- Minor REAL, "every pre-existing step row unchanged" contradicts two deliberate flips: applied, the AC3 evidence line now names both rows.
+- Minor REAL, AC1's `check` leg has a step row only for `! --dport 22`: applied, `TestCheckForLinux` rows for a bare `-j ACCEPT` and a `-p tcp -j ACCEPT` beside the scoped rule (both `manual`; they passed on arrival, being guards of the shared path).
+- Minor REAL, AC3's "existing step outcomes are unchanged" reads as refuted: applied as a reading note on the AC3 evidence line; no contract edit, as the review advises.
+- Minor THEORETICAL, `iptExcludes` keeps a disjunct unreachable from its only caller: not changed here, so the landed code is the reviewed code; folded into #758, which rewrites this predicate's port-bearing branch.
+- Minor REAL, PR #759's body says the e2e is running and has no triage yet: applied on the PR (body and `## Review triage` comment).
+- Question, AC4 not reproducible in the review window: the evidence is the recorded run, 129 pass, 0 fail at ddd7e21; dcea7d4 adds only spec text, and this round's follow-up adds tests only.
 
 ## Promotion candidates
 
