@@ -279,6 +279,21 @@ ok "v4 source-port allow removed: check is ok again" -- 'outcomes check "$C" | f
 iptables -A INPUT -p tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 ok "v4 allow held to replies beside the scoped rule: check is ok" -- 'outcomes check "$C" | fwstep ok'
 iptables -D INPUT -p tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+# A v4 chain of the operator's own that INPUT jumps to is read too (#762): a tailnet accept there is
+# fine, and an unscoped allow added inside it is reported under the chain's name, never deleted.
+V4CHAINOPEN='-A tsbe2e4 -p tcp -m tcp --dport 3389 -j ACCEPT'
+iptables -N tsbe2e4
+iptables -A tsbe2e4 -i tailscale0 -j ACCEPT
+iptables -A INPUT -j tsbe2e4
+ok "v4 jumped chain, a tailnet accept: check is ok" -- 'outcomes check "$C" | fwstep ok'
+iptables -A tsbe2e4 -p tcp --dport 3389 -j ACCEPT
+ok "v4 jumped chain, an unscoped allow: check says manual, naming the chain's rule" -- 'outcomes check "$C" | fwstep manual && outcomes check "$C" | grep -qF -- "$V4CHAINOPEN"'
+ok "v4 jumped chain, an unscoped allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+ok "v4 jumped chain, an unscoped allow: setup reports it and leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S tsbe2e4 | grep -qx -- "$V4CHAINOPEN"'
+iptables -D INPUT -j tsbe2e4
+iptables -F tsbe2e4
+iptables -X tsbe2e4
+ok "v4 jumped chain removed by the operator: check is ok again" -- 'outcomes check "$C" | fwstep ok'
 iptables -A INPUT ! -i lo -p tcp -j ACCEPT
 ok "v4 allow off loopback: check says manual" -- 'outcomes check "$C" | fwstep manual'
 ok "v4 allow off loopback: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
