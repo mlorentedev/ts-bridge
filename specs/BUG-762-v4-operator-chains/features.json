@@ -1,0 +1,23 @@
+[
+  {
+    "id": "BUG-762-v4-operator-chains-f1",
+    "behavior": "AC1+AC2: an unscoped or port-less allow in a chain INPUT jumps to (also two jumps deep, through a loop) is manual, firewall_ok false, never deleted; a scoped allow, a narrowed jump, ts-input and ufw's chains are not reported; the decision side is pinned",
+    "verification": "go test ./internal/host/ -run 'TestCheckForLinux|TestSetupForLinux' -count=1",
+    "state": "passing",
+    "evidence": "go test ./internal/host/ -run 'TestCheckForLinux|TestSetupForLinux' ok"
+  },
+  {
+    "id": "BUG-762-v4-operator-chains-f2",
+    "behavior": "AC3: an unreadable jumped chain turns an ok step unverified; a missing chain does not",
+    "verification": "go test ./internal/host/ -run 'TestCheckForLinux/chain|TestSetupForLinux/chain' -count=1",
+    "state": "passing",
+    "evidence": "go test ./internal/host/ -run 'TestCheckForLinux/chain|TestSetupForLinux/chain' ok"
+  },
+  {
+    "id": "BUG-762-v4-operator-chains-f3",
+    "behavior": "AC4: e2e on the Linux VM",
+    "verification": "make e2e-linux",
+    "state": "passing",
+    "evidence": "make e2e-linux on c4d8077: 135 pass, 0 fail; see verification.md AC4"
+  }
+]
