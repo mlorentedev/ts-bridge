@@ -109,7 +109,8 @@ ok "disabled xrdp: setup enables and starts it" -- 'systemctl is-enabled -q xrdp
 
 printf 'version: 1\nhost:\n  services:\n    - kind: ssh\n      port: 22\n' >"$W/ssh.yaml"
 run "$B" host setup --config "$W/ssh.yaml"
-ok "ssh service refused, citing #521" -- 'code 1 && has "#521"'
+# Linux converges ssh since #521: the declaration is no longer refused as planned work.
+ok "ssh service accepted on Linux, no #521 refusal" -- '! has "#521" && has "SSH server"'
 printf 'version: 1\nhost:\n  services:\n    - kind: rdp\n      port: 3389\n  colour: blue\n' >"$W/unk.yaml"
 run "$B" host check --config "$W/unk.yaml"
 ok "unknown key warned by name, check still runs" -- 'has "colour" && has "HOST CHECK"'
