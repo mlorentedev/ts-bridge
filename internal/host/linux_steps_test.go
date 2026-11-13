@@ -163,6 +163,9 @@ func TestIptablesCovers(t *testing.T) {
 		{"range", "-A INPUT -p tcp -m tcp --dport 3380:3390 -j ACCEPT", true},
 		{"source or destination ports", "-A INPUT -p tcp -m multiport --ports 3389 -j ACCEPT", true},
 		{"conntrack before the port", "-A INPUT -p tcp -m conntrack --ctstate NEW -m tcp --dport 3389 -j ACCEPT", true},
+		// Held to replies, a rule admits no new connection to the port (#758).
+		{"replies only", "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"not new", "-A INPUT -i tailscale0 -p tcp -m conntrack ! --ctstate NEW -m tcp --dport 3389 -j ACCEPT", false},
 		{"comment", `-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "rdp port" -j ACCEPT`, true},
 		{"longer port", "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT", false},
 		{"udp", "-A INPUT -p udp -m udp --dport 3389 -j ACCEPT", false},
