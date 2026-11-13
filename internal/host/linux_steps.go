@@ -984,7 +984,24 @@ func iptExposes(f []string, port int) bool {
 	if !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) }) {
 		return iptPortlessCovers(f)
 	}
-	return iptPortCovers(f, port) || iptExcludesOthers(f, port)
+	return (iptPortCovers(f, port) || iptExcludesOthers(f, port)) && !iptRepliesOnly(f)
+}
+
+// iptRepliesOnly reports a rule held by a conntrack or state match to packets
+// that are not NEW: a list without NEW (`--ctstate RELATED,ESTABLISHED`, or
+// `INVALID`), or `! --ctstate NEW`. Such an allow admits no new connection, so
+// it exposes nothing (#758). The
+// port-less path already reads any state match as narrowing.
+func iptRepliesOnly(f []string) bool {
+	for i, w := range f {
+		if (w == "--ctstate" || w == "--state") && i+1 < len(f) {
+			negated := i > 0 && f[i-1] == "!"
+			if negated == slices.Contains(strings.Split(f[i+1], ","), "NEW") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // iptExcludesOthers reports a TCP rule that admits port from every client but
@@ -1003,20 +1020,20 @@ func iptExcludesOthers(f []string, port int) bool {
 	return true
 }
 
-// iptExcludes reports whether the port match at f[i] is negated and, for a
-// destination list, leaves port out.
+// iptExcludes reports whether the destination port match at f[i] is negated
+// and leaves port out.
 func iptExcludes(f []string, i, port int) bool {
 	if i == 0 || f[i-1] != "!" || i+1 == len(f) {
 		return false
 	}
-	return !slices.Contains(iptDestPortFlags, f[i]) || !portListHas(f[i+1], port)
+	return !portListHas(f[i+1], port)
 }
 
 // iptMatchesPort reports whether a rule's match, whatever its target, applies
 // to new TCP connections on port.
 func iptMatchesPort(f []string, port int) bool {
 	if slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptPortFlags, w) }) {
-		return iptPortCovers(f, port)
+		return iptPortCovers(f, port) && !iptRepliesOnly(f)
 	}
 	return iptPortlessCovers(f)
 }

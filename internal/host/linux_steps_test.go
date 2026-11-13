@@ -163,6 +163,9 @@ func TestIptablesCovers(t *testing.T) {
 		{"range", "-A INPUT -p tcp -m tcp --dport 3380:3390 -j ACCEPT", true},
 		{"source or destination ports", "-A INPUT -p tcp -m multiport --ports 3389 -j ACCEPT", true},
 		{"conntrack before the port", "-A INPUT -p tcp -m conntrack --ctstate NEW -m tcp --dport 3389 -j ACCEPT", true},
+		// Held to replies, a rule admits no new connection to the port (#758).
+		{"replies only", "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"not new", "-A INPUT -i tailscale0 -p tcp -m conntrack ! --ctstate NEW -m tcp --dport 3389 -j ACCEPT", false},
 		{"comment", `-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "rdp port" -j ACCEPT`, true},
 		{"longer port", "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT", false},
 		{"udp", "-A INPUT -p udp -m udp --dport 3389 -j ACCEPT", false},
@@ -1022,6 +1025,23 @@ func TestCheckForLinux(t *testing.T) {
 			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
 		},
 		{
+			name:     "iptables, an accept held to replies beside the scoped rule: ok (#758)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "iptables, a tailnet accept held to replies is no rule for the port: changed (#758)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptEmpty + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "No firewall rule found",
+		},
+		{
 			name:     "iptables, an accept off loopback beside the scoped rule: manual (#736)",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT ! -i lo -p tcp -j ACCEPT\n", iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
@@ -1262,9 +1282,11 @@ func TestIptablesDecideOnly(t *testing.T) {
 		{"blanket drop before the allow", "-A INPUT -j DROP\n-A INPUT -i tailscale0 -j ACCEPT", ruleBlocked},
 		{"tcp reset before the allow", "-A INPUT -p tcp -j REJECT --reject-with tcp-reset\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
 		{"conntrack drop does not decide", "-A INPUT -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
-		// An unmodeled match on a port-bearing rule is ignored for a deny as for an
-		// allow (iptPortCovers), so this deny decides: parity, not precision.
-		{"port-bearing conntrack drop decides", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
+		// A port-bearing deny held to packets that are not new (INVALID, or
+		// replies) drops no new connection, as the port-less one above (#758);
+		// one that includes NEW still decides.
+		{"port-bearing conntrack drop does not decide", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
+		{"port-bearing new drop decides", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate NEW -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
 		{"negated-scope drop does not decide", "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
 		{"loopback drop does not decide", "-A INPUT -i lo -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
 		{"jump does not decide", "-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
@@ -1935,6 +1957,16 @@ func TestExposureShapes(t *testing.T) {
 		// does not undo a negated destination port (#736 review F2).
 		{"-A INPUT -p tcp -m tcp ! --dport 22 --sport 1024:65535 -j ACCEPT", true},
 		{"-A INPUT -p tcp -m tcp --dport 22 ! --sport 22 -j ACCEPT", false},
+		// Held to replies, an allow admits no new connection, whatever port it
+		// names; held to new ones, or to all but INVALID, it still does (#758).
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m state --state ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m conntrack ! --ctstate NEW -m tcp --dport 3389 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m state --state NEW -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -m conntrack --ctstate NEW -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -m state --state NEW -j ACCEPT", true},
 		// The client picks its source port, so a source-port match narrows
 		// nothing: the rule reads as a port-less one (#757).
 		{"-A INPUT -p tcp -m tcp --sport 22 -j ACCEPT", true},

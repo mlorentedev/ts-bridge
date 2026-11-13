@@ -275,6 +275,10 @@ ok "v4 source-port allow: check says manual" -- 'outcomes check "$C" | fwstep ma
 ok "v4 source-port allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
 iptables -D INPUT -p tcp --sport 1024:65535 -j ACCEPT
 ok "v4 source-port allow removed: check is ok again" -- 'outcomes check "$C" | fwstep ok'
+# An allow held to replies admits no new connection, so it exposes nothing (#758).
+iptables -A INPUT -p tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+ok "v4 allow held to replies beside the scoped rule: check is ok" -- 'outcomes check "$C" | fwstep ok'
+iptables -D INPUT -p tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
 iptables -A INPUT ! -i lo -p tcp -j ACCEPT
 ok "v4 allow off loopback: check says manual" -- 'outcomes check "$C" | fwstep manual'
 ok "v4 allow off loopback: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
