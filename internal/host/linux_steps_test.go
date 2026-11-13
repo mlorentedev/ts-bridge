@@ -2197,6 +2197,9 @@ func TestIP6Exposure(t *testing.T) {
 		message string
 		fix     string // the -D fix a manual step names; ip6DeleteFix when empty
 		chain   string // what ip6tables -S ts-input prints; ip6TSInput when empty
+		// chainFails makes `ip6tables -S ts-input` fail for a reason other
+		// than a missing chain.
+		chainFails bool
 	}{
 		{name: "captured chain", onPath: true, v6: ip6Closed, want: OutcomeOK},
 		{name: "captured chain, iptables-nft", onPath: true, v6: ip6Closed, chain: ip6TSInputNFT, want: OutcomeOK},
@@ -2221,6 +2224,9 @@ func TestIP6Exposure(t *testing.T) {
 			message: "-d ::/0", fix: "ip6tables -D INPUT -d ::/0 -p tcp -m tcp --dport 3389 -j ACCEPT"},
 		{name: "a v6 allow for one LAN prefix is the operator's scope", onPath: true, v6: ip6Closed + "-A INPUT -s 2001:db8::/32 -p tcp -m tcp --dport 3389 -j ACCEPT\n", want: OutcomeOK},
 		{name: "v6 read fails", onPath: true, v6Fails: true, want: OutcomeOK, message: ip6Read},
+		// A chain INPUT jumps to that cannot be read is an unknown, as on v4
+		// (#762), never a clear read (#763).
+		{name: "a v6 chain that cannot be read", onPath: true, v6: ip6Closed, chainFails: true, want: OutcomeUnverified, message: ip6ChainRead},
 		{name: "no ip6tables", want: OutcomeOK},
 	}
 	unprivileged := &recordingRunner{onPath: map[string]bool{"iptables": true, "ip6tables": true}}
@@ -2233,7 +2239,7 @@ func TestIP6Exposure(t *testing.T) {
 			newRunner := func() *recordingRunner {
 				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "ip6tables": tt.onPath},
 					output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: tt.v6, ip6ChainRead: cmp.Or(tt.chain, ip6TSInput)},
-					fail:   map[string]bool{ip6Read: tt.v6Fails}}
+					fail:   map[string]bool{ip6Read: tt.v6Fails, ip6ChainRead: tt.chainFails}}
 			}
 			r := newRunner()
 			setup := firewallSetupStep(r, 3389)
@@ -2397,7 +2403,10 @@ func TestIP6Jumps(t *testing.T) {
 			for chain, said := range tt.fail {
 				r.exit["ip6tables -S "+chain], r.stderr["ip6tables -S "+chain] = 1, said
 			}
-			foreign, _, note := readIP6(r, 3389, tt.ufw)
+			foreign, _, inputNote, note := readIP6(r, 3389, tt.ufw)
+			if inputNote != "" {
+				t.Errorf("input note = %q, want none: INPUT was read", inputNote)
+			}
 			if !slices.Equal(foreign, tt.want) {
 				t.Errorf("foreign = %q, want %q", foreign, tt.want)
 			}
@@ -2457,7 +2466,7 @@ func withoutProbes(calls []string) []string {
 func TestReadIP6NoteQuotesTheTool(t *testing.T) {
 	const said = "ip6tables v1.8.10 (nf_tables): Could not fetch rule set generation id: Address family not supported by protocol"
 	r := &recordingRunner{onPath: map[string]bool{backendIP6: true}, exit: map[string]int{"ip6tables -S INPUT": 1}, stderr: map[string]string{"ip6tables -S INPUT": said + "\n"}}
-	_, _, note := readIP6(r, 3389, false)
+	_, _, note, _ := readIP6(r, 3389, false)
 	if !strings.Contains(note, "Address family not supported by protocol") {
 		t.Errorf("note = %q, want it to quote the tool's stderr", note)
 	}

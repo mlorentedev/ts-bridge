@@ -275,8 +275,10 @@ type firewallRead struct {
 	v6Foreign []string
 	v6Note    string
 	// chainUnread says why a chain INPUT jumps to could not be read: an
-	// unknown, not a clear, exposure read (#762).
-	chainUnread string
+	// unknown, not a clear, exposure read (#762). v6ChainUnread is the same
+	// for ip6tables (#763); v6Note stays for an INPUT that could not be read.
+	chainUnread   string
+	v6ChainUnread string
 	// inputOpen means iptables' INPUT policy is ACCEPT: every port is open on
 	// every interface, so the tailscale0 scope restricts nothing (#691). An
 	// active ufw writes it from its incoming default (#735). See policyRead.
@@ -315,7 +317,7 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 	}
 	read := readLinuxFirewallV4(r, port)
 	if r.Elevated() {
-		read.v6Foreign, read.v6Open, read.v6Note = readIP6(r, port, read.backend == backendUFW)
+		read.v6Foreign, read.v6Open, read.v6Note, read.v6ChainUnread = readIP6(r, port, read.backend == backendUFW)
 	}
 	return read
 }
@@ -323,18 +325,19 @@ func readLinuxFirewall(r Runner, port int) firewallRead {
 // readIP6 lists the unscoped allows for port in ip6tables' INPUT and the
 // chains it jumps to (#720), and says whether INPUT's policy is ACCEPT (#733).
 // setup never writes a v6 rule, so every one of them is the operator's to
-// delete.
-func readIP6(r Runner, port int, ufw bool) (foreign []string, open bool, note string) {
+// delete. note says why INPUT could not be read; chains, why a chain it jumps
+// to could not be (#763).
+func readIP6(r Runner, port int, ufw bool) (foreign []string, open bool, note, chains string) {
 	if _, err := r.LookPath(backendIP6); err != nil {
-		return nil, false, ""
+		return nil, false, "", ""
 	}
 	out, err := r.Output(backendIP6, "-S", iptInput)
 	if err != nil {
-		return nil, false, fmt.Sprintf("%s -S %s: %v%s", backendIP6, iptInput, err, toolSaid(err))
+		return nil, false, fmt.Sprintf("%s -S %s: %v%s", backendIP6, iptInput, err, toolSaid(err)), ""
 	}
 	skip := func(chain string) bool { return ufw && strings.HasPrefix(chain, ufw6Prefix) }
-	foreign, note = iptWalk(r, chainWalk{tool: backendIP6, skip: skip, exposed: ip6Exposed}, iptRules(string(out)), port)
-	return foreign, iptPolicyAccept(string(out)), note
+	foreign, chains = iptWalk(r, chainWalk{tool: backendIP6, skip: skip, exposed: ip6Exposed}, iptRules(string(out)), port)
+	return foreign, iptPolicyAccept(string(out)), "", chains
 }
 
 // chainWalk says what iptWalk reads and scores: the tool, the chains it leaves
@@ -518,9 +521,21 @@ func linuxFirewallOK(fw firewallRead) bool {
 }
 
 // partlyUnread reports a read that left part of the firewall unknown: the
-// INPUT policy under a ufw decision (#735), or a chain INPUT jumps to (#762).
+// INPUT policy under a ufw decision (#735), or a chain INPUT jumps to, in
+// iptables (#762) or ip6tables (#763).
 func partlyUnread(fw firewallRead) bool {
-	return fw.policyUnread != "" || fw.chainUnread != ""
+	return fw.policyUnread != "" || chainsUnread(fw) != ""
+}
+
+// chainsUnread joins why chains INPUT jumps to could not be read, v4 and v6.
+func chainsUnread(fw firewallRead) string {
+	notes := make([]string, 0, 2)
+	for _, n := range []string{fw.chainUnread, fw.v6ChainUnread} {
+		if n != "" {
+			notes = append(notes, n)
+		}
+	}
+	return strings.Join(notes, "; ")
 }
 
 // policyRead reports whether the INPUT policies decide the host's exposure:
@@ -627,10 +642,11 @@ func withV6Policy(read firewallRead, step SetupStep) SetupStep {
 // admits is unknown, so a step that read ok, or that setup repaired, cannot
 // claim the port is held to the tailnet (#762, #764 review).
 func withChains(read firewallRead, step SetupStep, port int) SetupStep {
-	if read.chainUnread == "" {
+	unread := chainsUnread(read)
+	if unread == "" {
 		return step
 	}
-	step.Message += "; a chain INPUT jumps to was not read: " + read.chainUnread
+	step.Message += "; a chain INPUT jumps to was not read: " + unread
 	if step.Outcome != OutcomeOK && step.Outcome != OutcomeChanged {
 		return step
 	}
