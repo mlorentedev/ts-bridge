@@ -176,13 +176,18 @@ func TestSetupSSHKeepsTheOperatorsOwnAllow(t *testing.T) {
 	iptables := map[string]bool{"systemctl": true, "iptables": true, "sshd": true}
 	ownRule := "-A INPUT -p tcp -m tcp --dport 22 -j ACCEPT\n"
 	tests := []struct {
-		name   string
-		runner *recordingRunner
+		name    string
+		runner  *recordingRunner
+		wantAdd string
 	}{
 		{"ufw allow 22/tcp", &recordingRunner{elevated: true, onPath: sshOnPath,
-			output: sshUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 22/tcp\n" + ufwSSHAllow + "\n"})}},
+			output: sshUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 22/tcp\n" + ufwSSHAllow + "\n"})}, ""},
 		{"two copies in INPUT", &recordingRunner{elevated: true, onPath: iptables,
-			output: sshUp(map[string]string{iptRead: iptEmpty + iptScopedSSH + ownRule + ownRule, iptChain: tsInputDefault})}},
+			output: sshUp(map[string]string{iptRead: iptEmpty + iptScopedSSH + ownRule + ownRule, iptChain: tsInputDefault})}, ""},
+		// HOST-007 review: the operator's allow alone still gets the scoped rule added beside it.
+		{"ufw allow 22/tcp and no scoped rule", &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 22/tcp\n"})},
+			"ufw allow in on tailscale0 to any port 22 proto tcp"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -194,6 +199,9 @@ func TestSetupSSHKeepsTheOperatorsOwnAllow(t *testing.T) {
 			}
 			if fw := got.Steps[1]; fw.Outcome != OutcomeManual || !strings.Contains(fw.Message, "22") {
 				t.Errorf("firewall step = %s %q, want manual naming the rule", fw.Outcome, fw.Message)
+			}
+			if tt.wantAdd != "" && !slices.Contains(ran(tt.runner), tt.wantAdd) {
+				t.Errorf("ran %q, want the scoped rule added: %q", ran(tt.runner), tt.wantAdd)
 			}
 		})
 	}
@@ -236,6 +244,12 @@ func TestCheckSSH(t *testing.T) {
 		{"no systemctl: unread, never claimed off", sshOnly, &recordingRunner{onPath: map[string]bool{"sshd": true}, output: map[string]string{"tailscale ip -4": "100.64.0.5\n"}},
 			[]string{"Tailscale IP=ok", "SSH server=unverified", sshFwName + "=unverified"},
 			[]Service{{Kind: ServiceSSH, Port: 22, Unread: true}},
+			CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true}},
+		// HOST-007 review: the operator's unscoped allow is reported, not owned, and the port is not tailnet-only.
+		{"an operator-owned unscoped allow: firewall_ok false, manual", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(map[string]string{ufwAdded: ufwAddedHeader + "ufw allow 22/tcp\n" + ufwSSHAllow + "\n"})},
+			[]string{"Tailscale IP=ok", "SSH server=ok", sshFwName + "=manual"},
+			[]Service{{Kind: ServiceSSH, Port: 22, Enabled: true, Active: &yes}},
 			CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true}},
 		{"not installed: manual, with the install named", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
 			output: sshUp(map[string]string{sshIsEnabled: "not-found\n", sshdIsEnabled: "not-found\n"}), exit: map[string]int{sshIsEnabled: 4, sshdIsEnabled: 4}},
