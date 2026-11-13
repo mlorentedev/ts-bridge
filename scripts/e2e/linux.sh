@@ -269,6 +269,12 @@ ok "v4 negated allow as the only allow: check says manual" -- 'outcomes check "$
 ok "v4 negated allow as the only allow: setup adds the scoped rule, reports manual, leaves it" -- 'outcomes setup "$C" | fwstep manual && iptables -S INPUT | grep -qx -- "$SCOPED" && iptables -S INPUT | grep -qx -- "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT"'
 iptables -D INPUT -p tcp ! --dport 22 -j ACCEPT
 ok "v4 negated allow removed again: check is ok" -- 'outcomes check "$C" | fwstep ok'
+# A source port is the client's choice, so a source-port-only allow opens the port too (#757).
+iptables -A INPUT -p tcp --sport 1024:65535 -j ACCEPT
+ok "v4 source-port allow: check says manual" -- 'outcomes check "$C" | fwstep manual'
+ok "v4 source-port allow: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"
+iptables -D INPUT -p tcp --sport 1024:65535 -j ACCEPT
+ok "v4 source-port allow removed: check is ok again" -- 'outcomes check "$C" | fwstep ok'
 iptables -A INPUT ! -i lo -p tcp -j ACCEPT
 ok "v4 allow off loopback: check says manual" -- 'outcomes check "$C" | fwstep manual'
 ok "v4 allow off loopback: check does not report firewall_ok" -- "outcomes check $C | json 'not j[\"services\"][0][\"firewall_ok\"]'"

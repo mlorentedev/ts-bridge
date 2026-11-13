@@ -13,7 +13,7 @@ owner: manu
 
 - [x] AC1 (v4 negated, `-p tcp -j ACCEPT`, `-j ACCEPT` → `manual`, rule named, `firewall_ok` false, SSH caution in the fix, nothing deleted) -> commits `18b6154` (red: 9 failures on the old code), `8ece357`; tests `TestExposureShapes`, `TestReadIptablesUnscoped/a_port-less_accept_is_foreign`, `.../an_accept_for_every_port_but_SSH_is_foreign`, `TestSetupForLinux/iptables,_an_accept_for_every_port:...(#736)` (appends the scoped rule, deletes nothing), `TestCheckForLinux/iptables,_an_accept_for_every_port_but_SSH:_manual_(#736)` (`FirewallOK` false).
 - [x] AC2 (v6 same shapes) -> `TestExposureShapes` (both reads per row), `TestIP6Exposure/a_port-less_v6_accept`, `.../a_v6_accept_for_every_port_but_SSH` (fix names the `ip6tables -D` and the SSH caution).
-- [x] AC3 (not reported: `! --dport 3389`, `! --dports 3000:4000`, mixed negated dport + positive sport, `--sport` only, DROP, UDP, `-i lo`, `-i eth0`, `-i tailscale0`, `-s` prefix, conntrack-only, a rule outside INPUT) -> the `false` rows of `TestExposureShapes`; every pre-existing step row unchanged.
+- [x] AC3 (not reported: `! --dport 3389`, `! --dports 3000:4000`, `--dport 22` with a negated source port, DROP, UDP, `-i lo`, `-i eth0`, `-i tailscale0`, `-s` prefix, conntrack-only, a rule outside INPUT) -> the `false` rows of `TestExposureShapes`. Two pre-existing rows change on purpose, as Decisions records: `TestReadIptablesUnscoped`'s port-less accept (no longer the operator's posture: foreign, not `firewall_ok`) and `TestIP6Exposure`'s port-less v6 accept (`ok` -> `manual`). AC3's "existing step outcomes are unchanged" is read as scoped to the shapes it lists. A source-port-only TCP allow is reported since #757 (see the #757 section).
 - [x] AC4 (e2e) -> `make e2e-linux` at `8b93885` (round-4 head before this record), 108 pass, 0 fail, on the Lima Ubuntu guest, run 2026-11-12 11:23Z. The 15 #736 cases: v4 `! --dport 22` beside the scoped rule (manual, not `firewall_ok`, left in place, ok once removed); the same rule as the only allow (check manual; setup adds the scoped rule, reports manual, leaves it); v4 `! -i lo -p tcp -j ACCEPT` (manual, not `firewall_ok`, ok once removed); v6 `-p tcp -j ACCEPT` (manual with the SSH caution, not `firewall_ok`, left in place, ok once removed). An earlier run at `f8ac37b` gave 102/0 before rounds 2 and 3 added cases.
 
 ## Test status
@@ -27,7 +27,7 @@ owner: manu
 
 - `iptablesDecide` is unchanged: it already counts a port-less ACCEPT as admitting the port; only the exposure reads were blind.
 - v4 scope: `iptHasScope` treats any `!` as a scope, which hid `! --dport 22`. The exposure read uses `iptScopedAllow`, where a `!` before a port flag negates the port, not the scope. The deny path keeps `iptHasScope`.
-- Source ports: clients connect from ephemeral ports, so beside a negated destination port a source-port match does not narrow (`! --dport 22 --sport 1024:65535` is reported, review F2). With no destination match, only an all-negated source match (`! --sport 22`) is reported; `--sport 22` alone is not.
+- Source ports: clients connect from ephemeral ports, so beside a negated destination port a source-port match does not narrow (`! --dport 22 --sport 1024:65535` is reported, review F2). With no destination match, the rule was first reported only when every source match was negated (`! --sport 22`); since #757 any source-port-only TCP allow is reported, `--sport 22` included, as a port-less one.
 - A portless unscoped allow no longer counts as the scoped rule, so `setup` appends `-i tailscale0` beside it (review F4; proposal and ADR-017 say so).
 - Removing a rule with no destination port can close SSH, so both fixes (v4 `foreignFix`, v6 `withIP6`) name the loopback, replies and SSH rules to add first; the list is shared with #691's policy fix as `keepOpenFirst`.
 - Residual (#743, "fix(host): report a port-less allow under a negated scope as exposing the port", widened by comment on 2026-11-12): a negated non-loopback scope is not reported on v4. Two mechanisms are involved. For a port-less rule (`! -i tailscale0 -j ACCEPT`), `iptPortlessCovers` reads the negation as an unmodelled narrowing, so neither read reports it. For a port-bearing rule (`--dport 3389 ! -s 100.64.0.0/10`), `iptScopedAllow` counts the negated scope as the operator's, so v4 does not report it, while v6 does. With the scoped rule beside it, a v4 host then reads `ok` and `firewall_ok: true`. A negated loopback scope (`! -i lo`) is reported on both reads (round-2 F1).
@@ -59,7 +59,7 @@ owner: manu
 - Question (AC4): re-run at round-4 head, see AC4.
 - Question (#743): its title is recorded in the residual line above.
 
-## Spec review round 4 (nan/deepseek-v4-flash, FAIL at 6093ab9; this `review.md`)
+## Spec review round 4 (nan/deepseek-v4-flash, FAIL at 6093ab9; kept as `review-round4.md`)
 
 - Major REAL, a positive source-port match reads as narrowing (`--sport 1:65535` or `1024:65535` beside the scoped rule reads `ok`): ticketed as #757 by the owner's decision, not fixed here. The fix changes AC3's contract clause, which would need a fifth round; the owner chose to land this change and track the gap. Until #757 lands, `host check` can report `ok` on a host that admits the port through a positive source-port range.
 - Major REAL, v4 reads a negated scope as the operator's scope: deferred to #743 (open), as the review itself disposes. Pre-existing, not widened here.
@@ -74,7 +74,26 @@ Merging master brought #720's jumped-chain v6 walk, which pinned a port-less acc
 
 PR review (CodeRabbit, after the merge with #720): two findings applied, red first. A v6 jump for every port but another (`-p tcp ! --dport 22 -j wide`) is now followed (`TestIP6Jumps/a_jump_for_every_port_but_SSH`; `! --dport 3389` is not); the merge had joined #720's jump walk, which only followed jumps naming the port, to this change's negated-port reading. The v6 delete fix now keeps ICMPv6 open first, as #733's policy fix does. The third finding (negated `-i` on v6) is #743. The e2e was not re-run for these: they change which v6 chains are walked and the fix text, which the unit rows pin, and the e2e's `SSH open first` assertion still holds.
 
-This spec does not archive on this `review.md` (FAIL). It archives after #757 changes AC3 and a review of the new contract passes.
+This spec did not archive on the round 4 review (FAIL); it archives after #757 changes AC3 and a review of the new contract passes.
+
+## #757: the round 4 Major, fixed after #742 merged (PR #759)
+
+The owner chose to report every source-port-only allow, `--sport 22` included. Contract changed: the "What" bullet for a rule with no destination port and AC3 (which listed `--sport`-only rules as not reported, contradicting the `! --sport 22` row); `features.json` f1's behavior follows.
+
+- Code: `iptExposes` sends a rule with no destination port match to `iptPortlessCovers`, and `iptPortlessToken` models `--sport`/`--sports` (negated or not) and `-m multiport` as narrowing nothing. `iptExcludesOthers` keeps only its destination branch. `iptMatchesPort`, and so `iptablesDecide`, is unchanged.
+- TDD: bc3de59 fails 7 subtests on the old code: `TestExposureShapes` rows `--sport 22`, `--sport 1:65535`, `--sport 1024:65535`, `-m multiport --sports 1024:65535` (each `true` on v4 and v6), `TestIP6Jumps/a_jump_for_every_source_port`, and two `TestCheckForLinux` step rows (`--sport 1024:65535` beside the scoped rule, and as the only allow: `manual`). Rows that stay `false` and passed on arrival: `--sport 22` with `-m state --state ESTABLISHED` or `-m conntrack --ctstate RELATED,ESTABLISHED`, UDP `--sport 53`, and `-i lo` with a source port. ddd7e21 makes all pass.
+- `go test -race ./...`: ok. `golangci-lint run`: 0 issues on darwin and `GOOS=linux`.
+- `make e2e-linux` at ddd7e21: 129 pass, 0 fail. New: v4 `--sport 1024:65535` beside the scoped rule reads `manual`, not `firewall_ok`, and `ok` once removed.
+- Known over-report, unchanged here: an allow held to replies that names a destination port (`--dport 3389 --ctstate RELATED,ESTABLISHED`) is still reported; #758.
+
+## Spec review round 5 (nan/deepseek-v4-flash, PASS at dcea7d4; this `review.md`)
+
+- Minor REAL, "every pre-existing step row unchanged" contradicts two deliberate flips: applied, the AC3 evidence line now names both rows.
+- Minor REAL, AC1's `check` leg has a step row only for `! --dport 22`: applied, `TestCheckForLinux` rows for a bare `-j ACCEPT` and a `-p tcp -j ACCEPT` beside the scoped rule (both `manual`; they passed on arrival, being guards of the shared path).
+- Minor REAL, AC3's "existing step outcomes are unchanged" reads as refuted: applied as a reading note on the AC3 evidence line; no contract edit, as the review advises.
+- Minor THEORETICAL, `iptExcludes` keeps a disjunct unreachable from its only caller: not changed here, so the landed code is the reviewed code; folded into #758, which rewrites this predicate's port-bearing branch.
+- Minor REAL, PR #759's body says the e2e is running and has no triage yet: applied on the PR (body and `## Review triage` comment).
+- Question, AC4 not reproducible in the review window: the evidence is the recorded run, 129 pass, 0 fail at ddd7e21; dcea7d4 adds only spec text, and this round's follow-up adds tests only.
 
 ## Promotion candidates
 
@@ -84,7 +103,7 @@ This spec does not archive on this `review.md` (FAIL). It archives after #757 ch
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BUG-736-negated-portless-exposure/` -> `specs/archive/BUG-736-negated-portless-exposure/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BUG-736-negated-portless-exposure/` -> `specs/archive/BUG-736-negated-portless-exposure/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
