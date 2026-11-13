@@ -59,7 +59,7 @@ owner: manu
 - Question (AC4): re-run at round-4 head, see AC4.
 - Question (#743): its title is recorded in the residual line above.
 
-## Spec review round 4 (nan/deepseek-v4-flash, FAIL at 6093ab9; this `review.md`)
+## Spec review round 4 (nan/deepseek-v4-flash, FAIL at 6093ab9; kept as `review-round4.md`)
 
 - Major REAL, a positive source-port match reads as narrowing (`--sport 1:65535` or `1024:65535` beside the scoped rule reads `ok`): ticketed as #757 by the owner's decision, not fixed here. The fix changes AC3's contract clause, which would need a fifth round; the owner chose to land this change and track the gap. Until #757 lands, `host check` can report `ok` on a host that admits the port through a positive source-port range.
 - Major REAL, v4 reads a negated scope as the operator's scope: deferred to #743 (open), as the review itself disposes. Pre-existing, not widened here.
@@ -74,7 +74,17 @@ Merging master brought #720's jumped-chain v6 walk, which pinned a port-less acc
 
 PR review (CodeRabbit, after the merge with #720): two findings applied, red first. A v6 jump for every port but another (`-p tcp ! --dport 22 -j wide`) is now followed (`TestIP6Jumps/a_jump_for_every_port_but_SSH`; `! --dport 3389` is not); the merge had joined #720's jump walk, which only followed jumps naming the port, to this change's negated-port reading. The v6 delete fix now keeps ICMPv6 open first, as #733's policy fix does. The third finding (negated `-i` on v6) is #743. The e2e was not re-run for these: they change which v6 chains are walked and the fix text, which the unit rows pin, and the e2e's `SSH open first` assertion still holds.
 
-This spec does not archive on this `review.md` (FAIL). It archives after #757 changes AC3 and a review of the new contract passes.
+This spec did not archive on the round 4 review (FAIL); it archives after #757 changes AC3 and a review of the new contract passes.
+
+## #757: the round 4 Major, fixed after #742 merged (PR #759)
+
+The owner chose to report every source-port-only allow, `--sport 22` included. Contract changed: the "What" bullet for a rule with no destination port and AC3 (which listed `--sport`-only rules as not reported, contradicting the `! --sport 22` row); `features.json` f1's behavior follows.
+
+- Code: `iptExposes` sends a rule with no destination port match to `iptPortlessCovers`, and `iptPortlessToken` models `--sport`/`--sports` (negated or not) and `-m multiport` as narrowing nothing. `iptExcludesOthers` keeps only its destination branch. `iptMatchesPort`, and so `iptablesDecide`, is unchanged.
+- TDD: bc3de59 fails 7 subtests on the old code: `TestExposureShapes` rows `--sport 22`, `--sport 1:65535`, `--sport 1024:65535`, `-m multiport --sports 1024:65535` (each `true` on v4 and v6), `TestIP6Jumps/a_jump_for_every_source_port`, and two `TestCheckForLinux` step rows (`--sport 1024:65535` beside the scoped rule, and as the only allow: `manual`). Rows that stay `false` and passed on arrival: `--sport 22` with `-m state --state ESTABLISHED` or `-m conntrack --ctstate RELATED,ESTABLISHED`, UDP `--sport 53`, and `-i lo` with a source port. ddd7e21 makes all pass.
+- `go test -race ./...`: ok. `golangci-lint run`: 0 issues on darwin and `GOOS=linux`.
+- `make e2e-linux` at ddd7e21: 129 pass, 0 fail. New: v4 `--sport 1024:65535` beside the scoped rule reads `manual`, not `firewall_ok`, and `ok` once removed.
+- Known over-report, unchanged here: an allow held to replies that names a destination port (`--dport 3389 --ctstate RELATED,ESTABLISHED`) is still reported; #758.
 
 ## Promotion candidates
 
