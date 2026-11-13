@@ -1,0 +1,44 @@
+[
+  {
+    "id": "HOST-007-ssh-service-linux-f1",
+    "behavior": "AC1: linux loads kind ssh, windows still rejects it citing #521, and the commands wire both",
+    "verification": "go test ./internal/host/ ./cmd/cli/ -run 'TestLoadFile_OSCapability|TestLoadServeFile|TestHostCmd_ConfigSSHOnLinux|TestHostSetupCmd_ConfigOSCapability' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC1"
+  },
+  {
+    "id": "HOST-007-ssh-service-linux-f2",
+    "behavior": "AC2+AC3+AC8: setup/check read the unit (ssh, else sshd, socket credited), act only on a difference, mutate nothing in check, and leave an rdp or default host unchanged",
+    "verification": "go test ./internal/host/ -run 'TestReadSSH|TestSetupSSH|TestCheckSSH' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC2, AC3, AC8"
+  },
+  {
+    "id": "HOST-007-ssh-service-linux-f3",
+    "behavior": "AC6: setup never deletes the operator's unscoped allow for port 22",
+    "verification": "go test ./internal/host/ -run 'TestSetupSSHKeepsTheOperatorsOwnAllow' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC6"
+  },
+  {
+    "id": "HOST-007-ssh-service-linux-f4",
+    "behavior": "AC7: a declared non-default ssh port is compared with sshd -T and never written",
+    "verification": "go test ./internal/host/ -run 'TestSSHPort' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC7"
+  },
+  {
+    "id": "HOST-007-ssh-service-linux-f5",
+    "behavior": "AC4+AC5: services[] lists ssh, and the text output builds one line per service",
+    "verification": "go test ./cmd/cli/ -run 'TestCheckJSON_ListsSSHBesideRDP|TestPrintCheckText|TestPrintSetupSummary_NoRDPPort' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC4, AC5"
+  },
+  {
+    "id": "HOST-007-ssh-service-linux-f6",
+    "behavior": "e2e on the Linux VM: an ssh-only host file converges and a second setup changes nothing",
+    "verification": "make e2e-linux",
+    "state": "pending",
+    "evidence": "case added to scripts/e2e/linux.sh, not run by the author"
+  }
+]
