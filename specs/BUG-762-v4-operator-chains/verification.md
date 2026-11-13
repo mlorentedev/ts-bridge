@@ -22,7 +22,8 @@ owner: manu
   - `ts-input` is not walked: every existing iptables row records exactly one `iptables -S ts-input`, and removing the skip turns 83 tests red.
   - ufw's chains are not walked: the ufw host rows record no `iptables -S ufw-*`, and removing the skip turns 22 tests red.
   - The loop row ends, through `fw-open` → `fw-deep` → `fw-open`.
-- **AC3.** Covered by the rows "an operator chain that cannot be read: unverified" (check), "the scoped rule in place and a chain that cannot be read: unverified" (setup) and "a jump to a missing chain: ok". Each of these is red if `chainUnread` is dropped from `linuxFirewallOK` or `withChains` is short-circuited.
+- **AC3.** Covered by the rows "an operator chain that cannot be read: unverified" (check), "the scoped rule in place and a chain that cannot be read: unverified" (setup) and "a jump to a missing chain: ok". Each of these is red if `chainUnread` is dropped from `linuxFirewallOK` or `withChains` is short-circuited. On a ufw host, the rows "ufw host, an operator chain that cannot be read: unverified (#762 review)" (check) and "ufw, the scoped allow in place and an operator chain that cannot be read: unverified (#762 review)" (setup) cover it. Both are red if `withUFWIptables` drops `chainUnread`.
+- **AC5.** "an allow two jumps deep, through a loop: manual" covers both the nesting and the loop. "a jump from any address is a jump for every packet: manual (#762 review)" records the `iptables -S fw-open` read and the exposure, and it is red if `iptNarrowed` loses `0.0.0.0/0`.
 - **AC4.** `make e2e-linux` on c4d8077 gave 135 pass, 0 fail. The code is the same as in 9414418; the commits after it change docs and the spec only. The v4 jumped-chain cases all passed:
   - a tailnet accept is ok;
   - an unscoped allow is `manual`, its message names `-A tsbe2e4 -p tcp -m tcp --dport 3389 -j ACCEPT`, and `firewall_ok` is false;
@@ -38,6 +39,17 @@ owner: manu
 ## Decision side
 
 `iptablesDecide` is unchanged. The row "a tailnet accept in an operator chain is no rule for the port: changed (#762)" pins today's behaviour, as the proposal states.
+
+## Review dispositions
+
+Round 1 (nan/deepseek-v4-flash, FAIL, at a4e0f41; kept as `review-round1.md`):
+
+- **Blocker REAL, `chainUnread` lost on a ufw host: applied.** `withUFWIptables` now carries it. The ufw-host check and setup rows were red first.
+- **Major REAL, a `-s 0.0.0.0/0` jump not followed: applied.** `iptNarrowed` reads `0.0.0.0/0` as it reads `::/0`. The check row was red first. No v4 row was added to `TestIP6Jumps`: that test drives the v6 read, and the check row already records the chain read.
+- **Minor REAL, v6 names on shared helpers: applied.** They are renamed `iptVerdicts`, `iptNarrowed`, `iptJumpMatch`, `iptJumpDropped`, `iptJumpCovers` and `iptJumpScopeFlags`. `ip6Exposed` stays, since only v6 uses it.
+- **Minor REAL, Closing boxes stale: applied.** gosec is not installed locally, and the CI `security` job runs it. The task now says so instead of claiming a local run.
+- **Minor REAL, a duplicate `[AC2]`: applied.** The nested and loop criterion is now AC5, and it also covers the any-address jump.
+- **e2e not re-runnable on a dirty guest: applied.** `iptables -N tsbe2e4` falls back to flushing the chain when it exists.
 
 ## Promotion candidates
 

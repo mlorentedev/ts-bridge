@@ -20,9 +20,11 @@ owner: manu
 - [x] Docs: parity doc Linux firewall row, runbook rows (ADR-017 unchanged: no new outcome or doctrine)
 - [x] File the v6 unreadable-chain follow-up (#763)
 
+- [x] Review round 1 fixes: `chainUnread` survives the ufw fold, `0.0.0.0/0` jumps followed, shared helpers renamed `ipt*`, rows for each
+
 ## Closing
 
-- [ ] `go test -race ./...`, `golangci-lint run`, `gosec ./...`
-- [ ] `make e2e-linux`
+- [x] `go test -race ./...`, `golangci-lint run` (gosec: CI `security` job; not installed locally)
+- [x] `make e2e-linux`
 - [ ] features.json replays; verification.md filled; spec review committed
-- [ ] PR with `Closes #762`
+- [x] PR with `Closes #762` (#764)

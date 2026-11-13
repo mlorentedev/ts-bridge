@@ -306,8 +306,8 @@ func iptWalk(r Runner, w chainWalk, input string, port int) (foreign []string, n
 	return foreign, strings.Join(notes, "; ")
 }
 
-// ip6Verdicts are the targets that end a rule; none of them is a chain.
-var ip6Verdicts = []string{iptAccept, "DROP", "REJECT", "RETURN", "QUEUE", "NFQUEUE"}
+// iptVerdicts are the targets that end a rule; none of them is a chain.
+var iptVerdicts = []string{iptAccept, "DROP", "REJECT", "RETURN", "QUEUE", "NFQUEUE"}
 
 // ufw6Prefix names the chains ufw writes for IPv6. Where the firewall is read
 // through ufw, `ufw show added` already reports an allow there, with a fix ufw
@@ -337,18 +337,18 @@ func iptJump(f []string, chain string, port int) string {
 		return ""
 	}
 	target := cmp.Or(iptFlag(f, "-j"), iptFlag(f, "-g"))
-	if target == "" || slices.Contains(ip6Verdicts, target) {
+	if target == "" || slices.Contains(iptVerdicts, target) {
 		return ""
 	}
-	return iptIfTarget(ip6JumpCovers(f, port) && !ip6Narrowed(f) && !iptLoopback(f), target)
+	return iptIfTarget(iptJumpCovers(f, port) && !iptNarrowed(f) && !iptLoopback(f), target)
 }
 
-// ip6JumpCovers reports whether a jump's match, scopes aside, takes every new
+// iptJumpCovers reports whether a jump's match, scopes aside, takes every new
 // TCP connection on port: a port match, if any, names it, and nothing else
 // narrows it.
-func ip6JumpCovers(f []string, port int) bool {
+func iptJumpCovers(f []string, port int) bool {
 	ported := slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) })
-	return iptPortlessCovers(ip6Match(f)) && (!ported || iptPortCovers(f, port) || iptExcludesOthers(f, port))
+	return iptPortlessCovers(iptJumpMatch(f)) && (!ported || iptPortCovers(f, port) || iptExcludesOthers(f, port))
 }
 
 // iptIfTarget is target when ok, else "".
@@ -359,18 +359,18 @@ func iptIfTarget(ok bool, target string) string {
 	return ""
 }
 
-// ip6ScopeFlags are the scopes ip6Match drops from a jump's match.
-var ip6ScopeFlags = []string{"-i", "-s", "-d"}
+// iptJumpScopeFlags are the scopes iptJumpMatch drops from a jump's match.
+var iptJumpScopeFlags = []string{"-i", "-s", "-d"}
 
-// ip6Match is a jump rule's match without its -i, -s and -d scopes, negated or
-// not, which ip6Narrowed and iptLoopback judge, and without its destination
+// iptJumpMatch is a jump rule's match without its -i, -s and -d scopes, negated or
+// not, which iptNarrowed and iptLoopback judge, and without its destination
 // port match, which iptPortCovers judges; -g reads as -j, the target flag
 // iptPortlessCovers knows. Any qualifier left that it does not model (a
 // conntrack state, a mark) narrows the jump, so the chain is not followed.
-func ip6Match(f []string) []string {
+func iptJumpMatch(f []string) []string {
 	var out []string
 	for i := 0; i < len(f); i++ {
-		if n := ip6Dropped(f[i:]); n > 0 {
+		if n := iptJumpDropped(f[i:]); n > 0 {
 			i += n - 1
 			continue
 		}
@@ -379,16 +379,16 @@ func ip6Match(f []string) []string {
 	return out
 }
 
-// ip6Dropped is how many fields at the start of f ip6Match drops: a scope or a
+// iptJumpDropped is how many fields at the start of f iptJumpMatch drops: a scope or a
 // destination port match, negated or not; 0 keeps the field.
-func ip6Dropped(f []string) int {
-	if len(f) > 2 && f[0] == "!" && (slices.Contains(ip6ScopeFlags, f[1]) || slices.Contains(iptDestPortFlags, f[1])) {
+func iptJumpDropped(f []string) int {
+	if len(f) > 2 && f[0] == "!" && (slices.Contains(iptJumpScopeFlags, f[1]) || slices.Contains(iptDestPortFlags, f[1])) {
 		return 3
 	}
 	if len(f) < 2 {
 		return 0
 	}
-	dropped := slices.Contains(ip6ScopeFlags, f[0]) || slices.Contains(iptDestPortFlags, f[0]) || (f[0] == "-m" && f[1] == "multiport")
+	dropped := slices.Contains(iptJumpScopeFlags, f[0]) || slices.Contains(iptDestPortFlags, f[0]) || (f[0] == "-m" && f[1] == "multiport")
 	return iptIf(dropped, 2)
 }
 
@@ -401,19 +401,20 @@ func ip6Exposed(input, chain string, port int) []string {
 	var found []string
 	for _, line := range strings.Split(input, "\n") {
 		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
-		if len(f) > 1 && f[0] == "-A" && f[1] == chain && iptFlag(f, "-j") == iptAccept && iptExposes(f, port) && !iptLoopback(f) && !ip6Narrowed(f) {
+		if len(f) > 1 && f[0] == "-A" && f[1] == chain && iptFlag(f, "-j") == iptAccept && iptExposes(f, port) && !iptLoopback(f) && !iptNarrowed(f) {
 			found = append(found, strings.TrimSpace(line))
 		}
 	}
 	return found
 }
 
-// ip6Narrowed reports a rule held to part of the traffic by a plain -i, -s
-// or -d: a negated one, or ::/0, narrows nothing.
-func ip6Narrowed(f []string) bool {
+// iptNarrowed reports a rule held to part of the traffic by a plain -i, -s
+// or -d: a negated one, or an any-address literal (::/0, or 0.0.0.0/0 on the
+// v4 walk, #762 review), narrows nothing.
+func iptNarrowed(f []string) bool {
 	return slices.ContainsFunc([]string{"-i", "-s", "-d"}, func(flag string) bool {
 		v := iptFlag(f, flag)
-		return v != "" && v != "::/0" // iptFlag skips a negated flag
+		return v != "" && v != "::/0" && v != "0.0.0.0/0" // iptFlag skips a negated flag
 	})
 }
 
@@ -626,6 +627,7 @@ func withUFWIptables(read, ipt firewallRead) firewallRead {
 	if !read.ufwInactive && read.state != ruleAbsent && read.reason == "" {
 		read.policyUnread = ipt.policyUnread // ufw decided, but its default is unknown (#735)
 	}
+	read.chainUnread = ipt.chainUnread // a chain INPUT jumps to filters whatever ufw decided (#762 review)
 	read.foreign = append(read.foreign, ipt.foreign...)
 	read.scoped = read.scoped || ipt.scoped
 	// Only a ufw allow of its own makes the copies redundant; an unreadable ufw proves none (#576).
