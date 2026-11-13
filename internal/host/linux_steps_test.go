@@ -1935,6 +1935,15 @@ func TestExposureShapes(t *testing.T) {
 		// does not undo a negated destination port (#736 review F2).
 		{"-A INPUT -p tcp -m tcp ! --dport 22 --sport 1024:65535 -j ACCEPT", true},
 		{"-A INPUT -p tcp -m tcp --dport 22 ! --sport 22 -j ACCEPT", false},
+		// Held to replies, an allow admits no new connection, whatever port it
+		// names; held to new ones, or to all but INVALID, it still does (#758).
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m state --state ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m conntrack ! --ctstate NEW -m tcp --dport 3389 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -m conntrack --ctstate NEW -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -m state --state NEW -j ACCEPT", true},
 		// The client picks its source port, so a source-port match narrows
 		// nothing: the rule reads as a port-less one (#757).
 		{"-A INPUT -p tcp -m tcp --sport 22 -j ACCEPT", true},
