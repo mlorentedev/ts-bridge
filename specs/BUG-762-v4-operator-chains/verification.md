@@ -62,4 +62,5 @@ Round 2 (nan/deepseek-v4-flash, PASS, at afea4e9; this `review.md`):
 
 ## Promotion candidates
 
-None.
+- [x] Lesson for the repo's `docs/lessons/`? no: the one thing learned is that a new `firewallRead` field must also be carried by `withUFWIptables`. It is written as a comment on that function, where the next field gets added.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-017's outcomes already cover `manual` and `unverified`, and this walk applies the v6 doctrine of #720 to v4.

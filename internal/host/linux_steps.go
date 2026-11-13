@@ -624,6 +624,8 @@ func readUFW(r Runner, port int) firewallRead {
 // withUFWIptables folds the iptables read into a ufw read: the copies and
 // unscoped allows it found, the policy ufw wrote (#735), and its state when ufw
 // itself found nothing (#530).
+// A field added to firewallRead by the iptables read must be carried here, or
+// a ufw host never sees it: #762 lost chainUnread this way until review.
 func withUFWIptables(read, ipt firewallRead) firewallRead {
 	read.copies = ipt.copies
 	read.inputOpen = ipt.inputOpen // ufw writes the policy from its incoming default (#735)
