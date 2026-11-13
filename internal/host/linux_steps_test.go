@@ -2018,6 +2018,8 @@ func TestIP6Exposure(t *testing.T) {
 			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
 			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
+		{name: "a v6 accept for every source port", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT\n", want: OutcomeManual,
+			message: "--sport 1024:65535", fix: "ip6tables -D INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first"},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Closed + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
 		// A negated scope or an explicit any prefix still opens the port off
 		// the tailnet (BUG-526 review, finding 1).
