@@ -41,7 +41,7 @@ The decision (`iptablesDecide`) is unchanged. The `TestCheckForLinux` row "iptab
 ## Out of scope
 
 - **Following operator chains in `iptablesDecide`.** It would remove the duplicate described above. It is a separate change, and a riskier one, because setup would then trust a chain it does not own.
-- **The v6 read.** Its walk only notes a chain it cannot read and keeps `firewall_ok` true. That is filed as a follow-up so the two reads converge. This spec does not change v6 behaviour.
+- **The v6 read.** Its walk only notes a chain it cannot read and keeps `firewall_ok` true. That is filed as #763 so the two reads converge. This spec does not change v6 behaviour.
 - **Rule order.** As on v6 and in INPUT, an allow behind an unscoped deny is still listed.
 
 ## Risks / open questions

@@ -11,14 +11,14 @@ owner: manu
 
 ## Implementation
 
-- [ ] Pin the decision side: `TestCheckForLinux` row, a tailnet accept in an operator chain reads `changed` / "No firewall rule found"
-- [ ] [AC1] [AC2] [AC3] Failing rows: `TestCheckForLinux` (port allow and port-less allow in a chain, scoped, narrowed jump, ufw host, unreadable chain), plus a walk-level test (nested chain, loop)
-- [ ] `ip6Walk` → `iptWalk(tool, skip, exposed)`; `ip6Jumps`/`ip6Jump` → `iptJumps`/`iptJump`; v6 call unchanged in behaviour
-- [ ] [AC1] [AC2] v4 walk from `iptablesRead`, ufw flag threaded from `readUFW`; non-INPUT lines appended to `foreign`
-- [ ] [AC3] `chainUnread` on `firewallRead`: noted in the message, `ok` → `unverified`
-- [ ] [AC4] `scripts/e2e/linux.sh`: jumped-chain case
-- [ ] Docs: parity doc Linux firewall row, ADR-017 note
-- [ ] File the v6 unreadable-chain follow-up
+- [x] Pin the decision side: `TestCheckForLinux` row, a tailnet accept in an operator chain reads `changed` / "No firewall rule found"
+- [x] [AC1] [AC2] [AC3] Failing rows: `TestCheckForLinux` (port allow and port-less allow in a chain, scoped, narrowed jump, ufw host, unreadable chain), plus a walk-level test (nested chain, loop)
+- [x] `ip6Walk` → `iptWalk(tool, skip, exposed)`; `ip6Jumps`/`ip6Jump` → `iptJumps`/`iptJump`; v6 call unchanged in behaviour
+- [x] [AC1] [AC2] v4 walk from `iptablesRead`, ufw flag threaded from `readUFW`; non-INPUT lines appended to `foreign`
+- [x] [AC3] `chainUnread` on `firewallRead`: noted in the message, `ok` → `unverified`
+- [x] [AC4] `scripts/e2e/linux.sh`: jumped-chain case
+- [x] Docs: parity doc Linux firewall row, runbook rows (ADR-017 unchanged: no new outcome or doctrine)
+- [x] File the v6 unreadable-chain follow-up (#763)
 
 ## Closing
 
