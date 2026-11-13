@@ -103,7 +103,7 @@ The owner chose to report every source-port-only allow, `--sport 22` included. C
 
 ## Archive checklist
 
-- [ ] `proposal.md` frontmatter set to `status: archived`
-- [ ] Folder moved: `specs/BUG-736-negated-portless-exposure/` -> `specs/archive/BUG-736-negated-portless-exposure/`
+- [x] `proposal.md` frontmatter set to `status: archived`
+- [x] Folder moved: `specs/BUG-736-negated-portless-exposure/` -> `specs/archive/BUG-736-negated-portless-exposure/`
 - [ ] Bitácora board ticket for this spec moved to Done / closed with PR link (ADR-018)
-- [ ] Promotions above executed (if any)
+- [x] Promotions above executed (if any)
