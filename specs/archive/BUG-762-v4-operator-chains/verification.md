@@ -60,6 +60,11 @@ Round 2 (nan/deepseek-v4-flash, PASS, at afea4e9; this `review.md`):
 - **Minor REAL, the Closing box "features.json replays…" is unticked:** recorded here instead, as the review advises, since `tasks.md` is in the contract set. Both `features.json` commands replay and pass, `verification.md` is filled, and the review is committed.
 - **Minor SPECULATIVE, one `iptables -S` per chain with no cap:** declined. It is the trade named in Risks: each chain is read once, and the cost is bounded by the host's own rule set.
 
+After archive, PR #764 review (PR-Agent):
+
+- **REAL, a `-m conntrack --ctstate NEW` jump is not followed, so the read is clear:** applied. `iptJumpMatch` now drops a conntrack or state match that admits NEW (`iptStateDropped`, gated on `!iptRepliesOnly`), because such a match takes every new connection. The fix applies to both walks. The new rows are in `TestIP6Jumps` and `TestCheckForLinux`, and they were red first. A jump held by a qualifier the parser still does not model (a mark, a limit) is not followed, as before. That doctrine question is filed as #766.
+- **THEORETICAL, the e2e case leaves a jump behind on a rerun:** applied. Leftover jumps are deleted before the chain is created.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? no: the one thing learned is that a new `firewallRead` field must also be carried by `withUFWIptables`. It is written as a comment on that function, where the next field gets added.

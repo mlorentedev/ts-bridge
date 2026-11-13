@@ -365,12 +365,15 @@ var iptJumpScopeFlags = []string{"-i", "-s", "-d"}
 // iptJumpMatch is a jump rule's match without its -i, -s and -d scopes, negated or
 // not, which iptNarrowed and iptLoopback judge, and without its destination
 // port match, which iptPortCovers judges; -g reads as -j, the target flag
-// iptPortlessCovers knows. Any qualifier left that it does not model (a
-// conntrack state, a mark) narrows the jump, so the chain is not followed.
+// iptPortlessCovers knows. A conntrack or state match that admits NEW is
+// dropped too: it takes every new connection (#764 review). Any qualifier left
+// that it does not model (a match held to replies, a mark) narrows the jump,
+// so the chain is not followed.
 func iptJumpMatch(f []string) []string {
+	admitsNew := !iptRepliesOnly(f)
 	var out []string
 	for i := 0; i < len(f); i++ {
-		if n := iptJumpDropped(f[i:]); n > 0 {
+		if n := max(iptJumpDropped(f[i:]), iptIf(admitsNew, iptStateDropped(f[i:]))); n > 0 {
 			i += n - 1
 			continue
 		}
@@ -391,6 +394,23 @@ func iptJumpDropped(f []string) int {
 	dropped := slices.Contains(iptJumpScopeFlags, f[0]) || slices.Contains(iptDestPortFlags, f[0]) || (f[0] == "-m" && f[1] == "multiport")
 	return iptIf(dropped, 2)
 }
+
+// iptStateDropped is how many fields at the start of f a conntrack or state
+// match takes, negated or not; 0 for any other field. iptJumpMatch drops them
+// only from a match that admits NEW.
+func iptStateDropped(f []string) int {
+	if len(f) > 2 && f[0] == "!" && slices.Contains(iptStateFlags, f[1]) {
+		return 3
+	}
+	module := len(f) > 1 && f[0] == "-m" && slices.Contains(iptStateModules, f[1])
+	return iptIf(len(f) > 1 && (module || slices.Contains(iptStateFlags, f[0])), 2)
+}
+
+// iptStateModules and iptStateFlags spell a conntrack or state match.
+var (
+	iptStateModules = []string{"conntrack", "state"}
+	iptStateFlags   = []string{"--ctstate", "--state"}
+)
 
 // ip6Exposed lists the v6 allows for the port in chain that are not narrowed:
 // the exposure scan, not setup's rule-shape test. A negated -i/-s/-d or an

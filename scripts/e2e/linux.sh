@@ -282,7 +282,9 @@ iptables -D INPUT -p tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED
 # A v4 chain of the operator's own that INPUT jumps to is read too (#762): a tailnet accept there is
 # fine, and an unscoped allow added inside it is reported under the chain's name, never deleted.
 V4CHAINOPEN='-A tsbe2e4 -p tcp -m tcp --dport 3389 -j ACCEPT'
-iptables -N tsbe2e4 2>/dev/null || iptables -F tsbe2e4 # a run that stopped early leaves the chain
+# A run that stopped early leaves the chain, and maybe its jumps.
+while iptables -D INPUT -j tsbe2e4 2>/dev/null; do :; done
+iptables -N tsbe2e4 2>/dev/null || iptables -F tsbe2e4
 iptables -A tsbe2e4 -i tailscale0 -j ACCEPT
 iptables -A INPUT -j tsbe2e4
 ok "v4 jumped chain, a tailnet accept: check is ok" -- 'outcomes check "$C" | fwstep ok'
