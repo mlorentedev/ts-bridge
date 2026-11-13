@@ -983,6 +983,25 @@ func TestCheckForLinux(t *testing.T) {
 			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
 		},
 		{
+			name:     "iptables, an accept for every source port beside the scoped rule: manual (#757)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "--sport 1024:65535",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
+			name:     "iptables, an accept for every source port is the only allow: manual (#757)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptEmpty + "-A INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "--sport 1024:65535",
+		},
+		{
 			name:     "iptables, an accept off loopback beside the scoped rule: manual (#736)",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT ! -i lo -p tcp -j ACCEPT\n", iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
@@ -1896,7 +1915,16 @@ func TestExposureShapes(t *testing.T) {
 		// does not undo a negated destination port (#736 review F2).
 		{"-A INPUT -p tcp -m tcp ! --dport 22 --sport 1024:65535 -j ACCEPT", true},
 		{"-A INPUT -p tcp -m tcp --dport 22 ! --sport 22 -j ACCEPT", false},
-		{"-A INPUT -p tcp -m tcp --sport 22 -j ACCEPT", false},
+		// The client picks its source port, so a source-port match narrows
+		// nothing: the rule reads as a port-less one (#757).
+		{"-A INPUT -p tcp -m tcp --sport 22 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --sport 1:65535 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m multiport --sports 1024:65535 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --sport 22 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p udp -m udp --sport 53 -j ACCEPT", false},
+		{"-A INPUT -i lo -p tcp -m tcp --sport 1024:65535 -j ACCEPT", false},
 		{"-A INPUT -p tcp -m tcp ! --dport 22 -j DROP", false},
 		{"-A INPUT -p udp -m udp ! --dport 53 -j ACCEPT", false},
 		{"-A INPUT -p udp -j ACCEPT", false},
@@ -2137,6 +2165,8 @@ func TestIP6Jumps(t *testing.T) {
 		{name: "a jump for every port but SSH", input: "-A INPUT -p tcp -m tcp ! --dport 22 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"},
 			want: []string{"-A wide -j ACCEPT"}, reads: []string{"wide"}},
 		{name: "a jump for every port but this one is not followed", input: "-A INPUT -p tcp -m tcp ! --dport 3389 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"}},
+		{name: "a jump for every source port", input: "-A INPUT -p tcp -m tcp --sport 1024:65535 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"},
+			want: []string{"-A wide -j ACCEPT"}, reads: []string{"wide"}},
 		// A port-less accept opens the port in a jumped chain as in INPUT (#736, #753).
 		{name: "a port-less accept in a chain is reported", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j ACCEPT"},
 			want: []string{"-A ts-input -j ACCEPT"}, reads: []string{"ts-input"}},
