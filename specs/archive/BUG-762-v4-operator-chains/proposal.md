@@ -1,7 +1,7 @@
 ---
 id: "BUG-762-v4-operator-chains"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-11-13"
 issue: "mlorentedev/ts-bridge#762"
 tags: [spec, proposal]
