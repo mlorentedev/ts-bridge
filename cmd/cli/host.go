@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -498,9 +497,12 @@ func printSetupSummary(w io.Writer, tsIP string, result host.SetupResult) {
 	if tsIP != "" {
 		fmt.Fprintf(w, "  Tailscale IP: %s\n", tsIP)
 	}
-	fmt.Fprintf(w, "  RDP Port:     %d\n", result.RDPPort)
-	fmt.Fprintln(w)
-	printClientTarget(w, tsIP, result)
+	// An ssh-only host declares no RDP port: no RDP line and no target built from it.
+	if result.RDPPort != 0 {
+		fmt.Fprintf(w, "  RDP Port:     %d\n", result.RDPPort)
+		fmt.Fprintln(w)
+		printClientTarget(w, tsIP, result)
+	}
 	fmt.Fprintln(w)
 }
 
@@ -626,7 +628,9 @@ func printCheckText(w io.Writer, r host.CheckResult) {
 	fmt.Fprintf(w, "  Platform:      %s\n", runtime.GOOS)
 	fmt.Fprintf(w, "  Tailscale:     %s\n", statusStr(r.TailscaleUp))
 	fmt.Fprintf(w, "  Tailscale IP:  %s\n", r.TailscaleIP)
-	fmt.Fprintf(w, "  RDP:           %s\n", rdpLine(r))
+	for _, line := range serviceLines(r) {
+		fmt.Fprintf(w, "  %-15s%s\n", line.label, line.text)
+	}
 	fmt.Fprintf(w, "  Firewall:      %s\n", statusStr(r.FirewallOK))
 	for _, step := range r.Steps {
 		if step.Outcome != host.OutcomeOK {
@@ -642,33 +646,62 @@ func printCheckText(w io.Writer, r host.CheckResult) {
 	fmt.Fprintln(w)
 }
 
+// serviceLine is one declared service's line of the check.
+type serviceLine struct{ label, text string }
+
+// serviceLines builds the check's service lines from services[], so a host
+// that declares only ssh prints no RDP line (#521). A result with no services
+// keeps the RDP line, which then says none is declared.
+func serviceLines(r host.CheckResult) []serviceLine {
+	if len(r.Services) == 0 {
+		return []serviceLine{{"RDP:", rdpLine(r, host.Service{})}}
+	}
+	lines := make([]serviceLine, 0, len(r.Services))
+	for _, svc := range r.Services {
+		text := serviceText(r, svc)
+		if svc.Kind == host.ServiceRDP {
+			text = rdpLine(r, svc)
+		}
+		lines = append(lines, serviceLine{strings.ToUpper(svc.Kind) + ":", text})
+	}
+	return lines
+}
+
 // rdpLine is the RDP line of the check. The legacy RDPPort is set only by an
 // enabled service, so a declared service that is off or unread is named from
 // Services rather than reported as undeclared. It claims "unread" only when a
 // step said so, and blames elevation only when the process lacks it: a service
-// the check read and found off is NOT OK.
-func rdpLine(r host.CheckResult) string {
+// the check read and found off is NOT OK. A zero svc is no declared service.
+func rdpLine(r host.CheckResult, svc host.Service) string {
 	if r.RDPPort > 0 {
 		return fmt.Sprintf("%s (port %d)", statusStr(r.RDPEnabled), r.RDPPort)
 	}
-	i := slices.IndexFunc(r.Services, func(s host.Service) bool { return s.Kind == host.ServiceRDP })
-	if i < 0 {
+	if svc.Kind == "" {
 		return "no service declared"
 	}
+	return serviceText(r, svc)
+}
+
+// serviceText names a declared service the check read. A service is OK when
+// enabled and, where the step could tell, running.
+func serviceText(r host.CheckResult, svc host.Service) string {
 	port := "unknown"
-	if p := r.Services[i].Port; p > 0 {
-		port = strconv.Itoa(p)
+	if svc.Port > 0 {
+		port = strconv.Itoa(svc.Port)
 	}
-	if svc := r.Services[i]; svc.Unread {
+	if svc.Unread {
 		// The cause can be a missing systemctl or a failed port read, which
 		// elevation does not fix; it is only offered as one possibility.
-		line := fmt.Sprintf("unread (rdp, port %s): see the steps below for the cause", port)
+		line := fmt.Sprintf("unread (%s, port %s): see the steps below for the cause", svc.Kind, port)
 		if !r.Elevated {
 			line += "; running as root/administrator may help"
 		}
 		return line
 	}
-	return fmt.Sprintf("%s (rdp, port %s)", statusStr(false), port)
+	if svc.Kind != host.ServiceRDP && svc.Enabled && (svc.Active == nil || *svc.Active) && svc.Port > 0 {
+		return fmt.Sprintf("%s (port %s)", statusStr(true), port)
+	}
+	return fmt.Sprintf("%s (%s, port %s)", statusStr(false), svc.Kind, port)
 }
 
 func checkJSON(r host.CheckResult) ([]byte, error) {

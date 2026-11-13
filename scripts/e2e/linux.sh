@@ -331,6 +331,13 @@ ok "serve: ancestor with a read-only named-user ACL is not refused, and the walk
 rm -rf /var/lib/acl-e2e/state
 setfacl -b /var/lib/acl-e2e
 
+# An ssh-only host file (#521): services[] and the steps hold ssh alone, no xrdp step runs, and the
+# legacy rdp keys stay zero. The unit is read, not guessed, so this holds whether or not sshd is installed.
+printf 'version: 1\nhost:\n  services:\n    - kind: ssh\n' >"$W/ssh.yaml"
+ok "ssh-only: check lists only ssh in services[], with the legacy rdp keys zero" -- 'outcomes check "$W/ssh.yaml" | json "[s[\"kind\"] for s in j[\"services\"]]==[\"ssh\"] and j[\"rdp_port\"]==0 and not j[\"rdp_enabled\"]"'
+ok "ssh-only: check has an SSH server step and no xrdp step" -- 'outcomes check "$W/ssh.yaml" | json "\"SSH server\" in [s[\"name\"] for s in j[\"steps\"]] and \"xrdp service\" not in [s[\"name\"] for s in j[\"steps\"]]"'
+ok "ssh-only: setup has an SSH server step and no xrdp step" -- 'outcomes setup "$W/ssh.yaml" | json "\"SSH server\" in [s[\"name\"] for s in j[\"steps\"]] and \"xrdp service\" not in [s[\"name\"] for s in j[\"steps\"]]"'
+
 run "$B" import e2e "tsb://host-e2e:3389?cp=saas"
 ok "client: import a tsb:// descriptor" -- 'code 0'
 run "$B" import bad "http://nope"

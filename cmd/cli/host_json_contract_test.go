@@ -135,3 +135,26 @@ func TestSetupJSON_DescriptorControlURL(t *testing.T) {
 		})
 	}
 }
+
+// A host declaring ssh beside rdp reports both in services[] while the legacy
+// keys keep describing rdp alone (#521, ADR-017 §3).
+func TestCheckJSON_ListsSSHBesideRDP(t *testing.T) {
+	yes := true
+	r := host.CheckResult{
+		TailscaleIP: "100.64.0.1", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true,
+		Services: []host.Service{
+			{Kind: host.ServiceRDP, Port: 3389, Enabled: true, Active: &yes, FirewallOK: true},
+			{Kind: host.ServiceSSH, Port: 22, Enabled: true, Active: &yes, FirewallOK: true},
+		},
+	}
+	data, err := cmdpkg.CheckJSONForTest(r)
+	m := decode(t, data, err)
+
+	if m["rdp_port"] != float64(3389) || m["rdp_enabled"] != true || m["firewall_ok"] != true {
+		t.Errorf("legacy keys = %v, want rdp on 3389, enabled, firewall_ok", m)
+	}
+	svcs, _ := m["services"].([]any)
+	if len(svcs) != 2 || svcs[1].(map[string]any)["kind"] != "ssh" || svcs[1].(map[string]any)["port"] != float64(22) {
+		t.Errorf("services = %v, want rdp then ssh on 22", m["services"])
+	}
+}
