@@ -2903,3 +2903,25 @@ func TestNFTForeignInput(t *testing.T) {
 		})
 	}
 }
+
+// TestWideAllowFixFromTheRead runs the #745 shapes through the read itself
+// (#770 review): a port list that holds the service port among others is
+// reported, and its fix carries the SSH caution, on v4 and v6 alike.
+func TestWideAllowFixFromTheRead(t *testing.T) {
+	const caution = "keep loopback, replies"
+	for _, rule := range []string{
+		"-A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT",
+		"-A INPUT -p tcp -m multiport --dports 3380:3390 -j ACCEPT",
+		"-A INPUT -p tcp -m tcp --dport 3380:3390 -j ACCEPT",
+	} {
+		v4 := &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptScoped + rule + "\n", iptChain: tsInputNoAccept}}
+		v6 := &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, backendIP6: true},
+			output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: "-P INPUT DROP\n" + rule + "\n"}}
+		for family, r := range map[string]*recordingRunner{"v4": v4, "v6": v6} {
+			step := firewallCheckStep(readLinuxFirewall(r, 3389), 3389)
+			if step.Outcome != OutcomeManual || !strings.Contains(step.Message, rule) || !strings.Contains(step.Fix, caution) {
+				t.Errorf("%s %q: %s %q fix %q, want manual naming the rule with the SSH caution", family, rule, step.Outcome, step.Message, step.Fix)
+			}
+		}
+	}
+}
