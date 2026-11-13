@@ -65,6 +65,12 @@ After archive, PR #764 review (PR-Agent):
 - **REAL, a `-m conntrack --ctstate NEW` jump is not followed, so the read is clear:** applied. `iptJumpMatch` now drops a conntrack or state match that admits NEW (`iptStateDropped`, gated on `!iptRepliesOnly`), because such a match takes every new connection. The fix applies to both walks. The new rows are in `TestIP6Jumps` and `TestCheckForLinux`, and they were red first. A jump held by a qualifier the parser still does not model (a mark, a limit) is not followed, as before. That doctrine question is filed as #766.
 - **THEORETICAL, the e2e case leaves a jump behind on a rerun:** applied. Leftover jumps are deleted before the chain is created.
 
+After archive, PR #764 review (CodeRabbit), with each row red first and red again under a mutation:
+
+- **Major, a `changed` setup with an unreadable chain still claims "allowed on tailscale0 only":** applied. `withChains` now turns `changed` into `unverified` as well. Row: "a legacy copy replaced while an operator chain cannot be read: unverified (#764 review)".
+- **Major, a deny in INPUT hides an allow in a chain INPUT jumps to first:** applied. `firewallBlockedStep` now names the `foreign` allows, and its fix includes `foreignFix`. Row: "a deny after an operator chain that admits the port: the chain's allow is named (#764 review)". The decision still does not follow the chain, as the proposal declares.
+- **Minor, the runbook row for a port-less allow lacked the SSH caution:** applied.
+
 ## Promotion candidates
 
 - [x] Lesson for the repo's `docs/lessons/`? no: the one thing learned is that a new `firewallRead` field must also be carried by `withUFWIptables`. It is written as a comment on that function, where the next field gets added.

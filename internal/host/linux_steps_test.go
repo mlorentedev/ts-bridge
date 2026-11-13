@@ -351,6 +351,13 @@ func TestSetupForLinux(t *testing.T) {
 			message:  fwOpenRead,
 		},
 		{
+			name:     "iptables, a legacy copy replaced while an operator chain cannot be read: unverified (#764 review)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + iptLegacyRule + fwOpenJump, iptChain: tsInputNoAccept}), exit: map[string]int{fwOpenRead: 4}},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output "+fwOpenRead, "run "+iptAppend, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeUnverified, OutcomeOK},
+			message:  fwOpenRead,
+		},
+		{
 			name:     "ufw, tailscaled's ts-input admits the tailnet: no ufw allow (#530)",
 			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwHostAdded, iptRead: ufwHostInput, iptChain: tsInputDefault})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
@@ -1173,6 +1180,17 @@ func TestCheckForLinux(t *testing.T) {
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 			message:  strings.TrimSpace(fwOpenAllow),
+		},
+		{
+			name:     "iptables, a deny after an operator chain that admits the port: the chain's allow is named (#764 review)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptEmpty + fwOpenJump + "-A INPUT -p tcp -m tcp --dport 3389 -j DROP\n", iptChain: tsInputNoAccept, fwOpenRead: "-N fw-open\n" + fwOpenAllow})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output "+fwOpenRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
+			message:  strings.TrimSpace(fwOpenAllow),
+			fix:      "setup does not delete rules it did not write",
 		},
 		{
 			name:     "iptables, an accept off loopback beside the scoped rule: manual (#736)",

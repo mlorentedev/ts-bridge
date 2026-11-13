@@ -551,13 +551,14 @@ func withV6Policy(read firewallRead, step SetupStep) SetupStep {
 }
 
 // withChains adds a chain INPUT jumps to that could not be read: what it
-// admits is unknown, so a step that read ok cannot claim it (#762).
+// admits is unknown, so a step that read ok, or that setup repaired, cannot
+// claim the port is held to the tailnet (#762, #764 review).
 func withChains(read firewallRead, step SetupStep, port int) SetupStep {
 	if read.chainUnread == "" {
 		return step
 	}
 	step.Message += "; a chain INPUT jumps to was not read: " + read.chainUnread
-	if step.Outcome != OutcomeOK {
+	if step.Outcome != OutcomeOK && step.Outcome != OutcomeChanged {
 		return step
 	}
 	fix := fmt.Sprintf("read the chain as root and confirm it admits TCP %d only on %s, then run ts-bridge host check again", port, tailnetInterface)
@@ -1729,10 +1730,16 @@ func copiesFix(read firewallRead, port int) string {
 
 // firewallBlockedStep reports a deny that decides the port before any allow.
 // Setup never deletes or reorders firewall rules, so this is the operator's.
+// An unscoped allow found elsewhere (a chain INPUT jumps to before the deny,
+// which the decision does not follow) is named too (#764 review).
 func firewallBlockedStep(read firewallRead, port int) SetupStep {
-	return newStep(linuxFwName, OutcomeManual,
-		fmt.Sprintf("Firewall blocks TCP %d before any allow (%s): %s", port, read.source(), read.blockedBy),
-		fmt.Sprintf("remove that rule, or put an allow for TCP %d before it; setup does not delete or reorder firewall rules", port))
+	message := fmt.Sprintf("Firewall blocks TCP %d before any allow (%s): %s", port, read.source(), read.blockedBy)
+	fix := fmt.Sprintf("remove that rule, or put an allow for TCP %d before it; setup does not delete or reorder firewall rules", port)
+	if len(read.foreign) > 0 {
+		message += "; legacy unscoped rule: " + strings.Join(read.foreign, "; ")
+		fix += "; " + foreignFix(read)
+	}
+	return newStep(linuxFwName, OutcomeManual, message, fix)
 }
 
 func firewallFix(read firewallRead, port int, command string) string {
