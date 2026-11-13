@@ -977,49 +977,63 @@ func iptOpenNegation(f []string, i int) bool {
 
 // iptExposes reports whether an ACCEPT's match admits new TCP connections on
 // port from any client: it names the port, excludes only other ports, or has
-// no port in it (#736). Scope is the caller's to test.
+// no destination port in it (#736). The client picks its source port, so a
+// rule whose only port match is a source port reads as a port-less one (#757).
+// Scope is the caller's to test.
 func iptExposes(f []string, port int) bool {
-	if !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptPortFlags, w) }) {
+	if !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) }) {
 		return iptPortlessCovers(f)
 	}
-	return iptPortCovers(f, port) || iptExcludesOthers(f, port)
+	return (iptPortCovers(f, port) || iptExcludesOthers(f, port)) && !iptRepliesOnly(f)
+}
+
+// iptRepliesOnly reports a rule held by a conntrack or state match to packets
+// that are not NEW: a list without NEW (`--ctstate RELATED,ESTABLISHED`, or
+// `INVALID`), or `! --ctstate NEW`. Such an allow admits no new connection, so
+// it exposes nothing (#758). The
+// port-less path already reads any state match as narrowing.
+func iptRepliesOnly(f []string) bool {
+	for i, w := range f {
+		if (w == "--ctstate" || w == "--state") && i+1 < len(f) {
+			negated := i > 0 && f[i-1] == "!"
+			if negated == slices.Contains(strings.Split(f[i+1], ","), "NEW") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // iptExcludesOthers reports a TCP rule that admits port from every client but
-// those it names, such as `! --dport 22`. With a destination port match, each
-// one must be negated and leave port out; a source-port match beside it does
-// not narrow, since clients connect from ephemeral ports (#736 review). With
-// none, every source-port match must be negated (`! --sport 22`).
+// those it names, such as `! --dport 22`: each destination port match must be
+// negated and leave port out. A source-port match beside it does not narrow,
+// since clients connect from ephemeral ports (#736 review).
 func iptExcludesOthers(f []string, port int) bool {
 	if iptFlag(f, "-p") != protoTCP {
 		return false
 	}
-	flags := iptDestPortFlags
-	if !slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) }) {
-		flags = iptPortFlags
-	}
 	for i, w := range f {
-		if slices.Contains(flags, w) && !iptExcludes(f, i, port) {
+		if slices.Contains(iptDestPortFlags, w) && !iptExcludes(f, i, port) {
 			return false
 		}
 	}
 	return true
 }
 
-// iptExcludes reports whether the port match at f[i] is negated and, for a
-// destination list, leaves port out.
+// iptExcludes reports whether the destination port match at f[i] is negated
+// and leaves port out.
 func iptExcludes(f []string, i, port int) bool {
 	if i == 0 || f[i-1] != "!" || i+1 == len(f) {
 		return false
 	}
-	return !slices.Contains(iptDestPortFlags, f[i]) || !portListHas(f[i+1], port)
+	return !portListHas(f[i+1], port)
 }
 
 // iptMatchesPort reports whether a rule's match, whatever its target, applies
 // to new TCP connections on port.
 func iptMatchesPort(f []string, port int) bool {
 	if slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptPortFlags, w) }) {
-		return iptPortCovers(f, port)
+		return iptPortCovers(f, port) && !iptRepliesOnly(f)
 	}
 	return iptPortlessCovers(f)
 }
@@ -1064,13 +1078,15 @@ func iptPortlessToken(f []string) int { //nolint:gocyclo // baseline #629
 	case "-j", "--reject-with": // the caller decides by target
 		return 2
 	case "-p", "-m":
-		return iptIf(v == protoTCP || (f[0] == "-m" && v == "comment"), 2)
+		return iptIf(v == protoTCP || (f[0] == "-m" && (v == "comment" || v == "multiport")), 2)
+	case "--sport", "--sports": // the client's choice, so it narrows nothing (#757)
+		return 2
 	case "--comment", "-i", "-s", "-d":
 		return 2 // loopback scopes were rejected before this point
 	case "--tcp-flags": // `--syn` prints as this exact pair
 		return iptIf(len(f) > 2 && v == "FIN,SYN,RST,ACK" && f[2] == "SYN", 3)
-	case "!": // only a negated loopback scope leaves every other source open
-		return iptIf(len(f) > 2 && iptLoopbackScope(v, f[2]), 3)
+	case "!": // a negated loopback scope or source port leaves every other client open
+		return iptIf(len(f) > 2 && (iptLoopbackScope(v, f[2]) || v == "--sport" || v == "--sports"), 3)
 	}
 	return 0
 }

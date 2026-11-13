@@ -163,6 +163,9 @@ func TestIptablesCovers(t *testing.T) {
 		{"range", "-A INPUT -p tcp -m tcp --dport 3380:3390 -j ACCEPT", true},
 		{"source or destination ports", "-A INPUT -p tcp -m multiport --ports 3389 -j ACCEPT", true},
 		{"conntrack before the port", "-A INPUT -p tcp -m conntrack --ctstate NEW -m tcp --dport 3389 -j ACCEPT", true},
+		// Held to replies, a rule admits no new connection to the port (#758).
+		{"replies only", "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"not new", "-A INPUT -i tailscale0 -p tcp -m conntrack ! --ctstate NEW -m tcp --dport 3389 -j ACCEPT", false},
 		{"comment", `-A INPUT -p tcp -m tcp --dport 3389 -m comment --comment "rdp port" -j ACCEPT`, true},
 		{"longer port", "-A INPUT -p tcp -m tcp --dport 33890 -j ACCEPT", false},
 		{"udp", "-A INPUT -p udp -m udp --dport 3389 -j ACCEPT", false},
@@ -983,6 +986,62 @@ func TestCheckForLinux(t *testing.T) {
 			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
 		},
 		{
+			name:     "iptables, an accept for every source port beside the scoped rule: manual (#757)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "--sport 1024:65535",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
+			name:     "iptables, an accept for every source port is the only allow: manual (#757)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptEmpty + "-A INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "--sport 1024:65535",
+		},
+		{
+			name:     "iptables, a bare accept beside the scoped rule: manual (#736 review round 5)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "-A INPUT -j ACCEPT",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
+			name:     "iptables, a port-less TCP accept beside the scoped rule: manual (#736 review round 5)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -p tcp -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "-A INPUT -p tcp -j ACCEPT",
+			fix:      "keep loopback, replies and SSH open first (`iptables -A INPUT -i lo -j ACCEPT`",
+		},
+		{
+			name:     "iptables, an accept held to replies beside the scoped rule: ok (#758)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "iptables, a tailnet accept held to replies is no rule for the port: changed (#758)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptEmpty + "-A INPUT -i tailscale0 -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=changed"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "No firewall rule found",
+		},
+		{
 			name:     "iptables, an accept off loopback beside the scoped rule: manual (#736)",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT ! -i lo -p tcp -j ACCEPT\n", iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
@@ -1223,9 +1282,11 @@ func TestIptablesDecideOnly(t *testing.T) {
 		{"blanket drop before the allow", "-A INPUT -j DROP\n-A INPUT -i tailscale0 -j ACCEPT", ruleBlocked},
 		{"tcp reset before the allow", "-A INPUT -p tcp -j REJECT --reject-with tcp-reset\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
 		{"conntrack drop does not decide", "-A INPUT -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
-		// An unmodeled match on a port-bearing rule is ignored for a deny as for an
-		// allow (iptPortCovers), so this deny decides: parity, not precision.
-		{"port-bearing conntrack drop decides", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
+		// A port-bearing deny held to packets that are not new (INVALID, or
+		// replies) drops no new connection, as the port-less one above (#758);
+		// one that includes NEW still decides.
+		{"port-bearing conntrack drop does not decide", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
+		{"port-bearing new drop decides", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate NEW -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
 		{"negated-scope drop does not decide", "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
 		{"loopback drop does not decide", "-A INPUT -i lo -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
 		{"jump does not decide", "-A INPUT -j ts-input\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
@@ -1896,7 +1957,26 @@ func TestExposureShapes(t *testing.T) {
 		// does not undo a negated destination port (#736 review F2).
 		{"-A INPUT -p tcp -m tcp ! --dport 22 --sport 1024:65535 -j ACCEPT", true},
 		{"-A INPUT -p tcp -m tcp --dport 22 ! --sport 22 -j ACCEPT", false},
-		{"-A INPUT -p tcp -m tcp --sport 22 -j ACCEPT", false},
+		// Held to replies, an allow admits no new connection, whatever port it
+		// names; held to new ones, or to all but INVALID, it still does (#758).
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m state --state ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m conntrack ! --ctstate NEW -m tcp --dport 3389 -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m state --state NEW -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -m conntrack --ctstate NEW -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp ! --dport 22 -m state --state NEW -j ACCEPT", true},
+		// The client picks its source port, so a source-port match narrows
+		// nothing: the rule reads as a port-less one (#757).
+		{"-A INPUT -p tcp -m tcp --sport 22 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --sport 1:65535 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m multiport --sports 1024:65535 -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p tcp -m tcp --sport 22 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT", false},
+		{"-A INPUT -p udp -m udp --sport 53 -j ACCEPT", false},
+		{"-A INPUT -i lo -p tcp -m tcp --sport 1024:65535 -j ACCEPT", false},
 		{"-A INPUT -p tcp -m tcp ! --dport 22 -j DROP", false},
 		{"-A INPUT -p udp -m udp ! --dport 53 -j ACCEPT", false},
 		{"-A INPUT -p udp -j ACCEPT", false},
@@ -1970,6 +2050,8 @@ func TestIP6Exposure(t *testing.T) {
 			message: "-A INPUT -p tcp -j ACCEPT", fix: "ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
 		{name: "a v6 accept for every port but SSH", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", want: OutcomeManual,
 			message: "! --dport 22", fix: "ip6tables -D INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`"},
+		{name: "a v6 accept for every source port", onPath: true, v6: ip6Closed + "-A INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT\n", want: OutcomeManual,
+			message: "--sport 1024:65535", fix: "ip6tables -D INPUT -p tcp -m tcp --sport 1024:65535 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first"},
 		{name: "an unscoped v6 allow", onPath: true, v6: ip6Closed + ip6Unscoped + "\n", want: OutcomeManual, message: ip6Unscoped},
 		// A negated scope or an explicit any prefix still opens the port off
 		// the tailnet (BUG-526 review, finding 1).
@@ -2137,6 +2219,8 @@ func TestIP6Jumps(t *testing.T) {
 		{name: "a jump for every port but SSH", input: "-A INPUT -p tcp -m tcp ! --dport 22 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"},
 			want: []string{"-A wide -j ACCEPT"}, reads: []string{"wide"}},
 		{name: "a jump for every port but this one is not followed", input: "-A INPUT -p tcp -m tcp ! --dport 3389 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"}},
+		{name: "a jump for every source port", input: "-A INPUT -p tcp -m tcp --sport 1024:65535 -j wide", chains: map[string]string{"wide": "-A wide -j ACCEPT"},
+			want: []string{"-A wide -j ACCEPT"}, reads: []string{"wide"}},
 		// A port-less accept opens the port in a jumped chain as in INPUT (#736, #753).
 		{name: "a port-less accept in a chain is reported", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -j ACCEPT"},
 			want: []string{"-A ts-input -j ACCEPT"}, reads: []string{"ts-input"}},

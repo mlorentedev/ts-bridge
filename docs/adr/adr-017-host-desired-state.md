@@ -312,7 +312,9 @@ only the exact rule earlier releases wrote (`ufw allow <port>/tcp`, `-A INPUT -p
 never closed in between. Any other unscoped allow that names the port is reported `manual`: setup
 cannot know it wrote it. An allow with no port in it was first read as the operator's posture and
 left alone; since #736 an unscoped one (`-p tcp -j ACCEPT`, `-j ACCEPT`), like one excluding only
-other ports (`! --dport 22`), is reported `manual` too, because it voids the scope as a permissive
+other ports (`! --dport 22`) or naming only a source port (`--sport 1024:65535`, since #757: the
+client picks its source port), is reported `manual` too (one held to replies by a conntrack or
+state match admits no new connection, so it is neither reported nor counted as the scoped rule, #758), because it voids the scope as a permissive
 policy does (#691). It no longer counts as the scoped rule, so setup appends its own `-i tailscale0`
 rule beside it; setup still never deletes it, and the fix names the rules that keep SSH open first.
 

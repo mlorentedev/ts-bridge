@@ -1,7 +1,7 @@
 [
   {
     "id": "BUG-736-negated-portless-exposure-f1",
-    "behavior": "AC1+AC3 v4: negated-port and portless unscoped allows are foreign/manual; scoped, loopback, conntrack, UDP, sport and ! --dport <port> are not",
+    "behavior": "AC1+AC3 v4: negated-port, portless and source-port-only unscoped allows are foreign/manual; scoped, loopback, conntrack, UDP and ! --dport <port> are not",
     "verification": "go test ./internal/host/ -run 'TestReadIptablesUnscoped|TestExposureShapes' -count=1",
     "state": "passing",
     "evidence": "go test ./internal/host/ -run 'TestReadIptablesUnscoped|TestExposureShapes' ok"
