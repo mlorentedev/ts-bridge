@@ -1737,7 +1737,8 @@ func firewallBlockedStep(read firewallRead, port int) SetupStep {
 	fix := fmt.Sprintf("remove that rule, or put an allow for TCP %d before it; setup does not delete or reorder firewall rules", port)
 	if len(read.foreign) > 0 {
 		message += "; legacy unscoped rule: " + strings.Join(read.foreign, "; ")
-		fix += "; " + foreignFix(read)
+		// Removing the deny first would expose the port through the chain (#764 review).
+		fix = "first " + foreignFix(read) + "; only then " + fix
 	}
 	return newStep(linuxFwName, OutcomeManual, message, fix)
 }

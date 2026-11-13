@@ -70,6 +70,7 @@ After archive, PR #764 review (CodeRabbit), with each row red first and red agai
 - **Major, a `changed` setup with an unreadable chain still claims "allowed on tailscale0 only":** applied. `withChains` now turns `changed` into `unverified` as well. Row: "a legacy copy replaced while an operator chain cannot be read: unverified (#764 review)".
 - **Major, a deny in INPUT hides an allow in a chain INPUT jumps to first:** applied. `firewallBlockedStep` now names the `foreign` allows, and its fix includes `foreignFix`. Row: "a deny after an operator chain that admits the port: the chain's allow is named (#764 review)". The decision still does not follow the chain, as the proposal declares.
 - **Minor, the runbook row for a port-less allow lacked the SSH caution:** applied.
+- **Major (second pass), the fix for a deny with a chain allow behind it listed removing the deny first, which would expose the port:** applied. The chain allow is now named first. The row asserts the order.
 
 ## Promotion candidates
 

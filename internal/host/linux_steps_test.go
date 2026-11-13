@@ -1190,7 +1190,7 @@ func TestCheckForLinux(t *testing.T) {
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
 			blocked:  "-A INPUT -p tcp -m tcp --dport 3389 -j DROP",
 			message:  strings.TrimSpace(fwOpenAllow),
-			fix:      "setup does not delete rules it did not write",
+			fix:      "first scope -A fw-open -p tcp -m tcp --dport 3389 -j ACCEPT to tailscale0, or remove it; setup does not delete rules it did not write; only then remove that rule",
 		},
 		{
 			name:     "iptables, an accept off loopback beside the scoped rule: manual (#736)",
