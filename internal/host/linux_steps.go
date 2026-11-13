@@ -1644,14 +1644,37 @@ func foreignFix(read firewallRead) string {
 	return fix
 }
 
-// iptAdmitsOthers reports an iptables allow that names no destination port, so it admits
-// every port or every port but some: removing it may close SSH (#736).
+// iptAdmitsOthers reports an iptables allow that admits ports besides the service
+// port: it names no destination port (every port, or every port but some), or its
+// destination list holds more than one port. Only rules that cover the service port
+// reach here, so a list of one port is that port. Removing such a rule may close
+// SSH (#736, #745).
 func iptAdmitsOthers(line string) bool {
 	f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
 	if len(f) == 0 || f[0] != "-A" {
 		return false // a ufw line names its port in its own syntax
 	}
-	return !slices.ContainsFunc(iptDestPortFlags, func(flag string) bool { return iptFlag(f, flag) != "" })
+	named := false
+	for _, flag := range iptDestPortFlags {
+		list := iptFlag(f, flag)
+		if list == "" {
+			continue
+		}
+		named = true
+		if portListWide(list) {
+			return true
+		}
+	}
+	return !named
+}
+
+// portListWide reports a port list (`22,3389`, `3380:3390`) that holds more than one port.
+func portListWide(list string) bool {
+	if strings.Contains(list, ",") {
+		return true
+	}
+	lo, hi, isRange := strings.Cut(list, ":")
+	return isRange && lo != hi
 }
 
 // keepOpenFirst names the rules an operator adds before closing every port, so

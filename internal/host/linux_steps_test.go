@@ -2151,8 +2151,9 @@ func TestExposureShapes(t *testing.T) {
 }
 
 // TestWideAllowFix pins the whole fix for an unscoped foreign allow: the SSH
-// caution is added only to an iptables rule that names no destination port,
-// never to a ufw line or to a rule that names the port (#736 review F1, F5).
+// caution is added only to an iptables rule that names no destination port or
+// a list holding more than the service port, never to a ufw line or to a rule
+// naming only the port (#736 review F1, F5; #745).
 func TestWideAllowFix(t *testing.T) {
 	const keep = "keep loopback, replies and SSH open first (`%[1]s -A INPUT -i lo -j ACCEPT`, " +
 		"`%[1]s -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `%[1]s -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"
@@ -2160,8 +2161,12 @@ func TestWideAllowFix(t *testing.T) {
 	tests := []struct{ rule, want string }{
 		{"ufw allow 3389", "scope ufw allow 3389 to tailscale0, or remove it; setup does not delete rules it did not write"},
 		{"ufw allow 22,3389/tcp", "scope ufw allow 22,3389/tcp to tailscale0, or remove it; setup does not delete rules it did not write"},
-		{strings.TrimSpace(iptForeignPrinted), "scope " + strings.TrimSpace(iptForeignPrinted) + " to tailscale0, or remove it; setup does not delete rules it did not write"},
+		{strings.TrimSpace(iptForeignPrinted), "scope " + strings.TrimSpace(iptForeignPrinted) + " to tailscale0, or remove it; setup does not delete rules it did not write; the rule admits other ports too, so as root " + v4 + " before you change it"},
 		{"-A INPUT -j ACCEPT", "scope -A INPUT -j ACCEPT to tailscale0, or remove it; setup does not delete rules it did not write; the rule admits other ports too, so as root " + v4 + " before you change it"},
+		// A destination list holding the service port and another port admits that port too (#745).
+		{"-A INPUT -p tcp -m multiport --dports 3380:3390 -j ACCEPT", "scope -A INPUT -p tcp -m multiport --dports 3380:3390 -j ACCEPT to tailscale0, or remove it; setup does not delete rules it did not write; the rule admits other ports too, so as root " + v4 + " before you change it"},
+		{"-A INPUT -p tcp -m multiport --dports 3389 -j ACCEPT", "scope -A INPUT -p tcp -m multiport --dports 3389 -j ACCEPT to tailscale0, or remove it; setup does not delete rules it did not write"},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", "scope -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT to tailscale0, or remove it; setup does not delete rules it did not write"},
 	}
 	for _, tt := range tests {
 		if got := foreignFix(firewallRead{foreign: []string{tt.rule}}); got != tt.want {
@@ -2170,6 +2175,8 @@ func TestWideAllowFix(t *testing.T) {
 	}
 	v6 := []struct{ rule, want string }{
 		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", "run `ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT` as root to delete the v6 rule (setup never writes one)"},
+		{"-A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT", "run `ip6tables -D INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`, " +
+			"`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`, `ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"},
 		{"-A INPUT -p tcp -j ACCEPT", "run `ip6tables -D INPUT -p tcp -j ACCEPT` as root to delete the v6 rule (setup never writes one), after you keep loopback, replies, ICMPv6 and SSH open first (`ip6tables -A INPUT -i lo -j ACCEPT`, " +
 			"`ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `ip6tables -A INPUT -p ipv6-icmp -j ACCEPT`, `ip6tables -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"},
 	}
@@ -2894,5 +2901,27 @@ func TestNFTForeignInput(t *testing.T) {
 				t.Errorf("nftForeignInput = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestWideAllowFixFromTheRead runs the #745 shapes through the read itself
+// (#770 review): a port list that holds the service port among others is
+// reported, and its fix carries the SSH caution, on v4 and v6 alike.
+func TestWideAllowFixFromTheRead(t *testing.T) {
+	const caution = "keep loopback, replies"
+	for _, rule := range []string{
+		"-A INPUT -p tcp -m multiport --dports 22,3389 -j ACCEPT",
+		"-A INPUT -p tcp -m multiport --dports 3380:3390 -j ACCEPT",
+		"-A INPUT -p tcp -m tcp --dport 3380:3390 -j ACCEPT",
+	} {
+		v4 := &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true}, output: map[string]string{iptRead: iptScoped + rule + "\n", iptChain: tsInputNoAccept}}
+		v6 := &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, backendIP6: true},
+			output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: "-P INPUT DROP\n" + rule + "\n"}}
+		for family, r := range map[string]*recordingRunner{"v4": v4, "v6": v6} {
+			step := firewallCheckStep(readLinuxFirewall(r, 3389), 3389)
+			if step.Outcome != OutcomeManual || !strings.Contains(step.Message, rule) || !strings.Contains(step.Fix, caution) {
+				t.Errorf("%s %q: %s %q fix %q, want manual naming the rule with the SSH caution", family, rule, step.Outcome, step.Message, step.Fix)
+			}
+		}
 	}
 }
