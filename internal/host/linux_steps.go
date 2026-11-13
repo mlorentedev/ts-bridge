@@ -201,6 +201,9 @@ type firewallRead struct {
 	// not a reachability decision: the descriptor dials the IPv4 address (#526).
 	v6Foreign []string
 	v6Note    string
+	// chainUnread says why a chain INPUT jumps to could not be read: an
+	// unknown, not a clear, exposure read (#762).
+	chainUnread string
 	// inputOpen means iptables' INPUT policy is ACCEPT: every port is open on
 	// every interface, so the tailscale0 scope restricts nothing (#691). An
 	// active ufw writes it from its incoming default (#735). See policyRead.
@@ -256,17 +259,26 @@ func readIP6(r Runner, port int, ufw bool) (foreign []string, open bool, note st
 	if err != nil {
 		return nil, false, fmt.Sprintf("%s -S %s: %v%s", backendIP6, iptInput, err, toolSaid(err))
 	}
-	foreign, note = ip6Walk(r, iptRules(string(out)), port, ufw)
+	skip := func(chain string) bool { return ufw && strings.HasPrefix(chain, ufw6Prefix) }
+	foreign, note = iptWalk(r, chainWalk{tool: backendIP6, skip: skip, exposed: ip6Exposed}, iptRules(string(out)), port)
 	return foreign, iptPolicyAccept(string(out)), note
 }
 
-// ip6Walk scores INPUT and every chain it reaches through a jump that applies
-// to all the port's traffic (ip6Jumps), reading each chain once, so a loop
-// ends. Unlike the v4 walk it decides nothing setup writes: a qualified jump
-// is not an unknown read here, only a scope the chain's rules inherit (#720).
-// A target that is not a chain is skipped; a chain that cannot be read is a
-// note, and what the others showed is kept.
-func ip6Walk(r Runner, input string, port int, ufw bool) (foreign []string, note string) {
+// chainWalk says what iptWalk reads and scores: the tool, the chains it leaves
+// to another read, and the exposure scan run on each chain it reaches.
+type chainWalk struct {
+	tool    string
+	skip    func(chain string) bool
+	exposed func(input, chain string, port int) []string
+}
+
+// iptWalk scores INPUT and every chain it reaches through a jump that applies
+// to all the port's traffic (iptJumps), reading each chain once, so a loop
+// ends. It decides nothing setup writes: a qualified jump is not an unknown
+// read here, only a scope the chain's rules inherit (#720). A target that is
+// not a chain is skipped; a chain that cannot be read is a note, and what the
+// others showed is kept. The v6 read and the v4 read (#762) share it.
+func iptWalk(r Runner, w chainWalk, input string, port int) (foreign []string, note string) {
 	seen := map[string]bool{iptInput: true}
 	queue := []string{iptInput}
 	rules := map[string]string{iptInput: input}
@@ -274,16 +286,16 @@ func ip6Walk(r Runner, input string, port int, ufw bool) (foreign []string, note
 	for len(queue) > 0 {
 		chain := queue[0]
 		queue = queue[1:]
-		foreign = append(foreign, ip6Exposed(rules[chain], chain, port)...)
-		for _, next := range ip6Jumps(rules[chain], chain, port) {
-			if seen[next] || (ufw && strings.HasPrefix(next, ufw6Prefix)) {
+		foreign = append(foreign, w.exposed(rules[chain], chain, port)...)
+		for _, next := range iptJumps(rules[chain], chain, port) {
+			if seen[next] || w.skip(next) {
 				continue
 			}
 			seen[next] = true
-			out, err := r.Output(backendIP6, "-S", next)
+			out, err := r.Output(w.tool, "-S", next)
 			if err != nil {
 				if !chainMissing(err, iptNoChain) {
-					notes = append(notes, fmt.Sprintf("%s -S %s: %v%s", backendIP6, next, err, toolSaid(err)))
+					notes = append(notes, fmt.Sprintf("%s -S %s: %v%s", w.tool, next, err, toolSaid(err)))
 				}
 				continue
 			}
@@ -303,24 +315,24 @@ var ip6Verdicts = []string{iptAccept, "DROP", "REJECT", "RETURN", "QUEUE", "NFQU
 // leaves them to the ufw read. Without a ufw read the prefix excludes nothing.
 const ufw6Prefix = "ufw6-"
 
-// ip6Jumps lists the targets chain's rules jump or go to that may be chains,
+// iptJumps lists the targets chain's rules jump or go to that may be chains,
 // for the jumps that apply to every packet for port: the match covers TCP on
 // port (iptMatchesPort), and no plain -i, -s or -d or loopback scope holds the
 // jump to part of the traffic. A chain behind a narrowed jump admits only that
 // scope, which is not exposure on every interface.
-func ip6Jumps(input, chain string, port int) []string {
+func iptJumps(input, chain string, port int) []string {
 	var targets []string
 	for _, line := range strings.Split(input, "\n") {
-		if target := ip6Jump(strings.Fields(iptQuoted.ReplaceAllString(line, `""`)), chain, port); target != "" {
+		if target := iptJump(strings.Fields(iptQuoted.ReplaceAllString(line, `""`)), chain, port); target != "" {
 			targets = append(targets, target)
 		}
 	}
 	return targets
 }
 
-// ip6Jump is the target of one rule of chain when the walk follows it, or "".
+// iptJump is the target of one rule of chain when the walk follows it, or "".
 // A verdict ends the rule and is no chain.
-func ip6Jump(f []string, chain string, port int) string {
+func iptJump(f []string, chain string, port int) string {
 	if len(f) < 2 || f[0] != "-A" || f[1] != chain {
 		return ""
 	}
@@ -408,7 +420,13 @@ func ip6Narrowed(f []string) bool {
 // linuxFirewallOK is check's firewall_ok: the port is admitted, through a rule
 // scoped to the tailnet, and nothing admits it on every interface (#631, #526).
 func linuxFirewallOK(fw firewallRead) bool {
-	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw) && len(fw.v6Foreign) == 0 && !((fw.inputOpen || fw.v6Open) && policyRead(fw)) && fw.policyUnread == ""
+	return fw.state == rulePresent && !fw.ufwInactive && !legacyHeld(fw) && !offTailnetOnly(fw) && len(fw.v6Foreign) == 0 && !((fw.inputOpen || fw.v6Open) && policyRead(fw)) && !partlyUnread(fw)
+}
+
+// partlyUnread reports a read that left part of the firewall unknown: the
+// INPUT policy under a ufw decision (#735), or a chain INPUT jumps to (#762).
+func partlyUnread(fw firewallRead) bool {
+	return fw.policyUnread != "" || fw.chainUnread != ""
 }
 
 // policyRead reports whether the INPUT policies decide the host's exposure:
@@ -511,6 +529,20 @@ func withV6Policy(read firewallRead, step SetupStep) SetupStep {
 	return step
 }
 
+// withChains adds a chain INPUT jumps to that could not be read: what it
+// admits is unknown, so a step that read ok cannot claim it (#762).
+func withChains(read firewallRead, step SetupStep, port int) SetupStep {
+	if read.chainUnread == "" {
+		return step
+	}
+	step.Message += "; a chain INPUT jumps to was not read: " + read.chainUnread
+	if step.Outcome != OutcomeOK {
+		return step
+	}
+	fix := fmt.Sprintf("read the chain as root and confirm it admits TCP %d only on %s, then run ts-bridge host check again", port, tailnetInterface)
+	return newStep(step.Name, OutcomeUnverified, step.Message, fix)
+}
+
 // withIP6 adds the v6 read to a firewall step. An unscoped v6 allow turns a
 // converged or repaired step manual; a v6 read that failed is only noted.
 func withIP6(read firewallRead, step SetupStep, port int) SetupStep {
@@ -582,7 +614,7 @@ func readUFW(r Runner, port int) firewallRead {
 	}
 	// Copies are counted even when ufw is unreadable: each one admits the
 	// port on every interface whatever ufw would have said.
-	return withUFWIptables(read, readIptables(r, port))
+	return withUFWIptables(read, readIptablesOn(r, port, true))
 }
 
 // withUFWIptables folds the iptables read into a ufw read: the copies and
@@ -634,12 +666,18 @@ var tsInputJump = []string{"-A", iptInput, "-j", tsInputChain}
 // qualified jump into ts-input that the walk reaches with nothing decided:
 // setup never appends an open rule on a guess (#532).
 func readIptables(r Runner, port int) firewallRead {
+	return readIptablesOn(r, port, false)
+}
+
+// readIptablesOn is readIptables on a host whose firewall ufw manages when ufw
+// is set: ufw's own chains are then left to the ufw read (#762).
+func readIptablesOn(r Runner, port int, ufw bool) firewallRead {
 	out, err := r.Output(backendIPT, "-S", iptInput)
 	if err != nil {
 		reason := fmt.Sprintf("iptables -S INPUT: %v", err)
 		return firewallRead{backend: backendIPT, reason: reason, policyUnread: reason}
 	}
-	read := iptablesRead(r, port, string(out))
+	read := iptablesRead(r, port, string(out), ufw)
 	read.inputOpen = iptPolicyAccept(string(out))
 	return read
 }
@@ -653,7 +691,7 @@ func iptPolicyAccept(out string) bool {
 	return strings.TrimSpace(first) == "-P INPUT ACCEPT"
 }
 
-func iptablesRead(r Runner, port int, out string) firewallRead { //nolint:gocyclo // baseline #629
+func iptablesRead(r Runner, port int, out string, ufw bool) firewallRead { //nolint:gocyclo // baseline #629
 	input := iptRules(out)
 	rules, jump := iptBeforeQualifiedJump(input)
 	diverted := slices.ContainsFunc(strings.Split(rules, "\n"), iptTSInputJump)
@@ -676,7 +714,8 @@ func iptablesRead(r Runner, port int, out string) firewallRead { //nolint:gocycl
 	}
 	copies := iptLegacyCopies(input, port)
 	foreign, scoped := iptUnscopedRead(input, rules, port, state)
-	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: copies, foreign: foreign, scoped: scoped,
+	chained, unread := iptChainsRead(r, input, port, ufw)
+	return firewallRead{state: state, backend: backendIPT, blockedBy: rule, copies: copies, foreign: append(foreign, chained...), scoped: scoped, chainUnread: unread,
 		copiesAdmit: state == rulePresent && copies > 0 && !iptablesCovers(iptWithoutLegacy(rules, port), port)}
 }
 
@@ -938,10 +977,30 @@ func iptHasScope(f []string) bool {
 // port-bearing rule with another narrowing (conntrack, a comment) is listed
 // and reported rather than deleted.
 func iptUnscoped(input string, port int) []string {
+	return iptUnscopedIn(input, iptInput, port)
+}
+
+// ufw4Prefix names the chains ufw writes for IPv4, as ufw6Prefix does for v6.
+const ufw4Prefix = "ufw-"
+
+// iptChainsRead lists the unscoped allows for port in the chains INPUT jumps
+// to, by the predicate INPUT is read with, and says why a chain could not be
+// read (#762). INPUT itself is iptUnscopedRead's. ts-input is skipped: it is
+// inlined for the decision, where an unscoped accept in it would count as the
+// scoped rule; so are ufw's chains on a ufw host, whose allows `ufw show added`
+// reports with a fix ufw keeps.
+func iptChainsRead(r Runner, input string, port int, ufw bool) (foreign []string, note string) {
+	skip := func(chain string) bool { return chain == tsInputChain || (ufw && strings.HasPrefix(chain, ufw4Prefix)) }
+	found, note := iptWalk(r, chainWalk{tool: backendIPT, skip: skip, exposed: iptUnscopedIn}, input, port)
+	return slices.DeleteFunc(found, func(line string) bool { return strings.HasPrefix(line, "-A "+iptInput+" ") }), note
+}
+
+// iptUnscopedIn is iptUnscoped for any chain.
+func iptUnscopedIn(input, chain string, port int) []string {
 	var found []string
 	for _, line := range strings.Split(input, "\n") {
 		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
-		if len(f) > 1 && f[0] == "-A" && f[1] == iptInput && iptFlag(f, "-j") == iptAccept && iptExposes(f, port) && !iptLoopback(f) && !iptScopedAllow(f) {
+		if len(f) > 1 && f[0] == "-A" && f[1] == chain && iptFlag(f, "-j") == iptAccept && iptExposes(f, port) && !iptLoopback(f) && !iptScopedAllow(f) {
 			found = append(found, strings.TrimSpace(line))
 		}
 	}
@@ -1380,7 +1439,7 @@ func firewallSetupStep(r Runner, port int) SetupStep {
 	if read.other != "" {
 		return foreignStep(read, port, "setup")
 	}
-	return withIP6(read, withPolicy(read, firewallSetupFrom(r, read, port)), port)
+	return withChains(read, withIP6(read, withPolicy(read, firewallSetupFrom(r, read, port)), port), port)
 }
 
 func firewallSetupFrom(r Runner, read firewallRead, port int) SetupStep {
@@ -1595,7 +1654,7 @@ func firewallCheckStep(read firewallRead, port int) SetupStep {
 	if read.other != "" {
 		return foreignStep(read, port, "check")
 	}
-	return withIP6(read, withPolicy(read, firewallCheckV4(read, port)), port)
+	return withChains(read, withIP6(read, withPolicy(read, firewallCheckV4(read, port)), port), port)
 }
 
 func firewallCheckV4(read firewallRead, port int) SetupStep {
