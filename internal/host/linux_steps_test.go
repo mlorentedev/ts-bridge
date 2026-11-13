@@ -1964,6 +1964,7 @@ func TestExposureShapes(t *testing.T) {
 		{"-A INPUT -p tcp -m tcp --dport 3389 -m state --state ESTABLISHED -j ACCEPT", false},
 		{"-A INPUT -p tcp -m conntrack ! --ctstate NEW -m tcp --dport 3389 -j ACCEPT", false},
 		{"-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT", true},
+		{"-A INPUT -p tcp -m tcp --dport 3389 -m state --state NEW -j ACCEPT", true},
 		{"-A INPUT -p tcp -m tcp ! --dport 22 -m conntrack --ctstate NEW -j ACCEPT", true},
 		{"-A INPUT -p tcp -m tcp ! --dport 22 -m state --state NEW -j ACCEPT", true},
 		// The client picks its source port, so a source-port match narrows

@@ -988,8 +988,9 @@ func iptExposes(f []string, port int) bool {
 }
 
 // iptRepliesOnly reports a rule held by a conntrack or state match to packets
-// of existing connections: `--ctstate RELATED,ESTABLISHED`, or `! --ctstate NEW`.
-// Such an allow admits no new connection, so it exposes nothing (#758). The
+// that are not NEW: a list without NEW (`--ctstate RELATED,ESTABLISHED`, or
+// `INVALID`), or `! --ctstate NEW`. Such an allow admits no new connection, so
+// it exposes nothing (#758). The
 // port-less path already reads any state match as narrowing.
 func iptRepliesOnly(f []string) bool {
 	for i, w := range f {
