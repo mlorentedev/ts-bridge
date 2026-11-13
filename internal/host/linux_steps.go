@@ -541,6 +541,9 @@ func withChains(read firewallRead, step SetupStep, port int) SetupStep {
 		return step
 	}
 	fix := fmt.Sprintf("read the chain as root and confirm it admits TCP %d only on %s, then run ts-bridge host check again", port, tailnetInterface)
+	if step.Fix != "" {
+		fix = step.Fix + "; " + fix
+	}
 	return newStep(step.Name, OutcomeUnverified, step.Message, fix)
 }
 

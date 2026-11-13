@@ -19,7 +19,7 @@ owner: manu
   It is also covered by the `TestSetupForLinux` row "an unscoped allow in an operator chain: scoped rule added, nothing deleted, manual". In that row the recorded calls hold no `-D`.
 - **AC2.**
   - The rows "a scoped allow in an operator chain: ok" and "an operator chain behind a narrowed jump is not read: ok" cover it. In the second, no `iptables -S fw-open` call is recorded.
-  - `ts-input` is not walked: every existing iptables row records exactly one `iptables -S ts-input`, and removing the skip turns 83 tests red.
+  - `ts-input` is not walked: every existing iptables row records exactly one `iptables -S ts-input`, and removing the skip turns 85 tests red.
   - ufw's chains are not walked: the ufw host rows record no `iptables -S ufw-*`, and removing the skip turns 22 tests red.
   - The loop row ends, through `fw-open` → `fw-deep` → `fw-open`.
 - **AC3.** Covered by the rows "an operator chain that cannot be read: unverified" (check), "the scoped rule in place and a chain that cannot be read: unverified" (setup) and "a jump to a missing chain: ok". Each of these is red if `chainUnread` is dropped from `linuxFirewallOK` or `withChains` is short-circuited. On a ufw host, the rows "ufw host, an operator chain that cannot be read: unverified (#762 review)" (check) and "ufw, the scoped allow in place and an operator chain that cannot be read: unverified (#762 review)" (setup) cover it. Both are red if `withUFWIptables` drops `chainUnread`.
@@ -50,6 +50,15 @@ Round 1 (nan/deepseek-v4-flash, FAIL, at a4e0f41; kept as `review-round1.md`):
 - **Minor REAL, Closing boxes stale: applied.** gosec is not installed locally, and the CI `security` job runs it. The task now says so instead of claiming a local run.
 - **Minor REAL, a duplicate `[AC2]`: applied.** The nested and loop criterion is now AC5, and it also covers the any-address jump.
 - **e2e not re-runnable on a dirty guest: applied.** `iptables -N tsbe2e4` falls back to flushing the chain when it exists.
+
+Round 2 (nan/deepseek-v4-flash, PASS, at afea4e9; this `review.md`):
+
+- **Minor REAL, 83 should be 85:** applied. The count was re-measured at 85.
+- **Minor THEORETICAL, `withChains` drops an `ok` step's fix:** applied. It now prepends `step.Fix` as `withIP6` does. No `ok` step carries a fix today, so no row can reach it.
+- **Minor THEORETICAL, `-s 0.0.0.0/0` on an allow inside a chain is still read as a scope:** this is the declared predicate (`iptScopedAllow`, see Risks). #743 now carries the exposure side for both literals, as commented there. `iptNarrowed` errs toward reading more chains, so it does not outrun that fix: a chain read never hides an allow that the predicate would otherwise have reported.
+- **Minor REAL, no `-d 0.0.0.0/0` row:** applied. The row is "a jump to any address is a jump for every packet: manual (#762 review round 2)".
+- **Minor REAL, the Closing box "features.json replays…" is unticked:** recorded here instead, as the review advises, since `tasks.md` is in the contract set. Both `features.json` commands replay and pass, `verification.md` is filled, and the review is committed.
+- **Minor SPECULATIVE, one `iptables -S` per chain with no cap:** declined. It is the trade named in Risks: each chain is read once, and the cost is bounded by the host's own rule set.
 
 ## Promotion candidates
 

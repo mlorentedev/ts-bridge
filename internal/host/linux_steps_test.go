@@ -1157,6 +1157,15 @@ func TestCheckForLinux(t *testing.T) {
 			message:  strings.TrimSpace(fwOpenAllow),
 		},
 		{
+			name:     "iptables, a jump to any address is a jump for every packet: manual (#762 review round 2)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -d 0.0.0.0/0 -j fw-open\n", iptChain: tsInputNoAccept, fwOpenRead: "-N fw-open\n" + fwOpenAllow})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output "+fwOpenRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=manual"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  strings.TrimSpace(fwOpenAllow),
+		},
+		{
 			name:     "iptables, an accept off loopback beside the scoped rule: manual (#736)",
 			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT ! -i lo -p tcp -j ACCEPT\n", iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
