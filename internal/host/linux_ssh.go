@@ -70,14 +70,15 @@ func sshSetupSteps(r Runner, port int) []SetupStep {
 func checkSSH(r Runner, port int, result *CheckResult) {
 	unit, x := readSSH(r)
 	fw := sshFirewallRead(r, port)
-	steps := []SetupStep{sshUnit(unit).checkStep(x)}
+	svcStep := sshUnit(unit).checkStep(x)
+	result.Steps = append(result.Steps, svcStep)
 	if s, ok := sshPortStep(r, x, port, OutcomeUnverified); ok {
-		steps = append(steps, s)
+		result.Steps = append(result.Steps, s)
 	}
-	steps = append(steps, sshNamed(firewallCheckStep(fw, port)))
-	result.Steps = append(result.Steps, steps...)
-	unread := slices.ContainsFunc(steps, func(s SetupStep) bool { return s.Outcome == OutcomeUnverified })
-	svc := Service{Kind: ServiceSSH, Port: port, Enabled: x.enabled, FirewallOK: linuxFirewallOK(fw), Unread: unread}
+	result.Steps = append(result.Steps, sshNamed(firewallCheckStep(fw, port)))
+	// Unread is about the service, as for xrdp: an unreadable firewall or listener
+	// port is its own unverified step and leaves enabled and active meaningful.
+	svc := Service{Kind: ServiceSSH, Port: port, Enabled: x.enabled, FirewallOK: linuxFirewallOK(fw), Unread: svcStep.Outcome == OutcomeUnverified}
 	if x.readable {
 		active := x.active
 		svc.Active = &active

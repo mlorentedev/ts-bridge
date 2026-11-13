@@ -1,7 +1,7 @@
 ---
 id: "HOST-007-ssh-service-linux"
 type: spec
-status: implementing # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-11-12"
 issue: "mlorentedev/ts-bridge#521"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
@@ -43,6 +43,8 @@ This is the Linux half of #521. The Windows half (OpenSSH Server capability, `ss
 - **The declared port is verified only when it is not 22.** The host file cannot tell a declared 22 from an omitted one, and an undeclared port is left to the OS (ADR-017 §5), so sshd on a non-default port with nothing declared still reads `ok` for 22. A declared non-default port is read from `sshd -T`, which needs root: unprivileged `check` is `unverified` for it.
 - **`ssh` goes first in the unit lookup**, because on Debian `ssh.service` carries `sshd` as an alias and `systemctl is-enabled sshd` answers `alias`, which ts-bridge does not interpret.
 - **Socket activation is read, not assumed.** `ssh.socket` (Ubuntu 22.10+) is consulted only when the service is not already enabled and running. A host with the socket enabled and the service idle reads `ok`. This reading is unit-tested through the fake runner; it has not been run on an Ubuntu guest.
+- **An enabled but inactive `ssh.socket` over a disabled service makes setup run `enable --now ssh`**, the service: the socket credits "enabled" but not "active", so the host reads as drift and setup converges it by enabling the service too. That changes the activation model (socket and service both enabled at the next boot) on a host that was only missing a running socket. Enabling `<unit>.socket` instead when the socket unit exists would be more faithful; it is left for the owner to decide, since ADR-017 says nothing about socket activation.
+- **Per-service descriptors (ADR-017 §4) have not landed**, so an ssh-only host prints no descriptor in `check` and no client target in `setup`.
 - **A typical Ubuntu host (`ufw allow 22/tcp`, or `OpenSSH` app profile) will read `manual`.** The first is an unscoped allow that voids the `tailscale0` scope (Amendment B) and is never deleted; the operator scopes it, or removes it. The app-profile allow is not parsed by the ufw read (`ufw allow OpenSSH` is not counted), so setup appends the scoped rule beside it.
 - The firewall message for a reclassified allow says "legacy unscoped rule", the RDP wording; the fix names the rule and says setup does not delete rules it did not write.
 - `printSetupSummary` also skips the RDP lines on a Windows host whose registry read returns port 0; that case printed `RDP Port: 0` before.

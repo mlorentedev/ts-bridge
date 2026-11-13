@@ -17,7 +17,7 @@ owner: manu
 - [x] AC4 (JSON) -> `TestCheckSSH` (rdp+ssh: services in order, legacy keys from rdp alone, `FirewallOK` false when only the ssh port is closed), `TestCheckJSON_ListsSSHBesideRDP`.
 - [x] AC5 (text) -> `TestPrintCheckText_ServiceLines`: an ssh-only host prints `SSH:` and neither `RDP` nor `no service declared`; stopped and unread rows; rdp+ssh prints one line each. `TestPrintCheckText_Service` (the existing RDP rows) passes unchanged.
 - [x] AC6 (operator's allow) -> `TestSetupSSHKeepsTheOperatorsOwnAllow`. Red proof: with `sshFirewallRead`'s reclassification disabled the test fails with `setup deleted a rule ts-bridge did not write: "ufw delete allow 22/tcp"` and `"iptables -D INPUT -p tcp --dport 22 -j ACCEPT"` (twice, one per copy), and the firewall step reads `changed` ("Legacy unscoped firewall rule deleted"). Restored, it passes.
-- [x] AC7 (port) -> `TestSSHPort` (match, listenaddress with a port, sshd elsewhere = manual naming both, unreadable = failed in setup and unverified in check with `Unread`, no port in the answer; never a `sshd_config` write or restart), `TestSSHPortDefaultAndMissingReadNothing`.
+- [x] AC7 (port) -> `TestSSHPort` (match, listenaddress with a port, sshd elsewhere = manual naming both, unreadable = failed in setup and unverified in check, the service itself staying read, no port in the answer; never a `sshd_config` write or restart), `TestSSHPortDefaultAndMissingReadNothing`.
 - [x] AC8 (default host unchanged) -> every pre-existing Linux test passes unchanged (`TestSetupForLinux`, `TestCheckForLinux`, `TestXRDP`, `TestXRDPStepOutcomes`, the xrdp port tests), and `TestCheckSSHDefaultStaysRDP`.
 - [ ] e2e on the Linux VM -> `scripts/e2e/linux.sh` gains three ssh-only cases. Written, shellchecked, not run by the author; the lead runs `make e2e-linux`.
 
@@ -31,5 +31,6 @@ owner: manu
 
 - The xrdp unit steps became `linuxUnit` methods, and `readXRDP` became `readUnit(r, unit, binary)`, so xrdp and ssh share one systemd read and one outcome mapping; the xrdp messages are byte for byte as before (the existing tests pin them).
 - `SSH server` for a missing OpenSSH is `manual`, not `failed` (see Risks in the proposal).
+- `services[].unread` for ssh follows the unit step alone, as for xrdp: an unverified firewall or an unreadable `sshd -T` is its own step and leaves `enabled` and `active` meaningful (`TestCheckSSH/not_root`, red before the fix).
 - The firewall steps are called through `firewallSetupFor(r, read, port)`, a split of `firewallSetupStep` so the ssh path can hand in its reclassified read. No firewall read function is touched.
 - `SetupResult.RDPPort` is 0 on a host that declares no rdp; `printSetupSummary` skips the RDP lines at 0.

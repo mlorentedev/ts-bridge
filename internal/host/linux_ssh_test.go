@@ -229,6 +229,10 @@ func TestCheckSSH(t *testing.T) {
 			[]string{"Tailscale IP=ok", "xrdp service=ok", linuxFwName + "=ok", "SSH server=ok", sshFwName + "=changed"},
 			[]Service{{Kind: ServiceRDP, Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}, {Kind: ServiceSSH, Port: 22, Enabled: true, Active: &yes}},
 			CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true}},
+		{"not root: the firewall is unverified, the service was read fine", sshOnly, &recordingRunner{onPath: sshOnPath, output: sshUp(nil)},
+			[]string{"Tailscale IP=ok", "SSH server=ok", sshFwName + "=unverified"},
+			[]Service{{Kind: ServiceSSH, Port: 22, Enabled: true, Active: &yes}},
+			CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true}},
 		{"no systemctl: unread, never claimed off", sshOnly, &recordingRunner{onPath: map[string]bool{"sshd": true}, output: map[string]string{"tailscale ip -4": "100.64.0.5\n"}},
 			[]string{"Tailscale IP=ok", "SSH server=unverified", sshFwName + "=unverified"},
 			[]Service{{Kind: ServiceSSH, Port: 22, Unread: true}},
@@ -322,8 +326,8 @@ func TestSSHPort(t *testing.T) {
 			if c := stepNamed(t, got.Steps, sshPortName); c.Outcome != tt.check || !strings.Contains(c.Message, tt.message) {
 				t.Errorf("check = %s %q, want %s with %q", c.Outcome, c.Message, tt.check, tt.message)
 			}
-			if wantUnread := tt.check == OutcomeUnverified; got.Services[0].Unread != wantUnread {
-				t.Errorf("Unread = %v, want %v", got.Services[0].Unread, wantUnread)
+			if got.Services[0].Unread {
+				t.Error("Unread = true: the service was read, only its listener port was not")
 			}
 		})
 	}
