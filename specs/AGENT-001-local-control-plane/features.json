@@ -23,7 +23,7 @@
   {
     "id": "AGENT-001-local-control-plane-f4",
     "behavior": "The client refuses a socket directory that is not private to it and a server that is not its user, before writing a byte",
-    "verification": "go test ./internal/agent -run '^TestClientRefusesAnUntrustedEndpoint$' -count=1",
+    "verification": "go test ./internal/agent -run '^(TestClientRefusesAnOpenSocketDirectory|TestClientRefusesAForeignServer)$' -count=1",
     "state": "pending",
     "evidence": ""
   },
@@ -31,6 +31,13 @@
     "id": "AGENT-001-local-control-plane-f5",
     "behavior": "GET /v1/meta and /v1/status answer over the real transport, every error is the {code,message,detail} envelope, and ts-bridge agent serves until interrupted",
     "verification": "go test ./internal/agent ./cmd/cli -run '^(TestMetaAndStatusOverTheRealTransport|TestErrorsUseTheEnvelope|TestAgentCommandServesUntilInterrupted)$' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AGENT-001-local-control-plane-f6",
+    "behavior": "On Windows the agent pipe is named after the user's SID, its DACL allows only that SID, an owned name is refused, and the client checks the server's SID",
+    "verification": "go test ./internal/agent -run '^(TestPipeAdmitsOnlyTheUser|TestStartRefusesAnOwnedPipeName|TestEndpointRefusesANameOutsideThePipeNamespace|TestDefaultPipeNameCarriesTheUserSID|TestClientRefusesAForeignServer)$' -count=1",
     "state": "pending",
     "evidence": ""
   }
