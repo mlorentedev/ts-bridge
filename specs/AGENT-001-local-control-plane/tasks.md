@@ -9,53 +9,70 @@ owner: manu
 
 # Tasks - AGENT-001-local-control-plane
 
-The issue is split into four PRs of at most ~300 executable lines each (tests, lockfiles and generated
-files excluded), every one test-first. The split follows the seams of ADR-018: identity and transport
-first, because every later PR rests on them; then what runs behind the socket; then what is stored;
-then the first client. PRs 1 to 3 say `Refs #782`; PR 4 says `Closes #782`.
+The issue is split into five PRs of at most ~300 executable lines each (tests, lockfiles and generated
+files excluded), every one test-first. The split follows the seams of ADR-018: the agent and its Unix
+transport first, because every later PR rests on them; then the Windows transport; then what runs
+behind the socket; then what is stored; then the first client. PRs 1 to 4 say `Refs #782`; PR 5 says
+`Closes #782`.
 
-## PR 1 - single-instance agent with an identity-checked local API (`Refs #782`)
+## PR 1 - single-instance agent with an identity-checked Unix API (`Refs #782`)
 
 ### Setup
 
 - [x] Branch from master: `feat/issue-782-agent-local-api`
-- [x] `proposal.md` complete; Windows pipe dependency decided (`tailscale/go-winio`, already in `go.mod`)
+- [x] `proposal.md` reconciled with the merged ADR-018 (base from the user database, uid-only Linux
+  socket path, `/v1/meta`, error envelope, client-side server check, Windows split out)
 
 ### Implementation
 
 - [ ] Move the advisory file lock to `internal/oslock`; `internal/profile` uses it (existing lock tests stay green)
-- [ ] [AC1] Failing test, then `Start`: lock, second starter refused, stale socket removed under the lock, non-socket never removed
-- [ ] [AC2] Failing test, then the state-directory rules (default per OS, 0700, owner, symlink, socket mode, path length)
-- [ ] [AC3] Failing test, then `Authorize` and the identifying listener (fake peers, accept loop survives a refusal)
-- [ ] [AC3] [AC4] Unix peer credentials (Linux, macOS), Windows pipe, SDDL and token SID check
-- [ ] [AC4] `GET /v1/status`, `Serve`/`Close`, `HTTPClient`, and `ts-bridge agent` (foreground)
+- [ ] [AC2] Failing test, then the paths: base from the user database per OS, Linux socket directory
+  from the uid, macOS `<base>/run`; directory rules (0700, owner, symlink) and the `sun_path` limit
+- [ ] [AC1] Failing test, then `Start`: lock, second starter refused, stale socket removed under the
+  lock, non-socket never removed
+- [ ] [AC3] Failing test, then `Authorize` and the identifying listener (fake peers, accept loop
+  survives a refusal); Unix peer credentials (Linux, macOS)
+- [ ] [AC4] Failing test, then the client's directory and server-identity checks
+- [ ] [AC5] `GET /v1/meta`, `GET /v1/status`, the error envelope, `Serve`/`Close`, `HTTPClient`, and
+  `ts-bridge agent` (foreground); Windows refuses to start with a message naming the follow-up
 - [ ] ADR-007 package table: `oslock`, `agent`, and the `profile` row
 
 ### Closing
 
 - [ ] `go test -race ./...`, `golangci-lint run`, `gosec ./...`, `GOOS=windows go vet ./...`, `GOOS=darwin go vet ./...`
-- [ ] Mutation: `Authorize` always true, stale socket removed before the lock, socket mode left at the umask - each fails a test
+- [ ] Mutation: `Authorize` always true, stale socket removed before the lock, socket mode left at the
+  umask, client server check skipped - each fails a test
 - [ ] `verification.md` evidence filled once CI is green
 
-## PR 2 - session supervisor (`Refs #782`, not started)
+## PR 2 - Windows transport (`Refs #782`, not started)
 
-- [ ] [AC5] Child process re-exec of `connect --profile <name>`, with a lifetime tie per OS (`Pdeathsig` on
-  Linux, a Job Object with `KILL_ON_JOB_CLOSE` on Windows, a lifeline pipe closed on EOF on macOS)
-- [ ] [AC5] Desired-running set in the state directory: restore after an unexpected stop, keep a user stop
-- [ ] [AC5] `/v1/sessions` list, start, stop, status
+- [ ] [AC6] Named pipe `\\.\pipe\ts-bridge-agent-<SID>`, SDDL `D:P(A;;GA;;;<SID>)`,
+  `FILE_FLAG_FIRST_PIPE_INSTANCE`, `PIPE_REJECT_REMOTE_CLIENTS`; a name already owned fails and is
+  never retried under another name
+- [ ] [AC6] Per-connection client token SID check; client opens with
+  `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION` and checks `GetNamedPipeServerProcessId`'s token SID
+- [ ] `go.mod`: `tailscale/go-winio` loses its `// indirect` marker (operator-approved); `go.sum` unchanged
 
-Reason for the cut: the lifetime tie is three OS-specific mechanisms and the recovery set is its own
-state machine; together they fill a PR without touching the credential code.
+## PR 3 - session supervisor (`Refs #782`, not started)
 
-## PR 3 - profiles and discovery (`Refs #782`, not started)
+- [ ] [AC7] `connect --lifeline <fd|handle>` (hidden): `stop` line drains, EOF drains on Unix; stdin is
+  the null device
+- [ ] [AC7] Spawn: working dir, allow-listed environment, `.env` off, `--quiet`, `READY`/`ERROR` parsing;
+  Windows suspended + Job Object + resume; duplicate local address refused; stable hostname
+- [ ] Per-profile lock holder metadata (kind, pid, start) and the bounded wait for a previous
+  generation's lock
+- [ ] `/v1/sessions` list, start, stop, status; the skew check on mutations
 
-- [ ] [AC6] `/v1/profiles` list; import of a `tsb://` descriptor with its credential through `BindCredential`
-- [ ] [AC6] Discovery endpoint over `internal/discover`; a test that no secret reaches any file but the store
+## PR 4 - recovery and profiles (`Refs #782`, not started)
 
-## PR 4 - session CLI (`Closes #782`, not started)
+- [ ] [AC8] State machine, budget of three, persisted desired state, a minute of `ready` resets the count
+- [ ] [AC8] `/v1/profiles` list and import through the ADR-015 transition with an explicit `force`;
+  audit line per mutation
 
-- [ ] [AC7] `ts-bridge session list|start|stop|status` over `agent.HTTPClient`
-- [ ] [AC7] `connect --profile X` and an agent session of X refuse each other, each naming the other
+## PR 5 - session CLI (`Closes #782`, not started)
+
+- [ ] [AC9] `ts-bridge session list|start|stop|status` over `agent.HTTPClient`
+- [ ] [AC9] `connect --profile X` and an agent session of X refuse each other, each naming the other
 - [ ] Tick every AC in `verification.md`; archive the spec after review
 
 ## Notes

@@ -12,25 +12,37 @@ owner: manu
 ## Evidence
 
 - [ ] AC1 -> `TestStartRefusesASecondAgent`, `TestStartAfterCloseSucceeds`, `TestStartReplacesAStaleSocket`,
-  `TestStartKeepsTheSocketOfARunningAgent`, `TestStartNeverRemovesANonSocket`
-- [ ] AC2 -> `TestDefaultDir`, `TestPrepareDirModes`, `TestSocketModeIsOwnerOnly`, `TestStartRefusesALongSocketPath`
+  `TestStartNeverRemovesANonSocket`
+- [ ] AC2 -> `TestPathsFor`, `TestDefaultPathsIgnoreTheEnvironment`, `TestRunUserUsable`, `TestPrepareDirModes`,
+  `TestVerifyDirRefusesAForeignOwner`, `TestSocketModeIsOwnerOnly`, `TestStartRefusesASocketPathAtTheLimit`
 - [ ] AC3 -> `TestAuthorize` (fake uid/SID), `TestListenerRefusesAPeerThatIsNotTheOwner`,
-  `TestListenerKeepsServingAfterARefusal`
-- [ ] AC4 -> `TestStatusOverTheRealTransport`, `TestPeerIdentityIsTheCurrentUser`, `TestAgentCommandServesUntilInterrupted`
-- [ ] AC5 to AC7 -> later PRs (see `tasks.md`)
+  `TestListenerKeepsServingAfterARefusal`, `TestPeerIdentityIsTheCurrentUser`
+- [ ] AC4 -> `TestClientRefusesAnUntrustedEndpoint`
+- [ ] AC5 -> `TestMetaAndStatusOverTheRealTransport`, `TestErrorsUseTheEnvelope`, `TestAgentCommandServesUntilInterrupted`
+- [ ] AC6 to AC9 -> later PRs (see `tasks.md`)
 
 ## Test status
 
-(filled at the head of each PR)
+PR 1, local (macOS arm64, Go 1.27.3): `go test -race ./...` green; `golangci-lint run` 0 issues;
+`gosec ./...` (v2.30.0) 0 issues; `GOOS=windows` and `GOOS=linux` `go vet ./...` clean. Mutations, each
+killed by a test: `Authorize` always true; socket left at the umask; client server check skipped; client
+directory check skipped; a refused starter rebinding the socket before giving up.
 
 ## Decisions made during implementation
 
-(filled as they happen)
+- **PR 1 is over the ~300-line cap (about 475 executable lines, 40 of them the mechanical `oslock`
+  move).** The server's peer check and the client's server check are two halves of one trust
+  boundary (ADR-018 §2); split across PRs, each half would be reviewed without the other. Windows was
+  split out instead, which is the cut that removes code nobody can run locally.
+- **The `/run/user/<uid>` probe requires mode 0700 exactly**, the mode systemd-logind creates, and
+  falls back to `/tmp/ts-bridge-<uid>` otherwise; the fallback directory gets the same checks.
+- **The client checks the socket directory with no tightening** (`checkPrivateDir`): only the agent
+  creates or repairs it, and a client that tightened a directory it found loose would be trusting it.
 
 ## Promotion candidates
 
-- [ ] Lesson for the repo's `docs/lessons/`? to decide after PR 4
-- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-018 records the architecture; the ADR-007 table row is updated in PR 1
+- [ ] Lesson for the repo's `docs/lessons/`? to decide after PR 5
+- [ ] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-018 records the architecture; the ADR-007 table is updated in PR 1
 - [ ] New pattern candidate for `00_meta/patterns/`? no
 
 ## Archive checklist

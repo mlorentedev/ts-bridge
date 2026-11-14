@@ -12,15 +12,12 @@ import (
 	"strconv"
 )
 
-// maxSocketPath keeps a socket path under sun_path (104 bytes on macOS, 108 on
-// Linux), so a deep state directory fails with a clear error instead of bind's
-// "invalid argument".
-const maxSocketPath = 100
-
-func endpoint(dir string) (string, error) {
-	path := filepath.Join(dir, socketName)
-	if len(path) > maxSocketPath {
-		return "", fmt.Errorf("agent socket path is too long (%d bytes, at most %d): %s", len(path), maxSocketPath, path)
+// endpoint refuses a socket path that does not fit sun_path with its NUL, so a
+// deep directory fails with the path named instead of bind's "invalid argument".
+func endpoint(p Paths) (string, error) {
+	path := filepath.Join(p.Run, socketName)
+	if len(path) >= sunPathMax {
+		return "", fmt.Errorf("agent socket path is too long (%d bytes, the limit is %d): %s", len(path), sunPathMax-1, path)
 	}
 	return path, nil
 }
@@ -32,22 +29,25 @@ func currentIdentity() (Identity, error) {
 // listen binds the socket. The caller holds the agent lock, which is the only
 // reason a leftover socket may be removed: with the lock held, no agent of this
 // user is serving it.
-func listen(dir string) (net.Listener, error) {
-	path, err := endpoint(dir)
+func listen(p Paths) (net.Listener, string, error) {
+	path, err := endpoint(p)
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+	if err := prepareDir(p.Run); err != nil {
+		return nil, "", err
 	}
 	if err := removeStaleSocket(path); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	ln, err := net.Listen("unix", path)
 	if err != nil {
-		return nil, fmt.Errorf("listen on %s: %w", path, err)
+		return nil, "", fmt.Errorf("listen on %s: %w", path, err)
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
-		return nil, errors.Join(fmt.Errorf("restrict socket %s: %w", path, err), ln.Close())
+		return nil, "", errors.Join(fmt.Errorf("restrict socket %s: %w", path, err), ln.Close())
 	}
-	return ln, nil
+	return ln, path, nil
 }
 
 // removeStaleSocket removes a socket left by a crashed agent. Anything else at
@@ -69,8 +69,22 @@ func removeStaleSocket(path string) error {
 	return nil
 }
 
-func dial(ctx context.Context, dir string) (net.Conn, error) {
-	path, err := endpoint(dir)
+func dial(ctx context.Context, p Paths) (net.Conn, error) {
+	self, err := currentIdentity()
+	if err != nil {
+		return nil, err
+	}
+	return dialAs(ctx, p, self)
+}
+
+// dialAs connects only to an agent run by self: the socket directory must be
+// private to this user, and the server's peer credentials must name self. Both
+// checks run before the caller can write a byte.
+func dialAs(ctx context.Context, p Paths, self Identity) (net.Conn, error) {
+	if err := checkPrivateDir(p.Run, os.Geteuid()); err != nil {
+		return nil, err
+	}
+	path, err := endpoint(p)
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +92,18 @@ func dial(ctx context.Context, dir string) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial agent at %s: %w", path, err)
 	}
+	server, err := peerIdentity(conn)
+	if err == nil {
+		err = Authorize(server, self)
+	}
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("agent at %s: %w", path, err), conn.Close())
+	}
 	return conn, nil
 }
 
-// peerIdentity names the user on the other end of an accepted socket.
+// peerIdentity names the user on the other end of a connected socket. It works
+// from either end: the server learns its client, the client its server.
 func peerIdentity(conn net.Conn) (Identity, error) {
 	unixConn, ok := conn.(*net.UnixConn)
 	if !ok {
