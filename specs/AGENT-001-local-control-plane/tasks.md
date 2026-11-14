@@ -44,14 +44,14 @@ behind the socket; then what is stored; then the first client. PRs 1 to 4 say `R
   umask, client server check skipped - each fails a test
 - [ ] `verification.md` evidence filled once CI is green
 
-## PR 2 - Windows transport (`Refs #782`, not started)
+## PR 2 - Windows transport (`Refs #782`, in review)
 
-- [ ] [AC6] Named pipe `\\.\pipe\ts-bridge-agent-<SID>`, SDDL `D:P(A;;GA;;;<SID>)`,
+- [x] [AC6] Named pipe `\\.\pipe\ts-bridge-agent-<SID>`, SDDL `D:P(A;;GA;;;<SID>)`,
   `FILE_FLAG_FIRST_PIPE_INSTANCE`, `PIPE_REJECT_REMOTE_CLIENTS`; a name already owned fails and is
   never retried under another name
-- [ ] [AC6] Per-connection client token SID check; client opens with
+- [x] [AC6] Per-connection client token SID check; client opens with
   `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION` and checks `GetNamedPipeServerProcessId`'s token SID
-- [ ] `go.mod`: `tailscale/go-winio` loses its `// indirect` marker (operator-approved); `go.sum` unchanged
+- [x] `go.mod`: `tailscale/go-winio` loses its `// indirect` marker (operator-approved); `go.sum` unchanged
 
 ## PR 3 - session supervisor (`Refs #782`, not started)
 
