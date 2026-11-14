@@ -176,11 +176,11 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 
 Windows `ssh` (#521) is read first and converges no more than Linux's. The OpenSSH Server
 capability is read with `Get-WindowsCapability -Online -Name 'OpenSSH.Server*'`: `Installed` is
-`ok`, `NotPresent` is `manual` naming `Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0`
-(a managed host needs Windows Update, WSUS or a Features-on-Demand source), and an unreadable
+`ok`, `NotPresent` with no `sshd` service is `manual` naming `Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0`
+(a managed host needs Windows Update, WSUS or a Features-on-Demand source; `NotPresent` with an `sshd` service is an OpenSSH installed outside Windows capabilities, such as the Win32-OpenSSH MSI, and is read as installed), and an unreadable
 answer is `failed` in `setup` and `unverified` in `check`; ts-bridge installs nothing. With the
 capability present `sshd` is set to Automatic and started, and a declared port other than 22 is
-compared with `sshd -T` (`manual` on a mismatch, `sshd_config` never written). The firewall rule is
+compared with `sshd -T`, run from the executable the service's `BINARY_PATH_NAME` names (`manual` on a mismatch, `sshd_config` never written). The firewall rule is
 the ts-bridge-owned `Tailscale-SSH-Ingress`, scoped as the RDP rule is (Amendment B). The capability's
 own `OpenSSH-Server-In-TCP` allows any address, so, like the built-in Remote Desktop group, an
 enabled inbound allow of it on the declared port is reported `manual` with
