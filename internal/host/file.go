@@ -77,7 +77,7 @@ type osCapability struct {
 }
 
 var osCapabilities = map[string]osCapability{
-	goosWindows: {kinds: []string{ServiceRDP}, power: true, firewallRule: true, serve: true, planned: map[string]string{ServiceSSH: "#521"}},
+	goosWindows: {kinds: []string{ServiceRDP, ServiceSSH}, power: true, firewallRule: true, serve: true},
 	goosLinux:   {kinds: []string{ServiceRDP, ServiceSSH}, serve: true},
 	goosDarwin:  {planned: map[string]string{ServiceSSH: "#459", ServiceVNC: "#459"}},
 }
@@ -180,7 +180,7 @@ func validateFirewall(fw *FileFirewall, goos string, capab osCapability) error {
 	if fw.Rule == nil {
 		return nil
 	}
-	if _, err := sanitizeFirewallRule(*fw.Rule); err != nil {
+	if _, err := sanitizeRDPRule(*fw.Rule); err != nil {
 		return fmt.Errorf("host.firewall.rule: %w", err)
 	}
 	return nil

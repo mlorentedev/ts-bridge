@@ -3,6 +3,7 @@ package host
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 const maxFirewallRuleName = 64
@@ -23,4 +24,20 @@ func sanitizeFirewallRule(name string) (string, error) {
 		return "", fmt.Errorf("firewall rule name contains invalid characters (only A-Z, a-z, 0-9, -, _ allowed): %q", name)
 	}
 	return name, nil
+}
+
+// sanitizeRDPRule validates the operator-chosen RDP rule name (the flag,
+// TS_HOST_FIREWALL_RULE, host.firewall.rule). The ssh service owns
+// Tailscale-SSH-Ingress, and setup replaces every rule that carries a name, so
+// an RDP rule under it would be overwritten by the ssh step (#781). Windows
+// compares rule names without case.
+func sanitizeRDPRule(name string) (string, error) {
+	rule, err := sanitizeFirewallRule(name)
+	if err != nil {
+		return "", err
+	}
+	if strings.EqualFold(rule, sshFirewallRule) {
+		return "", fmt.Errorf("firewall rule name %q is reserved for the ssh service", name)
+	}
+	return rule, nil
 }

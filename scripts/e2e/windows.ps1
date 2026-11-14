@@ -166,7 +166,9 @@ Case 'prevent_sleep false: no power step' { @($jn.steps).Count -gt 0 -and -not (
 Yaml "$W\custom.yaml" "version: 1`nhost:`n  services:`n    - kind: rdp`n      port: 3389`n  firewall:`n    rule: Custom-E2E"
 Case 'custom rule name from the file is created' { Json setup "$W\custom.yaml" | Out-Null; @(Rule 'Custom-E2E').Count -eq 1 }
 Yaml "$W\ssh.yaml" "version: 1`nhost:`n  services:`n    - kind: ssh`n      port: 22"
-Case 'ssh service refused, citing #521' { Tsb host setup --config "$W\ssh.yaml"; $Code -eq 1 -and $Out -match '#521' }
+# Windows converges ssh since #521. The case reads only (check) so the e2e host is not given an sshd:
+# the declaration is accepted, not refused as planned work, and the capability step is reported.
+Case 'ssh service accepted on Windows, no #521 refusal' { Tsb host check --config "$W\ssh.yaml"; $Out -notmatch '#521' -and $Out -match 'OpenSSH Server' }
 Yaml "$W\unk.yaml" "version: 1`nhost:`n  services:`n    - kind: rdp`n      port: 3389`n  colour: blue"
 Case 'unknown key warned by name, check still runs' { Tsb host check --config "$W\unk.yaml"; $Out -match 'colour' -and $Out -match 'HOST CHECK' }
 Yaml "$W\v2.yaml" "version: 2`nhost: {}"
