@@ -133,8 +133,11 @@ Measured locally on 2026-11-14:
   - A `stop` line cancels its context and runs the normal drain (`--drain-timeout`).
     This is the graceful stop on every OS, including Windows, where a console-less
     child receives no signal.
-  - EOF means the agent died, which the kernel guarantees. The child runs the same
-    drain and exits.
+  - EOF means the agent died, which the kernel guarantees. On Unix the child runs the
+    same drain and exits. On Windows the agent's death also closes the Job Object
+    handle, and kill-on-close ends the child at once, with no drain. That is accepted:
+    an agent that died cannot report the drain anyway, and tsnet's state survives an
+    abrupt stop.
 - Windows also creates each child suspended, assigns it to a Job Object with
   kill-on-close, then resumes it, so nothing the child spawns starts outside the job. A
   parent job that forbids nesting makes the assignment fail. That failure is logged, and
@@ -215,8 +218,12 @@ Measured locally on 2026-11-14:
 **Transport.**
 
 - Linux:
-  - The socket goes in `$XDG_RUNTIME_DIR/ts-bridge/` when that variable is set and the
-    directory is owned by the user with mode 0700.
+  - The path is derived from the uid alone, never from the environment, so an agent
+    and a client started with different `XDG_RUNTIME_DIR` values still meet at one
+    endpoint.
+  - The socket goes in `/run/user/<uid>/ts-bridge/` when `/run/user/<uid>` exists and
+    is owned by the user with mode 0700 (the directory systemd-logind creates and
+    `XDG_RUNTIME_DIR` normally names).
   - Otherwise it goes in `/tmp/ts-bridge-<uid>/`, created 0700. The agent refuses to use
     that directory if it is a symlink, owned by another user, or more permissive than
     0700.
@@ -282,11 +289,13 @@ the only thing that restarts the agent:
 | Windows, task creation refused by policy | HKCU `Run` key | none: the agent starts at login only |
 
 - `agent stop` exits 0, so no supervisor restarts it.
-- When a registration exists, the tray never executes the agent. It asks the supervisor
+- When a supervisor-backed registration exists (the systemd, launchd or Scheduled
+  Task rows), the tray never executes the agent. It asks the supervisor
   instead (`systemctl --user start`, `launchctl kickstart`, `schtasks /run`), because a
   second starter that wins the lock would turn the supervisor's instance into a crash
   loop.
-- The tray starts the agent directly only when no registration exists.
+- The tray starts the agent directly only when no supervisor-backed registration
+  exists, which includes the XDG autostart and HKCU `Run` fallbacks.
 
 ### 4. `ts-bridge-tray`: a separate binary, Wails v3
 
@@ -301,7 +310,9 @@ the only thing that restarts the agent:
 - The credential never enters the webview. The tray's Go side collects it through the
   OS's native masked prompt and sends it straight to the agent's `import` over the
   verified endpoint. Where no native masked prompt exists (a Linux desktop without one),
-  the tray opens a terminal running `ts-bridge auth set --profile <name>`.
+  the tray opens a terminal running `ts-bridge import <name> <descriptor>` (which
+  needs no credential) followed by `ts-bridge auth set --profile <name>`, the same
+  two-step sequence the CLI documents.
 - On GNOME without the AppIndicator extension, the window opens from the application
   launcher and the app stays usable without the tray.
 - Wails v3.1.x is pinned. It was tagged on 2026-11-01, and NetBird, the reference that
@@ -385,7 +396,7 @@ Linux tray is the unverified part, and the spike settles it.
   it the app works from its window only.
 - On Linux without user systemd, and on Windows under the `Run` fallback, nothing
   restarts a crashed agent until the next login, unless the tray finds it dead (there
-  is no registration, so the tray may start it).
+  is no supervisor-backed registration, so the tray may start it).
 - A profile whose SSH bootstrap needs a passphrase, an unknown host key or an
   `ssh-agent` the supervisor did not inherit cannot run in the agent and stays a
   foreground `connect --profile`.
