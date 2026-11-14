@@ -102,8 +102,11 @@ func TestWindowsSSHSetup(t *testing.T) {
 		{"installed by the MSI and stopped: the service is started", 22, map[string]string{winSSHCapPS: "state=NotPresent\r\n", winSSHQuery: "1  STOPPED"}, nil,
 			[]string{cap + "=ok", svc + "=changed", fw + "=ok"}, []string{"net start sshd"}},
 		{"installed by the MSI, 2222: sshd -T runs from the service's own path", 2222, map[string]string{winSSHCapPS: "state=NotPresent\r\n",
-			winSSHQC: winAutoStart + "\r\n        BINARY_PATH_NAME   : \"" + winMSIBin + "\" -f x\r\n", winSSHMSIPortsPS: "port 2222\r\n"}, nil,
+			winSSHQC: winAutoStart + "\r\n        BINARY_PATH_NAME   : \"" + winMSIBin + "\"\r\n", winSSHMSIPortsPS: "port 2222\r\n"}, nil,
 			[]string{cap + "=ok", svc + "=ok", sshPortName + "=ok", fw + "=ok"}, nil},
+		{"installed by the MSI, 2222, service passes -f: the listener is not probed", 2222, map[string]string{winSSHCapPS: "state=NotPresent\r\n",
+			winSSHQC: winAutoStart + "\r\n        BINARY_PATH_NAME   : \"" + winMSIBin + "\" -f C:\\ssh\\custom.conf\r\n", winSSHMSIPortsPS: "port 22\r\n"}, nil,
+			[]string{cap + "=ok", svc + "=ok", sshPortName + "=failed", fw + "=ok"}, nil},
 		{"capability unreadable: failed, sshd not touched", 22, nil, []string{winSSHCapPS},
 			[]string{cap + "=failed", fw + "=ok"}, nil},
 		{"capability in a state ts-bridge does not interpret", 22, map[string]string{winSSHCapPS: "state=Staged\r\n"}, nil,
@@ -408,17 +411,18 @@ func TestWindowsUnknownKindFails(t *testing.T) {
 // TestWindowsServiceBinary pins the BINARY_PATH_NAME parse: quoted with
 // arguments, unquoted, and no line at all (the default path stands in).
 func TestWindowsServiceBinary(t *testing.T) {
-	tests := []struct{ name, qc, want string }{
-		{"quoted with arguments", "SERVICE_NAME: sshd\r\n        BINARY_PATH_NAME   : \"C:\\Program Files\\OpenSSH\\sshd.exe\" -f x\r\n", `C:\Program Files\OpenSSH\sshd.exe`},
-		{"unquoted", "        BINARY_PATH_NAME   : C:\\Windows\\System32\\OpenSSH\\sshd.exe\r\n", `C:\Windows\System32\OpenSSH\sshd.exe`},
-		{"unquoted with arguments", "BINARY_PATH_NAME   : C:\\OpenSSH\\SSHD.EXE -D\r\n", `C:\OpenSSH\SSHD.EXE`},
-		{"no such line", "START_TYPE         : 2   AUTO_START\r\n", ""},
-		{"empty", "", ""},
+	tests := []struct{ name, qc, want, args string }{
+		{"quoted with arguments", "SERVICE_NAME: sshd\r\n        BINARY_PATH_NAME   : \"C:\\Program Files\\OpenSSH\\sshd.exe\" -f x\r\n", `C:\Program Files\OpenSSH\sshd.exe`, "-f x"},
+		{"quoted, no arguments", "        BINARY_PATH_NAME   : \"C:\\Program Files\\OpenSSH\\sshd.exe\"\r\n", `C:\Program Files\OpenSSH\sshd.exe`, ""},
+		{"unquoted", "        BINARY_PATH_NAME   : C:\\Windows\\System32\\OpenSSH\\sshd.exe\r\n", `C:\Windows\System32\OpenSSH\sshd.exe`, ""},
+		{"unquoted with arguments", "BINARY_PATH_NAME   : C:\\OpenSSH\\SSHD.EXE -D\r\n", `C:\OpenSSH\SSHD.EXE`, "-D"},
+		{"no such line", "START_TYPE         : 2   AUTO_START\r\n", "", ""},
+		{"empty", "", "", ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := serviceBinary(tt.qc); got != tt.want {
-				t.Errorf("serviceBinary = %q, want %q", got, tt.want)
+			if got, args := serviceBinary(tt.qc); got != tt.want || args != tt.args {
+				t.Errorf("serviceBinary = %q, %q; want %q, %q", got, args, tt.want, tt.args)
 			}
 		})
 	}
@@ -480,6 +484,23 @@ func TestSSHInstallerRuleReadFailsClosed(t *testing.T) {
 	for _, want := range []string{"$ErrorActionPreference = 'Stop'", "ObjectNotFound", "$port = 22", `'^(\d+)-(\d+)$'`} {
 		if !strings.Contains(rule, want) {
 			t.Errorf("the installer rule read lacks %q: %s", want, rule)
+		}
+	}
+}
+
+// TestSSHWindowsPortStepServiceArguments: a service that starts sshd with
+// arguments (-f another file) is not probed with a bare sshd -T, which would
+// read the default configuration and compare the wrong port (#781 review).
+func TestSSHWindowsPortStepServiceArguments(t *testing.T) {
+	r := &recordingRunner{}
+	in := sshInstall{installed: true, external: true, bin: `C:\OpenSSH\sshd.exe`, args: `-f C:\ssh\custom.conf`}
+	step, ok := sshWindowsPortStep(r, 2222, in, OutcomeUnverified)
+	if !ok || step.Outcome != OutcomeUnverified || !strings.Contains(step.Message, "custom.conf") {
+		t.Errorf("step = %+v (ok %v), want unverified naming the arguments", step, ok)
+	}
+	for _, c := range r.calls {
+		if strings.Contains(c, "-T") {
+			t.Errorf("sshd -T ran despite the service arguments: %v", c)
 		}
 	}
 }

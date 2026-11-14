@@ -73,6 +73,8 @@ func readSSHCapability(r Runner) (bool, error) {
 type sshInstall struct {
 	installed, external bool
 	bin                 string
+	// args is what the service passes sshd after bin (-f another file, say).
+	args string
 }
 
 // readSSHInstall reads the capability and, since the MSI installs no capability,
@@ -88,15 +90,15 @@ func readSSHInstall(r Runner) (sshInstall, error) {
 	out, qcErr := r.Output("sc", "qc", sshWinService)
 	in := sshInstall{installed: capInstalled || qcErr == nil, external: !capInstalled && qcErr == nil}
 	if qcErr == nil {
-		in.bin = serviceBinary(string(out))
+		in.bin, in.args = serviceBinary(string(out))
 	}
 	return in, nil
 }
 
 // serviceBinary is the executable in the BINARY_PATH_NAME line of `sc qc`,
-// quoted or not and without its arguments; "" when there is none. sc localizes
+// quoted or not, and the arguments after it; "" when there is none. sc localizes
 // no key names, and the path is the value after the first colon.
-func serviceBinary(qc string) string {
+func serviceBinary(qc string) (bin, args string) {
 	for _, line := range strings.Split(qc, "\n") {
 		key, value, ok := strings.Cut(line, ":")
 		if !ok || strings.TrimSpace(key) != "BINARY_PATH_NAME" {
@@ -104,14 +106,14 @@ func serviceBinary(qc string) string {
 		}
 		value = strings.TrimSpace(value)
 		if rest, quoted := strings.CutPrefix(value, `"`); quoted {
-			path, _, _ := strings.Cut(rest, `"`)
-			return path
+			path, after, _ := strings.Cut(rest, `"`)
+			return path, strings.TrimSpace(after)
 		}
 		if i := strings.Index(strings.ToLower(value), ".exe"); i >= 0 {
-			return value[:i+len(".exe")]
+			return value[:i+len(".exe")], strings.TrimSpace(value[i+len(".exe"):])
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // sshPortsScript runs sshd -T from bin, or from the capability's path when the
@@ -145,7 +147,7 @@ func sshWindowsSetupSteps(r Runner, port int) []SetupStep {
 	// Without the capability or a service there is no sshd to converge or to read.
 	if in.installed {
 		steps = append(steps, serviceStep(r, sshWinService, sshName, "Failed to start sshd", "start the sshd service"))
-		if s, ok := sshWindowsPortStep(r, port, in.bin, OutcomeFailed); ok {
+		if s, ok := sshWindowsPortStep(r, port, in, OutcomeFailed); ok {
 			steps = append(steps, s)
 		}
 	}
@@ -164,7 +166,7 @@ func sshWindowsCheck(r Runner, port int, result *CheckResult) {
 		if readable {
 			svc.Active = &running
 		}
-		if s, ok := sshWindowsPortStep(r, port, in.bin, OutcomeUnverified); ok {
+		if s, ok := sshWindowsPortStep(r, port, in, OutcomeUnverified); ok {
 			result.Steps = append(result.Steps, s)
 		}
 	}
@@ -200,14 +202,14 @@ func sshInstallerRuleStep(port int) fwGuard {
 }
 
 // sshWindowsPortStep reports whether sshd listens on a declared port other
-// than 22 (from sshd.exe at bin, "" for the default), as the Linux step does: the listener is never moved, since
+// than 22 (from the sshd.exe in, the default path when it names none), as the Linux step does: the listener is never moved, since
 // sshd_config is the operator's. unreadable is the outcome when `sshd -T`
 // cannot be read (it needs an elevated shell and the host keys).
-func sshWindowsPortStep(r Runner, declared int, bin string, unreadable Outcome) (SetupStep, bool) {
+func sshWindowsPortStep(r Runner, declared int, in sshInstall, unreadable Outcome) (SetupStep, bool) {
 	if declared == defaultPorts[ServiceSSH] {
 		return SetupStep{}, false
 	}
-	ports, err := readSSHWindowsPorts(r, bin)
+	ports, err := readSSHWindowsPorts(r, in)
 	switch {
 	case err != nil:
 		return newStep(sshPortName, unreadable, "Cannot read the sshd listener: "+err.Error(),
@@ -219,8 +221,14 @@ func sshWindowsPortStep(r Runner, declared int, bin string, unreadable Outcome) 
 		fmt.Sprintf(`set Port %d in %%ProgramData%%\ssh\sshd_config and run Restart-Service sshd; ts-bridge does not edit it`, declared)), true
 }
 
-func readSSHWindowsPorts(r Runner, bin string) ([]int, error) {
-	out, err := outputPS(r, sshPortsScript(bin))
+// readSSHWindowsPorts runs sshd -T as the service does. A service that passes
+// sshd arguments (-f another file, say) is not probed: sshd -T without them
+// would read the default configuration and answer for another listener.
+func readSSHWindowsPorts(r Runner, in sshInstall) ([]int, error) {
+	if in.args != "" {
+		return nil, fmt.Errorf("the %s service starts sshd with arguments (%s), which ts-bridge does not interpret", sshWinService, in.args)
+	}
+	out, err := outputPS(r, sshPortsScript(in.bin))
 	if err != nil {
 		return nil, fmt.Errorf("sshd -T: %w", err)
 	}
