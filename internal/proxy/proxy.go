@@ -159,12 +159,12 @@ func handleConn(client net.Conn, dialer Dialer, cfg config.Config, cancel contex
 
 	logger.Info("connection opened", "client", addr)
 
-	// DialTimeout is intentionally smaller than ConnectTimeout: ConnectTimeout
-	// covers the one-time tsnet init (control plane handshake, can be slow),
-	// DialTimeout covers each per-connection target dial. With ReconnectDialer
-	// retrying, a large ConnectTimeout would let one stuck client hog a slot
-	// for many minutes; DialTimeout=5s keeps the worst case bounded.
-	ctx, dialCancel := context.WithTimeout(context.Background(), cfg.DialTimeout)
+	// DialTimeout bounds each dial attempt and dialBudget bounds the whole
+	// retried dial, so a blackholed target still gets every retry (#805) while
+	// one stuck client holds a slot for at most the budget (30.5s with the
+	// defaults). ConnectTimeout, the one-time tsnet init, is not used here: it
+	// would let one stuck client hold a slot for minutes.
+	ctx, dialCancel := context.WithTimeout(context.Background(), dialBudget(cfg))
 	defer dialCancel()
 
 	remote, err := dialer.Dial(ctx, "tcp", cfg.Target)
