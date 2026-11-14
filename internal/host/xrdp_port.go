@@ -57,14 +57,25 @@ func readXRDPListener(r Runner) (xrdpListener, error) {
 			continue
 		}
 		l.line, l.value = i, value
-		m := xrdpPortValue.FindStringSubmatch(l.value)
-		if m == nil {
-			return l, fmt.Errorf("%s sets port=%s, which is not one TCP port", xrdpINIPath, l.value)
+		if l.prefix, l.port, err = parseXRDPPort(value); err != nil {
+			return l, err
 		}
-		l.prefix = m[1]
-		l.port, _ = strconv.Atoi(m[2])
 	}
 	return l, nil
+}
+
+// parseXRDPPort splits a [Globals] port value into its optional tcp:// prefix
+// and the port. Anything but one port in 1..65535 is refused (#802): an
+// out-of-range number is not a TCP port xrdp can open.
+func parseXRDPPort(value string) (prefix string, port int, err error) {
+	m := xrdpPortValue.FindStringSubmatch(value)
+	if m != nil {
+		port, err = strconv.Atoi(m[2])
+	}
+	if m == nil || err != nil || port < 1 || port > 65535 {
+		return "", defaultRDPPort, fmt.Errorf("%s sets port=%s, which is not one TCP port", xrdpINIPath, value)
+	}
+	return m[1], port, nil
 }
 
 // globalsPort returns the value of a `port=` line when line sits in [Globals].
