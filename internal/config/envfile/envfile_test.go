@@ -95,20 +95,26 @@ func TestLoad_valueWithEquals(t *testing.T) {
 	}
 }
 
-func TestLoad_overridesExistingEnv(t *testing.T) {
-	os.Setenv("TEST_OVERRIDE", "original")
-	defer os.Unsetenv("TEST_OVERRIDE")
+// A variable the operator set wins over .env: the documented chain is
+// flags > env > .env > YAML > defaults (#801). An empty one counts as unset,
+// as it does in the merge chain, so .env fills it.
+func TestLoad_keepsExistingEnv(t *testing.T) {
+	for _, tc := range []struct{ original, want string }{
+		{"original", "original"},
+		{"", "from_envfile"},
+	} {
+		t.Run(fmt.Sprintf("%q", tc.original), func(t *testing.T) {
+			t.Setenv("TEST_OVERRIDE", tc.original)
+			tmp := filepath.Join(t.TempDir(), ".env")
+			_ = os.WriteFile(tmp, []byte("TEST_OVERRIDE=from_envfile"), 0600)
 
-	tmp := filepath.Join(t.TempDir(), ".env")
-	content := "TEST_OVERRIDE=from_envfile"
-	_ = os.WriteFile(tmp, []byte(content), 0600)
-
-	if err := Load(tmp); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if v := os.Getenv("TEST_OVERRIDE"); v != "from_envfile" {
-		t.Errorf("TEST_OVERRIDE = %q, want %q", v, "from_envfile")
+			if err := Load(tmp); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if v := os.Getenv("TEST_OVERRIDE"); v != tc.want {
+				t.Errorf("TEST_OVERRIDE = %q, want %q", v, tc.want)
+			}
+		})
 	}
 }
 
@@ -187,8 +193,8 @@ func TestLoad_precedence_chain(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if v := os.Getenv("TS_TARGET"); v != "from_envfile" {
-		t.Errorf("after Load: TS_TARGET = %q, want %q", v, "from_envfile")
+	if v := os.Getenv("TS_TARGET"); v != "from_os" {
+		t.Errorf("after Load: TS_TARGET = %q, want the explicit %q", v, "from_os")
 	}
 }
 
