@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"ts-bridge/internal/agent"
 	"ts-bridge/internal/config"
 )
 
@@ -140,5 +141,21 @@ func TestBrowserCommandAuthKeyFileErrorHasOnePrefix(t *testing.T) {
 	err := command.Execute()
 	if err == nil || !strings.HasPrefix(err.Error(), "stat auth key file: ") {
 		t.Fatalf("browser error = %v, want one stat auth key file prefix (#401)", err)
+	}
+}
+
+// The default profile lives under the per-user state directory ADR-018
+// resolves, never in the shared temp directory (#803).
+func TestDefaultBrowserUserDataDirIsPerUser(t *testing.T) {
+	paths, err := agent.DefaultPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := defaultBrowserUserDataDir()
+	if want := filepath.Join(paths.Base, "browser"); got != want {
+		t.Fatalf("default user-data dir = %q, want %q", got, want)
+	}
+	if strings.HasPrefix(got, os.TempDir()) {
+		t.Fatalf("default user-data dir %q is under the shared temp dir", got)
 	}
 }

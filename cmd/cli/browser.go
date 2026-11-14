@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"ts-bridge/internal/agent"
 	"ts-bridge/internal/config"
 	"ts-bridge/internal/config/envfile"
 )
@@ -161,9 +162,15 @@ func collectBrowserFlags(command *cobra.Command) (config.FlagSet, error) {
 	return flags, nil
 }
 
+// defaultBrowserUserDataDir is the isolated profile under the per-user state
+// directory ADR-018 resolves from the user database (Linux
+// ~/.local/state/ts-bridge, macOS Application Support, Windows LocalAppData),
+// never the shared temp directory (#803). It is empty when that directory
+// cannot be resolved, and the launch then asks for --user-data-dir.
 func defaultBrowserUserDataDir() string {
-	if root := os.Getenv("LOCALAPPDATA"); root != "" {
-		return filepath.Join(root, "ts-bridge", "browser")
+	paths, err := agent.DefaultPaths()
+	if err != nil {
+		return ""
 	}
-	return filepath.Join(os.TempDir(), "ts-bridge-browser")
+	return filepath.Join(paths.Base, "browser")
 }
