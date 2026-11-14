@@ -1,5 +1,114 @@
 # Changelog
 
+## [2.0.0](https://github.com/mlorentedev/ts-bridge/compare/v1.20.0...v2.0.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** the root persistent `--config` flag is removed. It was documented as reserved and nothing read it; a command line that passes it to `status`, `auth`, `import` or `discover` now fails with `unknown flag: --config`. `init`, `host`, `connect` and `browser` keep their own `--config`.
+* **host:** `ts-bridge host init` requires `--config` and writes the ADR-017 YAML host file instead of `TS_HOST_*` lines in `.env`. On Windows and Linux, scripts that run `host init` without `--config` fail. `host setup` and `host check` still read `TS_HOST_*` from a `.env` in the working directory.
+* **host:** `host init` now requires `--config <file>` and writes the ADR-017 YAML host file that `host setup`, `host check` and `host serve` read. It no longer writes `TS_HOST_*` lines to `.env`. Re-run `host init --config <file>`, or write the host file by hand, and pass the same `--config` to setup, check and serve.
+
+### Features
+
+* **agent:** serve an identity-checked local API from a per-user agent ([#793](https://github.com/mlorentedev/ts-bridge/issues/793)) ([0b3eff4](https://github.com/mlorentedev/ts-bridge/commit/0b3eff4593da7534f1fc3ff16a623112275b02a7))
+* **bootstrapssh:** log the destination of every bootstrap SOCKS dial ([#669](https://github.com/mlorentedev/ts-bridge/issues/669)) ([3090051](https://github.com/mlorentedev/ts-bridge/commit/30900515d8d532ab2aa663da7dfbd28ae07bd680))
+* **discover:** save the chosen host as a profile with --profile ([#665](https://github.com/mlorentedev/ts-bridge/issues/665)) ([7165991](https://github.com/mlorentedev/ts-bridge/commit/716599109ff11c64a2622b142659ca93de7e1222))
+* **host:** converge an ssh service on Windows hosts ([#781](https://github.com/mlorentedev/ts-bridge/issues/781)) ([4428ecb](https://github.com/mlorentedev/ts-bridge/commit/4428ecb6e87c58d84367d433b6cf79272f84c99e))
+* **host:** converge and check the ssh service on Linux ([#765](https://github.com/mlorentedev/ts-bridge/issues/765)) ([9e6ba8d](https://github.com/mlorentedev/ts-bridge/commit/9e6ba8d54ee962d6a8f22cb671eb180df71a3e08)), closes [#521](https://github.com/mlorentedev/ts-bridge/issues/521)
+* **host:** host init writes the YAML host file named by --config ([3e1a3e2](https://github.com/mlorentedev/ts-bridge/commit/3e1a3e248d37fcba1aaa24bdc79b8a020980e77f))
+* **host:** host serve, a persistent tailnet node publishing the declared services (HOST-008) ([#560](https://github.com/mlorentedev/ts-bridge/issues/560)) ([f85eab3](https://github.com/mlorentedev/ts-bridge/commit/f85eab3cc697f9084513fd34733518aa47741f00))
+* **host:** load and validate the declared host configuration file ([#519](https://github.com/mlorentedev/ts-bridge/issues/519)) ([4363338](https://github.com/mlorentedev/ts-bridge/commit/436333857c079d5d3b80578b54507045941ca6f5))
+* **host:** open the Linux service port on tailscale0 only (iptables) ([#687](https://github.com/mlorentedev/ts-bridge/issues/687)) ([605e5d2](https://github.com/mlorentedev/ts-bridge/commit/605e5d233af2ba4e192382887e4e802627931691))
+* **host:** read a --config host file in host setup and host check ([#554](https://github.com/mlorentedev/ts-bridge/issues/554)) ([ecace2e](https://github.com/mlorentedev/ts-bridge/commit/ecace2e369ecc2730fee05c84ba4a11a11983012))
+* **host:** refuse a Linux ancestor whose POSIX ACL grants another principal write ([#679](https://github.com/mlorentedev/ts-bridge/issues/679)) ([635945a](https://github.com/mlorentedev/ts-bridge/commit/635945afc590fbd1b1313752212db55ae1bcf07f))
+
+
+### Bug Fixes
+
+* **auth:** refuse to share a credential name across control planes ([#664](https://github.com/mlorentedev/ts-bridge/issues/664)) ([398ead6](https://github.com/mlorentedev/ts-bridge/commit/398ead6a0ea81700e7611108ddc9491adebc6f4e))
+* **bootstrapssh:** tie the ssh child to the parent's lifetime ([#597](https://github.com/mlorentedev/ts-bridge/issues/597)) ([a6bfe81](https://github.com/mlorentedev/ts-bridge/commit/a6bfe818cedb4b3cb6515ff17b3b75a531baba6d))
+* **ci:** derive the toolchain guard's job and with: depth from the file ([#551](https://github.com/mlorentedev/ts-bridge/issues/551)) ([2b2a178](https://github.com/mlorentedev/ts-bridge/commit/2b2a1785896a884bbb165392e5b04c52fefe78de))
+* **ci:** read persist-credentials only from the checkout step's with: block ([#552](https://github.com/mlorentedev/ts-bridge/issues/552)) ([46bdedc](https://github.com/mlorentedev/ts-bridge/commit/46bdedc8238d44e33f6ea4a9cceabdcc272a9c1a))
+* **ci:** recognise go flags, go.exe and every go subcommand in the toolchain guard ([#555](https://github.com/mlorentedev/ts-bridge/issues/555)) ([aaf5e26](https://github.com/mlorentedev/ts-bridge/commit/aaf5e26bf7cf6bcb3fd3fb6c2d14f79102b7ce2b))
+* **cli:** give auth key file errors one prefix and pin the init docs ([#549](https://github.com/mlorentedev/ts-bridge/issues/549)) ([88d0176](https://github.com/mlorentedev/ts-bridge/commit/88d01767fb8d3e09de2043ed0e7436c9b825bcf3))
+* **cli:** hide the agent command until it manages sessions ([#794](https://github.com/mlorentedev/ts-bridge/issues/794)) ([8e27b00](https://github.com/mlorentedev/ts-bridge/commit/8e27b0040a90d6712f86cf2566142c19ba0333ac))
+* **cli:** make discover --auto pick a host without prompting ([#711](https://github.com/mlorentedev/ts-bridge/issues/711)) ([639f6b4](https://github.com/mlorentedev/ts-bridge/commit/639f6b4447f65055c64edf5153f433722475f2a2))
+* **cli:** name the next step on the import, auth set, connect path ([#645](https://github.com/mlorentedev/ts-bridge/issues/645)) ([82b1c69](https://github.com/mlorentedev/ts-bridge/commit/82b1c6918c3b101a2bd58e048f17bb1b5829ff8b))
+* **cli:** remove the root --config flag that nothing reads ([#648](https://github.com/mlorentedev/ts-bridge/issues/648)) ([d19e0ad](https://github.com/mlorentedev/ts-bridge/commit/d19e0adbcfa8e61dc9927511bd6e851bb02df91a))
+* **cli:** small message fixes from the pre-2.0.0 audit ([#650](https://github.com/mlorentedev/ts-bridge/issues/650)) ([ba44445](https://github.com/mlorentedev/ts-bridge/commit/ba444455a9345499d1a010cf918ea69809e24402))
+* **config:** bind TCP mode to loopback when no listener is set ([#636](https://github.com/mlorentedev/ts-bridge/issues/636)) ([9554a27](https://github.com/mlorentedev/ts-bridge/commit/9554a2725f7c0aed1c5bffa6f4ff14625e386c9a))
+* **config:** wire --verbose and TS_VERBOSE into Merge ([#658](https://github.com/mlorentedev/ts-bridge/issues/658)) ([72baa03](https://github.com/mlorentedev/ts-bridge/commit/72baa03023deb73c7460e798ff2af74330e78f53))
+* **connect:** compare the override target's host case-insensitively ([#547](https://github.com/mlorentedev/ts-bridge/issues/547)) ([4de326c](https://github.com/mlorentedev/ts-bridge/commit/4de326c0db8e34070e05b5696ff2a5561d7b8e2c))
+* **connect:** refuse a non-loopback health address without --health-allow-remote ([#659](https://github.com/mlorentedev/ts-bridge/issues/659)) ([3fd908d](https://github.com/mlorentedev/ts-bridge/commit/3fd908d8499e39b12be24ce504e7639fd4a5cda8))
+* **discover:** ask for the API key each control plane needs ([#647](https://github.com/mlorentedev/ts-bridge/issues/647)) ([575c7d6](https://github.com/mlorentedev/ts-bridge/commit/575c7d699598fe4ad0dba4c96084bef9182efaab))
+* **discover:** list Headscale nodes from /api/v1/node ([#731](https://github.com/mlorentedev/ts-bridge/issues/731)) ([38ed0ba](https://github.com/mlorentedev/ts-bridge/commit/38ed0ba05ee37157c3a080b7aae04852d72dbccf))
+* **e2e:** make QA-606's acceptance checks fallible and lint the e2e scripts ([#703](https://github.com/mlorentedev/ts-bridge/issues/703)) ([7a8ad9d](https://github.com/mlorentedev/ts-bridge/commit/7a8ad9dc2840f44e3c2699f6aa554353edafaf95))
+* **host:** add the tailscale0 rule when every allow is scoped off the tailnet ([#704](https://github.com/mlorentedev/ts-bridge/issues/704)) ([136c483](https://github.com/mlorentedev/ts-bridge/commit/136c4830fb6d7c94d447ff30aba70552d447debe))
+* **host:** apply a declared RDP port to xrdp, and report one Windows does not listen on ([#660](https://github.com/mlorentedev/ts-bridge/issues/660)) ([00e8d26](https://github.com/mlorentedev/ts-bridge/commit/00e8d26e7199ccf21de7334787689d71e0bb33c5))
+* **host:** carry the descriptor in host setup --json ([#587](https://github.com/mlorentedev/ts-bridge/issues/587)) ([e5adf4e](https://github.com/mlorentedev/ts-bridge/commit/e5adf4edaeb9bae7bb10d99bfc4be94aa9db6fa7))
+* **host:** carry the host's real control plane in its descriptor ([#615](https://github.com/mlorentedev/ts-bridge/issues/615)) ([abcf51b](https://github.com/mlorentedev/ts-bridge/commit/abcf51b962d75ece7906fb14102d71f7902adbd4))
+* **host:** check Windows power timeouts for drift ([#661](https://github.com/mlorentedev/ts-bridge/issues/661)) ([f88556d](https://github.com/mlorentedev/ts-bridge/commit/f88556df36337d30d122b2d56dbdb441d7da8f33))
+* **host:** converge ssh.socket on socket-activated hosts ([#773](https://github.com/mlorentedev/ts-bridge/issues/773)) ([7de966d](https://github.com/mlorentedev/ts-bridge/commit/7de966d94948e207b8efbe1963eb5c7fe40651f4))
+* **host:** credit iptables when it decides, and archive BUG-530 ([#577](https://github.com/mlorentedev/ts-bridge/issues/577)) ([3d37be5](https://github.com/mlorentedev/ts-bridge/commit/3d37be5be5a98a1127ff4556547252b37bb11087))
+* **host:** cut iptables output into rules before any reader splits it ([#541](https://github.com/mlorentedev/ts-bridge/issues/541)) ([3683300](https://github.com/mlorentedev/ts-bridge/commit/36833007c7ecdd392c39bdbcadf1c768fdb3aaba))
+* **host:** do not count or report an allow held to replies ([#761](https://github.com/mlorentedev/ts-bridge/issues/761)) ([f8ace2d](https://github.com/mlorentedev/ts-bridge/commit/f8ace2d22e7b22b89ba6261cb04a57563a4fea2e))
+* **host:** fail a declared Linux service kind that has no step ([#769](https://github.com/mlorentedev/ts-bridge/issues/769)) ([c9177cf](https://github.com/mlorentedev/ts-bridge/commit/c9177cf0af55eb44c2b596a3867df8bf138a45cf))
+* **host:** fail closed on a qualified jump into ts-input ([#533](https://github.com/mlorentedev/ts-bridge/issues/533)) ([aafda54](https://github.com/mlorentedev/ts-bridge/commit/aafda54f96c71359071309615d92ea4269e56624))
+* **host:** flag unread services in check --json and stop blaming privilege ([#672](https://github.com/mlorentedev/ts-bridge/issues/672)) ([f77459d](https://github.com/mlorentedev/ts-bridge/commit/f77459d47fd2ba3c033e8694f7414470af004013))
+* **host:** follow INPUT's jumps in the IPv6 exposure scan ([#752](https://github.com/mlorentedev/ts-bridge/issues/752)) ([3b72548](https://github.com/mlorentedev/ts-bridge/commit/3b72548c5d948a43269596cfec799a5605c159c3))
+* **host:** follow INPUT's jumps into operator chains in the IPv4 exposure read ([#764](https://github.com/mlorentedev/ts-bridge/issues/764)) ([f369cfe](https://github.com/mlorentedev/ts-bridge/commit/f369cfecc401191b196baa2fd405a1ec3b786ac4))
+* **host:** publish existing SSH services without convergence steps ([#698](https://github.com/mlorentedev/ts-bridge/issues/698)) ([e7cd305](https://github.com/mlorentedev/ts-bridge/commit/e7cd30548eaccbbc3d9b28e68ba757e1bbe82745))
+* **host:** read a jump under an unmodelled match as an unknown exposure ([#775](https://github.com/mlorentedev/ts-bridge/issues/775)) ([f785fb4](https://github.com/mlorentedev/ts-bridge/commit/f785fb4b24d92a1c52da0721360d6241a42aad2c))
+* **host:** read an unreadable IPv6 chain INPUT jumps to as unverified ([#771](https://github.com/mlorentedev/ts-bridge/issues/771)) ([354305c](https://github.com/mlorentedev/ts-bridge/commit/354305ced1499b2b575e8e0d5fea617d50ab70a2))
+* **host:** read iptables on ufw hosts before allowing the port ([#567](https://github.com/mlorentedev/ts-bridge/issues/567)) ([7bd3fe7](https://github.com/mlorentedev/ts-bridge/commit/7bd3fe7a4aea5d72a39e2716f7262b42c06fd0f1))
+* **host:** read RDP state from the policy key first on Windows ([#599](https://github.com/mlorentedev/ts-bridge/issues/599)) ([5c42542](https://github.com/mlorentedev/ts-bridge/commit/5c4254291bc471dd3eb4112ef701bc202195571b))
+* **host:** read tailscaled's nodivert, nftables and IPv6 firewall rule sets on Linux ([#714](https://github.com/mlorentedev/ts-bridge/issues/714)) ([8814575](https://github.com/mlorentedev/ts-bridge/commit/8814575efa9cfcda828a2c1227bf5bc854803450))
+* **host:** read tailscaled's ts-input chain before appending an open iptables rule ([#527](https://github.com/mlorentedev/ts-bridge/issues/527)) ([41f5a06](https://github.com/mlorentedev/ts-bridge/commit/41f5a0694b3c731387c55b86e4b8f7718d19aeea))
+* **host:** read the Remote Desktop group by its resource id ([#716](https://github.com/mlorentedev/ts-bridge/issues/716)) ([e592426](https://github.com/mlorentedev/ts-bridge/commit/e592426187ea387892e0644719d698e0270a733c))
+* **host:** read the Windows firewall rule before recreating it ([#600](https://github.com/mlorentedev/ts-bridge/issues/600)) ([402467e](https://github.com/mlorentedev/ts-bridge/commit/402467e463172363e1dcdcb3ac183bf260b4a93c))
+* **host:** read Windows services, network profile and power before acting ([#611](https://github.com/mlorentedev/ts-bridge/issues/611)) ([a6f8721](https://github.com/mlorentedev/ts-bridge/commit/a6f87210e1e3233272ad50ac6392226a70a678d1))
+* **host:** refuse a Unix auth_key_file under an ancestor others can write ([#612](https://github.com/mlorentedev/ts-bridge/issues/612)) ([aba1a0c](https://github.com/mlorentedev/ts-bridge/commit/aba1a0c48d1d520e1d7a9d1b5c1d1cb1f7888085))
+* **host:** refuse a Unix state_dir under an ancestor others can write ([#596](https://github.com/mlorentedev/ts-bridge/issues/596)) ([9ab3b55](https://github.com/mlorentedev/ts-bridge/commit/9ab3b55e31e92613fa697de9b2ffc70c5a1ef5de))
+* **host:** report a permissive iptables INPUT policy as manual ([#734](https://github.com/mlorentedev/ts-bridge/issues/734)) ([50f555c](https://github.com/mlorentedev/ts-bridge/commit/50f555c5508811211b05e4521f273e507bd05ce3))
+* **host:** report a permissive IPv6 INPUT policy on iptables hosts ([#746](https://github.com/mlorentedev/ts-bridge/issues/746)) ([42e34ea](https://github.com/mlorentedev/ts-bridge/commit/42e34ea9d5fcbd3abfcff3e9aeaadf22773d9a1b))
+* **host:** report a port-less accept that admits new states on IPv4 ([#779](https://github.com/mlorentedev/ts-bridge/issues/779)) ([b67eeaa](https://github.com/mlorentedev/ts-bridge/commit/b67eeaa8a069d87950e85a5ef19affccfadcea7d))
+* **host:** report a source-port-only allow as exposing the port ([#759](https://github.com/mlorentedev/ts-bridge/issues/759)) ([dcddfee](https://github.com/mlorentedev/ts-bridge/commit/dcddfeef2ea38aeb06456f24ac88cbf0a8fdd243))
+* **host:** report an active ufw's ACCEPT INPUT policy ([#748](https://github.com/mlorentedev/ts-bridge/issues/748)) ([9868909](https://github.com/mlorentedev/ts-bridge/commit/98689099475dedf54f3f92d529f1c046583b04ab))
+* **host:** report an inactive ufw instead of claiming its rule admits the port ([#655](https://github.com/mlorentedev/ts-bridge/issues/655)) ([8b61b40](https://github.com/mlorentedev/ts-bridge/commit/8b61b40abb60c3c7a31c1e7ea2980753e65e2b35))
+* **host:** report an IPv4 allow held only by a negated scope as exposing the port ([#776](https://github.com/mlorentedev/ts-bridge/issues/776)) ([1077ad8](https://github.com/mlorentedev/ts-bridge/commit/1077ad87a058f72c88c8f91c981976800b6a1a03)), closes [#743](https://github.com/mlorentedev/ts-bridge/issues/743)
+* **host:** report copies of setup's own iptables rule in host check ([#534](https://github.com/mlorentedev/ts-bridge/issues/534)) ([50b0c3b](https://github.com/mlorentedev/ts-bridge/commit/50b0c3b4b1b391e6e7cbb63bdf80f2191e92987b))
+* **host:** report firewalld and native nftables instead of reading iptables ([#750](https://github.com/mlorentedev/ts-bridge/issues/750)) ([f266385](https://github.com/mlorentedev/ts-bridge/commit/f2663855a8791747aa0b07952f7d62223fa36ce3))
+* **host:** report leftover firewall copies from setup as check does ([#580](https://github.com/mlorentedev/ts-bridge/issues/580)) ([63871a3](https://github.com/mlorentedev/ts-bridge/commit/63871a3f38044f57eccc6fa4767cd7e651a59294))
+* **host:** report negated and portless allows as exposing the port ([#742](https://github.com/mlorentedev/ts-bridge/issues/742)) ([8c0c0a4](https://github.com/mlorentedev/ts-bridge/commit/8c0c0a48b6bba3b07e1890e05344c5c2cce2c005))
+* **host:** report ssh.service and ssh.socket both enabled as manual ([#780](https://github.com/mlorentedev/ts-bridge/issues/780)) ([cb4792f](https://github.com/mlorentedev/ts-bridge/commit/cb4792f1932cb0248391a9544b278289c3b0146e))
+* **host:** report the host's real state in setup and check ([#613](https://github.com/mlorentedev/ts-bridge/issues/613)) ([b7e5460](https://github.com/mlorentedev/ts-bridge/commit/b7e5460a0ab7cff9b97d5748bee62723e7ca9647))
+* **host:** report unattended mode as manual on a logged-out Windows node ([#756](https://github.com/mlorentedev/ts-bridge/issues/756)) ([c337705](https://github.com/mlorentedev/ts-bridge/commit/c337705bbd73abc0c0f76a3d40a41646bbbfd577))
+* **host:** report unverified when tailscaled's ts-input is outside the iptables read ([#616](https://github.com/mlorentedev/ts-bridge/issues/616)) ([f80b57f](https://github.com/mlorentedev/ts-bridge/commit/f80b57feea8f01cff17d42f723540ea59aaa9a10))
+* **host:** scope the Linux ufw allow to the tailnet interface ([#688](https://github.com/mlorentedev/ts-bridge/issues/688)) ([6d53dd6](https://github.com/mlorentedev/ts-bridge/commit/6d53dd69a5b0c7da0232d801124962a118b77dd8))
+* **host:** scope the Windows firewall rule to the tailnet addresses ([#689](https://github.com/mlorentedev/ts-bridge/issues/689)) ([55cfd68](https://github.com/mlorentedev/ts-bridge/commit/55cfd68ba8ef0f91d8ecfc12669895e1498e216c))
+* **host:** set Windows unattended mode with tailscale set, after reading it ([#594](https://github.com/mlorentedev/ts-bridge/issues/594)) ([88579c5](https://github.com/mlorentedev/ts-bridge/commit/88579c525b1b5c06e2664d023a5cd0f2c972bfe9))
+* **host:** start the Tailscale service before the Windows unattended step ([#708](https://github.com/mlorentedev/ts-bridge/issues/708)) ([da6b81b](https://github.com/mlorentedev/ts-bridge/commit/da6b81b3b575e8662b10f90d83bfac2e926c6f87))
+* **host:** warn before deleting a ufw allow that also lists SSH ([#774](https://github.com/mlorentedev/ts-bridge/issues/774)) ([4aae1b4](https://github.com/mlorentedev/ts-bridge/commit/4aae1b4f8a268183b12be1cc0bb85eff09e8005a))
+* **host:** warn before removing a foreign allow that also lists SSH ([#770](https://github.com/mlorentedev/ts-bridge/issues/770)) ([6fc0fe7](https://github.com/mlorentedev/ts-bridge/commit/6fc0fe7e4ddf18f628ca1d8e629d20791db3232e))
+* **init:** refuse a key flag without --target instead of discarding it ([#564](https://github.com/mlorentedev/ts-bridge/issues/564)) ([4011258](https://github.com/mlorentedev/ts-bridge/commit/4011258a8b56100167a7bfc4da66ce4e7bbec59b))
+* **init:** refuse the wizard when stdin is not a terminal ([#649](https://github.com/mlorentedev/ts-bridge/issues/649)) ([b9bb19e](https://github.com/mlorentedev/ts-bridge/commit/b9bb19e9821c023019fd9de872cae157e63b3332))
+* **profile:** bind a managed credential to its profile's control plane ([#637](https://github.com/mlorentedev/ts-bridge/issues/637)) ([af0b7a1](https://github.com/mlorentedev/ts-bridge/commit/af0b7a10dfe1d4b2200a0e71ee84c97f9f57c6aa))
+* **profile:** serialize credential and profile transitions under a store lock ([#690](https://github.com/mlorentedev/ts-bridge/issues/690)) ([1a8d840](https://github.com/mlorentedev/ts-bridge/commit/1a8d84064bebfe1138630c51ded3a4f83b3e8baa))
+* **proxy:** log the SOCKS5 tunnel close with duration and byte counts ([#667](https://github.com/mlorentedev/ts-bridge/issues/667)) ([99406dd](https://github.com/mlorentedev/ts-bridge/commit/99406ddab2d528a6f6a87be677ecf0bff8371253))
+* **proxy:** publish byte metrics while a tunnel is open ([#586](https://github.com/mlorentedev/ts-bridge/issues/586)) ([49e83dc](https://github.com/mlorentedev/ts-bridge/commit/49e83dc2117187760b93fb0d6c97b4aed21a43c1))
+* **run:** stop dialing the control plane after cancellation and close the SOCKS5, lifecycle and log-rotation test gaps ([#662](https://github.com/mlorentedev/ts-bridge/issues/662)) ([da7f8af](https://github.com/mlorentedev/ts-bridge/commit/da7f8afb1e875598e891a62dc876c260cba2ed52))
+* **secretfile:** grant the Windows ACL to the token user SID ([#663](https://github.com/mlorentedev/ts-bridge/issues/663)) ([b422402](https://github.com/mlorentedev/ts-bridge/commit/b422402bf9176e44a293f531a16dd4cf287b2cc4))
+* **security:** keep the auth key out of loose files and the ssh child ([#635](https://github.com/mlorentedev/ts-bridge/issues/635)) ([2d868df](https://github.com/mlorentedev/ts-bridge/commit/2d868df906972064f27742386d2eb708df211142))
+* **security:** validate control URLs in one shared place ([#634](https://github.com/mlorentedev/ts-bridge/issues/634)) ([5dbf559](https://github.com/mlorentedev/ts-bridge/commit/5dbf559f1c09b14ae562d5d6c1c99584b29e8a11))
+* **serve:** report a control-plane outage on /health/ready from Self.Online ([#719](https://github.com/mlorentedev/ts-bridge/issues/719)) ([c3a7a58](https://github.com/mlorentedev/ts-bridge/commit/c3a7a5868ecea58010aad6d7775af4a493d7601a))
+* **status:** name the health opt-in and print JSON when nothing answers ([#643](https://github.com/mlorentedev/ts-bridge/issues/643)) ([ae74b5e](https://github.com/mlorentedev/ts-bridge/commit/ae74b5e9f5f3ab980a18c11904605a9b1cf7e4ca))
+
+
+### Documentation
+
+* **host:** mark the host init change as breaking ([#602](https://github.com/mlorentedev/ts-bridge/issues/602)) ([7bf4cd9](https://github.com/mlorentedev/ts-bridge/commit/7bf4cd99d21fe97be4737830e5e2dd6f3d0099e9))
+
 ## [1.20.0](https://github.com/mlorentedev/ts-bridge/compare/v1.19.1...v1.20.0) (2026-10-30)
 
 
