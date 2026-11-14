@@ -353,16 +353,20 @@ type chainWalk struct {
 // ends. It decides nothing setup writes: a qualified jump is not an unknown
 // read here, only a scope the chain's rules inherit (#720). A target that is
 // not a chain is skipped; a chain that cannot be read is a note, and what the
-// others showed is kept. The v6 read and the v4 read (#762) share it.
+// others showed is kept. A jump under a match the parser does not model is a
+// note too, once the walk is done (iptUnreadJumps, #766). The v6 read and the
+// v4 read (#762) share it.
 func iptWalk(r Runner, w chainWalk, input string, port int) (foreign []string, note string) {
 	seen := map[string]bool{iptInput: true}
 	queue := []string{iptInput}
 	rules := map[string]string{iptInput: input}
 	var notes []string
+	var unread []unreadJump
 	for len(queue) > 0 {
 		chain := queue[0]
 		queue = queue[1:]
 		foreign = append(foreign, w.exposed(rules[chain], chain, port)...)
+		unread = append(unread, iptUnreadJumps(rules[chain], chain, port)...)
 		for _, next := range iptJumps(rules[chain], chain, port) {
 			if seen[next] || w.skip(next) {
 				continue
@@ -379,7 +383,29 @@ func iptWalk(r Runner, w chainWalk, input string, port int) (foreign []string, n
 			queue = append(queue, next)
 		}
 	}
-	return foreign, strings.Join(notes, "; ")
+	return foreign, strings.Join(append(notes, unreadJumpNotes(r, w, unread, rules)...), "; ")
+}
+
+// unreadJump is a rule that jumps to target under a match the parser does not
+// model, in chain.
+type unreadJump struct{ chain, target, rule string }
+
+// unreadJumpNotes says which of the unread jumps reach a chain the walk did not
+// read: the exposure behind it is unknown (#766). A target the walk read
+// anyway, a ts-input or ufw chain left to another read, and a target that is no
+// chain (LOG, MARK) say nothing.
+func unreadJumpNotes(r Runner, w chainWalk, unread []unreadJump, rules map[string]string) []string {
+	var notes []string
+	for _, j := range unread {
+		if _, read := rules[j.target]; read || w.skip(j.target) {
+			continue
+		}
+		if _, err := r.Output(w.tool, "-S", j.target); err != nil && chainMissing(err, iptNoChain) {
+			continue
+		}
+		notes = append(notes, fmt.Sprintf("a jump %s makes under a match ts-bridge does not read: %s", j.chain, j.rule))
+	}
+	return notes
 }
 
 // iptVerdicts are the targets that end a rule; none of them is a chain.
@@ -407,24 +433,56 @@ func iptJumps(input, chain string, port int) []string {
 }
 
 // iptJump is the target of one rule of chain when the walk follows it, or "".
-// A verdict ends the rule and is no chain.
 func iptJump(f []string, chain string, port int) string {
+	return iptIfTarget(iptJumpCovers(f, port) && !iptNarrowed(f) && !iptLoopback(f), iptJumpTarget(f, chain))
+}
+
+// iptJumpTarget is the target of one rule of chain that jumps or goes to it. A
+// verdict ends the rule and is no chain.
+func iptJumpTarget(f []string, chain string) string {
 	if len(f) < 2 || f[0] != "-A" || f[1] != chain {
 		return ""
 	}
 	target := cmp.Or(iptFlag(f, "-j"), iptFlag(f, "-g"))
-	if target == "" || slices.Contains(iptVerdicts, target) {
-		return ""
+	return iptIfTarget(!slices.Contains(iptVerdicts, target), target)
+}
+
+// iptUnreadJumps lists the rules of chain that the walk does not follow only
+// because a qualifier the parser does not model (a mark, a limit, a set)
+// stands in the jump's match: the chain behind may take every packet for the
+// port, which is not the narrowing the rest of iptJump reads (#766). A jump
+// held to another port, protocol, interface or source, to loopback, or to
+// replies is narrowed by what the parser does model, and is not listed.
+func iptUnreadJumps(input, chain string, port int) []unreadJump {
+	var found []unreadJump
+	for _, line := range strings.Split(input, "\n") {
+		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
+		if target := iptJumpTarget(f, chain); target != "" && iptJumpUnmodelled(f, port) {
+			found = append(found, unreadJump{chain: chain, target: target, rule: strings.TrimSpace(line)})
+		}
 	}
-	return iptIfTarget(iptJumpCovers(f, port) && !iptNarrowed(f) && !iptLoopback(f), target)
+	return found
+}
+
+// iptJumpUnmodelled reports a jump that nothing the parser models narrows, but
+// whose match holds a qualifier it does not: iptJumpCovers fails on it alone.
+func iptJumpUnmodelled(f []string, port int) bool {
+	proto := iptFlag(f, "-p")
+	return iptJumpPortCovers(f, port) && (proto == "" || proto == protoTCP) && !iptNarrowed(f) && !iptLoopback(f) && !iptRepliesOnly(f) && !iptPortlessCovers(iptJumpMatch(f))
 }
 
 // iptJumpCovers reports whether a jump's match, scopes aside, takes every new
 // TCP connection on port: a port match, if any, names it, and nothing else
 // narrows it.
 func iptJumpCovers(f []string, port int) bool {
+	return iptPortlessCovers(iptJumpMatch(f)) && iptJumpPortCovers(f, port)
+}
+
+// iptJumpPortCovers reports whether a jump's destination port match, if any,
+// takes port: it names it, or excludes only other ports.
+func iptJumpPortCovers(f []string, port int) bool {
 	ported := slices.ContainsFunc(f, func(w string) bool { return slices.Contains(iptDestPortFlags, w) })
-	return iptPortlessCovers(iptJumpMatch(f)) && (!ported || iptPortCovers(f, port) || iptExcludesOthers(f, port))
+	return !ported || iptPortCovers(f, port) || iptExcludesOthers(f, port)
 }
 
 // iptIfTarget is target when ok, else "".
@@ -638,19 +696,20 @@ func withV6Policy(read firewallRead, step SetupStep) SetupStep {
 	return step
 }
 
-// withChains adds a chain INPUT jumps to that could not be read: what it
-// admits is unknown, so a step that read ok, or that setup repaired, cannot
-// claim the port is held to the tailnet (#762, #764 review).
+// withChains adds a chain INPUT jumps to that could not be read, or that a jump
+// under a match ts-bridge does not model may reach (#766): what it admits is
+// unknown, so a step that read ok, or that setup repaired, cannot claim the
+// port is held to the tailnet (#762, #764 review).
 func withChains(read firewallRead, step SetupStep, port int) SetupStep {
 	unread := chainsUnread(read)
 	if unread == "" {
 		return step
 	}
-	step.Message += "; a chain INPUT jumps to was not read: " + unread
+	step.Message += "; part of the firewall was not read: " + unread
 	if step.Outcome != OutcomeOK && step.Outcome != OutcomeChanged {
 		return step
 	}
-	fix := fmt.Sprintf("read the chain as root and confirm it admits TCP %d only on %s, then run ts-bridge host check again", port, tailnetInterface)
+	fix := fmt.Sprintf("read the chain named above as root and confirm it admits TCP %d only on %s, then run ts-bridge host check again", port, tailnetInterface)
 	if step.Fix != "" {
 		fix = step.Fix + "; " + fix
 	}
