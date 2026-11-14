@@ -36,10 +36,17 @@ var (
 	// configuration in lower case (`port 22`, `listenaddress 0.0.0.0:22`) and needs the host keys.
 	psReadSSHPorts = `& "$env:WINDIR\System32\OpenSSH\sshd.exe" -T; exit $LASTEXITCODE`
 	// psReadSSHInstallerRule takes the declared port as its %d: the rule is
-	// exposed only when it is enabled, inbound, allows any address and opens that port.
-	psReadSSHInstallerRule = `$g = @(Get-NetFirewallRule -Name '` + sshInstallerRule + `' -ErrorAction SilentlyContinue); Write-Output "total=$($g.Count)"; ` +
-		`Write-Output "exposed=$(@($g | Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' -and ($_ | Get-NetFirewallAddressFilter).RemoteAddress -eq 'Any' -and ` +
-		`(@(($_ | Get-NetFirewallPortFilter).LocalPort) -contains '%d' -or @(($_ | Get-NetFirewallPortFilter).LocalPort) -contains 'Any') }).Count)"`
+	// exposed only when it is enabled, inbound, allows any address and opens that
+	// port, alone, as Any or inside a low-high range. Only a missing rule is
+	// absent: any other error, the filter reads included, stops the read, so an
+	// unreadable rule is never counted as one that exposes nothing.
+	psReadSSHInstallerRule = `$ErrorActionPreference = 'Stop'; $port = %d; $g = @(); ` +
+		`try { $g = @(Get-NetFirewallRule -Name '` + sshInstallerRule + `') } catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { throw } }; ` +
+		`$opens = { param($ports) foreach ($e in @($ports)) { if ($e -eq 'Any' -or $e -eq "$port") { return $true }; ` +
+		`if ($e -match '^(\d+)-(\d+)$' -and [int]$Matches[1] -le $port -and $port -le [int]$Matches[2]) { return $true } }; return $false }; ` +
+		`Write-Output "total=$($g.Count)"; ` +
+		`Write-Output "exposed=$(@($g | Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' -and ` +
+		`@(($_ | Get-NetFirewallAddressFilter).RemoteAddress) -contains 'Any' -and (& $opens ($_ | Get-NetFirewallPortFilter).LocalPort) }).Count)"`
 )
 
 // readSSHCapability reads whether the OpenSSH Server capability is installed.

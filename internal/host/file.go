@@ -180,7 +180,7 @@ func validateFirewall(fw *FileFirewall, goos string, capab osCapability) error {
 	if fw.Rule == nil {
 		return nil
 	}
-	if _, err := sanitizeFirewallRule(*fw.Rule); err != nil {
+	if _, err := sanitizeRDPRule(*fw.Rule); err != nil {
 		return fmt.Errorf("host.firewall.rule: %w", err)
 	}
 	return nil

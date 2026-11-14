@@ -277,3 +277,17 @@ func TestLogCheck_DeclaredServices(t *testing.T) {
 		})
 	}
 }
+
+// TestSanitizeRDPRule_ReservesSSHRule: the ssh service owns
+// Tailscale-SSH-Ingress, and setup replaces every rule with its name, so an
+// RDP rule given that name would be overwritten by the ssh step (#781).
+func TestSanitizeRDPRule_ReservesSSHRule(t *testing.T) {
+	for _, name := range []string{sshFirewallRule, "tailscale-ssh-ingress", "TAILSCALE-SSH-INGRESS"} {
+		if _, err := SanitizeFirewallRule(name); err == nil {
+			t.Errorf("SanitizeFirewallRule(%q) accepted the name the ssh service owns", name)
+		}
+	}
+	if _, err := SanitizeFirewallRule("Tailscale-RDP-Ingress"); err != nil {
+		t.Errorf("the default RDP rule name is refused: %v", err)
+	}
+}

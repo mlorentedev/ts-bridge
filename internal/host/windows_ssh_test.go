@@ -468,3 +468,18 @@ func TestWindowsSSHFirewallOKIsOneSemantic(t *testing.T) {
 		})
 	}
 }
+
+// TestSSHInstallerRuleReadFailsClosed pins the two exposure gaps of the first
+// read (#781 review): a hidden filter error and an unmatched port range both
+// read as a rule that exposes nothing.
+func TestSSHInstallerRuleReadFailsClosed(t *testing.T) {
+	rule := fmt.Sprintf(psReadSSHInstallerRule, 22)
+	if strings.Contains(rule, "SilentlyContinue") {
+		t.Errorf("the installer rule read hides errors: %s", rule)
+	}
+	for _, want := range []string{"$ErrorActionPreference = 'Stop'", "ObjectNotFound", "$port = 22", `'^(\d+)-(\d+)$'`} {
+		if !strings.Contains(rule, want) {
+			t.Errorf("the installer rule read lacks %q: %s", want, rule)
+		}
+	}
+}

@@ -48,13 +48,13 @@ ADR-017 §5 lists `ssh` on Windows (OpenSSH Server), but `host setup` and `host 
 - **`Get-WindowsCapability` needs an elevated shell.** Unprivileged `check` reads `unverified` for the capability, so the ssh service entry is `unread`.
 - **`sshd -T` needs the host keys**, which `sshd` generates on its first start. A host whose service never ran reads the port as unreadable (`failed` in setup, after the service step started it, so the next run reads it; `unverified` in check).
 - **Only `OpenSSH-Server-In-TCP` is read.** Any other rule an operator wrote that opens the port to every address is not looked at, as with RDP.
-- **The installer rule's port is compared as a string** (`22`, or `Any`); a range such as `20-30` is not matched.
+- **The installer rule's port** matches as `22`, `Any` or a `low-high` range that contains it (a range was missed until the #781 review). Any read error other than a missing rule stops the read, so the step is `unverified`, never `ok`.
 
 ## Acceptance criteria
 
 - [ ] [AC1] The loader accepts `kind: ssh` on Windows (with a port, without one), `LoadServeFile` is unchanged, and `host setup`/`host check` reach the step runner for it.
 - [ ] [AC2] `setup` on an ssh-only Windows host reads the capability, runs no RDP step, converges `sshd` to Automatic and Running only when it is not already, reads the firewall rule before writing a tailnet-scoped one, and runs no mutating command on a converged host.
-- [ ] [AC3] A missing capability with no `sshd` service is `manual` with the `Add-WindowsCapability` fix in setup and check, no `sc` command runs, and nothing is installed; a missing capability with an `sshd` service is `ok` and converges the service and port from the service's own `sshd.exe`; an unreadable capability is `failed` in setup and `unverified` in check.
+- [ ] [AC3] A missing capability with no `sshd` service is `manual` with the `Add-WindowsCapability` fix in setup and check, only the `sc qc sshd` read runs (no `sc` command changes or starts the service), and nothing is installed; a missing capability with an `sshd` service is `ok` and converges the service and port from the service's own `sshd.exe`; an unreadable capability is `failed` in setup and `unverified` in check.
 - [ ] [AC4] `check` runs no mutating command, reports `changed` for a stopped or Manual `sshd`, `unverified` when `sc` cannot be read, and an `ssh` entry in `services[]` after `rdp` where both are declared with the legacy RDP keys unchanged.
 - [ ] [AC5] An enabled any-address `OpenSSH-Server-In-TCP` allow on the declared port turns the ssh firewall step `manual` with `Disable-NetFirewallRule -Name OpenSSH-Server-In-TCP`; `firewall_ok` is true only when the ssh firewall step is `ok`, so `manual`, `unverified` and `changed` are false, per service and overall, as on Linux, and is never disabled or deleted; an absent rule does not.
 - [ ] [AC6] A declared port other than 22 is compared with `sshd -T`: `ok`, `manual` naming both ports, or `failed`/`unverified` when unreadable; `sshd_config` is never written.
