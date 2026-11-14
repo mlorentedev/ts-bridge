@@ -74,18 +74,24 @@ func Values(path string) (map[string]string, error) { //nolint:funlen,gocyclo //
 	return values, nil
 }
 
-// Load reads the .env file at path and sets each KEY=VALUE into the process
-// environment via os.Setenv. If the file does not exist, Load returns nil.
+// Load reads the .env file at path and sets each KEY=VALUE whose variable has
+// no value in the process environment. If the file does not exist, Load
+// returns nil.
 //
-// Precedence: values in .env are set before the merge chain runs, so
-// CLI flags and explicit TS_* env vars still override them (the merge
-// chain applies flags > env > yaml > defaults).
+// Precedence: a variable the operator set to a value is never replaced, so the
+// chain stays flags > env > .env > YAML > defaults. A .env in a directory the
+// operator merely cd'd into must not redirect a key they exported, for example
+// by setting TS_CONTROL_URL (#801). An empty variable counts as unset, as it
+// does in the merge chain, which reads every TS_* value with os.Getenv.
 func Load(path string) error {
 	values, err := Values(path)
 	if err != nil {
 		return err
 	}
 	for key, value := range values {
+		if os.Getenv(key) != "" {
+			continue
+		}
 		// #nosec G104 -- os.Setenv always returns nil in the standard library.
 		os.Setenv(key, value)
 	}
