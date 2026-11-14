@@ -244,11 +244,12 @@ func runBridge( //nolint:funlen,gocyclo // baseline #629
 	tunnelStatus.MarkReady()
 	var activeConns sync.WaitGroup
 	dialer := &proxy.ReconnectDialer{
-		Inner:       server,
-		MaxRetries:  cfg.DialRetries,
-		BaseBackoff: cfg.DialBackoffBase,
-		MaxBackoff:  cfg.DialBackoffMax,
-		Logger:      logger,
+		Inner:          server,
+		MaxRetries:     cfg.DialRetries,
+		BaseBackoff:    cfg.DialBackoffBase,
+		MaxBackoff:     cfg.DialBackoffMax,
+		AttemptTimeout: cfg.DialTimeout,
+		Logger:         logger,
 	}
 	var errAccept error
 	if cfg.SOCKS5Addr != "" {

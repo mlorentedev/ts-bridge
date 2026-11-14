@@ -162,8 +162,8 @@ func handleSOCKS5Conn( //nolint:funlen,gocyclo // baseline #629
 
 	dialContext := context.Background()
 	dialCancel := func() {}
-	if cfg.DialTimeout > 0 {
-		dialContext, dialCancel = context.WithTimeout(dialContext, cfg.DialTimeout)
+	if budget := dialBudget(cfg); budget > 0 {
+		dialContext, dialCancel = context.WithTimeout(dialContext, budget)
 	}
 	defer dialCancel()
 	remote, err := dialer.Dial(dialContext, "tcp", target)
