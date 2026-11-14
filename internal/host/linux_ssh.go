@@ -42,8 +42,7 @@ func readSSH(r Runner) (string, xrdpState) {
 // activation: the socket is the unit to converge and the service is left alone.
 // A socket exists when systemctl reads it (is-enabled answers something other
 // than not-found, and a word ts-bridge interprets); one it cannot read is
-// ignored, as if absent. A masked service stays masked, and a masked socket is
-// reported, never unmasked.
+// ignored, as if absent. A masked service stays masked.
 func withSocket(r Runner, unit string, x xrdpState) (string, xrdpState) {
 	if !x.readable || x.masked || (x.enabled && x.active) {
 		return unit, x
@@ -53,7 +52,6 @@ func withSocket(r Runner, unit string, x xrdpState) (string, xrdpState) {
 		return unit, x
 	}
 	x.enabled, x.active = x.enabled || sock.enabled, x.active || sock.active
-	x.masked = sock.masked
 	return unit + ".socket", x
 }
 
@@ -62,10 +60,12 @@ func withSocket(r Runner, unit string, x xrdpState) (string, xrdpState) {
 // enabled ssh.service, and the socket Conflicts= with the service: enabling it
 // there would leave both enabled at boot, and starting it would stop an sshd the
 // operator started by hand. So the socket leads only when it is enabled (static
-// counts) or masked, or when neither unit is enabled and the service is not
-// running, where there is no model to preserve and the socket is the choice (#767).
+// counts), or when neither unit is enabled and the service is not running, where
+// there is no model to preserve and the socket is the choice (#767). A masked
+// socket never leads: masking it is how an operator opts out of socket
+// activation, so the service is converged and nothing asks to unmask the socket.
 func socketIsModel(svc, sock xrdpState) bool {
-	return sock.enabled || sock.masked || (!svc.enabled && !svc.active)
+	return sock.enabled || (!svc.enabled && !svc.active && !sock.masked)
 }
 
 // sshUnit is the step text for the unit read; label names the unit so a host
