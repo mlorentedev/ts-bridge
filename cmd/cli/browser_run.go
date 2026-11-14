@@ -23,6 +23,12 @@ func RunBrowser(cfg config.Config, options BrowserOptions) error {
 	}
 	defer func() { _ = pacServer.Shutdown(context.Background()) }()
 
+	if options.UserDataDir == "" {
+		return fmt.Errorf("no default browser profile directory could be resolved; pass --user-data-dir")
+	}
+	if err := browser.PrepareProfileDir(options.UserDataDir); err != nil {
+		return err
+	}
 	edgePath, err := browser.FindEdge(options.EdgePath)
 	if err != nil {
 		return err
