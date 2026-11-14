@@ -1,0 +1,23 @@
+[
+  {
+    "id": "LOG-788-rotator-shared-file-f1",
+    "behavior": "AC1: closing one rotator leaves the file another rotator writes in place, holding both rotators' lines",
+    "verification": "go test ./internal/logging/ -run '^TestFileRotator_CloseLeavesAPeersFileInPlace$' -count=1",
+    "state": "passing",
+    "evidence": "failed before the fix: the shared day file was gone after one rotator closed"
+  },
+  {
+    "id": "LOG-788-rotator-shared-file-f2",
+    "behavior": "AC2: compressing a day whose archive exists appends a gzip member instead of truncating",
+    "verification": "go test ./internal/logging/ -run '^TestCompressDayAppendsToAnExistingArchive$' -count=1",
+    "state": "passing",
+    "evidence": "failed before the fix: archive = \"run2\\n\", the first run was erased"
+  },
+  {
+    "id": "LOG-788-rotator-shared-file-f3",
+    "behavior": "AC3/AC4: the midnight rollover in Write compresses the past day through the Open path and never today",
+    "verification": "go test ./internal/logging/ -run '^TestFileRotator_MidnightRolloverCompressesThePastDayOnly$' -count=1",
+    "state": "passing",
+    "evidence": "failed before the fix: no archive for yesterday after crossing midnight"
+  }
+]

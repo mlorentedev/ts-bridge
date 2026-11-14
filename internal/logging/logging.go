@@ -98,17 +98,25 @@ func (l *Logger) Close() error {
 
 // --- File Rotator: daily rotation with gzip compression ---
 
+const (
+	logPrefix = "ts-bridge-"
+	dayLayout = "2006-01-02"
+	// claimedSuffix marks a past day's log a process has taken to compress.
+	claimedSuffix = ".claimed"
+)
+
 // FileRotator manages daily log file rotation.
 type FileRotator struct {
 	mu         sync.Mutex
 	dir        string
 	current    *os.File
 	currentDay string
+	now        func() time.Time
 }
 
 // NewFileRotator creates a rotator that writes to dir/ts-bridge-YYYY-MM-DD.log.
 func NewFileRotator(dir string) *FileRotator {
-	return &FileRotator{dir: dir}
+	return &FileRotator{dir: dir, now: time.Now}
 }
 
 // CurrentPath returns the path of the current log file.
@@ -122,121 +130,131 @@ func (r *FileRotator) CurrentPath() string {
 }
 
 // Write implements io.Writer so FileRotator can be passed directly to
-// slog handlers. This enables dynamic rotation: every log write checks
-// if the day has changed and rotates if needed.
+// slog handlers. Every write checks the day and rotates through the same path
+// Open uses, so a process that crosses midnight compresses yesterday and
+// enforces retention without a restart (#788).
 func (r *FileRotator) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	today := time.Now().Format("2006-01-02")
-
-	// Rotate if the day has changed.
-	if r.current == nil || r.currentDay != today {
-		if r.current != nil {
-			// #nosec G104 // cleanup: ignore close errors.
-			r.current.Close()
-			r.currentDay = "" // Force re-open below.
-		}
-
-		if r.currentDay != today {
-			path := filepath.Join(r.dir, fmt.Sprintf("ts-bridge-%s.log", today))
-			// #nosec G302,G304 // filename is date-derived, not user-controlled.
-			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
-			if err != nil {
-				return 0, fmt.Errorf("open log file: %w", err)
-			}
-			r.current = f
-			r.currentDay = today
-		}
+	if err := r.rotateLocked(); err != nil {
+		return 0, err
 	}
-
 	return r.current.Write(p)
 }
 
-// Open opens (or creates) the log file for today.
-// If the current file is from a different day, it closes it,
-// compresses it, and opens a new one.
+// Open opens (or creates) today's log file, compressing past days and
+// applying retention when it starts a new day.
 func (r *FileRotator) Open() (*os.File, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	today := time.Now().Format("2006-01-02")
-
-	// If we already have today's file open, return it.
-	if r.current != nil && r.currentDay == today {
-		return r.current, nil
+	if err := r.rotateLocked(); err != nil {
+		return nil, err
 	}
-
-	// Close and compress yesterday's file.
-	if r.current != nil {
-		// #nosec G104 // cleanup: ignore close errors.
-		r.current.Close()
-		r.compress(r.currentDay)
-	}
-
-	// Open today's file.
-	path := filepath.Join(r.dir, fmt.Sprintf("ts-bridge-%s.log", today))
-	// #nosec G302,G304 // filename is date-derived, not user-controlled.
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
-	if err != nil {
-		return nil, fmt.Errorf("open log file: %w", err)
-	}
-
-	r.current = f
-	r.currentDay = today
-
-	// Clean up old files.
-	r.cleanup()
-
-	return f, nil
+	return r.current, nil
 }
 
-// Close closes the current file and compresses it.
+// Close closes the current file. It never compresses it: other processes
+// may still be writing the same day (#788). The day is compressed by the
+// first rotation, in any process, after it has ended.
 func (r *FileRotator) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
 	if r.current != nil {
 		// #nosec G104 // cleanup: ignore close errors.
 		r.current.Close()
-		r.compress(r.currentDay)
 		r.current = nil
 	}
 	return nil
 }
 
-// compress gzips the log file for the given day.
-func (r *FileRotator) compress(day string) {
-	srcPath := filepath.Join(r.dir, fmt.Sprintf("ts-bridge-%s.log", day))
-	dstPath := srcPath + ".gz"
+// rotateLocked makes today's file current. On a day change it opens today's
+// file, compresses every past day still left as a .log, and applies
+// retention. Callers hold r.mu.
+func (r *FileRotator) rotateLocked() error {
+	today := r.now().Format(dayLayout)
+	if r.current != nil && r.currentDay == today {
+		return nil
+	}
+	if r.current != nil {
+		// #nosec G104 // cleanup: ignore close errors.
+		r.current.Close()
+		r.current = nil
+	}
+	// #nosec G302,G304 // filename is date-derived, not user-controlled.
+	f, err := os.OpenFile(r.dayPath(today), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	if err != nil {
+		return fmt.Errorf("open log file: %w", err)
+	}
+	r.current, r.currentDay = f, today
+	r.compressPastDays(today)
+	r.cleanup()
+	return nil
+}
 
+func (r *FileRotator) dayPath(day string) string {
+	return filepath.Join(r.dir, logPrefix+day+".log")
+}
+
+// compressPastDays compresses each ts-bridge-<day>.log whose day is before
+// today. Today, and any day after it (a clock set back), is left alone.
+func (r *FileRotator) compressPastDays(today string) {
+	entries, err := os.ReadDir(r.dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		day, ok := strings.CutSuffix(strings.TrimPrefix(e.Name(), logPrefix), ".log")
+		if !ok || !strings.HasPrefix(e.Name(), logPrefix) || day >= today {
+			continue
+		}
+		if _, err := time.Parse(dayLayout, day); err == nil {
+			r.compressDay(day)
+		}
+	}
+}
+
+// compressDay appends a past day's log to its archive as a new gzip member.
+// The log is first claimed by an atomic rename, so two processes rotating at
+// once never compress it twice; the loser's rename fails and it moves on. On
+// Windows the rename also fails while a process still holds the file, and
+// the day is retried on a later rotation. Appending, not truncating, keeps an
+// archive that already holds an earlier run of the day.
+func (r *FileRotator) compressDay(day string) {
+	src := r.dayPath(day)
+	claimed := fmt.Sprintf("%s.%d%s", src, os.Getpid(), claimedSuffix)
+	if err := os.Rename(src, claimed); err != nil {
+		return
+	}
+	if err := appendGzipMember(claimed, src+".gz"); err != nil {
+		return // The claimed file keeps the lines; retention removes it later.
+	}
+	// #nosec G104 // cleanup: ignore remove errors.
+	os.Remove(claimed)
+}
+
+// appendGzipMember writes srcPath to the end of dstPath as one gzip member.
+// A multi-member file reads back as one stream (zcat, gzip.Reader).
+func appendGzipMember(srcPath, dstPath string) error {
 	// #nosec G304 // filename is date-derived, not user-controlled.
 	src, err := os.Open(srcPath)
 	if err != nil {
-		return // File already gone or unreadable.
+		return err
 	}
 	defer src.Close()
-	// #nosec G304 // filename is date-derived, not user-controlled.
-	dst, err := os.Create(dstPath)
+	// #nosec G302,G304 // filename is date-derived, not user-controlled.
+	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
-		return
+		return err
 	}
 	defer dst.Close()
-
 	gw := gzip.NewWriter(dst)
 	if _, err := io.Copy(gw, src); err != nil {
-		return
+		return err
 	}
 	if err := gw.Close(); err != nil {
-		return
+		return err
 	}
-	if err := dst.Close(); err != nil {
-		return
-	}
-
-	// Remove the uncompressed file.
-	// #nosec G104 // cleanup: ignore remove errors.
-	os.Remove(srcPath)
+	return dst.Close()
 }
 
 // cleanup removes log files older than maxDays and keeps at most maxFiles.
