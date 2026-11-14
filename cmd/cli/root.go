@@ -18,6 +18,7 @@ target host through the encrypted Tailscale network.`,
 	root.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
 	configureUsageOnErrors(root)
 	root.AddCommand(
+		newAgentCmd(),
 		newAuthCmd(),
 		newBrowserCmd(),
 		newConnectCmd(),
