@@ -606,6 +606,14 @@ func TestSetupForLinux(t *testing.T) {
 			fix:      "setup does not delete",
 		},
 		{
+			name:     "iptables, a legacy copy and a port-less negated allow: the copy replaced, the allow reported (#743)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + iptLegacyRule + "-A INPUT ! -i tailscale0 -j ACCEPT\n", iptChain: tsInputNoAccept})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "run "+iptDelete, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeManual, OutcomeOK},
+			message:  "! -i tailscale0 -j ACCEPT",
+			fix:      "setup does not delete",
+		},
+		{
 			name:     "iptables, an accept for every port but SSH is the only allow: scoped rule added, manual (#736 review round 3)",
 			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + "-A INPUT -p tcp -m tcp ! --dport 22 -j ACCEPT\n", iptChain: tsInputNoAccept})},
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "run "+iptAppend, "output tailscale ip -4"),
@@ -2166,6 +2174,8 @@ func TestExposureShapes(t *testing.T) {
 		{"-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j ACCEPT", true},
 		{"-A INPUT -p tcp -m tcp --dport 3389 ! -s 100.64.0.0/10 -j ACCEPT", true},
 		{"-A INPUT ! -i tailscale0 -p tcp -m tcp ! --dport 22 -j ACCEPT", true},
+		// A bare `!` before a state match is no scope: the allow admits new connections from everyone (#743).
+		{"-A INPUT -p tcp -m conntrack ! --ctstate INVALID -m tcp --dport 3389 -j ACCEPT", true},
 		// The any-address literal narrows nothing, in either direction (#743, #762 review).
 		{"-A INPUT -s 0.0.0.0/0 -p tcp -m tcp --dport 3389 -j ACCEPT", true},
 		{"-A INPUT -d 0.0.0.0/0 -j ACCEPT", true},
