@@ -32,9 +32,11 @@ Every ts-bridge process appends to one daily file, and `FileRotator.Close` gzips
 
 ## Risks / open questions
 
-- A line written in the instant a peer claims yesterday's file at midnight: on Unix it lands in the claimed inode and is compressed with it unless the write comes after the copy finished, which loses one line at most. Accepted and documented.
-- A crash between the claim and the archive leaves a `*.claimed` file. The claimed name keeps the `ts-bridge-` prefix, so retention removes it after 7 days. Accepted.
-- Windows refuses to rename a file another process holds open. The claim fails and the day is retried on the next rotation. That is the desired behaviour.
+- A line written in the instant a peer claims yesterday's file at midnight cannot be lost: every `Write` rotates to today before it writes, so a peer never appends to a claimed file.
+- **Windows:** Go opens files with `FILE_SHARE_DELETE`, so the claim rename succeeds while a peer still holds the file. This is safe for the same reason as above. (Round 1 of the review corrected an earlier claim that the rename fails on Windows.)
+- **Failed compression** (archive unwritable, disk full): the lines stay in the `.claimed` file. Retention never deletes a claim, and every rotation retries leftover claims for past days, so nothing is lost. A write that fails midway truncates the archive back to its old size, so the archive never holds a partial member.
+- **Accepted:** a rotation that retries another live process's claim while that process is still compressing it appends the day twice. The result is duplicated lines, never lost ones, and it needs two processes rotating within the same milliseconds.
+- **Accepted:** a claim that keeps failing (for example a disk that stays full) accumulates until the cause clears. Those files are the unarchived lines themselves.
 
 ## Acceptance criteria
 
@@ -42,6 +44,7 @@ Every ts-bridge process appends to one daily file, and `FileRotator.Close` gzips
 - [x] AC2: compressing a past day whose `.gz` already exists appends to it; the archive decompresses to the earlier content followed by the new content.
 - [x] AC3: the midnight rollover in `Write` compresses the previous day and runs retention, through the same path `Open` uses.
 - [x] AC4: today's file is never compressed by rotation, even when its name sorts among the past days.
+- [x] AC5: a compression that fails keeps the day's lines, even past retention, and a later rotation archives them; two concurrent compressions of one day archive it once; a directory named like a log is left alone.
 
 ## References
 

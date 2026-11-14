@@ -19,5 +19,12 @@
     "verification": "go test ./internal/logging/ -run '^TestFileRotator_MidnightRolloverCompressesThePastDayOnly$' -count=1",
     "state": "passing",
     "evidence": "failed before the fix: no archive for yesterday after crossing midnight"
+  },
+  {
+    "id": "LOG-788-rotator-shared-file-f4",
+    "behavior": "AC5: a failed compression keeps and later archives the lines; concurrent claims archive once; a directory named like a log is ignored",
+    "verification": "go test ./internal/logging/ -run '^(TestFileRotator_FailedCompressionIsRetriedNotLost|TestCompressDayConcurrentClaimsArchiveOnce|TestFileRotator_LeavesADirectoryNamedLikeALog)$' -count=1",
+    "state": "passing",
+    "evidence": "the retry and directory tests failed before the round-1 fix"
   }
 ]

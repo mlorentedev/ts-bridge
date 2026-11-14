@@ -4,6 +4,7 @@ package logging
 
 import (
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -195,46 +196,81 @@ func (r *FileRotator) dayPath(day string) string {
 	return filepath.Join(r.dir, logPrefix+day+".log")
 }
 
-// compressPastDays compresses each ts-bridge-<day>.log whose day is before
-// today. Today, and any day after it (a clock set back), is left alone.
+// compressPastDays archives each ts-bridge-<day>.log whose day is before
+// today, and retries any claim a failed compression left behind. Today, any
+// day after it (a clock set back), and anything that is not a regular file
+// are left alone.
 func (r *FileRotator) compressPastDays(today string) {
 	entries, err := os.ReadDir(r.dir)
 	if err != nil {
 		return
 	}
 	for _, e := range entries {
-		day, ok := strings.CutSuffix(strings.TrimPrefix(e.Name(), logPrefix), ".log")
-		if !ok || !strings.HasPrefix(e.Name(), logPrefix) || day >= today {
+		day, claim, ok := pastDayEntry(e, today)
+		if !ok {
 			continue
 		}
-		if _, err := time.Parse(dayLayout, day); err == nil {
+		if claim {
+			r.archiveClaim(filepath.Join(r.dir, e.Name()), day)
+		} else {
 			r.compressDay(day)
 		}
 	}
 }
 
-// compressDay appends a past day's log to its archive as a new gzip member.
-// The log is first claimed by an atomic rename, so two processes rotating at
-// once never compress it twice; the loser's rename fails and it moves on. On
-// Windows the rename also fails while a process still holds the file, and
-// the day is retried on a later rotation. Appending, not truncating, keeps an
-// archive that already holds an earlier run of the day.
-func (r *FileRotator) compressDay(day string) {
-	src := r.dayPath(day)
-	claimed := fmt.Sprintf("%s.%d%s", src, os.Getpid(), claimedSuffix)
-	if err := os.Rename(src, claimed); err != nil {
-		return
+// pastDayEntry reports the day of a regular file named ts-bridge-<day>.log
+// or ts-bridge-<day>.log.<pid>.claimed whose day is before today.
+func pastDayEntry(e os.DirEntry, today string) (day string, claim, ok bool) {
+	rest, found := strings.CutPrefix(e.Name(), logPrefix)
+	if !found || !e.Type().IsRegular() || len(rest) < len(dayLayout) {
+		return "", false, false
 	}
-	if err := appendGzipMember(claimed, src+".gz"); err != nil {
-		return // The claimed file keeps the lines; retention removes it later.
+	day, rest = rest[:len(dayLayout)], rest[len(dayLayout):]
+	if _, err := time.Parse(dayLayout, day); err != nil || day >= today {
+		return "", false, false
+	}
+	switch {
+	case rest == ".log":
+		return day, false, true
+	case strings.HasPrefix(rest, ".log.") && strings.HasSuffix(rest, claimedSuffix):
+		return day, true, true
+	}
+	return "", false, false
+}
+
+// compressDay claims a past day's log by an atomic rename, so two processes
+// rotating at once never archive it twice (the loser's rename fails), then
+// archives the claim. Go opens files with FILE_SHARE_DELETE on Windows, so
+// the rename succeeds there too while a peer still holds the file; the peer
+// rotates to today before its next write, so nothing lands in the claim.
+func (r *FileRotator) compressDay(day string) {
+	r.archiveClaim(r.dayPath(day), day)
+}
+
+// archiveClaim takes path (a day's log, or a claim a failed compression left)
+// under this process's claim name and appends it to the day's archive as a
+// new gzip member. Appending, not truncating, keeps an archive that already
+// holds an earlier run of the day. On failure the claim stays, cleanup never
+// deletes a claim, and the next rotation retries it, so lines are not lost.
+func (r *FileRotator) archiveClaim(path, day string) {
+	claimed := fmt.Sprintf("%s.%d%s", r.dayPath(day), os.Getpid(), claimedSuffix)
+	if path != claimed {
+		if err := os.Rename(path, claimed); err != nil {
+			return
+		}
+	}
+	if err := appendGzipMember(claimed, r.dayPath(day)+".gz"); err != nil {
+		return
 	}
 	// #nosec G104 // cleanup: ignore remove errors.
 	os.Remove(claimed)
 }
 
 // appendGzipMember writes srcPath to the end of dstPath as one gzip member.
-// A multi-member file reads back as one stream (zcat, gzip.Reader).
-func appendGzipMember(srcPath, dstPath string) error {
+// A multi-member file reads back as one stream (zcat, gzip.Reader). A failed
+// write truncates dstPath back to its old size, so a partial member never
+// makes the archive unreadable past it.
+func appendGzipMember(srcPath, dstPath string) (err error) {
 	// #nosec G304 // filename is date-derived, not user-controlled.
 	src, err := os.Open(srcPath)
 	if err != nil {
@@ -246,13 +282,17 @@ func appendGzipMember(srcPath, dstPath string) error {
 	if err != nil {
 		return err
 	}
-	defer dst.Close()
-	gw := gzip.NewWriter(dst)
-	if _, err := io.Copy(gw, src); err != nil {
-		return err
+	info, err := dst.Stat()
+	if err != nil {
+		return errors.Join(err, dst.Close())
 	}
-	if err := gw.Close(); err != nil {
-		return err
+	gw := gzip.NewWriter(dst)
+	_, err = io.Copy(gw, src)
+	if err == nil {
+		err = gw.Close()
+	}
+	if err != nil {
+		return errors.Join(err, dst.Truncate(info.Size()), dst.Close())
 	}
 	return dst.Close()
 }
@@ -274,7 +314,8 @@ func (r *FileRotator) cleanup() { //nolint:funlen,gocyclo // baseline #629
 
 	logs := make([]logFile, 0, len(entries))
 	for _, e := range entries {
-		if !strings.HasPrefix(e.Name(), "ts-bridge-") {
+		// A claim holds lines not yet archived: never age it out.
+		if !strings.HasPrefix(e.Name(), logPrefix) || strings.HasSuffix(e.Name(), claimedSuffix) {
 			continue
 		}
 		info, err := e.Info()
@@ -296,7 +337,7 @@ func (r *FileRotator) cleanup() { //nolint:funlen,gocyclo // baseline #629
 		}
 	}
 
-	now := time.Now()
+	now := r.now()
 	gzCount := 0
 	for _, lf := range logs {
 		age := now.Sub(lf.modTime)
