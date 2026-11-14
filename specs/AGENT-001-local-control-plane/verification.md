@@ -12,7 +12,7 @@ owner: manu
 ## Evidence
 
 - [x] AC1 -> `TestStartRefusesASecondAgent`, `TestStartAfterCloseSucceeds`, `TestStartReplacesAStaleSocket`,
-  `TestStartNeverRemovesANonSocket`
+  `TestStartNeverRemovesANonSocket`, `TestServerDropsARequestWhoseBodyNeverArrives`
 - [x] AC2 -> `TestPathsFor`, `TestDefaultPathsIgnoreTheEnvironment`, `TestRunUserUsable`, `TestPrepareDirModes`,
   `TestVerifyDirRefusesAForeignOwner`, `TestSocketModeIsOwnerOnly`, `TestStartRefusesASocketPathAtTheLimit`
 - [x] AC3 -> `TestAuthorize` (fake uid/SID), `TestListenerRefusesAPeerThatIsNotTheOwner`,

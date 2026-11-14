@@ -1,8 +1,8 @@
 [
   {
     "id": "AGENT-001-local-control-plane-f1",
-    "behavior": "One agent per user: a second starter is refused, a leftover socket is replaced only under the lock, and a non-socket file is never removed",
-    "verification": "go test ./internal/agent -run '^(TestStartRefusesASecondAgent|TestStartAfterCloseSucceeds|TestStartReplacesAStaleSocket|TestStartNeverRemovesANonSocket)$' -count=1",
+    "behavior": "One agent per user: a second starter is refused, a leftover socket is replaced only under the lock, and a non-socket file is never removed, and a request whose body never arrives is dropped",
+    "verification": "go test ./internal/agent -run '^(TestStartRefusesASecondAgent|TestStartAfterCloseSucceeds|TestStartReplacesAStaleSocket|TestStartNeverRemovesANonSocket|TestServerDropsARequestWhoseBodyNeverArrives)$' -count=1",
     "state": "pending",
     "evidence": ""
   },

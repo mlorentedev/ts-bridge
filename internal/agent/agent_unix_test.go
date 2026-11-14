@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -353,5 +354,29 @@ func decode(t *testing.T, resp *http.Response, status int, v any) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 		t.Fatalf("decode: %v", err)
+	}
+}
+
+// A client that announces a body and never sends it must not hold a serving
+// goroutine forever: ReadHeaderTimeout ends at the headers, so the body read
+// needs its own bound.
+func TestServerDropsARequestWhoseBodyNeverArrives(t *testing.T) {
+	old := readTimeout
+	readTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { readTimeout = old })
+	p := testPaths(t)
+	startAgent(t, p)
+
+	conn, err := dial(context.Background(), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.Write([]byte("POST /v1/status HTTP/1.1\r\nHost: agent\r\nContent-Length: 1\r\n\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if _, err := io.ReadAll(conn); err != nil {
+		t.Fatalf("the server kept the connection open: %v", err)
 	}
 }

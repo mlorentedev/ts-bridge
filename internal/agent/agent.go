@@ -24,6 +24,11 @@ var ErrAlreadyRunning = errors.New("another ts-bridge agent is already running f
 
 const shutdownTimeout = 5 * time.Second
 
+// readTimeout bounds a whole request read, body included: ReadHeaderTimeout
+// stops at the headers, and a body that never arrives would otherwise hold a
+// serving goroutine forever. Every request today is small. A var for tests.
+var readTimeout = 10 * time.Second
+
 // Options configures Start. Paths is required; Version is reported by
 // /v1/meta; a nil Log discards.
 type Options struct {
@@ -71,7 +76,12 @@ func Start(opts Options) (*Agent, error) {
 		version:  opts.Version,
 		started:  time.Now().UTC(),
 	}
-	a.srv = &http.Server{Handler: a.handler(), ReadHeaderTimeout: 5 * time.Second}
+	a.srv = &http.Server{
+		Handler:           a.handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       readTimeout,
+		IdleTimeout:       time.Minute,
+	}
 	return a, nil
 }
 
