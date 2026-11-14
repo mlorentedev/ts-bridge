@@ -27,6 +27,9 @@ The agent serves a local HTTP API under /v1/ on a socket only this user can
 reach, and refuses to start while another agent of the same user runs. Session
 management arrives in later releases; today it answers /v1/meta and /v1/status.`,
 		Args: cobra.NoArgs,
+		// Hidden until it manages sessions (#782): a release should not list a
+		// command whose only use today is answering /v1/meta and /v1/status.
+		Hidden: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			paths, err := agent.DefaultPaths()
 			if err != nil {

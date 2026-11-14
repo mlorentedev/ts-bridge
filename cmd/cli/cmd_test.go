@@ -147,3 +147,16 @@ func TestVersionShortWithBuildVars(t *testing.T) {
 		t.Errorf("expected '2.1.0', got %q", output)
 	}
 }
+
+// The agent manages no session yet (#782), so it stays out of --help until it
+// does; it still runs when named.
+func TestAgentCommandIsHiddenUntilItManagesSessions(t *testing.T) {
+	root := cmdpkg.NewRootCmd()
+	agent, _, err := root.Find([]string{"agent"})
+	if err != nil || agent.Name() != "agent" {
+		t.Fatalf("agent command not found: %v", err)
+	}
+	if !agent.Hidden {
+		t.Fatal("agent is listed in --help before it manages sessions")
+	}
+}
