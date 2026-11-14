@@ -88,8 +88,21 @@ func (r *ReconnectDialer) attempt(ctx context.Context, network, address string) 
 	}
 	attemptCtx, cancel := context.WithTimeout(ctx, r.AttemptTimeout)
 	defer cancel()
-	return r.Inner.Dial(attemptCtx, network, address)
+	conn, err := r.Inner.Dial(attemptCtx, network, address)
+	if err != nil && attemptCtx.Err() != nil && ctx.Err() == nil {
+		// Cut off by this attempt's own deadline. The cause may look
+		// permanent (a lookup cut short is a *net.DNSError), so mark it.
+		return nil, &attemptTimeoutError{Cause: err}
+	}
+	return conn, err
 }
+
+// attemptTimeoutError is a dial that AttemptTimeout cut off while the
+// caller's context was still live. It is always retryable.
+type attemptTimeoutError struct{ Cause error }
+
+func (e *attemptTimeoutError) Error() string { return "dial attempt timed out: " + e.Cause.Error() }
+func (e *attemptTimeoutError) Unwrap() error { return e.Cause }
 
 // dialBudget is the caller-side deadline for one dial through a
 // ReconnectDialer built from cfg: every attempt's DialTimeout plus the longest
@@ -164,6 +177,10 @@ func (e *TerminalDialError) Unwrap() error { return e.Cause }
 // The default is "transient" — any unknown error is retried until MaxRetries.
 func isPermanentDialError(err error) bool {
 	if err == nil {
+		return false
+	}
+	var timedOut *attemptTimeoutError
+	if errors.As(err, &timedOut) {
 		return false
 	}
 	var addrErr *net.AddrError

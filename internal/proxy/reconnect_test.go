@@ -289,13 +289,17 @@ func TestReconnectDialer_WrappedErrorPreservesInner(t *testing.T) {
 // hangingDialer blackholes its first hangs dials, as a dial to an offline
 // tailnet peer does: they block until their context ends. Later dials succeed.
 type hangingDialer struct {
-	hangs int
-	calls atomic.Int32
+	hangs   int
+	hangErr error // returned by a hung dial instead of ctx.Err(), when set
+	calls   atomic.Int32
 }
 
 func (h *hangingDialer) Dial(ctx context.Context, _, _ string) (net.Conn, error) {
 	if int(h.calls.Add(1)) <= h.hangs {
 		<-ctx.Done()
+		if h.hangErr != nil {
+			return nil, h.hangErr
+		}
 		return nil, ctx.Err()
 	}
 	client, server := net.Pipe()
@@ -320,6 +324,24 @@ func TestReconnectDialer_RetriesADialThatHangs(t *testing.T) {
 	_ = conn.Close()
 	if got := inner.calls.Load(); got != 3 {
 		t.Fatalf("attempts = %d, want 3", got)
+	}
+}
+
+// A lookup cut off by the attempt's own deadline fails as a *net.DNSError,
+// which is otherwise permanent. While the caller's context is live it must
+// stay retryable, or one slow lookup stops the whole bridge (#815 review).
+func TestReconnectDialer_RetriesALookupCutOffByTheAttemptTimeout(t *testing.T) {
+	inner := &hangingDialer{hangs: 1, hangErr: &net.DNSError{Err: "i/o timeout", Name: "peer", IsTimeout: true}}
+	d := newReconnectDialer(inner, 2, time.Millisecond, time.Millisecond)
+	d.AttemptTimeout = 50 * time.Millisecond
+
+	conn, err := d.Dial(context.Background(), "tcp", "peer:22")
+	if err != nil {
+		t.Fatalf("Dial after a lookup cut off by the attempt timeout: %v (attempts %d)", err, inner.calls.Load())
+	}
+	_ = conn.Close()
+	if got := inner.calls.Load(); got != 2 {
+		t.Fatalf("attempts = %d, want 2", got)
 	}
 }
 
