@@ -203,6 +203,7 @@ func TestWindowsSSHCheck(t *testing.T) {
 			Service{Kind: ServiceSSH, Port: 22, FirewallOK: true, Unread: true}},
 		{"rule absent", 22, map[string]string{winSSHFwPS(): "count=0\r\n"}, nil, []string{cap + "=ok", svc + "=ok", fw + "=changed"},
 			Service{Kind: ServiceSSH, Port: 22, Enabled: true, Active: boolPtr(true)}},
+		// A manual or unverified firewall step is firewall_ok false (the zero value of FirewallOK below), as on Linux.
 		{"installer rule open to any address", 22, map[string]string{winSSHInstallerPS(22): "total=1\r\nexposed=1\r\n"}, nil,
 			[]string{cap + "=ok", svc + "=ok", fw + "=manual"},
 			Service{Kind: ServiceSSH, Port: 22, Enabled: true, Active: boolPtr(true)}},
@@ -426,5 +427,44 @@ func TestWindowsServiceBinary(t *testing.T) {
 	}
 	if got := sshPortsScript(`C:\a'b\sshd.exe`); !strings.Contains(got, `'C:\a''b\sshd.exe'`) {
 		t.Errorf("a quote in the path is not escaped: %q", got)
+	}
+}
+
+// TestWindowsSSHFirewallOKIsOneSemantic pins firewall_ok for ssh as for Linux:
+// only an ok firewall step is true, so a manual (installer rule open to any
+// address) or unverified (its read fails) step is false per service and
+// overall, with the ssh service alone or beside rdp.
+func TestWindowsSSHFirewallOKIsOneSemantic(t *testing.T) {
+	cfg := Config{FirewallRule: "Rule", NoSleep: true, Services: []DeclaredService{{Kind: ServiceSSH, Port: 22}}}
+	tests := []struct {
+		name string
+		over map[string]string
+		fail []string
+		want bool
+		step Outcome
+	}{
+		{"scoped, installer rule absent", nil, nil, true, OutcomeOK},
+		{"installer rule open to any address", map[string]string{winSSHInstallerPS(22): "total=1\r\nexposed=1\r\n"}, nil, false, OutcomeManual},
+		{"installer rule read fails", nil, []string{winSSHInstallerPS(22)}, false, OutcomeUnverified},
+		{"rule absent", map[string]string{winSSHFwPS(): "count=0\r\n"}, nil, false, OutcomeChanged},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := winSSHHost(22, tt.over)
+			r.fail = map[string]bool{}
+			for _, k := range tt.fail {
+				r.fail[k] = true
+			}
+			check := checkFor(goosWindows, cfg, r)
+			var fw Outcome
+			for _, s := range check.Steps {
+				if s.Name == sshWinFwName {
+					fw = s.Outcome
+				}
+			}
+			if fw != tt.step || check.Services[0].FirewallOK != tt.want || check.FirewallOK != tt.want {
+				t.Errorf("firewall step %q, service firewall_ok %v, overall %v; want %q and %v for both", fw, check.Services[0].FirewallOK, check.FirewallOK, tt.step, tt.want)
+			}
+		})
 	}
 }

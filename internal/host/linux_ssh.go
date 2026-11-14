@@ -42,13 +42,30 @@ func readSSH(r Runner) (string, xrdpState) {
 // activation: the socket is the unit to converge and the service is left alone.
 // A socket exists when systemctl reads it (is-enabled answers something other
 // than not-found, and a word ts-bridge interprets); one it cannot read is
-// ignored, as if absent. A masked service stays masked.
+// ignored, as if absent. A masked service stays masked. The socket is read even
+// beside an enabled, running service: when both are enabled the host is outside
+// either model, which is dual state, reported for the operator to resolve (#777).
+// Dual needs is-enabled to say enabled: a static socket has no [Install], so
+// disabling the service beside it would leave nothing to start sshd at boot.
 func withSocket(r Runner, unit string, x xrdpState) (string, xrdpState) {
-	if !x.readable || x.masked || (x.enabled && x.active) {
+	if !x.readable || x.masked {
 		return unit, x
 	}
 	sock := readUnit(r, unit+".socket", "sshd")
-	if !sock.readable || !socketIsModel(x, sock) {
+	if !sock.readable {
+		return unit, x
+	}
+	return foldSocket(unit, x, sock)
+}
+
+// foldSocket is withSocket once the socket has been read.
+func foldSocket(unit string, x, sock xrdpState) (string, xrdpState) {
+	if x.enabled && sock.enabled && !sock.static {
+		// The socket may be the one listening: Active says whether sshd answers.
+		x.dual, x.active = true, x.active || sock.active
+		return unit, x
+	}
+	if !socketIsModel(x, sock) {
 		return unit, x
 	}
 	x.enabled, x.active = x.enabled || sock.enabled, x.active || sock.active
@@ -57,15 +74,59 @@ func withSocket(r Runner, unit string, x xrdpState) (string, xrdpState) {
 
 // socketIsModel is whether the socket, not the service, is how the operator runs
 // sshd. Debian 12 and Ubuntu 22.04 and earlier ship ssh.socket disabled beside an
-// enabled ssh.service, and the socket Conflicts= with the service: enabling it
-// there would leave both enabled at boot, and starting it would stop an sshd the
-// operator started by hand. So the socket leads only when it is enabled (static
-// counts), or when neither unit is enabled and the service is not running, where
-// there is no model to preserve and the socket is the choice (#767). A masked
-// socket never leads: masking it is how an operator opts out of socket
-// activation, so the service is converged and nothing asks to unmask the socket.
+// enabled ssh.service. Whether the socket Conflicts= with the service depends on
+// the release: Debian 11, Ubuntu 20.04 and 22.04 say so, Debian 12 and 13 and
+// Ubuntu 23.04 and later (24.04's socket is Before= and RequiredBy= the service)
+// do not. Where it does, starting the socket stops an sshd the operator started
+// by hand; where it does not, the socket cannot bind a port that sshd already
+// holds, and enabling it leaves both units enabled (#777). Either way the
+// socket leads only when it is enabled (static counts, unless the service is
+// enabled too: a static socket has no [Install], so nothing starts it at boot and
+// it is neither the model nor dual), or when neither unit is enabled and the
+// service is not running, where there is no model to preserve
+// and the socket is the choice (#767). A masked socket never leads: masking it
+// is how an operator opts out of socket activation, so the service is converged
+// and nothing asks to unmask the socket. With both enabled the host is dual, led
+// by neither (withSocket).
 func socketIsModel(svc, sock xrdpState) bool {
-	return sock.enabled || (!svc.enabled && !svc.active && !sock.masked)
+	staticBesideService := sock.static && svc.enabled
+	return (sock.enabled && !staticBesideService) || (!svc.enabled && !svc.active && !sock.masked)
+}
+
+// sshDualFix is the fix for a host whose service and socket are both enabled.
+// Disabling the service alone is the safe form: the socket starts sshd from the
+// next boot, and the running sshd and its sessions are not touched. The
+// immediate form stops the listener before the socket takes over, so a remote
+// operator who runs it can lose the connection they ran it from.
+const sshDualFix = "run `sudo systemctl disable %[1]s.service`: the socket starts sshd from the next boot " +
+	"and the running sshd is left alone. To switch now, from a console and not over SSH, run " +
+	"`sudo systemctl disable --now %[1]s.service && sudo systemctl start %[1]s.socket`"
+
+// sshDualStep is the step for a host with the service and its socket both
+// enabled. It is manual in setup and in check: disabling a unit is the
+// operator's call, never an automatic one. state says what sshd is doing.
+func sshDualStep(unit, state string) SetupStep {
+	return newStep(sshName, OutcomeManual,
+		fmt.Sprintf("%[1]s.service and %[1]s.socket are both enabled, so sshd also starts outside the socket's activation%s", unit, state),
+		fmt.Sprintf(sshDualFix, unit))
+}
+
+// sshDualSetupStep leaves sshd running where it can: with both units enabled and
+// nothing listening it starts the socket, the model on these releases, and
+// enables nothing and leaves the service alone. The step stays manual for the
+// dual enable either way.
+func sshDualSetupStep(r Runner, unit string, x xrdpState) SetupStep {
+	if x.active {
+		return sshDualStep(unit, "")
+	}
+	if err := r.Run("systemctl", "start", unit+".socket"); err != nil {
+		step := sshDualStep(unit, "")
+		step.Outcome = OutcomeFailed
+		step.Message += fmt.Sprintf(", and sshd is not running: could not start %s.socket: %v", unit, err)
+		step.Fix = fmt.Sprintf("sudo systemctl start %s.socket, then %s", unit, step.Fix)
+		return step
+	}
+	return sshDualStep(unit, fmt.Sprintf("; sshd was not running, so %s.socket was started", unit))
 }
 
 // sshUnit is the step text for the unit read; label names the unit so a host
@@ -81,17 +142,35 @@ func sshUnit(unit string) linuxUnit {
 
 func sshSetupSteps(r Runner, port int) []SetupStep {
 	unit, x := readSSH(r)
-	steps := []SetupStep{sshUnit(unit).setupStep(r, x)}
+	steps := []SetupStep{sshServerSetupStep(r, unit, x)}
 	if s, ok := sshPortStep(r, x, port, OutcomeFailed); ok {
 		steps = append(steps, s)
 	}
 	return append(steps, sshFirewallSetupStep(r, port))
 }
 
+func sshServerSetupStep(r Runner, unit string, x xrdpState) SetupStep {
+	if x.dual {
+		return sshDualSetupStep(r, unit, x)
+	}
+	return sshUnit(unit).setupStep(r, x)
+}
+
+func sshServerCheckStep(unit string, x xrdpState) SetupStep {
+	if x.dual {
+		state := ""
+		if !x.active {
+			state = "; sshd is not running"
+		}
+		return sshDualStep(unit, state)
+	}
+	return sshUnit(unit).checkStep(x)
+}
+
 func checkSSH(r Runner, port int, result *CheckResult) {
 	unit, x := readSSH(r)
 	fw := sshFirewallRead(r, port)
-	svcStep := sshUnit(unit).checkStep(x)
+	svcStep := sshServerCheckStep(unit, x)
 	result.Steps = append(result.Steps, svcStep)
 	if s, ok := sshPortStep(r, x, port, OutcomeUnverified); ok {
 		result.Steps = append(result.Steps, s)
