@@ -86,13 +86,14 @@ The four-package split above grew to fifteen packages under `internal/`. The bou
 
 | Package | Imports (project-local) |
 |---------|-------------------------|
-| `bootstrapssh`, `browser`, `config/envfile`, `controlurl`, `logging`, `secretfile`, `telemetry` | none |
+| `bootstrapssh`, `browser`, `config/envfile`, `controlurl`, `logging`, `oslock`, `secretfile`, `telemetry` | none |
+| `agent` | `oslock` |
 | `config` | `controlurl`, `credential` |
 | `credential` | `secretfile` |
 | `discover` | `secretfile` |
 | `health` | `telemetry` |
 | `host` | `bootstrapssh`, `controlurl` |
-| `profile` | `controlurl`, `credential`, `secretfile` |
+| `profile` | `controlurl`, `credential`, `oslock`, `secretfile` |
 | `proxy` | `config`, `telemetry` |
 | `serve` | `config`, `health`, `host`, `proxy` |
 
