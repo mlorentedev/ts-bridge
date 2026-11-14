@@ -333,6 +333,23 @@ the unscoped rule and only reporting it (leaves the exposure in place after the 
 Reopen when: tailscaled's interface name stops being `tailscale0` by default, or ts-bridge reads
 it from the node instead of fixing it.
 
+## Amendment C (Accepted, 2026-11-14): a per-user login start for the client agent
+
+Status: accepted by the operator with ADR-018 (#451).
+
+Amendment A says ts-bridge "installs no service and supervises nothing". That still holds
+for hosts and for system services. ADR-018 adds a client-side `ts-bridge agent` that owns
+the user's `connect` sessions, and `agent enable` registers it as a **per-user** login
+start: a systemd `--user` unit, a LaunchAgent, or a logon Scheduled Task for the user,
+with an XDG autostart or HKCU `Run` fallback. The registration needs no elevation, runs
+as the user, and never as root or SYSTEM.
+
+What does not change:
+
+- `host serve` stays foreground and is supervised by the consumer's provisioning, as in
+  Amendment A.
+- ts-bridge installs no system service and never registers anything for another user.
+
 ## References
 
 - #450 (epic), #457, #458, #459, #453, #454, #455, #307, #408, #451, #530, #631.
