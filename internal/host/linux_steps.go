@@ -1267,9 +1267,11 @@ func iptPortCovers(f []string, port int) bool {
 // iptPortlessCovers reports whether a non-loopback rule with no port flag
 // matches a new TCP connection on every port. Every token after the chain must
 // be one this parser models; anything else (limit, `-f`, a `--tcp-flags` set
-// other than `--syn`, a negation of anything but a scope or a source port, a
-// state match held to replies) narrows the rule in a way not modeled here, so
-// the rule reads as absent.
+// other than `--syn`, a negation of anything but a scope, a source port or a
+// state list) narrows the rule in a way not modeled here, so the rule reads as
+// absent. A negated scope or source port is open as before (#743, #757); a
+// state match, negated or not, narrows only when its list leaves NEW out, so
+// `! --ctstate INVALID` stays open and `! --ctstate NEW` does not (#778).
 func iptPortlessCovers(f []string) bool {
 	for i := 2; i < len(f); {
 		n := iptPortlessToken(f[i:])
