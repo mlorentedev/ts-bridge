@@ -2151,16 +2151,34 @@ func TestExposureShapes(t *testing.T) {
 }
 
 // TestWideAllowFix pins the whole fix for an unscoped foreign allow: the SSH
-// caution is added only to an iptables rule that names no destination port or
-// a list holding more than the service port, never to a ufw line or to a rule
-// naming only the port (#736 review F1, F5; #745).
+// caution is added to an iptables rule that names no destination port or a
+// list holding more than the service port, and to the ufw forms of the same
+// shapes in ufw's own syntax; never to a rule naming only the service port
+// (#736 review F1, F5; #745; #772).
 func TestWideAllowFix(t *testing.T) {
 	const keep = "keep loopback, replies and SSH open first (`%[1]s -A INPUT -i lo -j ACCEPT`, " +
 		"`%[1]s -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT`, `%[1]s -A INPUT -p tcp --dport <your SSH port> -j ACCEPT`)"
 	v4 := fmt.Sprintf(keep, "iptables")
+	const base = "scope %s to tailscale0, or remove it; setup does not delete rules it did not write"
+	ufwCaution := func(cmds string) string {
+		return "; the rule admits other ports too, so as root re-add them first (" + cmds + ", keeping SSH open) before you change it"
+	}
+	const anySSH = "`ufw allow <your SSH port>/tcp`"
 	tests := []struct{ rule, want string }{
-		{"ufw allow 3389", "scope ufw allow 3389 to tailscale0, or remove it; setup does not delete rules it did not write"},
-		{"ufw allow 22,3389/tcp", "scope ufw allow 22,3389/tcp to tailscale0, or remove it; setup does not delete rules it did not write"},
+		{"ufw allow 3389", fmt.Sprintf(base, "ufw allow 3389")},
+		{"ufw allow 3389/tcp", fmt.Sprintf(base, "ufw allow 3389/tcp")},
+		{"ufw allow proto tcp from any to any port 3389", fmt.Sprintf(base, "ufw allow proto tcp from any to any port 3389")},
+		// The other ports of the list are named when it can be read (#772).
+		{"ufw allow 22,3389/tcp", fmt.Sprintf(base, "ufw allow 22,3389/tcp") + ufwCaution("`ufw allow 22/tcp`")},
+		{"ufw allow 22,80,3389/tcp", fmt.Sprintf(base, "ufw allow 22,80,3389/tcp") + ufwCaution("`ufw allow 22,80/tcp`")},
+		{"ufw allow 22,3000:3010,3389/tcp", fmt.Sprintf(base, "ufw allow 22,3000:3010,3389/tcp") + ufwCaution("`ufw allow 22,3000:3010/tcp`")},
+		{"ufw allow in 22,3389/tcp comment 'ssh'", fmt.Sprintf(base, "ufw allow in 22,3389/tcp comment 'ssh'") + ufwCaution("`ufw allow 22/tcp`")},
+		{"ufw allow proto tcp from any to any port 22,3389", fmt.Sprintf(base, "ufw allow proto tcp from any to any port 22,3389") + ufwCaution("`ufw allow 22/tcp`")},
+		// A range holding the service port, or no port at all, cannot be split: name the SSH port generically.
+		{"ufw allow 3380:3390/tcp", fmt.Sprintf(base, "ufw allow 3380:3390/tcp") + ufwCaution(anySSH)},
+		{"ufw allow 22,3380:3390/tcp", fmt.Sprintf(base, "ufw allow 22,3380:3390/tcp") + ufwCaution(anySSH)},
+		{"ufw allow from any", fmt.Sprintf(base, "ufw allow from any") + ufwCaution(anySSH)},
+		{"ufw allow proto tcp from any", fmt.Sprintf(base, "ufw allow proto tcp from any") + ufwCaution(anySSH)},
 		{strings.TrimSpace(iptForeignPrinted), "scope " + strings.TrimSpace(iptForeignPrinted) + " to tailscale0, or remove it; setup does not delete rules it did not write; the rule admits other ports too, so as root " + v4 + " before you change it"},
 		{"-A INPUT -j ACCEPT", "scope -A INPUT -j ACCEPT to tailscale0, or remove it; setup does not delete rules it did not write; the rule admits other ports too, so as root " + v4 + " before you change it"},
 		// A destination list holding the service port and another port admits that port too (#745).
@@ -2169,9 +2187,19 @@ func TestWideAllowFix(t *testing.T) {
 		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", "scope -A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT to tailscale0, or remove it; setup does not delete rules it did not write"},
 	}
 	for _, tt := range tests {
-		if got := foreignFix(firewallRead{foreign: []string{tt.rule}}); got != tt.want {
+		if got := foreignFix(firewallRead{foreign: []string{tt.rule}}, 3389); got != tt.want {
 			t.Errorf("foreignFix(%q):\n got %q\nwant %q", tt.rule, got, tt.want)
 		}
+	}
+	// Several rules each add their own re-add commands, once.
+	twoUFW := foreignFix(firewallRead{foreign: []string{"ufw allow 22,3389/tcp", "ufw allow 80,3389/tcp", "ufw allow 22,3389/tcp"}}, 3389)
+	if want := ufwCaution("`ufw allow 22/tcp`, `ufw allow 80/tcp`"); !strings.HasSuffix(twoUFW, want) {
+		t.Errorf("foreignFix over two ufw rules = %q, want suffix %q", twoUFW, want)
+	}
+	// An iptables rule and a ufw rule in one read carry both cautions.
+	mixed := foreignFix(firewallRead{foreign: []string{"-A INPUT -j ACCEPT", "ufw allow 22,3389/tcp"}}, 3389)
+	if !strings.Contains(mixed, v4+" before you change it") || !strings.HasSuffix(mixed, ufwCaution("`ufw allow 22/tcp`")) {
+		t.Errorf("foreignFix over an iptables and a ufw rule = %q, want both cautions", mixed)
 	}
 	v6 := []struct{ rule, want string }{
 		{"-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", "run `ip6tables -D INPUT -p tcp -m tcp --dport 3389 -j ACCEPT` as root to delete the v6 rule (setup never writes one)"},
@@ -2923,5 +2951,38 @@ func TestWideAllowFixFromTheRead(t *testing.T) {
 				t.Errorf("%s %q: %s %q fix %q, want manual naming the rule with the SSH caution", family, rule, step.Outcome, step.Message, step.Fix)
 			}
 		}
+	}
+}
+
+// TestUFWWideAllowFromTheRead runs the #772 shapes through `ufw show added`
+// and the check step, as an operator's report would: a ufw allow that lists
+// SSH beside the service port carries the ufw caution, a lone allow does not.
+// `ufw allow 3389/tcp` is the rule setup wrote before #631, so setup replaces
+// it alone ("changed") and no manual fix is due.
+func TestUFWWideAllowFromTheRead(t *testing.T) {
+	tests := []struct {
+		rule    string
+		outcome Outcome
+		want    string // the caution the fix must carry; empty means none
+	}{
+		{"ufw allow 22,3389/tcp", OutcomeManual, "re-add them first (`ufw allow 22/tcp`, keeping SSH open)"},
+		{"ufw allow 3380:3390/tcp", OutcomeManual, "re-add them first (`ufw allow <your SSH port>/tcp`, keeping SSH open)"},
+		{"ufw allow 3389", OutcomeManual, ""},
+		{"ufw allow 3389/tcp", OutcomeChanged, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.rule, func(t *testing.T) {
+			r := &recordingRunner{elevated: true, onPath: ufwIpt, output: map[string]string{ufwStatus: ufwActive, ufwAdded: ufwAddedHeader + tt.rule + "\n", iptRead: iptScoped, iptChain: tsInputNoAccept}}
+			step := firewallCheckStep(readLinuxFirewall(r, 3389), 3389)
+			if step.Outcome != tt.outcome || !strings.Contains(step.Message, tt.rule) {
+				t.Fatalf("%s %q, want %s naming the rule", step.Outcome, step.Message, tt.outcome)
+			}
+			if got := strings.Contains(step.Fix, "re-add them first"); got != (tt.want != "") || (tt.want != "" && !strings.Contains(step.Fix, tt.want)) {
+				t.Errorf("fix %q, want caution %q", step.Fix, tt.want)
+			}
+			if strings.Contains(step.Fix, "iptables -A INPUT") {
+				t.Errorf("fix %q names an iptables command on a ufw rule", step.Fix)
+			}
+		})
 	}
 }

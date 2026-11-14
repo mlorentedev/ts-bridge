@@ -1485,8 +1485,13 @@ func ufwUnscopedAllow(f []string, port int) bool {
 	if !ufwInboundAllow(f) || ufwScoped(f) {
 		return false
 	}
-	g := slices.DeleteFunc(slices.Clone(f[2:]), func(w string) bool { return w == "log" || w == "log-all" })
+	g := withoutLog(f[2:])
 	return ufwRuleMatchesPort(f[2:], port) && (len(g) <= 2 || destPortIndex(g) >= 0)
+}
+
+// withoutLog drops the `log` and `log-all` modifiers of a ufw rule's arguments.
+func withoutLog(f []string) []string {
+	return slices.DeleteFunc(slices.Clone(f), func(w string) bool { return w == "log" || w == "log-all" })
 }
 
 // ufwRuleMatchesPort matches the short form (`3389/tcp`, `3389`, `in 3389/tcp`)
@@ -1496,7 +1501,7 @@ func ufwRuleMatchesPort(f []string, port int) bool { //nolint:gocyclo // baselin
 	if i := slices.Index(f, "comment"); i >= 0 {
 		f = f[:i]
 	}
-	f = slices.DeleteFunc(slices.Clone(f), func(w string) bool { return w == "log" || w == "log-all" })
+	f = withoutLog(f)
 	if len(f) == 2 && f[0] == "in" {
 		f = f[1:]
 	}
@@ -1608,7 +1613,7 @@ func legacySetupStep(r Runner, read firewallRead, port int) SetupStep {
 	}
 	if len(read.foreign) > 0 {
 		return newStep(linuxFwName, OutcomeManual, fmt.Sprintf("Firewall allows TCP %d on %s (%s), but legacy unscoped rule: %s", port, tailnetInterface, read.source(), strings.Join(read.foreign, "; ")),
-			foreignFix(read))
+			foreignFix(read, port))
 	}
 	if read.scoped {
 		return newStep(linuxFwName, OutcomeChanged, fmt.Sprintf("Legacy unscoped firewall rule deleted: TCP %d stays allowed by the scoped rule (%s)", port, read.source()), "")
@@ -1629,19 +1634,110 @@ func legacyCheckStep(read firewallRead, port int) SetupStep {
 	held = append(held, read.foreign...)
 	message := fmt.Sprintf("Firewall allows TCP %d on every interface (%s), not only %s: legacy unscoped rule: %s", port, read.source(), tailnetInterface, strings.Join(held, "; "))
 	if len(read.foreign) > 0 {
-		return newStep(linuxFwName, OutcomeManual, message, foreignFix(read))
+		return newStep(linuxFwName, OutcomeManual, message, foreignFix(read, port))
 	}
 	return newStep(linuxFwName, OutcomeChanged, message,
 		fmt.Sprintf("run ts-bridge host setup as root: it adds the rule scoped to %s and deletes the unscoped one", tailnetInterface))
 }
 
 // foreignFix is the operator's part: setup deletes only the rules it wrote.
-func foreignFix(read firewallRead) string {
+func foreignFix(read firewallRead, port int) string {
 	fix := fmt.Sprintf("scope %s to %s, or remove it; setup does not delete rules it did not write", strings.Join(read.foreign, "; "), tailnetInterface)
 	if slices.ContainsFunc(read.foreign, iptAdmitsOthers) {
 		fix += "; the rule admits other ports too, so as root " + keepOpenFirst(backendIPT) + " before you change it"
 	}
+	if cmds := ufwReAddCmds(read.foreign, port); len(cmds) > 0 {
+		fix += "; the rule admits other ports too, so as root re-add them first (`" + strings.Join(cmds, "`, `") + "`, keeping SSH open) before you change it"
+	}
 	return fix
+}
+
+// ufwKeepSSH is the re-add a ufw allow names when the ports it admits besides the
+// service port cannot be read off the rule.
+const ufwKeepSSH = "ufw allow <your SSH port>/tcp"
+
+// ufwReAddCmds are the `ufw allow` commands that keep the other ports open
+// before the ufw allows in foreign are changed, each once (#772). A ufw rule
+// that admits only the service port adds none.
+func ufwReAddCmds(foreign []string, port int) []string {
+	var cmds []string
+	for _, line := range foreign {
+		if cmd, ok := ufwAdmitsOthers(line, port); ok && !slices.Contains(cmds, cmd) {
+			cmds = append(cmds, cmd)
+		}
+	}
+	return cmds
+}
+
+// ufwAdmitsOthers is iptAdmitsOthers for a `ufw show added` line, with the
+// command that re-adds the other ports: it names no destination port, or its
+// list holds more than the service port. Deleting such a rule under ufw's
+// default deny incoming may close SSH (#772).
+func ufwAdmitsOthers(line string, port int) (cmd string, admits bool) {
+	f := strings.Fields(line)
+	if len(f) < 3 || f[0] != backendUFW {
+		return "", false // an iptables line has its own caution
+	}
+	if i := slices.Index(f, "comment"); i >= 0 {
+		f = f[:i]
+	}
+	g := withoutLog(f[2:])
+	if len(g) == 2 && g[0] == "in" {
+		g = g[1:]
+	}
+	list := ufwPortList(g)
+	if list == "" {
+		return ufwKeepSSH, true
+	}
+	if !portListWide(list) {
+		return "", false
+	}
+	return ufwReAdd(list, port), true
+}
+
+// ufwPortList is the destination port list of a ufw allow's arguments, empty
+// when the rule names none: the short form (`22,3389/tcp`) or the full form's
+// `port` after `to`.
+func ufwPortList(g []string) string {
+	if len(g) == 1 {
+		ports, _, _ := strings.Cut(g[0], "/")
+		return ports
+	}
+	if i := destPortIndex(g); i >= 0 && i+1 < len(g) {
+		return g[i+1]
+	}
+	return ""
+}
+
+// ufwReAdd names the ports of list other than the service port as one TCP
+// allow. A range holding the service port cannot be split, so it falls back to
+// ufwKeepSSH, as does a list that names no other port.
+func ufwReAdd(list string, port int) string {
+	var keep []string
+	for _, p := range strings.Split(list, ",") {
+		lo, hi, ok := portSpan(p)
+		if !ok || (lo <= port && port <= hi && lo != hi) {
+			return ufwKeepSSH
+		}
+		if lo != port || hi != port {
+			keep = append(keep, p)
+		}
+	}
+	if len(keep) == 0 {
+		return ufwKeepSSH
+	}
+	return fmt.Sprintf("ufw allow %s/%s", strings.Join(keep, ","), protoTCP)
+}
+
+// portSpan reads one element of a port list: `22` or `3380:3390`.
+func portSpan(p string) (lo, hi int, ok bool) {
+	a, b, isRange := strings.Cut(p, ":")
+	if !isRange {
+		b = a
+	}
+	lo, errLo := strconv.Atoi(a)
+	hi, errHi := strconv.Atoi(b)
+	return lo, hi, errLo == nil && errHi == nil
 }
 
 // iptAdmitsOthers reports an iptables allow that admits ports besides the service
@@ -1652,7 +1748,7 @@ func foreignFix(read firewallRead) string {
 func iptAdmitsOthers(line string) bool {
 	f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
 	if len(f) == 0 || f[0] != "-A" {
-		return false // a ufw line names its port in its own syntax
+		return false // a ufw line names its port in its own syntax (ufwAdmitsOthers)
 	}
 	named := false
 	for _, flag := range iptDestPortFlags {
@@ -1789,7 +1885,7 @@ func ufwInactiveStep(read firewallRead, port int, state string) SetupStep {
 	}
 	if len(read.foreign) > 0 {
 		message += "; legacy unscoped rule: " + strings.Join(read.foreign, "; ")
-		fix += "; " + foreignFix(read)
+		fix += "; " + foreignFix(read, port)
 	}
 	return newStep(linuxFwName, OutcomeManual, message, fix)
 }
@@ -1854,7 +1950,7 @@ func firewallBlockedStep(read firewallRead, port int) SetupStep {
 	if len(read.foreign) > 0 {
 		message += "; legacy unscoped rule: " + strings.Join(read.foreign, "; ")
 		// Removing the deny first would expose the port through the chain (#764 review).
-		fix = "first " + foreignFix(read) + "; only then " + fix
+		fix = "first " + foreignFix(read, port) + "; only then " + fix
 	}
 	return newStep(linuxFwName, OutcomeManual, message, fix)
 }
