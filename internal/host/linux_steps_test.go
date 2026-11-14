@@ -1563,6 +1563,7 @@ func TestIptablesDecideOnly(t *testing.T) {
 		// replies) drops no new connection, as the port-less one above (#758);
 		// one that includes NEW still decides.
 		{"port-bearing conntrack drop does not decide", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate INVALID -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
+		{"port-less new drop decides", "-A INPUT -m conntrack --ctstate NEW -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
 		{"port-bearing new drop decides", "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate NEW -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", ruleBlocked},
 		{"negated-scope drop does not decide", "-A INPUT ! -i tailscale0 -p tcp -m tcp --dport 3389 -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
 		{"loopback drop does not decide", "-A INPUT -i lo -j DROP\n-A INPUT -p tcp -m tcp --dport 3389 -j ACCEPT", rulePresent},
