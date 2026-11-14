@@ -1200,18 +1200,20 @@ func iptExposes(f []string, port int) bool {
 // iptRepliesOnly reports a rule held by a conntrack or state match to packets
 // that are not NEW: a list without NEW (`--ctstate RELATED,ESTABLISHED`, or
 // `INVALID`), or `! --ctstate NEW`. Such an allow admits no new connection, so
-// it exposes nothing (#758). The
-// port-less path already reads any state match as narrowing.
+// it exposes nothing (#758). iptStateNewSpan reads the same match on the
+// port-less path (#778).
 func iptRepliesOnly(f []string) bool {
 	for i, w := range f {
-		if (w == "--ctstate" || w == "--state") && i+1 < len(f) {
-			negated := i > 0 && f[i-1] == "!"
-			if negated == slices.Contains(strings.Split(f[i+1], ","), "NEW") {
-				return true
-			}
+		if slices.Contains(iptStateFlags, w) && i+1 < len(f) && iptStateReplies(i > 0 && f[i-1] == "!", f[i+1]) {
+			return true
 		}
 	}
 	return false
+}
+
+// iptStateReplies reports a state list, negated or not, that leaves NEW out.
+func iptStateReplies(negated bool, list string) bool {
+	return negated == slices.Contains(strings.Split(list, ","), "NEW")
 }
 
 // iptExcludesOthers reports a TCP rule that admits port from every client but
@@ -1264,10 +1266,12 @@ func iptPortCovers(f []string, port int) bool {
 
 // iptPortlessCovers reports whether a non-loopback rule with no port flag
 // matches a new TCP connection on every port. Every token after the chain must
-// be one this parser models; anything else (conntrack, state, limit, `-f`, a
-// `--tcp-flags` set other than `--syn`, a negation of anything but a scope or a
-// source port)
-// narrows the rule in a way not modeled here, so the rule reads as absent.
+// be one this parser models; anything else (limit, `-f`, a `--tcp-flags` set
+// other than `--syn`, a negation of anything but a scope, a source port or a
+// state list) narrows the rule in a way not modeled here, so the rule reads as
+// absent. A negated scope or source port is open as before (#743, #757); a
+// state match, negated or not, narrows only when its list leaves NEW out, so
+// `! --ctstate INVALID` stays open and `! --ctstate NEW` does not (#778).
 func iptPortlessCovers(f []string) bool {
 	for i := 2; i < len(f); {
 		n := iptPortlessToken(f[i:])
@@ -1282,6 +1286,9 @@ func iptPortlessCovers(f []string) bool {
 // iptPortlessToken returns how many fields the qualifier at the start of f
 // spans when it keeps a rule open to every TCP port, or 0 when it narrows it.
 func iptPortlessToken(f []string) int { //nolint:gocyclo // baseline #629
+	if n := iptStateNewSpan(f); n > 0 {
+		return n
+	}
 	if len(f) < 2 {
 		return 0
 	}
@@ -1300,6 +1307,24 @@ func iptPortlessToken(f []string) int { //nolint:gocyclo // baseline #629
 		return iptIf(len(f) > 2 && slices.Contains(iptNegatedOpen, v), 3)
 	}
 	return 0
+}
+
+// iptStateNewSpan is how many fields at the start of f a conntrack or state
+// match spans, with its module, a `!` and its list, when it admits NEW and so
+// leaves a port-less rule open to every port: `--ctstate NEW`, or
+// `! --ctstate INVALID` (#778). 0 for any other field, a match held to replies
+// included, which narrows the rule.
+func iptStateNewSpan(f []string) int {
+	n := iptIf(len(f) > 1 && f[0] == "-m" && slices.Contains(iptStateModules, f[1]), 2)
+	rest := f[n:]
+	negated := len(rest) > 0 && rest[0] == "!"
+	if negated {
+		rest = rest[1:]
+	}
+	if len(rest) < 2 || !slices.Contains(iptStateFlags, rest[0]) || iptStateReplies(negated, rest[1]) {
+		return 0
+	}
+	return n + iptIf(negated, 1) + 2
 }
 
 // iptNegatedOpen are the flags a rule may negate and stay open to every TCP
