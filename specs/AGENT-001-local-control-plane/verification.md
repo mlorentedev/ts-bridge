@@ -11,14 +11,14 @@ owner: manu
 
 ## Evidence
 
-- [ ] AC1 -> `TestStartRefusesASecondAgent`, `TestStartAfterCloseSucceeds`, `TestStartReplacesAStaleSocket`,
+- [x] AC1 -> `TestStartRefusesASecondAgent`, `TestStartAfterCloseSucceeds`, `TestStartReplacesAStaleSocket`,
   `TestStartNeverRemovesANonSocket`
-- [ ] AC2 -> `TestPathsFor`, `TestDefaultPathsIgnoreTheEnvironment`, `TestRunUserUsable`, `TestPrepareDirModes`,
+- [x] AC2 -> `TestPathsFor`, `TestDefaultPathsIgnoreTheEnvironment`, `TestRunUserUsable`, `TestPrepareDirModes`,
   `TestVerifyDirRefusesAForeignOwner`, `TestSocketModeIsOwnerOnly`, `TestStartRefusesASocketPathAtTheLimit`
-- [ ] AC3 -> `TestAuthorize` (fake uid/SID), `TestListenerRefusesAPeerThatIsNotTheOwner`,
+- [x] AC3 -> `TestAuthorize` (fake uid/SID), `TestListenerRefusesAPeerThatIsNotTheOwner`,
   `TestListenerKeepsServingAfterARefusal`, `TestPeerIdentityIsTheCurrentUser`
-- [ ] AC4 -> `TestClientRefusesAnUntrustedEndpoint`
-- [ ] AC5 -> `TestMetaAndStatusOverTheRealTransport`, `TestErrorsUseTheEnvelope`, `TestAgentCommandServesUntilInterrupted`
+- [x] AC4 -> `TestClientRefusesAnUntrustedEndpoint`
+- [x] AC5 -> `TestMetaAndStatusOverTheRealTransport`, `TestErrorsUseTheEnvelope`, `TestAgentCommandServesUntilInterrupted`
 - [ ] AC6 to AC9 -> later PRs (see `tasks.md`)
 
 ## Test status
@@ -27,6 +27,9 @@ PR 1, local (macOS arm64, Go 1.27.3): `go test -race ./...` green; `golangci-lin
 `gosec ./...` (v2.30.0) 0 issues; `GOOS=windows` and `GOOS=linux` `go vet ./...` clean. Mutations, each
 killed by a test: `Authorize` always true; socket left at the umask; client server check skipped; client
 directory check skipped; a refused starter rebinding the socket before giving up.
+
+PR 1, CI at `dec3716` (#793): `test` (Linux, `-race`), `test-macos`, `test-windows`, `lint`, `security`,
+`hygiene`, `smoke` and the six-target `build-matrix` all green.
 
 ## Decisions made during implementation
 
