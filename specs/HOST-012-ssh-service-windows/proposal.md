@@ -1,7 +1,7 @@
 ---
 id: "HOST-012-ssh-service-windows"
 type: spec
-status: draft # draft | implementing | verifying | archived
+status: verifying # draft | implementing | verifying | archived
 created: "2026-11-13"
 issue: "mlorentedev/ts-bridge#521"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
