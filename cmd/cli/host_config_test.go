@@ -370,7 +370,7 @@ func TestHostSetupJSONOnDarwinIsJSON(t *testing.T) {
 // otherwise be written into xrdp.ini and xrdp restarted on a port it cannot
 // bind (#802). Every other source of the port is already range-checked.
 func TestHostSetupRejectsAnOutOfRangePort(t *testing.T) {
-	for _, port := range []string{"99999", "65536", "-1"} {
+	for _, port := range []string{"99999", "65536", "-1", "0"} {
 		t.Run(port, func(t *testing.T) {
 			ran := false
 			c := cmdpkg.HostSetupCmdForTest(t, "linux", true, func(host.Config, *slog.Logger) (host.SetupResult, error) {
