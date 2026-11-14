@@ -104,7 +104,7 @@ explicitly selected instead of background reuse.
 > ADR-018 reopens it as a per-user agent whose sessions run this ADR's foreground
 > `connect` path as child processes, so the per-profile ownership below still applies.
 
-- B: reconsider only when a concrete consumer requires a successful second
+- B (reopened and decided by ADR-018 on 2026-11-14): reconsider only when a concrete consumer requires a successful second
   invocation to reuse an unattended session; specify ownership and recovery first.
 - C: reconsider only if the one-profile-only daily invocation requirement is removed.
 - D: reconsider only under a separate approved SSH-credential lifecycle requirement.

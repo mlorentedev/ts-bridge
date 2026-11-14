@@ -46,8 +46,8 @@ both.
 
 ### Reference audit
 
-The full matrix is in the maintainer's store
-(`prestudy/gui-control-plane-reference-audit-matrix.md`). Each reference was
+The full matrix, with its divergence log, is
+[`docs/design/gui-control-plane-reference-audit.md`](../design/gui-control-plane-reference-audit.md). Each reference was
 read from primary sources on 2026-11-14.
 
 | Reference | Who owns sessions | Local IPC and auth | GUI |
@@ -101,9 +101,21 @@ Measured locally on 2026-11-14:
   `connect --profile <name>` path. The child holds the ADR-016 per-profile
   lock, so `connect --profile X` from a terminal and a session of X in the
   agent exclude each other, and each side fails with an actionable error that
-  names the other. Children are tied to the agent's lifetime (`Pdeathsig` on
-  Linux, a Job Object on Windows, a lifeline pipe on macOS), so an agent crash
-  leaves no orphan holding a lock.
+  names the other. Children are tied to the agent's lifetime so that an agent
+  crash leaves no orphan holding a lock. On every OS the agent passes each
+  child a lifeline pipe, and the child exits when the pipe reaches EOF, which
+  the kernel guarantees when the agent dies. Windows adds a Job Object with
+  kill-on-close. `Pdeathsig` alone is not enough on Linux: it fires when the
+  parent thread exits rather than the process, and it races with a parent
+  that dies before the child sets it. It may only be added on top of the
+  lifeline.
+- Sessions started by the agent have no terminal. A profile that bootstraps
+  over SSH (ADR-005) runs it non-interactively in the agent (`BatchMode=yes`).
+  The key must be in `ssh-agent` or unencrypted, and the host key must already
+  be in `known_hosts`. When that fails, the session fails with an error that
+  names the cause and says to run `connect --profile <name>` in a terminal.
+  ADR-016 keeps interactive unlock with OpenSSH, and the agent never captures
+  or relays a passphrase or a host-key prompt.
 - Recovery: the agent records which profiles should be running in its state
   directory. After a restart it brings back the sessions that were running
   when it stopped unexpectedly. A session the user stopped stays stopped.
@@ -130,7 +142,8 @@ each OS:
 
 | OS | Registration | Restart on crash |
 | --- | --- | --- |
-| Linux | systemd `--user` unit (XDG autostart where there is no user systemd) | `Restart=on-failure` |
+| Linux | systemd `--user` unit | `Restart=on-failure` |
+| Linux without user systemd | XDG autostart entry | none: the agent starts at login only |
 | macOS | LaunchAgent in `~/Library/LaunchAgents` | `KeepAlive` |
 | Windows | Scheduled Task at logon for the user | the task's restart-on-failure setting |
 
@@ -144,9 +157,13 @@ The tray also relaunches the agent when it finds the socket dead.
 - It is a client of the local API only and owns no session or secret.
 - Surface (G-C2): a tray or menu-bar icon whose state shows whether any
   session is up, and a menu listing the profiles with connect/disconnect. One
-  small window holds the profile list, status, and the first-run form, which
-  is the single field for a `tsb://` descriptor or a discovered host plus the
-  credential (G-C3). It also offers "start at login" (`agent enable`).
+  small window holds the profile list, status, and the first-run form. That
+  form has a single field for a `tsb://` descriptor, plus the credential
+  (G-C3). Choosing a discovered host is not part of first run. Discovery
+  needs a control-plane API key, which is not the node key, and on Tailscale
+  SaaS it also needs a tailnet name (`cmd/cli/discover.go`). So the window
+  offers it only once those are managed through ADR-015 (`auth set`). The
+  window also offers "start at login" (`agent enable`).
 - On GNOME without the AppIndicator extension, the window opens from the
   application launcher and the app stays usable without the tray.
 - Pin Wails v3.1.x. Wails v2.17 is the fallback if v3 regresses. The GUI stays
@@ -212,6 +229,11 @@ with tray and autostart built in, and a real window for the first-run form.
   signing and notarization become release work.
 - A Linux desktop without SNI needs the AppIndicator extension for the tray;
   without it the app works from its window only.
+- On Linux without user systemd, the XDG autostart fallback restarts nothing.
+  An agent that crashes there stays down until the next login, or until the
+  tray relaunches it if the tray is running.
+- A profile whose SSH bootstrap needs a passphrase or an unknown host key
+  cannot run in the agent and stays a foreground `connect --profile`.
 - The agent's recovery depends on each OS's user-level restart; Windows has
   the weakest one (see the B' reopen trigger).
 
