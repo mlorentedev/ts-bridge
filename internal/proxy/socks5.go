@@ -95,18 +95,11 @@ func AcceptSOCKS5Loop(
 	if resolve == nil {
 		return fmt.Errorf("SOCKS5 target resolver is required")
 	}
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			if errors.Is(err, net.ErrClosed) {
-				return nil
-			}
-			return fmt.Errorf("accept SOCKS5 connection: %w", err)
-		}
+	return acceptEach(listener, logger, func(conn net.Conn) {
 		if !telemetry.TryClaimConnection(cfg.MaxConnections) {
 			telemetry.AddRejectedConn()
 			_ = conn.Close()
-			continue
+			return
 		}
 		wg.Add(1)
 		go func() {
@@ -118,7 +111,7 @@ func AcceptSOCKS5Loop(
 				logger.Warn("SOCKS5 connection failed", "error", err)
 			}
 		}()
-	}
+	})
 }
 
 func handleSOCKS5Conn( //nolint:funlen,gocyclo // baseline #629
