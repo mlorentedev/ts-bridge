@@ -102,14 +102,15 @@ func newHostCheckCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check [flags]",
 		Short: "Verify host readiness (read-only)",
-		Long: `Verify that the host is ready for RDP access over Tailscale.
+		Long: `Verify that the host is ready to serve its declared services (RDP, SSH)
+over Tailscale.
 
 Read-only — no administrative changes are made.
 
 Outputs:
   - Tailscale IP address
-  - RDP listening port
-  - Firewall rule status
+  - Each declared service: enabled, listening port
+  - Firewall rule status (n/a when no service is declared)
 
 Use --json for machine-readable output.
 
@@ -631,7 +632,7 @@ func printCheckText(w io.Writer, r host.CheckResult) {
 	for _, line := range serviceLines(r) {
 		fmt.Fprintf(w, "  %-15s%s\n", line.label, line.text)
 	}
-	fmt.Fprintf(w, "  Firewall:      %s\n", statusStr(r.FirewallOK))
+	fmt.Fprintf(w, "  Firewall:      %s\n", firewallLine(r))
 	for _, step := range r.Steps {
 		if step.Outcome != host.OutcomeOK {
 			fmt.Fprintf(w, "  ! %s (%s): %s\n", step.Name, step.Outcome, step.Fix)
@@ -746,6 +747,16 @@ func printCheckJSON(w io.Writer, r host.CheckResult) error {
 	}
 	fmt.Fprintln(w, string(data))
 	return nil
+}
+
+// firewallLine is the Firewall line of the check. With no service declared no
+// firewall step runs, so the legacy FirewallOK stays false without anything
+// having failed (#797).
+func firewallLine(r host.CheckResult) string {
+	if r.RDPPort == 0 && len(r.Services) == 0 {
+		return "n/a (no service declared)"
+	}
+	return statusStr(r.FirewallOK)
 }
 
 func statusStr(ok bool) string {
