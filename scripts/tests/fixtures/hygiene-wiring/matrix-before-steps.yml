@@ -61,8 +61,6 @@ jobs:
         run: bash scripts/tests/test-workflow-permissions.sh
       - name: Auth-key guard rejects unsafe command examples
         run: bash scripts/tests/test-doc-authkey.sh
-      - name: That guard tolerates a null comment body (#345 regression)
-        run: bash scripts/tests/test-check-review-published.sh
       - name: Site changes keep their pull-request build gate
         run: bash scripts/tests/test-site-pr-workflow.sh
       - name: Go workflows follow the module toolchain
