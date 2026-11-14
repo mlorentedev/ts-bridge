@@ -214,6 +214,12 @@ func resolveHostSetupConfig(cmd *cobra.Command, file host.File) (host.Config, er
 		LogFormat:    mustString(cmd, "log-format"),
 	}
 
+	// Range-check --port as every other source of the port is checked: setup
+	// writes it into xrdp.ini and the firewall rule (#802).
+	if flags.Port < 0 || flags.Port > 65535 {
+		return host.Config{}, fmt.Errorf("--port %d: must be between 1 and 65535", flags.Port)
+	}
+
 	cfg := host.Resolve(hostGOOS, file, flags)
 
 	// Validate firewall rule early (before any side effects).
