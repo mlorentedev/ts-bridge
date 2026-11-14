@@ -45,6 +45,8 @@ func readSSH(r Runner) (string, xrdpState) {
 // ignored, as if absent. A masked service stays masked. The socket is read even
 // beside an enabled, running service: when both are enabled the host is outside
 // either model, which is dual state, reported for the operator to resolve (#777).
+// Dual needs is-enabled to say enabled: a static socket has no [Install], so
+// disabling the service beside it would leave nothing to start sshd at boot.
 func withSocket(r Runner, unit string, x xrdpState) (string, xrdpState) {
 	if !x.readable || x.masked {
 		return unit, x
@@ -58,7 +60,7 @@ func withSocket(r Runner, unit string, x xrdpState) (string, xrdpState) {
 
 // foldSocket is withSocket once the socket has been read.
 func foldSocket(unit string, x, sock xrdpState) (string, xrdpState) {
-	if x.enabled && sock.enabled {
+	if x.enabled && sock.enabled && !sock.static {
 		// The socket may be the one listening: Active says whether sshd answers.
 		x.dual, x.active = true, x.active || sock.active
 		return unit, x
@@ -78,14 +80,17 @@ func foldSocket(unit string, x, sock xrdpState) (string, xrdpState) {
 // do not. Where it does, starting the socket stops an sshd the operator started
 // by hand; where it does not, the socket cannot bind a port that sshd already
 // holds, and enabling it leaves both units enabled (#777). Either way the
-// socket leads only when it is enabled (static counts), or when neither unit is
-// enabled and the service is not running, where there is no model to preserve
+// socket leads only when it is enabled (static counts, unless the service is
+// enabled too: a static socket has no [Install], so nothing starts it at boot and
+// it is neither the model nor dual), or when neither unit is enabled and the
+// service is not running, where there is no model to preserve
 // and the socket is the choice (#767). A masked socket never leads: masking it
 // is how an operator opts out of socket activation, so the service is converged
 // and nothing asks to unmask the socket. With both enabled the host is dual, led
 // by neither (withSocket).
 func socketIsModel(svc, sock xrdpState) bool {
-	return sock.enabled || (!svc.enabled && !svc.active && !sock.masked)
+	staticBesideService := sock.static && svc.enabled
+	return (sock.enabled && !staticBesideService) || (!svc.enabled && !svc.active && !sock.masked)
 }
 
 // sshDualFix is the fix for a host whose service and socket are both enabled.

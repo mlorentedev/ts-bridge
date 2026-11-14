@@ -123,6 +123,9 @@ func checkRDP(cfg Config, r Runner, port int, result *CheckResult) {
 type xrdpState struct {
 	installed, readable, enabled, active, masked bool
 	undecided                                    string
+	// static: is-enabled said static, which counts as enabled but has no [Install]
+	// section, so nothing starts the unit at boot (#777).
+	static bool
 	// dual: the ssh service and its socket are both enabled (#777); set only by
 	// withSocket, which reads the socket.
 	dual bool
@@ -154,7 +157,7 @@ func readUnit(r Runner, unit, binary string) xrdpState {
 	x := xrdpState{installed: true, readable: true, active: a == "active"}
 	switch e {
 	case "enabled", "static": // static: no [Install] section, enable cannot change it
-		x.enabled = true
+		x.enabled, x.static = true, e == "static"
 	case "masked":
 		x.masked = true
 	case "disabled", "enabled-runtime": // enabled-runtime lasts until the next boot
