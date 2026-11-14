@@ -2,6 +2,7 @@ package host
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"regexp"
@@ -24,16 +25,44 @@ func setupWindows(cfg Config, r Runner) SetupResult {
 		networkProfileStep(r),
 	}
 
-	// The RDP port lives in the registry; the firewall must open that exact port.
-	rdpStep, rdpPort := rdpSetupStep(r)
-	steps = append(steps, declaredRDPPort(rdpStep, cfg, rdpPort))
-
-	steps = append(steps, windowsFirewallSetupStep(r, cfg.FirewallRule, rdpPort))
+	var result SetupResult
+	for _, svc := range windowsServices(cfg) {
+		switch svc.Kind {
+		case ServiceRDP:
+			// The RDP port lives in the registry; the firewall must open that exact port.
+			rdpStep, rdpPort := rdpSetupStep(r)
+			result.RDPPort = rdpPort
+			steps = append(steps, declaredRDPPort(rdpStep, cfg, rdpPort), windowsFirewallSetupStep(r, cfg.FirewallRule, rdpPort))
+		case ServiceSSH:
+			steps = append(steps, sshWindowsSetupSteps(r, svc.Port)...)
+		default:
+			steps = append(steps, noWindowsStep(svc.Kind))
+		}
+	}
 
 	if !cfg.NoSleep {
 		steps = append(steps, powerStep(r))
 	}
-	return SetupResult{RDPPort: rdpPort, Steps: steps}
+	result.Steps = steps
+	return result
+}
+
+// windowsServices is what the Windows steps converge. A host that declares
+// nothing is the RDP host of the default (ADR-017 §1).
+func windowsServices(cfg Config) []DeclaredService {
+	if len(cfg.Services) == 0 {
+		return []DeclaredService{{Kind: ServiceRDP, Port: defaultRDPPort}}
+	}
+	return cfg.Services
+}
+
+// noWindowsStep fails a declared kind that has no Windows step. The loader
+// admits only kinds with one, so this is reached only when a loader change
+// outruns the steps; it must fail, never converge nothing and read ready.
+func noWindowsStep(kind string) SetupStep {
+	return newStep(kind+" service", OutcomeFailed,
+		fmt.Sprintf("ts-bridge has no Windows step for the declared service kind %q", kind),
+		"remove the service from the host file, or use a ts-bridge release that supports it on Windows")
 }
 
 // unattendedStep sets unattended mode only when the node lacks it (W1, #455).
@@ -182,6 +211,23 @@ func rdpCheckStep(r Runner, port int) (SetupStep, bool) {
 }
 
 func checkWindows(cfg Config, r Runner, result *CheckResult) {
+	for _, svc := range windowsServices(cfg) {
+		switch svc.Kind {
+		case ServiceRDP:
+			checkWindowsRDP(cfg, r, result)
+		case ServiceSSH:
+			sshWindowsCheck(r, svc.Port, result)
+		default:
+			result.Steps = append(result.Steps, noWindowsStep(svc.Kind))
+			result.Services = append(result.Services, Service{Kind: svc.Kind, Port: svc.Port, Unread: true})
+		}
+	}
+	if !cfg.NoSleep {
+		result.Steps = append(result.Steps, powerCheckStep(r))
+	}
+}
+
+func checkWindowsRDP(cfg Config, r Runner, result *CheckResult) {
 	port, err := readPortPS(r, psReadRDPPort)
 	svc := Service{Kind: ServiceRDP, Unread: err != nil}
 	step := actRead("RDP configuration", err, "", "Could not read the RDP port from the registry", rdpEnableFix)
@@ -194,10 +240,7 @@ func checkWindows(cfg Config, r Runner, result *CheckResult) {
 	fwStep, fwOK := windowsFirewallCheckStep(r, cfg.FirewallRule, svc.Port)
 	svc.FirewallOK = fwOK
 	result.Steps = append(result.Steps, fwStep)
-	if !cfg.NoSleep {
-		result.Steps = append(result.Steps, powerCheckStep(r))
-	}
-	result.Services = []Service{svc}
+	result.Services = append(result.Services, svc)
 }
 
 // declaredRDPPort turns a converged RDP step manual when the host declares a
@@ -320,13 +363,38 @@ func serviceStep(r Runner, svc, name, failMsg, fix string) SetupStep {
 // serviceState reads the start type (sc qc) and the state (sc query). A read
 // that fails reports false, so the step acts rather than trusting it.
 func serviceState(r Runner, svc string) (auto, running bool) {
-	if out, err := r.Output("sc", "qc", svc); err == nil {
+	auto, running, _ = readServiceState(r, svc)
+	return auto, running
+}
+
+// readServiceState is serviceState with the failure kept, so a read-only check
+// can tell a stopped service from one it could not read. Both reads always run.
+func readServiceState(r Runner, svc string) (auto, running bool, err error) {
+	out, qcErr := r.Output("sc", "qc", svc)
+	if qcErr == nil {
 		auto = strings.Contains(string(out), "AUTO_START")
 	}
-	if out, err := r.Output("sc", "query", svc); err == nil {
+	out, queryErr := r.Output("sc", "query", svc)
+	if queryErr == nil {
 		running = strings.Contains(string(out), "RUNNING")
 	}
-	return auto, running
+	return auto, running, errors.Join(qcErr, queryErr)
+}
+
+// serviceCheckStep is the read half of serviceStep: "changed" names the drift
+// setup would converge, "unverified" a service it could not read.
+func serviceCheckStep(r Runner, svc, name string) (step SetupStep, auto, running, readable bool) {
+	auto, running, err := readServiceState(r, svc)
+	switch {
+	case err != nil:
+		return newStep(name, OutcomeUnverified, fmt.Sprintf("Could not read the %s service: %v", svc, err),
+			fmt.Sprintf("run `sc qc %s` and `sc query %s` to see why the read fails", svc, svc)), false, false, false
+	case auto && running:
+		return newStep(name, OutcomeOK, "Already running", ""), auto, running, true
+	case !auto:
+		return newStep(name, OutcomeChanged, fmt.Sprintf("The %s service does not start automatically", svc), "run ts-bridge host setup as an administrator"), auto, running, true
+	}
+	return newStep(name, OutcomeChanged, fmt.Sprintf("The %s service is not running", svc), "run ts-bridge host setup as an administrator"), auto, running, true
 }
 
 // networkProfileStep sets the Tailscale connection profile to Private after
@@ -517,18 +585,28 @@ func windowsFirewallRuleOK(r Runner, rule string, port int) (ok, found, legacy b
 	return ok, f[fwCount.Key] != "0", f[fwCount.Key] == "1" && strings.EqualFold(f[fwRemote.Key], "any"), nil
 }
 
-// windowsFirewallSetupStep recreates the rule only when the read does not
+// fwGuard reports an enabled rule of the OS's own that allows any address on
+// the service's port, which voids the tailnet scope (ADR-017 Amendment B). It
+// takes a step that is otherwise converged and returns it unchanged, or
+// "manual"/"unverified"; the bool is false unless the step stands.
+type fwGuard func(r Runner, step SetupStep) (SetupStep, bool)
+
+// windowsFirewallSetupStep is windowsFirewallSetupFor for the RDP rule.
+func windowsFirewallSetupStep(r Runner, ruleName string, port int) SetupStep {
+	return windowsFirewallSetupFor(r, "Firewall rule", ruleName, port, builtinGroupStep)
+}
+
+// windowsFirewallSetupFor recreates the rule only when the read does not
 // show it converged. The recreate is idempotent, so an unreadable rule is
 // recreated rather than reported.
-func windowsFirewallSetupStep(r Runner, ruleName string, port int) SetupStep {
-	const name = "Firewall rule"
+func windowsFirewallSetupFor(r Runner, name, ruleName string, port int, guard fwGuard) SetupStep {
 	fix := fmt.Sprintf(windowsFirewallFix, port)
 	rule, err := sanitizeFirewallRule(ruleName)
 	if err != nil {
 		return newStep(name, OutcomeFailed, fmt.Sprintf("Failed to configure firewall: validate firewall rule: %v", err), windowsFirewallNameFix)
 	}
 	if ok, _, _, err := windowsFirewallRuleOK(r, rule, port); err == nil && ok {
-		step, _ := builtinGroupStep(r, newStep(name, OutcomeOK, fmt.Sprintf("Rule '%s' already active (port %d)", rule, port), ""))
+		step, _ := guard(r, newStep(name, OutcomeOK, fmt.Sprintf("Rule '%s' already active (port %d)", rule, port), ""))
 		return step
 	}
 	// The scoped rule is created before the old ones go, and errors terminate,
@@ -539,7 +617,7 @@ func windowsFirewallSetupStep(r Runner, ruleName string, port int) SetupStep {
 	if err != nil {
 		return step
 	}
-	step, _ = builtinGroupStep(r, step)
+	step, _ = guard(r, step)
 	return step
 }
 
@@ -574,9 +652,13 @@ func builtinGroupStep(r Runner, step SetupStep) (SetupStep, bool) {
 		windowsGroupFix), false
 }
 
-// windowsFirewallCheckStep is the read half of windowsFirewallSetupStep.
+// windowsFirewallCheckStep is windowsFirewallCheckFor for the RDP rule.
 func windowsFirewallCheckStep(r Runner, ruleName string, port int) (SetupStep, bool) {
-	const name = "Firewall rule"
+	return windowsFirewallCheckFor(r, "Firewall rule", ruleName, port, builtinGroupStep)
+}
+
+// windowsFirewallCheckFor is the read half of windowsFirewallSetupFor.
+func windowsFirewallCheckFor(r Runner, name, ruleName string, port int, guard fwGuard) (SetupStep, bool) {
 	rule, err := sanitizeFirewallRule(ruleName)
 	if err != nil {
 		return newStep(name, OutcomeFailed, fmt.Sprintf("Invalid firewall rule name: %v", err), windowsFirewallNameFix), false
@@ -590,10 +672,10 @@ func windowsFirewallCheckStep(r Runner, ruleName string, port int) (SetupStep, b
 		// The RDP port read failed, so the rule's port went unchecked (#700).
 		return withGroupNote(r, newStep(name, OutcomeUnverified,
 			fmt.Sprintf("Rule '%s' is scoped to the tailnet, but its port is unchecked: the RDP port could not be read", rule),
-			"fix the RDP configuration step, then run ts-bridge host check again")), false
+			"fix the RDP configuration step, then run ts-bridge host check again"), guard), false
 	}
 	if ok {
-		return builtinGroupStep(r, firewallReadStep(name, true, port))
+		return guard(r, firewallReadStep(name, true, port))
 	}
 	step := firewallReadStep(name, false, port)
 	if legacy {
@@ -603,14 +685,14 @@ func windowsFirewallCheckStep(r Runner, ruleName string, port int) (SetupStep, b
 		step = newStep(name, OutcomeChanged, fmt.Sprintf("Rule '%s' differs from what setup creates (inbound TCP %d, tailnet addresses only, every profile, enabled, one rule)", rule, port),
 			"run ts-bridge host setup as an administrator")
 	}
-	return withGroupNote(r, step), false
+	return withGroupNote(r, step, guard), false
 }
 
 // withGroupNote adds the built-in group exposure to a step that already
 // fails on the named rule, so the first check on a pre-#631 host reports
 // both. A failed group read adds nothing: the step is not ok either way.
-func withGroupNote(r Runner, step SetupStep) SetupStep {
-	group, ok := builtinGroupStep(r, step)
+func withGroupNote(r Runner, step SetupStep, guard fwGuard) SetupStep {
+	group, ok := guard(r, step)
 	if ok || group.Outcome != OutcomeManual {
 		return step
 	}

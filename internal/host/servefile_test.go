@@ -19,13 +19,9 @@ func TestLoadServeFile(t *testing.T) {
 				services[1].Kind != ServiceRDP || services[1].Port == nil || *services[1].Port != 45000 {
 				t.Fatalf("declared services were not preserved: %+v", services)
 			}
-			// Linux converges ssh since #521; Windows still has no step for it.
-			_, err = LoadFile(path, goos, nil)
-			if goos == goosWindows && (err == nil || !strings.Contains(err.Error(), "#521")) {
-				t.Errorf("serve must not enable SSH convergence on windows: LoadFile() = %v", err)
-			}
-			if goos == goosLinux && err != nil {
-				t.Errorf("LoadFile() on linux = %v, want ssh accepted", err)
+			// Windows and Linux converge ssh since #521.
+			if _, err = LoadFile(path, goos, nil); err != nil {
+				t.Errorf("LoadFile() on %s = %v, want ssh accepted", goos, err)
 			}
 		})
 	}

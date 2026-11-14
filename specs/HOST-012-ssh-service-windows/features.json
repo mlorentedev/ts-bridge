@@ -1,0 +1,51 @@
+[
+  {
+    "id": "HOST-012-ssh-service-windows-f1",
+    "behavior": "AC1: windows loads kind ssh, serve loading is unchanged, and the commands reach the step runner for it on linux and windows",
+    "verification": "go test ./internal/host/ ./cmd/cli/ -run 'TestLoadFile_OSCapability|TestLoadServeFile|TestHostCmd_ConfigSSH' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC1"
+  },
+  {
+    "id": "HOST-012-ssh-service-windows-f2",
+    "behavior": "AC2+AC3: setup reads the OpenSSH Server capability, never installs it, converges sshd only on a difference and writes the scoped rule after reading it",
+    "verification": "go test ./internal/host/ -run 'TestWindowsSSHSetup|TestWindowsSSHSetupMissingCapabilityNamesTheInstall' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC2, AC3"
+  },
+  {
+    "id": "HOST-012-ssh-service-windows-f3",
+    "behavior": "AC3+AC4: check runs no mutating command, reports drift as changed and an unreadable answer as unverified, and lists ssh in services[] with the legacy RDP keys unchanged",
+    "verification": "go test ./internal/host/ -run 'TestWindowsSSHCheck|TestWindowsServiceReadState|TestWindowsSSHOnlyHost|TestWindowsRDPBesideSSH' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC3, AC4"
+  },
+  {
+    "id": "HOST-012-ssh-service-windows-f4",
+    "behavior": "AC5: an enabled any-address OpenSSH-Server-In-TCP allow is manual with the operator's fix and is never disabled; an absent rule is not an exposure",
+    "verification": "go test ./internal/host/ -run 'TestWindowsSSHInstallerRule|TestWindowsSSHReadsUseStableNames|TestWindowsReadsReachTheirParsers' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC5"
+  },
+  {
+    "id": "HOST-012-ssh-service-windows-f5",
+    "behavior": "AC6: a declared non-default ssh port is compared with sshd -T and sshd_config is never written",
+    "verification": "go test ./internal/host/ -run 'TestWindowsSSHSetup|TestWindowsSSHCheck' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC6"
+  },
+  {
+    "id": "HOST-012-ssh-service-windows-f6",
+    "behavior": "AC7: a host declaring nothing, only rdp, or an unknown kind keeps its steps; the existing Windows tests pass unchanged",
+    "verification": "go test ./internal/host/ -run 'TestSetupFor|TestCheckFor|TestWindowsUnknownKindFails|TestWindowsRDPDenyState|TestWindowsFirewallRule' -count=1",
+    "state": "passing",
+    "evidence": "see verification.md AC7"
+  },
+  {
+    "id": "HOST-012-ssh-service-windows-f7",
+    "behavior": "e2e on the Windows VM: an ssh declaration is accepted by host check and names the OpenSSH Server capability step",
+    "verification": "make e2e-windows",
+    "state": "pending",
+    "evidence": "case rewritten in scripts/e2e/windows.ps1, not run by the author"
+  }
+]

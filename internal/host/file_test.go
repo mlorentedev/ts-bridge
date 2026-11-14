@@ -220,7 +220,7 @@ func TestLoadFile_OSCapability(t *testing.T) {
 		{"windows", firewall, nil, ""},
 		{"linux", svc("ssh"), nil, ""},
 		{"linux", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "linux", "ADR-017 §5"}, "#454"},
-		{"windows", svc("ssh"), []string{"host.services[0].kind", `"ssh"`, "windows", "#521"}, "#455"},
+		{"windows", svc("ssh"), nil, ""},
 		{"windows", svc("vnc"), []string{"host.services[0].kind", `"vnc"`, "windows", "ADR-017 §5"}, "#455"},
 		{"darwin", svc("ssh"), []string{"host.services[0].kind", "darwin", "#459"}, ""},
 		{"darwin", svc("vnc"), []string{"host.services[0].kind", "darwin", "#459"}, ""},

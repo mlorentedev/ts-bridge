@@ -170,9 +170,22 @@ SaaS (C5, #453). The legacy single `descriptor` key carries the first declared s
 
 | OS | Services | Automated | Verified and guided only |
 | --- | --- | --- | --- |
-| Windows | `rdp` (`ssh` via OpenSSH Server is planned, #521; its firewall rule must be scoped or reported like the RDP group) | RDP enable honouring Group Policy precedence, firewall rule scoped to the tailnet ranges (state-first, Amendment B), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
+| Windows | `rdp`, `ssh` (OpenSSH Server, #521; see below) | RDP enable honouring Group Policy precedence, firewall rule scoped to the tailnet ranges (state-first, Amendment B), unattended Tailscale via `tailscale set`, power | none beyond policy-managed settings |
 | Linux | `rdp` (xrdp), `ssh` (OpenSSH, #521) | `systemctl enable --now` on the unit systemd has (`ssh` on Debian and Ubuntu, `sshd` elsewhere) or, on a host whose `<unit>.socket` is enabled (or static), or where neither unit is enabled, the service is not running and the socket is not masked (#767), on the socket with the service left alone; a host whose service is enabled or running while the socket is disabled (Debian 12, Ubuntu 22.04 and earlier) keeps the service, since enabling the socket there would only leave both units enabled (the shipped sockets `Conflicts=` with the service on Debian 11 and Ubuntu 22.04 and earlier, not on Debian 12 and 13 or Ubuntu 23.04 and later), and a masked socket keeps the service too, because masking it is the operator's opt-out of socket activation (the socket is never unmasked, and nothing asks for it); a host whose service and socket are both enabled (is-enabled says `enabled`; a `static` socket has no `[Install]`, so nothing starts it at boot and the service stays the model, `ok`; an earlier release ran `enable --now ssh` on a socket-activated Ubuntu, #777) is `manual` in setup and check, in any run state, and nothing is disabled or enabled automatically (when neither is running, setup starts `<unit>.socket` so sshd is not left down, and says so; check only reports that sshd is not running): the fix is `systemctl disable <unit>.service`, which leaves the running sshd and its sessions alone and lets the socket start sshd from the next boot, and the immediate form (`disable --now` then `start <unit>.socket`) is offered as console-only because it stops the listener a remote operator is connected through, the xrdp listener port (`port=` in `[Globals]` of `/etc/xrdp/xrdp.ini`, #557), firewall INPUT rule scoped to `tailscale0` (ufw `allow in on` / iptables `-i`, Amendment B) for each service's port | A missing OpenSSH server (`manual`, ts-bridge installs no package); a declared non-default ssh port is compared with `sshd -T` and a mismatch is `manual` (`sshd_config` is never written); an unscoped allow for the ssh port, which is the operator's and is reported, never deleted |
 | macOS | `ssh` (Remote Login), `vnc` (Screen Sharing) | Remote Login when elevated and Full Disk Access is granted | Screen Sharing; Remote Login without Full Disk Access; application-firewall "block all" |
+
+Windows `ssh` (#521) is read first and converges no more than Linux's. The OpenSSH Server
+capability is read with `Get-WindowsCapability -Online -Name 'OpenSSH.Server*'`: `Installed` is
+`ok`, `NotPresent` with no `sshd` service is `manual` naming `Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0`
+(a managed host needs Windows Update, WSUS or a Features-on-Demand source; `NotPresent` with an `sshd` service is an OpenSSH installed outside Windows capabilities, such as the Win32-OpenSSH MSI, and is read as installed), and an unreadable
+answer is `failed` in `setup` and `unverified` in `check`; ts-bridge installs nothing. With the
+capability present `sshd` is set to Automatic and started, and a declared port other than 22 is
+compared with `sshd -T`, run from the executable the service's `BINARY_PATH_NAME` names (`manual` on a mismatch, `sshd_config` never written). The firewall rule is
+the ts-bridge-owned `Tailscale-SSH-Ingress`, scoped as the RDP rule is (Amendment B). The capability's
+own `OpenSSH-Server-In-TCP` allows any address, so, like the built-in Remote Desktop group, an
+enabled inbound allow of it on the declared port is reported `manual` with
+`Disable-NetFirewallRule -Name OpenSSH-Server-In-TCP` as the operator's action and is never disabled
+or deleted; unlike that group, an absent rule is a normal host, not an unknown exposure.
 
 A declared RDP port is applied where the OS lets a CLI move the listener and reported
 where it does not (#557, amended 2026-11-06). Linux rewrites xrdp's `port=` and restarts
@@ -268,12 +281,11 @@ Decision:
 - Publication and OS convergence have separate service validation (clarified
   2026-11-06). On Windows and Linux, serve may publish an already-provisioned `ssh`
   service alongside `rdp`; it does not install or configure OpenSSH. The strict
-  step-capability check in §1 remains on `setup` and `check`: they still reject
-  SSH declarations where #521 has not supplied the OS step (Linux does since #521;
-  Windows does not yet). `init` still generates an
+  step-capability check in §1 remains on `setup` and `check`: they reject
+  SSH declarations where #521 has not supplied the OS step (Linux and Windows do
+  since #521; macOS does not). `init` still generates an
   RDP-only file and validates it through the convergence loader. A combined SSH/RDP
-  serve file can be used with `host check` on Linux; on Windows its publication
-  diagnostic is serve's health endpoint until the Windows `ssh` step lands. This does not add VNC or macOS support.
+  serve file can be used with `host check` on Windows and Linux. This does not add VNC or macOS support.
 
 Rejected for this amendment: an OS service inside ts-bridge (Windows SCM or systemd
 integration in the binary), which is #451's question and would add a supervisor before
