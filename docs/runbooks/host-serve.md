@@ -31,7 +31,7 @@ recipes below register it.
 - SSH and RDP must already be provisioned and listening locally. Serve can publish
   both on Windows and Linux, but does not install or configure either service.
   `host setup` and `host check` retain their stricter OS-step contract: on Linux they
-  converge and check `ssh` (#521: the OpenSSH unit, its port and a `tailscale0`-scoped
+  converge and check `ssh` (#521: the OpenSSH unit, or its `.socket` where the server is socket-activated as on Ubuntu 22.10+, #767; its port and a `tailscale0`-scoped
   firewall rule; a missing OpenSSH server is reported `manual`, never installed), and on
   Windows they reject SSH declarations until that step lands. `host init` still
   generates an RDP-only file.

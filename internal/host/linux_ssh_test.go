@@ -17,6 +17,8 @@ const (
 	sshdIsActive  = "systemctl is-active sshd"
 	sockIsEnabled = "systemctl is-enabled ssh.socket"
 	sockIsActive  = "systemctl is-active ssh.socket"
+	sdSockEnabled = "systemctl is-enabled sshd.socket"
+	sdSockActive  = "systemctl is-active sshd.socket"
 	ufwSSHAllow   = "ufw allow in on tailscale0 to any port 22 proto tcp"
 	iptScopedSSH  = "-A INPUT -i tailscale0 -p tcp -m tcp --dport 22 -j ACCEPT\n"
 )
@@ -37,6 +39,15 @@ func sshUp(extra map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+// sshSocket is the answers of a Ubuntu-style host whose ssh service and
+// ssh.socket each report an (is-enabled, is-active) pair.
+func sshSocket(svcEnabled, svcActive, sockEnabled, sockActive string) map[string]string {
+	return map[string]string{
+		sshIsEnabled: svcEnabled + "\n", sshIsActive: svcActive + "\n",
+		sockIsEnabled: sockEnabled + "\n", sockIsActive: sockActive + "\n",
+	}
 }
 
 // ran lists the commands a runner executed, as opposed to read.
@@ -79,6 +90,25 @@ func TestReadSSH(t *testing.T) {
 			"ssh", xrdpState{installed: true, readable: true}},
 		{"socket-activated: the socket stands in for the idle service", &recordingRunner{onPath: sshOnPath,
 			output: map[string]string{sshIsEnabled: "disabled\n", sshIsActive: "inactive\n", sockIsEnabled: "enabled\n", sockIsActive: "active\n"}},
+			"ssh.socket", xrdpState{installed: true, readable: true, enabled: true, active: true}},
+		{"socket exists but is off: the socket is the converge target", &recordingRunner{onPath: sshOnPath,
+			output: map[string]string{sshIsEnabled: "disabled\n", sshIsActive: "inactive\n", sockIsEnabled: "disabled\n", sockIsActive: "inactive\n"}},
+			"ssh.socket", xrdpState{installed: true, readable: true}},
+		{"no socket unit: the service is the target", &recordingRunner{onPath: sshOnPath,
+			output: map[string]string{sshIsEnabled: "disabled\n", sshIsActive: "inactive\n", sockIsEnabled: "not-found\n"}, exit: map[string]int{sockIsEnabled: 4}},
+			"ssh", xrdpState{installed: true, readable: true}},
+		{"a socket systemctl cannot answer is ignored", &recordingRunner{onPath: sshOnPath,
+			output: map[string]string{sshIsEnabled: "disabled\n", sshIsActive: "inactive\n"}},
+			"ssh", xrdpState{installed: true, readable: true}},
+		{"a masked socket is masked, and still the target", &recordingRunner{onPath: sshOnPath,
+			output: map[string]string{sshIsEnabled: "disabled\n", sshIsActive: "inactive\n", sockIsEnabled: "masked\n", sockIsActive: "inactive\n"}},
+			"ssh.socket", xrdpState{installed: true, readable: true, masked: true}},
+		{"fedora: sshd.socket", &recordingRunner{onPath: sshOnPath,
+			output: map[string]string{sshIsEnabled: "not-found\n", sshdIsEnabled: "disabled\n", sshdIsActive: "inactive\n", sdSockEnabled: "enabled\n", sdSockActive: "active\n"},
+			exit:   map[string]int{sshIsEnabled: 4}},
+			"sshd.socket", xrdpState{installed: true, readable: true, enabled: true, active: true}},
+		{"service running directly: the socket is not consulted", &recordingRunner{onPath: sshOnPath,
+			output: sshSocket("enabled", "active", "masked", "inactive")},
 			"ssh", xrdpState{installed: true, readable: true, enabled: true, active: true}},
 		{"a masked service is not rescued by its socket", &recordingRunner{onPath: sshOnPath,
 			output: map[string]string{sshIsEnabled: "masked\n", sshIsActive: "inactive\n", sockIsEnabled: "enabled\n", sockIsActive: "active\n"}},
@@ -118,6 +148,27 @@ func TestSetupSSH(t *testing.T) {
 		{"fedora names the unit sshd", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
 			output: sshUp(map[string]string{sshIsEnabled: "not-found\n", sshdIsEnabled: "disabled\n", sshdIsActive: "inactive\n"}), exit: map[string]int{sshIsEnabled: 4}},
 			[]string{"SSH server=changed", sshFwName + "=ok", "Tailscale IP=ok"}, []string{"systemctl enable --now sshd"}},
+		{"socket-activated and listening: nothing to run", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(sshSocket("disabled", "inactive", "enabled", "active"))},
+			[]string{"SSH server=ok", sshFwName + "=ok", "Tailscale IP=ok"}, nil},
+		{"socket enabled but stopped: the socket is started, not the service", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(sshSocket("disabled", "inactive", "enabled", "inactive"))},
+			[]string{"SSH server=changed", sshFwName + "=ok", "Tailscale IP=ok"}, []string{"systemctl enable --now ssh.socket"}},
+		{"socket and service both off: the socket is the target", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(sshSocket("disabled", "inactive", "disabled", "inactive"))},
+			[]string{"SSH server=changed", sshFwName + "=ok", "Tailscale IP=ok"}, []string{"systemctl enable --now ssh.socket"}},
+		{"no socket unit: the service, as before", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(map[string]string{sshIsEnabled: "disabled\n", sshIsActive: "inactive\n", sockIsEnabled: "not-found\n"}), exit: map[string]int{sockIsEnabled: 4}},
+			[]string{"SSH server=changed", sshFwName + "=ok", "Tailscale IP=ok"}, []string{"systemctl enable --now ssh"}},
+		{"service running directly, socket masked: converged, left alone", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(sshSocket("enabled", "active", "masked", "inactive"))},
+			[]string{"SSH server=ok", sshFwName + "=ok", "Tailscale IP=ok"}, nil},
+		{"masked socket: failed, never unmasked", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(sshSocket("disabled", "inactive", "masked", "inactive"))},
+			[]string{"SSH server=failed", sshFwName + "=ok", "Tailscale IP=ok"}, nil},
+		{"fedora: sshd.socket", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(map[string]string{sshIsEnabled: "not-found\n", sshdIsEnabled: "disabled\n", sshdIsActive: "inactive\n", sdSockEnabled: "disabled\n", sdSockActive: "inactive\n"}), exit: map[string]int{sshIsEnabled: 4}},
+			[]string{"SSH server=changed", sshFwName + "=ok", "Tailscale IP=ok"}, []string{"systemctl enable --now sshd.socket"}},
 		{"port closed: the rule is scoped to tailscale0", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath, output: sshUp(map[string]string{ufwAdded: ufwAddedHeader})},
 			[]string{"SSH server=ok", sshFwName + "=changed", "Tailscale IP=ok"}, []string{ufwSSHAllow}},
 		{"not installed: manual, nothing installed", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
@@ -143,6 +194,35 @@ func TestSetupSSH(t *testing.T) {
 				if s.Outcome != OutcomeOK && s.Outcome != OutcomeChanged && s.Fix == "" {
 					t.Errorf("step %q is %s with no fix", s.Name, s.Outcome)
 				}
+			}
+		})
+	}
+}
+
+// TestSSHSocketStepsNameTheUnit pins that the output says which unit setup
+// converged or refused, since ssh and ssh.socket are two units.
+func TestSSHSocketStepsNameTheUnit(t *testing.T) {
+	tests := []struct {
+		name        string
+		check       bool
+		sockEnabled string
+		wantOutcome Outcome
+		wantFix     string
+	}{
+		{"setup converges the socket", false, "disabled", OutcomeChanged, ""},
+		{"setup refuses a masked socket", false, "masked", OutcomeFailed, "systemctl unmask ssh.socket, then"},
+		{"check refuses a masked socket", true, "masked", OutcomeManual, "systemctl unmask ssh.socket, then"},
+		{"check reports the socket as drift", true, "disabled", OutcomeChanged, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &recordingRunner{elevated: true, onPath: sshOnPath, output: sshUp(sshSocket("disabled", "inactive", tt.sockEnabled, "inactive"))}
+			s := setupFor("linux", sshOnly, r).Steps[0]
+			if tt.check {
+				s = checkFor("linux", sshOnly, r).Steps[1]
+			}
+			if s.Outcome != tt.wantOutcome || !strings.Contains(s.Message, "ssh.socket") || !strings.Contains(s.Fix, tt.wantFix) {
+				t.Errorf("step = %s %q fix %q, want %s naming ssh.socket and %q", s.Outcome, s.Message, s.Fix, tt.wantOutcome, tt.wantFix)
 			}
 		})
 	}
@@ -224,6 +304,18 @@ func TestCheckSSH(t *testing.T) {
 		{"ssh only, stopped: setup would change it", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath, output: sshUp(map[string]string{sshIsActive: "inactive\n"})},
 			[]string{"Tailscale IP=ok", "SSH server=changed", sshFwName + "=ok"},
 			[]Service{{Kind: ServiceSSH, Port: 22, Enabled: true, FirewallOK: true, Active: new(bool)}},
+			CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, FirewallOK: true}},
+		{"socket-activated and listening: converged", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath, output: sshUp(sshSocket("disabled", "inactive", "enabled", "active"))},
+			[]string{"Tailscale IP=ok", "SSH server=ok", sshFwName + "=ok"},
+			[]Service{{Kind: ServiceSSH, Port: 22, Enabled: true, Active: &yes, FirewallOK: true}},
+			CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, FirewallOK: true}},
+		{"socket off: setup would enable it", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath, output: sshUp(sshSocket("disabled", "inactive", "disabled", "inactive"))},
+			[]string{"Tailscale IP=ok", "SSH server=changed", sshFwName + "=ok"},
+			[]Service{{Kind: ServiceSSH, Port: 22, FirewallOK: true, Active: new(bool)}},
+			CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, FirewallOK: true}},
+		{"masked socket: manual, setup does not unmask", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath, output: sshUp(sshSocket("disabled", "inactive", "masked", "inactive"))},
+			[]string{"Tailscale IP=ok", "SSH server=manual", sshFwName + "=ok"},
+			[]Service{{Kind: ServiceSSH, Port: 22, FirewallOK: true, Active: new(bool)}},
 			CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, FirewallOK: true}},
 		{"rdp and ssh: the legacy keys come from rdp alone", sshAndRDP,
 			&recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "ufw": true},

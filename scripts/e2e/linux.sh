@@ -355,6 +355,9 @@ printf 'version: 1\nhost:\n  services:\n    - kind: ssh\n' >"$W/ssh.yaml"
 ok "ssh-only: check lists only ssh in services[], with the legacy rdp keys zero" -- 'outcomes check "$W/ssh.yaml" | json "[s[\"kind\"] for s in j[\"services\"]]==[\"ssh\"] and j[\"rdp_port\"]==0 and not j[\"rdp_enabled\"]"'
 ok "ssh-only: check has an SSH server step and no xrdp step" -- 'outcomes check "$W/ssh.yaml" | json "\"SSH server\" in [s[\"name\"] for s in j[\"steps\"]] and \"xrdp service\" not in [s[\"name\"] for s in j[\"steps\"]]"'
 ok "ssh-only: setup has an SSH server step and no xrdp step" -- 'outcomes setup "$W/ssh.yaml" | json "\"SSH server\" in [s[\"name\"] for s in j[\"steps\"]] and \"xrdp service\" not in [s[\"name\"] for s in j[\"steps\"]]"'
+# A socket-activated sshd (#767): where ssh.socket exists, setup converges it and leaves the service
+# alone, so the next check agrees. Without the socket unit (or without openssh-server) the case is vacuous.
+ok "ssh-only: a socket-activated host converges, and check agrees with setup" -- '! systemctl cat ssh.socket >/dev/null 2>&1 || { outcomes setup "$W/ssh.yaml" >/dev/null; outcomes check "$W/ssh.yaml" | json "{s[\"name\"]:s[\"outcome\"] for s in j[\"steps\"]}.get(\"SSH server\")==\"ok\""; }'
 
 run "$B" import e2e "tsb://host-e2e:3389?cp=saas"
 ok "client: import a tsb:// descriptor" -- 'code 0'

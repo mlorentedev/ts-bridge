@@ -23,28 +23,38 @@ const (
 // an answer ts-bridge does not interpret.
 var sshUnits = []string{"ssh", "sshd"}
 
-// readSSH finds which unit the host has and reads it. The unit is "" when
-// neither exists.
+// readSSH finds which unit the host has and reads it. The first result is the
+// unit setup converges: the service, or its socket where systemd socket-activates
+// sshd (Ubuntu since 22.10). It is "" when the host has no ssh service unit.
 func readSSH(r Runner) (string, xrdpState) {
 	for _, unit := range sshUnits {
 		if x := readUnit(r, unit, "sshd"); x.installed {
-			return unit, withSocket(r, unit, x)
+			return withSocket(r, unit, x)
 		}
 	}
 	return "", xrdpState{}
 }
 
-// withSocket credits the unit with its socket: where systemd socket-activates
-// sshd (Ubuntu since 22.10), the service sits idle until the first connection
-// while the socket listens, and reading only the service would report drift on
-// a host that answers. A masked service stays masked.
-func withSocket(r Runner, unit string, x xrdpState) xrdpState {
+// withSocket folds the socket into the reading. Where the socket exists, the
+// service sits idle until the first connection while the socket listens, so
+// reading only the service would report drift on a host that answers, and
+// starting the service would leave it running outside the socket's activation.
+// The socket is then the unit to converge and the service is left alone. A
+// socket exists when systemctl reads it (is-enabled answers something other than
+// not-found, and a word ts-bridge interprets); one it cannot read is ignored, as
+// if absent, so those hosts keep the service behavior. A masked service stays
+// masked, and a masked socket is reported, never unmasked.
+func withSocket(r Runner, unit string, x xrdpState) (string, xrdpState) {
 	if !x.readable || x.masked || (x.enabled && x.active) {
-		return x
+		return unit, x
 	}
 	sock := readUnit(r, unit+".socket", "sshd")
+	if !sock.readable {
+		return unit, x
+	}
 	x.enabled, x.active = x.enabled || sock.enabled, x.active || sock.active
-	return x
+	x.masked = sock.masked
+	return unit + ".socket", x
 }
 
 // sshUnit is the step text for the unit read; label names the unit so a host
