@@ -60,26 +60,85 @@ func readSSHCapability(r Runner) (bool, error) {
 	}
 }
 
+// sshInstall is what the host has of the OpenSSH Server. external is an
+// install that is not the Windows capability (the Win32-OpenSSH MSI), found by
+// its service; bin is the sshd.exe the service runs, "" for the default path.
+type sshInstall struct {
+	installed, external bool
+	bin                 string
+}
+
+// readSSHInstall reads the capability and, since the MSI installs no capability,
+// the sshd service: NotPresent with no service is a missing server, and
+// NotPresent with a service is one installed outside Windows capabilities.
+// A capability read that fails is not retried through the service: the host
+// state is unknown, as for any unreadable step.
+func readSSHInstall(r Runner) (sshInstall, error) {
+	capInstalled, err := readSSHCapability(r)
+	if err != nil {
+		return sshInstall{}, err
+	}
+	out, qcErr := r.Output("sc", "qc", sshWinService)
+	in := sshInstall{installed: capInstalled || qcErr == nil, external: !capInstalled && qcErr == nil}
+	if qcErr == nil {
+		in.bin = serviceBinary(string(out))
+	}
+	return in, nil
+}
+
+// serviceBinary is the executable in the BINARY_PATH_NAME line of `sc qc`,
+// quoted or not and without its arguments; "" when there is none. sc localizes
+// no key names, and the path is the value after the first colon.
+func serviceBinary(qc string) string {
+	for _, line := range strings.Split(qc, "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if !ok || strings.TrimSpace(key) != "BINARY_PATH_NAME" {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if rest, quoted := strings.CutPrefix(value, `"`); quoted {
+			path, _, _ := strings.Cut(rest, `"`)
+			return path
+		}
+		if i := strings.Index(strings.ToLower(value), ".exe"); i >= 0 {
+			return value[:i+len(".exe")]
+		}
+	}
+	return ""
+}
+
+// sshPortsScript runs sshd -T from bin, or from the capability's path when the
+// service names none. The path comes from the service configuration, which only
+// an administrator writes; it is single-quoted so it is a literal, not code.
+func sshPortsScript(bin string) string {
+	if bin == "" {
+		return psReadSSHPorts
+	}
+	return `& '` + strings.ReplaceAll(bin, "'", "''") + `' -T; exit $LASTEXITCODE`
+}
+
 // sshCapabilityStep is the capability step. unreadable is the outcome of a
 // read that failed: failed in setup, unverified in check (ADR-017 §2).
-func sshCapabilityStep(installed bool, err error, unreadable Outcome) SetupStep {
+func sshCapabilityStep(in sshInstall, err error, unreadable Outcome) SetupStep {
 	switch {
 	case err != nil:
 		return newStep(sshWinCapName, unreadable, "Cannot read the OpenSSH Server capability: "+err.Error(),
 			"run `Get-WindowsCapability -Online -Name 'OpenSSH.Server*'` in an elevated PowerShell")
-	case !installed:
+	case in.external:
+		return newStep(sshWinCapName, OutcomeOK, "The OpenSSH Server is installed outside Windows capabilities (the "+sshWinService+" service exists)", "")
+	case !in.installed:
 		return newStep(sshWinCapName, OutcomeManual, "The OpenSSH Server is not installed", sshWinMissingFix)
 	}
 	return newStep(sshWinCapName, OutcomeOK, "The OpenSSH Server is installed", "")
 }
 
 func sshWindowsSetupSteps(r Runner, port int) []SetupStep {
-	installed, err := readSSHCapability(r)
-	steps := []SetupStep{sshCapabilityStep(installed, err, OutcomeFailed)}
-	// Without the capability there is no sshd service to converge or to read.
-	if installed {
+	in, err := readSSHInstall(r)
+	steps := []SetupStep{sshCapabilityStep(in, err, OutcomeFailed)}
+	// Without the capability or a service there is no sshd to converge or to read.
+	if in.installed {
 		steps = append(steps, serviceStep(r, sshWinService, sshName, "Failed to start sshd", "start the sshd service"))
-		if s, ok := sshWindowsPortStep(r, port, OutcomeFailed); ok {
+		if s, ok := sshWindowsPortStep(r, port, in.bin, OutcomeFailed); ok {
 			steps = append(steps, s)
 		}
 	}
@@ -87,18 +146,18 @@ func sshWindowsSetupSteps(r Runner, port int) []SetupStep {
 }
 
 func sshWindowsCheck(r Runner, port int, result *CheckResult) {
-	installed, err := readSSHCapability(r)
-	capStep := sshCapabilityStep(installed, err, OutcomeUnverified)
+	in, err := readSSHInstall(r)
+	capStep := sshCapabilityStep(in, err, OutcomeUnverified)
 	result.Steps = append(result.Steps, capStep)
 	svc := Service{Kind: ServiceSSH, Port: port, Unread: capStep.Outcome == OutcomeUnverified}
-	if installed {
+	if in.installed {
 		step, auto, running, readable := serviceCheckStep(r, sshWinService, sshName)
 		result.Steps = append(result.Steps, step)
 		svc.Enabled, svc.Unread = auto, step.Outcome == OutcomeUnverified
 		if readable {
 			svc.Active = &running
 		}
-		if s, ok := sshWindowsPortStep(r, port, OutcomeUnverified); ok {
+		if s, ok := sshWindowsPortStep(r, port, in.bin, OutcomeUnverified); ok {
 			result.Steps = append(result.Steps, s)
 		}
 	}
@@ -134,18 +193,18 @@ func sshInstallerRuleStep(port int) fwGuard {
 }
 
 // sshWindowsPortStep reports whether sshd listens on a declared port other
-// than 22, as the Linux step does: the listener is never moved, since
+// than 22 (from sshd.exe at bin, "" for the default), as the Linux step does: the listener is never moved, since
 // sshd_config is the operator's. unreadable is the outcome when `sshd -T`
 // cannot be read (it needs an elevated shell and the host keys).
-func sshWindowsPortStep(r Runner, declared int, unreadable Outcome) (SetupStep, bool) {
+func sshWindowsPortStep(r Runner, declared int, bin string, unreadable Outcome) (SetupStep, bool) {
 	if declared == defaultPorts[ServiceSSH] {
 		return SetupStep{}, false
 	}
-	ports, err := readSSHWindowsPorts(r)
+	ports, err := readSSHWindowsPorts(r, bin)
 	switch {
 	case err != nil:
 		return newStep(sshPortName, unreadable, "Cannot read the sshd listener: "+err.Error(),
-			fmt.Sprintf(`run `+"`"+`& "$env:WINDIR\System32\OpenSSH\sshd.exe" -T`+"`"+` in an elevated PowerShell and check that sshd listens on TCP %d`, declared)), true
+			fmt.Sprintf("run `sshd.exe -T` (the one `sc qc sshd` names; %%WINDIR%%\\System32\\OpenSSH\\sshd.exe for the capability) in an elevated PowerShell and check that sshd listens on TCP %d", declared)), true
 	case slices.Contains(ports, declared):
 		return newStep(sshPortName, OutcomeOK, fmt.Sprintf("sshd listens on TCP %d", declared), ""), true
 	}
@@ -153,8 +212,8 @@ func sshWindowsPortStep(r Runner, declared int, unreadable Outcome) (SetupStep, 
 		fmt.Sprintf(`set Port %d in %%ProgramData%%\ssh\sshd_config and run Restart-Service sshd; ts-bridge does not edit it`, declared)), true
 }
 
-func readSSHWindowsPorts(r Runner) ([]int, error) {
-	out, err := outputPS(r, psReadSSHPorts)
+func readSSHWindowsPorts(r Runner, bin string) ([]int, error) {
+	out, err := outputPS(r, sshPortsScript(bin))
 	if err != nil {
 		return nil, fmt.Errorf("sshd -T: %w", err)
 	}

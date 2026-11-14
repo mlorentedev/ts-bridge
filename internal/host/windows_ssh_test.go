@@ -9,6 +9,8 @@ import (
 var (
 	winSSHCapPS   = psPrefix + psReadSSHCapability
 	winSSHPortsPS = psPrefix + psReadSSHPorts
+	// winSSHMSIPortsPS is the port read when `sc qc sshd` names winMSIBin.
+	winSSHMSIPortsPS = psPrefix + sshPortsScript(winMSIBin)
 )
 
 const (
@@ -18,6 +20,7 @@ const (
 	winRunning     = "STATE              : 4  RUNNING"
 	winSSHRuleName = "Tailscale-SSH-Ingress"
 	winInstaller   = "OpenSSH-Server-In-TCP"
+	winMSIBin      = `C:\Program Files\OpenSSH\sshd.exe`
 )
 
 func winSSHFwPS() string { return psPrefix + fmt.Sprintf(psReadFirewallRule, winSSHRuleName) }
@@ -92,8 +95,15 @@ func TestWindowsSSHSetup(t *testing.T) {
 			[]string{cap + "=ok", svc + "=changed", fw + "=ok"}, []string{"sc config sshd start=auto", "net start sshd"}},
 		{"sshd automatic and stopped", 22, map[string]string{winSSHQuery: "1  STOPPED"}, nil,
 			[]string{cap + "=ok", svc + "=changed", fw + "=ok"}, []string{"net start sshd"}},
-		{"capability missing: manual, no sshd step, rule still written", 22, map[string]string{winSSHCapPS: "state=NotPresent\r\n", winSSHFwPS(): "count=0\r\n"}, nil,
+		{"capability missing and no sshd service: manual, no sshd step, rule still written", 22, map[string]string{winSSHCapPS: "state=NotPresent\r\n", winSSHFwPS(): "count=0\r\n"}, []string{winSSHQC},
 			[]string{cap + "=manual", fw + "=changed"}, []string{"New-NetFirewallRule"}},
+		{"installed by the MSI (NotPresent, service exists): converged", 22, map[string]string{winSSHCapPS: "state=NotPresent\r\n"}, nil,
+			[]string{cap + "=ok", svc + "=ok", fw + "=ok"}, nil},
+		{"installed by the MSI and stopped: the service is started", 22, map[string]string{winSSHCapPS: "state=NotPresent\r\n", winSSHQuery: "1  STOPPED"}, nil,
+			[]string{cap + "=ok", svc + "=changed", fw + "=ok"}, []string{"net start sshd"}},
+		{"installed by the MSI, 2222: sshd -T runs from the service's own path", 2222, map[string]string{winSSHCapPS: "state=NotPresent\r\n",
+			winSSHQC: winAutoStart + "\r\n        BINARY_PATH_NAME   : \"" + winMSIBin + "\" -f x\r\n", winSSHMSIPortsPS: "port 2222\r\n"}, nil,
+			[]string{cap + "=ok", svc + "=ok", sshPortName + "=ok", fw + "=ok"}, nil},
 		{"capability unreadable: failed, sshd not touched", 22, nil, []string{winSSHCapPS},
 			[]string{cap + "=failed", fw + "=ok"}, nil},
 		{"capability in a state ts-bridge does not interpret", 22, map[string]string{winSSHCapPS: "state=Staged\r\n"}, nil,
@@ -110,7 +120,7 @@ func TestWindowsSSHSetup(t *testing.T) {
 			[]string{cap + "=ok", svc + "=ok", sshPortName + "=manual", fw + "=ok"}, nil},
 		{"declared 2222 and sshd -T unreadable", 2222, nil, []string{winSSHPortsPS},
 			[]string{cap + "=ok", svc + "=ok", sshPortName + "=failed", fw + "=ok"}, nil},
-		{"declared 2222, capability missing: no port step", 2222, map[string]string{winSSHCapPS: "state=NotPresent\r\n"}, nil,
+		{"declared 2222, capability missing and no service: no port step", 2222, map[string]string{winSSHCapPS: "state=NotPresent\r\n"}, []string{winSSHQC},
 			[]string{cap + "=manual", fw + "=ok"}, nil},
 	}
 	for _, tt := range tests {
@@ -146,14 +156,15 @@ func TestWindowsSSHSetup(t *testing.T) {
 // capability name, and that a managed host needs a Features-on-Demand source.
 func TestWindowsSSHSetupMissingCapabilityNamesTheInstall(t *testing.T) {
 	r := winSSHHost(22, map[string]string{winSSHCapPS: "state=NotPresent\r\n"})
+	r.fail = map[string]bool{winSSHQC: true}
 	step := sshWindowsSetupSteps(r, 22)[0]
 	for _, want := range []string{"Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0", "WSUS", "does not install"} {
 		if !strings.Contains(step.Fix, want) {
 			t.Errorf("fix %q does not contain %q", step.Fix, want)
 		}
 	}
-	if sawCall(r, "sc ") {
-		t.Errorf("a missing capability read sshd: %q", r.calls)
+	if sawCall(r, "sc query") || sawCall(r, "sc config") || sawCall(r, "net start") {
+		t.Errorf("a missing server converged sshd: %q", r.calls)
 	}
 }
 
@@ -178,8 +189,16 @@ func TestWindowsSSHCheck(t *testing.T) {
 			Service{Kind: ServiceSSH, Port: 22, Enabled: false, Active: boolPtr(true), FirewallOK: true}},
 		{"sc cannot be read", 22, nil, []string{winSSHQC, winSSHQuery}, []string{cap + "=ok", svc + "=unverified", fw + "=ok"},
 			Service{Kind: ServiceSSH, Port: 22, FirewallOK: true, Unread: true}},
-		{"capability missing", 22, map[string]string{winSSHCapPS: "state=NotPresent\r\n"}, nil, []string{cap + "=manual", fw + "=ok"},
+		{"capability missing and no sshd service", 22, map[string]string{winSSHCapPS: "state=NotPresent\r\n"}, []string{winSSHQC}, []string{cap + "=manual", fw + "=ok"},
 			Service{Kind: ServiceSSH, Port: 22, FirewallOK: true}},
+		{"installed by the MSI (NotPresent, service exists)", 22, map[string]string{winSSHCapPS: "state=NotPresent\r\n"}, nil, []string{cap + "=ok", svc + "=ok", fw + "=ok"},
+			Service{Kind: ServiceSSH, Port: 22, Enabled: true, Active: boolPtr(true), FirewallOK: true}},
+		{"installed by the MSI and stopped", 22, map[string]string{winSSHCapPS: "state=NotPresent\r\n", winSSHQuery: "1  STOPPED"}, nil, []string{cap + "=ok", svc + "=changed", fw + "=ok"},
+			Service{Kind: ServiceSSH, Port: 22, Enabled: true, Active: boolPtr(false), FirewallOK: true}},
+		{"installed by the MSI, 2222 on its own path, listening on 22", 2222, map[string]string{winSSHCapPS: "state=NotPresent\r\n",
+			winSSHQC: winAutoStart + "\r\n        BINARY_PATH_NAME   : " + winMSIBin + "\r\n", winSSHMSIPortsPS: "port 22\r\n"}, nil,
+			[]string{cap + "=ok", svc + "=ok", sshPortName + "=manual", fw + "=ok"},
+			Service{Kind: ServiceSSH, Port: 2222, Enabled: true, Active: boolPtr(true), FirewallOK: true}},
 		{"capability unreadable (not elevated)", 22, nil, []string{winSSHCapPS}, []string{cap + "=unverified", fw + "=ok"},
 			Service{Kind: ServiceSSH, Port: 22, FirewallOK: true, Unread: true}},
 		{"rule absent", 22, map[string]string{winSSHFwPS(): "count=0\r\n"}, nil, []string{cap + "=ok", svc + "=ok", fw + "=changed"},
@@ -382,5 +401,30 @@ func TestWindowsUnknownKindFails(t *testing.T) {
 	setup := setupFor(goosWindows, cfg, &recordingRunner{})
 	if names := strings.Join(outcomes(setup.Steps), "|"); !strings.Contains(names, "vnc service=failed") {
 		t.Errorf("setup steps = %s, want a failed vnc step", names)
+	}
+}
+
+// TestWindowsServiceBinary pins the BINARY_PATH_NAME parse: quoted with
+// arguments, unquoted, and no line at all (the default path stands in).
+func TestWindowsServiceBinary(t *testing.T) {
+	tests := []struct{ name, qc, want string }{
+		{"quoted with arguments", "SERVICE_NAME: sshd\r\n        BINARY_PATH_NAME   : \"C:\\Program Files\\OpenSSH\\sshd.exe\" -f x\r\n", `C:\Program Files\OpenSSH\sshd.exe`},
+		{"unquoted", "        BINARY_PATH_NAME   : C:\\Windows\\System32\\OpenSSH\\sshd.exe\r\n", `C:\Windows\System32\OpenSSH\sshd.exe`},
+		{"unquoted with arguments", "BINARY_PATH_NAME   : C:\\OpenSSH\\SSHD.EXE -D\r\n", `C:\OpenSSH\SSHD.EXE`},
+		{"no such line", "START_TYPE         : 2   AUTO_START\r\n", ""},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := serviceBinary(tt.qc); got != tt.want {
+				t.Errorf("serviceBinary = %q, want %q", got, tt.want)
+			}
+		})
+	}
+	if got := sshPortsScript(""); got != psReadSSHPorts {
+		t.Errorf("no service path must read the capability's sshd.exe, got %q", got)
+	}
+	if got := sshPortsScript(`C:\a'b\sshd.exe`); !strings.Contains(got, `'C:\a''b\sshd.exe'`) {
+		t.Errorf("a quote in the path is not escaped: %q", got)
 	}
 }
