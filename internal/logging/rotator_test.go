@@ -2,6 +2,7 @@ package logging
 
 import (
 	"compress/gzip"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -68,8 +69,9 @@ func TestFileRotator_CloseLeavesAPeersFileInPlace(t *testing.T) {
 	_ = b.Close()
 }
 
-// AC2: an archive that already exists is extended, never truncated.
-func TestCompressDayAppendsToAnExistingArchive(t *testing.T) {
+// AC2: an archive that already exists is never truncated or overwritten; a
+// later run of the same day gets an archive of its own.
+func TestCompressDayNeverOverwritesAnArchive(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Date(2026, 11, 14, 12, 0, 0, 0, time.Local)
 	r := rotatorAt(dir, &now)
@@ -80,8 +82,11 @@ func TestCompressDayAppendsToAnExistingArchive(t *testing.T) {
 		}
 		r.compressDay(day)
 	}
-	if got := gunzip(t, dayFile(dir, day)+".gz"); got != "run1\nrun2\n" {
-		t.Fatalf("archive = %q, want both runs", got)
+	if got := gunzip(t, dayFile(dir, day)+".gz"); got != "run1\n" {
+		t.Fatalf("first archive = %q, want run1 untouched", got)
+	}
+	if got := archives(t, dir, day); len(got) != 2 || got[0]+got[1] != "run1\nrun2\n" && got[0]+got[1] != "run2\nrun1\n" {
+		t.Fatalf("archives of the day = %q, want one per run", got)
 	}
 	if _, err := os.Stat(dayFile(dir, day)); !os.IsNotExist(err) {
 		t.Fatalf("the compressed .log is still there: %v", err)
@@ -116,8 +121,8 @@ func TestFileRotator_MidnightRolloverCompressesThePastDayOnly(t *testing.T) {
 	}
 }
 
-// A compression that fails must keep the day's lines, even for a log old
-// enough for retention, and a later rotation must archive them (review F1).
+// A compression that fails keeps the day's lines, even for a log past
+// retention, and a later rotation archives them once the claim is stale.
 func TestFileRotator_FailedCompressionIsRetriedNotLost(t *testing.T) {
 	dir := t.TempDir()
 	day := "2026-11-01"
@@ -128,10 +133,8 @@ func TestFileRotator_FailedCompressionIsRetriedNotLost(t *testing.T) {
 	if err := os.Chtimes(dayFile(dir, day), old, old); err != nil {
 		t.Fatal(err)
 	}
-	blocked := dayFile(dir, day) + ".gz"
-	if err := os.Mkdir(blocked, 0o700); err != nil { // an archive that cannot be opened
-		t.Fatal(err)
-	}
+	writeGzip = func(string, string) error { return errors.New("disk full") }
+	t.Cleanup(func() { writeGzip = gzipFile })
 
 	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.Local) // 9 days later: past retention
 	r := rotatorAt(dir, &now)
@@ -141,14 +144,12 @@ func TestFileRotator_FailedCompressionIsRetriedNotLost(t *testing.T) {
 		t.Fatalf("after a failed compression the lines must survive in one claim, found %v", remaining)
 	}
 
-	if err := os.Remove(blocked); err != nil {
-		t.Fatal(err)
-	}
-	now = now.Add(24 * time.Hour)
+	writeGzip = gzipFile
+	now = now.Add(2 * staleClaimAge)
 	r = rotatorAt(dir, &now)
-	write(t, r, "next day\n")
+	write(t, r, "later\n")
 	_ = r.Close()
-	if got := gunzip(t, blocked); got != "old lines\n" {
+	if got := gunzip(t, dayFile(dir, day)+".gz"); got != "old lines\n" {
 		t.Fatalf("archive after the retry = %q, want the claimed lines", got)
 	}
 	if remaining := claimedFiles(t, dir); len(remaining) != 0 {
@@ -156,8 +157,33 @@ func TestFileRotator_FailedCompressionIsRetriedNotLost(t *testing.T) {
 	}
 }
 
-// Two rotators compressing the same past day archive it exactly once.
-func TestCompressDayConcurrentClaimsArchiveOnce(t *testing.T) {
+// A claim younger than staleClaimAge may belong to a peer still compressing
+// it, so no rotation touches it.
+func TestFileRotator_LeavesAFreshClaimAlone(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 11, 14, 0, 1, 0, 0, time.Local)
+	claim := dayFile(dir, "2026-11-13") + ".99.1" + claimedSuffix
+	if err := os.WriteFile(claim, []byte("peer\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fresh := now.Add(-time.Minute)
+	if err := os.Chtimes(claim, fresh, fresh); err != nil {
+		t.Fatal(err)
+	}
+	r := rotatorAt(dir, &now)
+	write(t, r, "x\n")
+	_ = r.Close()
+	if _, err := os.Stat(claim); err != nil {
+		t.Fatalf("a fresh claim was taken: %v", err)
+	}
+	if got := archives(t, dir, "2026-11-13"); len(got) != 0 {
+		t.Fatalf("a fresh claim was archived: %q", got)
+	}
+}
+
+// Two rotators compressing the same past day never corrupt an archive and
+// never lose the day: every archive holds it whole, and no claim is left.
+func TestCompressDayConcurrentClaimsNeverCorrupt(t *testing.T) {
 	for range 20 {
 		dir := t.TempDir()
 		day := "2026-11-13"
@@ -170,10 +196,26 @@ func TestCompressDayConcurrentClaimsArchiveOnce(t *testing.T) {
 		go func() { a.compressDay(day); close(done) }()
 		b.compressDay(day)
 		<-done
-		if got := gunzip(t, dayFile(dir, day)+".gz"); got != "line\n" {
-			t.Fatalf("archive = %q, want the day exactly once", got)
+		got := archives(t, dir, day)
+		if len(got) == 0 {
+			t.Fatal("the day was lost: no archive")
+		}
+		for _, content := range got {
+			if content != "line\n" {
+				t.Fatalf("archive = %q, want the day whole", content)
+			}
+		}
+		if remaining := claimedFiles(t, dir); len(remaining) != 0 {
+			t.Fatalf("claims left: %v", remaining)
 		}
 	}
+}
+
+// A zero-value FileRotator still works (it reads time.Now).
+func TestFileRotator_ZeroValueUsesTheWallClock(t *testing.T) {
+	r := &FileRotator{dir: t.TempDir()}
+	write(t, r, "x\n")
+	_ = r.Close()
 }
 
 // A directory that happens to carry a log's name is not a log.
@@ -205,6 +247,20 @@ func claimedFiles(t *testing.T, dir string) []string {
 		if strings.HasSuffix(e.Name(), claimedSuffix) {
 			out = append(out, e.Name())
 		}
+	}
+	return out
+}
+
+// archives returns the decompressed content of every archive of day.
+func archives(t *testing.T, dir, day string) []string {
+	t.Helper()
+	matches, err := filepath.Glob(dayFile(dir, day) + "*.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, gunzip(t, m))
 	}
 	return out
 }

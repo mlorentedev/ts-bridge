@@ -104,6 +104,10 @@ const (
 	dayLayout = "2006-01-02"
 	// claimedSuffix marks a past day's log a process has taken to compress.
 	claimedSuffix = ".claimed"
+	// partialSuffix marks an archive still being written.
+	partialSuffix = ".partial"
+	// staleClaimAge is how old a claim must be before a rotation retries it.
+	staleClaimAge = time.Hour
 )
 
 // FileRotator manages daily log file rotation.
@@ -172,7 +176,7 @@ func (r *FileRotator) Close() error {
 // file, compresses every past day still left as a .log, and applies
 // retention. Callers hold r.mu.
 func (r *FileRotator) rotateLocked() error {
-	today := r.now().Format(dayLayout)
+	today := r.clock().Format(dayLayout)
 	if r.current != nil && r.currentDay == today {
 		return nil
 	}
@@ -192,14 +196,22 @@ func (r *FileRotator) rotateLocked() error {
 	return nil
 }
 
+// clock is the rotator's time source; a zero-value FileRotator uses time.Now.
+func (r *FileRotator) clock() time.Time {
+	if r.now == nil {
+		return time.Now()
+	}
+	return r.now()
+}
+
 func (r *FileRotator) dayPath(day string) string {
 	return filepath.Join(r.dir, logPrefix+day+".log")
 }
 
 // compressPastDays archives each ts-bridge-<day>.log whose day is before
-// today, and retries any claim a failed compression left behind. Today, any
-// day after it (a clock set back), and anything that is not a regular file
-// are left alone.
+// today, and retries any claim a failed or interrupted compression left behind
+// once it is older than staleClaimAge. Today, any day after it (a clock set
+// back), and anything that is not a regular file are left alone.
 func (r *FileRotator) compressPastDays(today string) {
 	entries, err := os.ReadDir(r.dir)
 	if err != nil {
@@ -207,19 +219,23 @@ func (r *FileRotator) compressPastDays(today string) {
 	}
 	for _, e := range entries {
 		day, claim, ok := pastDayEntry(e, today)
-		if !ok {
+		if !ok || (claim && !r.staleClaim(e)) {
 			continue
 		}
-		if claim {
-			r.archiveClaim(filepath.Join(r.dir, e.Name()), day)
-		} else {
-			r.compressDay(day)
-		}
+		r.archive(filepath.Join(r.dir, e.Name()), day)
 	}
 }
 
+// staleClaim reports whether a claim is old enough that no live process can
+// still be compressing it. A compression takes milliseconds; a claim is
+// touched when it is made, so a peer's in-flight claim is never taken.
+func (r *FileRotator) staleClaim(e os.DirEntry) bool {
+	info, err := e.Info()
+	return err == nil && r.clock().Sub(info.ModTime()) >= staleClaimAge
+}
+
 // pastDayEntry reports the day of a regular file named ts-bridge-<day>.log
-// or ts-bridge-<day>.log.<pid>.claimed whose day is before today.
+// or ts-bridge-<day>.log.<...>.claimed whose day is before today.
 func pastDayEntry(e os.DirEntry, today string) (day string, claim, ok bool) {
 	rest, found := strings.CutPrefix(e.Name(), logPrefix)
 	if !found || !e.Type().IsRegular() || len(rest) < len(dayLayout) {
@@ -238,39 +254,64 @@ func pastDayEntry(e os.DirEntry, today string) (day string, claim, ok bool) {
 	return "", false, false
 }
 
-// compressDay claims a past day's log by an atomic rename, so two processes
-// rotating at once never archive it twice (the loser's rename fails), then
-// archives the claim. Go opens files with FILE_SHARE_DELETE on Windows, so
-// the rename succeeds there too while a peer still holds the file; the peer
-// rotates to today before its next write, so nothing lands in the claim.
+// compressDay archives a past day's log.
 func (r *FileRotator) compressDay(day string) {
-	r.archiveClaim(r.dayPath(day), day)
+	r.archive(r.dayPath(day), day)
 }
 
-// archiveClaim takes path (a day's log, or a claim a failed compression left)
-// under this process's claim name and appends it to the day's archive as a
-// new gzip member. Appending, not truncating, keeps an archive that already
-// holds an earlier run of the day. On failure the claim stays, cleanup never
-// deletes a claim, and the next rotation retries it, so lines are not lost.
-func (r *FileRotator) archiveClaim(path, day string) {
-	claimed := fmt.Sprintf("%s.%d%s", r.dayPath(day), os.Getpid(), claimedSuffix)
-	if path != claimed {
-		if err := os.Rename(path, claimed); err != nil {
-			return
-		}
+// archive claims path under a unique name by an atomic rename, so two
+// processes never compress the same file at once (the loser's rename fails),
+// then writes it to an archive of its own and drops the claim. No archive is
+// ever appended to or overwritten. If anything fails the claim keeps the
+// lines, and a later rotation retries it once it is stale.
+func (r *FileRotator) archive(path, day string) {
+	claimed := r.uniqueName(day, claimedSuffix)
+	if err := os.Rename(path, claimed); err != nil {
+		return
 	}
-	if err := appendGzipMember(claimed, r.dayPath(day)+".gz"); err != nil {
+	now := r.clock()
+	_ = os.Chtimes(claimed, now, now) // the claim's age starts now, not at the log's last write
+	if err := r.writeArchive(claimed, day); err != nil {
 		return
 	}
 	// #nosec G104 // cleanup: ignore remove errors.
 	os.Remove(claimed)
 }
 
-// appendGzipMember writes srcPath to the end of dstPath as one gzip member.
-// A multi-member file reads back as one stream (zcat, gzip.Reader). A failed
-// write truncates dstPath back to its old size, so a partial member never
-// makes the archive unreadable past it.
-func appendGzipMember(srcPath, dstPath string) (err error) {
+// uniqueName is a per-compression name next to the day's log.
+func (r *FileRotator) uniqueName(day, suffix string) string {
+	return fmt.Sprintf("%s.%d.%d%s", r.dayPath(day), os.Getpid(), time.Now().UnixNano(), suffix)
+}
+
+// writeArchive gzips src into a private temp file, then publishes it without
+// clobbering: as ts-bridge-<day>.log.gz when no archive of that day exists
+// (os.Link fails on an existing name), otherwise under a unique name. A
+// second run of the same day therefore gets its own archive.
+func (r *FileRotator) writeArchive(src, day string) error {
+	tmp := r.uniqueName(day, ".gz"+partialSuffix)
+	if err := writeGzip(src, tmp); err != nil {
+		// #nosec G104 // cleanup: ignore remove errors.
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Link(tmp, r.dayPath(day)+".gz"); err == nil {
+		// #nosec G104 // cleanup: ignore remove errors.
+		os.Remove(tmp)
+		return nil
+	}
+	if err := os.Rename(tmp, strings.TrimSuffix(tmp, partialSuffix)); err != nil {
+		// #nosec G104 // cleanup: ignore remove errors.
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// writeGzip is gzipFile; tests replace it to make a compression fail.
+var writeGzip = gzipFile
+
+// gzipFile writes srcPath gzipped to a new file at dstPath.
+func gzipFile(srcPath, dstPath string) error {
 	// #nosec G304 // filename is date-derived, not user-controlled.
 	src, err := os.Open(srcPath)
 	if err != nil {
@@ -278,23 +319,16 @@ func appendGzipMember(srcPath, dstPath string) (err error) {
 	}
 	defer src.Close()
 	// #nosec G302,G304 // filename is date-derived, not user-controlled.
-	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
-	}
-	info, err := dst.Stat()
-	if err != nil {
-		return errors.Join(err, dst.Close())
 	}
 	gw := gzip.NewWriter(dst)
 	_, err = io.Copy(gw, src)
 	if err == nil {
 		err = gw.Close()
 	}
-	if err != nil {
-		return errors.Join(err, dst.Truncate(info.Size()), dst.Close())
-	}
-	return dst.Close()
+	return errors.Join(err, dst.Close())
 }
 
 // cleanup removes log files older than maxDays and keeps at most maxFiles.
@@ -314,8 +348,9 @@ func (r *FileRotator) cleanup() { //nolint:funlen,gocyclo // baseline #629
 
 	logs := make([]logFile, 0, len(entries))
 	for _, e := range entries {
-		// A claim holds lines not yet archived: never age it out.
-		if !strings.HasPrefix(e.Name(), logPrefix) || strings.HasSuffix(e.Name(), claimedSuffix) {
+		// Retention removes archives only. A .log or a claim holds lines not
+		// yet archived, so it is never aged out.
+		if !strings.HasPrefix(e.Name(), logPrefix) || !strings.HasSuffix(e.Name(), ".gz") {
 			continue
 		}
 		info, err := e.Info()
@@ -337,7 +372,7 @@ func (r *FileRotator) cleanup() { //nolint:funlen,gocyclo // baseline #629
 		}
 	}
 
-	now := r.now()
+	now := r.clock()
 	gzCount := 0
 	for _, lf := range logs {
 		age := now.Sub(lf.modTime)

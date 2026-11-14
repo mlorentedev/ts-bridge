@@ -8,10 +8,10 @@
   },
   {
     "id": "LOG-788-rotator-shared-file-f2",
-    "behavior": "AC2: compressing a day whose archive exists appends a gzip member instead of truncating",
-    "verification": "go test ./internal/logging/ -run '^TestCompressDayAppendsToAnExistingArchive$' -count=1",
+    "behavior": "AC2: an existing archive is never truncated or overwritten; a later run of the same day gets its own archive",
+    "verification": "go test ./internal/logging/ -run '^TestCompressDayNeverOverwritesAnArchive$' -count=1",
     "state": "passing",
-    "evidence": "failed before the fix: archive = \"run2\\n\", the first run was erased"
+    "evidence": "the original code truncated the archive to the last run (archive = \"run2\\n\")"
   },
   {
     "id": "LOG-788-rotator-shared-file-f3",
@@ -22,9 +22,9 @@
   },
   {
     "id": "LOG-788-rotator-shared-file-f4",
-    "behavior": "AC5: a failed compression keeps and later archives the lines; concurrent claims archive once; a directory named like a log is ignored",
-    "verification": "go test ./internal/logging/ -run '^(TestFileRotator_FailedCompressionIsRetriedNotLost|TestCompressDayConcurrentClaimsArchiveOnce|TestFileRotator_LeavesADirectoryNamedLikeALog)$' -count=1",
+    "behavior": "AC5: failed compression is retried once stale, never lost; a fresh claim is left alone; concurrent compressions never corrupt; a directory named like a log is ignored",
+    "verification": "go test ./internal/logging/ -run '^(TestFileRotator_FailedCompressionIsRetriedNotLost|TestFileRotator_LeavesAFreshClaimAlone|TestCompressDayConcurrentClaimsNeverCorrupt|TestFileRotator_LeavesADirectoryNamedLikeALog)$' -count=1",
     "state": "passing",
-    "evidence": "the retry and directory tests failed before the round-1 fix"
+    "evidence": "round 2's append design corrupted the archive under concurrency (flate: corrupt input on test-windows); round 3 publishes one archive per compression"
   }
 ]

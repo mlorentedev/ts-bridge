@@ -12,12 +12,14 @@ owner: manu
 ## Evidence
 
 - [x] AC1 -> `TestFileRotator_CloseLeavesAPeersFileInPlace`. It failed on the old code with "the shared day file is gone after one rotator closed".
-- [x] AC2 -> `TestCompressDayAppendsToAnExistingArchive`. It failed on the old code with `archive = "run2\n"`: the first run was erased.
+- [x] AC2 -> `TestCompressDayNeverOverwritesAnArchive`. The original code failed the equivalent test with `archive = "run2\n"`: the first run was erased.
 - [x] AC3, AC4 -> `TestFileRotator_MidnightRolloverCompressesThePastDayOnly`. It failed on the old code: no archive for the previous day after crossing midnight. It also asserts that today is never compressed and no claimed file is left behind.
 
-- [x] AC5 (round 1 review findings) -> `TestFileRotator_FailedCompressionIsRetriedNotLost`, which failed before the fix with "found []" because retention deleted the claimed lines in the same rotation. `TestFileRotator_LeavesADirectoryNamedLikeALog` failed before the fix ("the directory was moved"). `TestCompressDayConcurrentClaimsArchiveOnce` is regression cover for the claim (20 iterations, -race).
+- [x] AC5 (round 1 review findings) -> `TestFileRotator_FailedCompressionIsRetriedNotLost`, which failed before the fix with "found []" because retention deleted the claimed lines in the same rotation. `TestFileRotator_LeavesADirectoryNamedLikeALog` failed before the fix ("the directory was moved"). `TestCompressDayConcurrentClaimsNeverCorrupt` asserts that two concurrent compressions leave every archive whole and no claim behind (20 iterations, -race; `go test -race -count=20 ./internal/logging/` green). `TestFileRotator_LeavesAFreshClaimAlone` covers the stale-age guard.
 
 The red runs used the old `Close`/`compress` with only the clock seam added, so each test failed for the behaviour, not for a missing symbol.
+
+- Round 2 review (FAIL, deepseek) Blocker: retrying another process's live claim let two writers append to one `.gz`, which interleaved the gzip members and corrupted the archive. `test-windows` reproduced it (`flate: corrupt input before offset 1`). Round 3 removes the shared writer: one archive per compression, published without clobbering; unique claim names; only stale claims are retried; retention deletes `.gz` only (the retention test now expects an old `.log` to be kept); a zero-value rotator uses `time.Now`.
 
 ## Test status
 
