@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/mlorentedev/ts-bridge/compare/v2.0.0...v2.0.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* **host:** stop reporting the firewall as failed when no service is declared ([#798](https://github.com/mlorentedev/ts-bridge/issues/798)) ([1693014](https://github.com/mlorentedev/ts-bridge/commit/169301444135ac42c6e5606833e9ce130807de22))
+
 ## [2.0.0](https://github.com/mlorentedev/ts-bridge/compare/v1.20.0...v2.0.0) (2026-11-14)
 
 
