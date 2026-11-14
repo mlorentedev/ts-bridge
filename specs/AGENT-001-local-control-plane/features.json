@@ -1,0 +1,30 @@
+[
+  {
+    "id": "AGENT-001-local-control-plane-f1",
+    "behavior": "One agent per user: a second starter is refused, a leftover socket is replaced only under the lock, and a non-socket file is never removed",
+    "verification": "go test ./internal/agent -run '^(TestStartRefusesASecondAgent|TestStartAfterCloseSucceeds|TestStartReplacesAStaleSocket|TestStartKeepsTheSocketOfARunningAgent|TestStartNeverRemovesANonSocket)$' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AGENT-001-local-control-plane-f2",
+    "behavior": "The state directory is per user and private, the socket is 0600, and a symlinked or foreign directory is refused",
+    "verification": "go test ./internal/agent -run '^(TestDefaultDir|TestPrepareDirModes|TestSocketModeIsOwnerOnly|TestStartRefusesALongSocketPath)$' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AGENT-001-local-control-plane-f3",
+    "behavior": "A connection from another identity, or one that cannot be identified, is closed before a request is read and the accept loop keeps serving the owner",
+    "verification": "go test ./internal/agent -run '^(TestAuthorize|TestListenerRefusesAPeerThatIsNotTheOwner|TestListenerKeepsServingAfterARefusal)$' -count=1",
+    "state": "pending",
+    "evidence": ""
+  },
+  {
+    "id": "AGENT-001-local-control-plane-f4",
+    "behavior": "GET /v1/status answers to the owner over the real transport on every OS",
+    "verification": "go test ./internal/agent ./cmd/cli -run '^(TestStatusOverTheRealTransport|TestPeerIdentityIsTheCurrentUser|TestAgentCommandServesUntilInterrupted)$' -count=1",
+    "state": "pending",
+    "evidence": ""
+  }
+]

@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"ts-bridge/internal/oslock"
 )
 
 var (
 	errProfileInUse = errors.New("already connected; close this profile's existing ts-bridge terminal with Ctrl+C before retrying")
-	errLockHeld     = errors.New("lock held by another process")
+	errLockHeld     = oslock.ErrHeld
 	errStoreBusy    = errors.New("another ts-bridge command is updating the profile store; retry in a moment")
 )
 
@@ -72,7 +74,7 @@ func (s *Store) tryLock(fileName string) (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open lock file: %w", err)
 	}
-	if err := lockFile(file); err != nil {
+	if err := oslock.Try(file); err != nil {
 		return nil, errors.Join(err, file.Close())
 	}
 	return file, nil
