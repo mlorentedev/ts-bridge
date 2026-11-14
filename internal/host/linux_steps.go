@@ -1089,7 +1089,9 @@ func iptHasScope(f []string) bool {
 // iptUnscoped lists the INPUT rules that accept TCP port with no interface,
 // source or destination qualifier: the legacy rules of #631, and any rule that
 // admits the port by excluding only others or by naming no port (#736), since
-// those void the tailnet scope as a permissive policy does (#691). A port-less
+// those void the tailnet scope as a permissive policy does (#691). A negated
+// scope or an any-address literal holds nothing to the tailnet, so it does not
+// count as a qualifier (#743, iptNarrowed). A port-less
 // rule counts only when iptPortlessCovers models every token in it; a
 // port-bearing rule with another narrowing (conntrack, a comment) is listed
 // and reported rather than deleted.
@@ -1117,38 +1119,11 @@ func iptUnscopedIn(input, chain string, port int) []string {
 	var found []string
 	for _, line := range strings.Split(input, "\n") {
 		f := strings.Fields(iptQuoted.ReplaceAllString(line, `""`))
-		if len(f) > 1 && f[0] == "-A" && f[1] == chain && iptFlag(f, "-j") == iptAccept && iptExposes(f, port) && !iptLoopback(f) && !iptScopedAllow(f) {
+		if len(f) > 1 && f[0] == "-A" && f[1] == chain && iptFlag(f, "-j") == iptAccept && iptExposes(f, port) && !iptLoopback(f) && !iptNarrowed(f) {
 			found = append(found, strings.TrimSpace(line))
 		}
 	}
 	return found
-}
-
-// iptScopedAllow reports an interface, source or destination qualifier on an
-// allow, or a negation, unless the negation leaves the rule open off the
-// tailnet: one before a port list negates the port, and one before a loopback
-// scope negates only loopback (#736).
-func iptScopedAllow(f []string) bool {
-	for i, w := range f {
-		if slices.Contains(iptScopeFlags, w) && !iptOpenNegation(f, i) {
-			return true
-		}
-	}
-	return false
-}
-
-// iptOpenNegation reports whether f[i], a `!` or the flag one negates, is a
-// negated port list or a negated loopback scope.
-func iptOpenNegation(f []string, i int) bool {
-	if f[i] == "!" {
-		i++
-	} else if i == 0 || f[i-1] != "!" {
-		return false
-	}
-	if i >= len(f) {
-		return false
-	}
-	return slices.Contains(iptPortFlags, f[i]) || (i+1 < len(f) && iptLoopbackScope(f[i], f[i+1]))
 }
 
 // iptExposes reports whether an ACCEPT's match admits new TCP connections on
@@ -1231,7 +1206,8 @@ func iptPortCovers(f []string, port int) bool {
 // iptPortlessCovers reports whether a non-loopback rule with no port flag
 // matches a new TCP connection on every port. Every token after the chain must
 // be one this parser models; anything else (conntrack, state, limit, `-f`, a
-// `--tcp-flags` set other than `--syn`, a negation that is not of loopback)
+// `--tcp-flags` set other than `--syn`, a negation of anything but a scope or a
+// source port)
 // narrows the rule in a way not modeled here, so the rule reads as absent.
 func iptPortlessCovers(f []string) bool {
 	for i := 2; i < len(f); {
@@ -1261,11 +1237,16 @@ func iptPortlessToken(f []string) int { //nolint:gocyclo // baseline #629
 		return 2 // loopback scopes were rejected before this point
 	case "--tcp-flags": // `--syn` prints as this exact pair
 		return iptIf(len(f) > 2 && v == "FIN,SYN,RST,ACK" && f[2] == "SYN", 3)
-	case "!": // a negated loopback scope or source port leaves every other client open
-		return iptIf(len(f) > 2 && (iptLoopbackScope(v, f[2]) || v == "--sport" || v == "--sports"), 3)
+	case "!": // a negated scope or source port leaves every client outside it open (#743)
+		return iptIf(len(f) > 2 && slices.Contains(iptNegatedOpen, v), 3)
 	}
 	return 0
 }
+
+// iptNegatedOpen are the flags a rule may negate and stay open to every TCP
+// port: a scope, which holds only the clients it names out, and a source port,
+// which the client picks.
+var iptNegatedOpen = []string{"-i", "-s", "-d", "--sport", "--sports"}
 
 func iptIf(ok bool, n int) int {
 	if ok {
