@@ -37,7 +37,7 @@ No PowerShell ran in this change. These are the commands and the output shapes t
 1. `powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; $c = Get-WindowsCapability -Online -Name 'OpenSSH.Server*' | Select-Object -First 1; Write-Output \"state=$($c.State)\""` prints exactly one line `state=Installed` or `state=NotPresent` (any other word, or `state=`, is reported as unreadable). Assumed: the `-Name` wildcard is accepted; an unelevated shell fails with a non-zero exit (Dism requires elevation) instead of printing an empty state.
 2. `sc qc sshd` prints a `BINARY_PATH_NAME   : <path>` line (quoted when it holds spaces, possibly followed by arguments) and contains `AUTO_START` for Automatic (also `AUTO_START (DELAYED)`), `sc query sshd` contains `RUNNING` when running; both fail (exit 1060) when the service does not exist.
 3. `powershell ... -Command "& \"$env:WINDIR\System32\OpenSSH\sshd.exe\" -T; exit $LASTEXITCODE"` exits non-zero without elevation or host keys (a missing sshd.exe is a non-terminating error, so the shell can instead exit 0 with no `port` line; both read as unreadable), and otherwise prints lower-case lines `port 22` and `listenaddress 0.0.0.0:22` (`listenaddress [::]:22` also parses: the port after the last colon). The binary is the one `BINARY_PATH_NAME` names, `%WINDIR%\System32\OpenSSH\sshd.exe` when `sc qc` names none (the capability's path).
-4. `Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP'` finds the rule the capability installs (name, not display name `OpenSSH SSH Server (sshd)`); the read prints `total=<n>` and `exposed=<n>`, where exposed counts rules with `Enabled -eq 'True'`, `Direction -eq 'Inbound'`, `Action -eq 'Allow'`, an address filter `RemoteAddress -eq 'Any'` and a port filter whose `LocalPort` is the declared port or `Any`. Assumed: a stock rule prints `22` in `LocalPort` (a range such as `20-30` is not matched).
+4. `Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP'` finds the rule the capability installs (name, not display name `OpenSSH SSH Server (sshd)`); the read prints `total=<n>` and `exposed=<n>`, where exposed counts rules with `Enabled -eq 'True'`, `Direction -eq 'Inbound'`, `Action -eq 'Allow'`, an address filter whose `RemoteAddress` holds `Any` and a port filter whose `LocalPort` is the declared port, `Any` or a `low-high` range containing it (#781 review). Any error but `ObjectNotFound` stops the read. **Confirmed on the Windows 11 guest, 2026-11-14:** absent `0/0`, `20-30` from any address `1/1`, `2000-3000` `1/0`, `22` scoped to `100.64.0.0/10` `1/0`, `22` from any address `1/1`; a missing name reports category `ObjectNotFound`.
 5. The ssh rule is created and read with the RDP rule's existing scripts under the name `Tailscale-SSH-Ingress`, which `sanitizeFirewallRule` accepts.
 
 ## Decisions made during implementation
@@ -50,3 +50,11 @@ No PowerShell ran in this change. These are the commands and the output shapes t
 ## Review
 
 Not yet reviewed. An independent review (`dotf spec review`, a reviewer from `harness/reviewer-pool.json`) is a precondition of archiving, not of this draft.
+
+## Promotion candidates
+
+Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
+
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/lesson-061-2026-11-14.md` — a read that guards exposure must fail closed and be run against real rules on a guest; a fixture that passes dropped input through can encode the bug.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes: `docs/adr/adr-017-host-desired-state.md` — Amendment B and §5 already record the Windows ssh decisions this spec implemented; nothing new to decide.
+- [x] New pattern candidate for `00_meta/patterns/`? no: fail-closed reads are already the ADR-017 §2 rule; the guest-shape check is ts-bridge's e2e practice.

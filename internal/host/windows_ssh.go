@@ -109,11 +109,29 @@ func serviceBinary(qc string) (bin, args string) {
 			path, after, _ := strings.Cut(rest, `"`)
 			return path, strings.TrimSpace(after)
 		}
-		if i := strings.Index(strings.ToLower(value), ".exe"); i >= 0 {
-			return value[:i+len(".exe")], strings.TrimSpace(value[i+len(".exe"):])
+		if end := unquotedExeEnd(value); end > 0 {
+			return value[:end], strings.TrimSpace(value[end:])
 		}
 	}
 	return "", ""
+}
+
+// unquotedExeEnd is where the executable of an unquoted command line ends: the
+// first ".exe" followed by the end or a space, so a directory such as
+// C:\tools.exelib is not taken for the binary; 0 when there is none.
+func unquotedExeEnd(value string) int {
+	lower := strings.ToLower(value)
+	for from := 0; ; {
+		i := strings.Index(lower[from:], ".exe")
+		if i < 0 {
+			return 0
+		}
+		end := from + i + len(".exe")
+		if end == len(value) || value[end] == ' ' || value[end] == '\t' {
+			return end
+		}
+		from = end
+	}
 }
 
 // sshPortsScript runs sshd -T from bin, or from the capability's path when the

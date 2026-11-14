@@ -416,6 +416,7 @@ func TestWindowsServiceBinary(t *testing.T) {
 		{"quoted, no arguments", "        BINARY_PATH_NAME   : \"C:\\Program Files\\OpenSSH\\sshd.exe\"\r\n", `C:\Program Files\OpenSSH\sshd.exe`, ""},
 		{"unquoted", "        BINARY_PATH_NAME   : C:\\Windows\\System32\\OpenSSH\\sshd.exe\r\n", `C:\Windows\System32\OpenSSH\sshd.exe`, ""},
 		{"unquoted with arguments", "BINARY_PATH_NAME   : C:\\OpenSSH\\SSHD.EXE -D\r\n", `C:\OpenSSH\SSHD.EXE`, "-D"},
+		{"unquoted, .exe inside a directory name", "BINARY_PATH_NAME   : C:\\tools.exelib\\sshd.exe -D\r\n", `C:\tools.exelib\sshd.exe`, "-D"},
 		{"no such line", "START_TYPE         : 2   AUTO_START\r\n", "", ""},
 		{"empty", "", "", ""},
 	}
