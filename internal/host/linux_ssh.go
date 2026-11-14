@@ -98,12 +98,30 @@ const sshDualFix = "run `sudo systemctl disable %[1]s.service`: the socket start
 	"`sudo systemctl disable --now %[1]s.service && sudo systemctl start %[1]s.socket`"
 
 // sshDualStep is the step for a host with the service and its socket both
-// enabled. It is manual in setup and in check: sshd keeps answering, and
-// disabling a unit is the operator's call, never an automatic one.
-func sshDualStep(unit string) SetupStep {
+// enabled. It is manual in setup and in check: disabling a unit is the
+// operator's call, never an automatic one. state says what sshd is doing.
+func sshDualStep(unit, state string) SetupStep {
 	return newStep(sshName, OutcomeManual,
-		fmt.Sprintf("%[1]s.service and %[1]s.socket are both enabled, so sshd also starts outside the socket's activation", unit),
+		fmt.Sprintf("%[1]s.service and %[1]s.socket are both enabled, so sshd also starts outside the socket's activation%s", unit, state),
 		fmt.Sprintf(sshDualFix, unit))
+}
+
+// sshDualSetupStep leaves sshd running where it can: with both units enabled and
+// nothing listening it starts the socket, the model on these releases, and
+// enables nothing and leaves the service alone. The step stays manual for the
+// dual enable either way.
+func sshDualSetupStep(r Runner, unit string, x xrdpState) SetupStep {
+	if x.active {
+		return sshDualStep(unit, "")
+	}
+	if err := r.Run("systemctl", "start", unit+".socket"); err != nil {
+		step := sshDualStep(unit, "")
+		step.Outcome = OutcomeFailed
+		step.Message += fmt.Sprintf(", and sshd is not running: could not start %s.socket: %v", unit, err)
+		step.Fix = fmt.Sprintf("sudo systemctl start %s.socket, then %s", unit, step.Fix)
+		return step
+	}
+	return sshDualStep(unit, fmt.Sprintf("; sshd was not running, so %s.socket was started", unit))
 }
 
 // sshUnit is the step text for the unit read; label names the unit so a host
@@ -128,14 +146,18 @@ func sshSetupSteps(r Runner, port int) []SetupStep {
 
 func sshServerSetupStep(r Runner, unit string, x xrdpState) SetupStep {
 	if x.dual {
-		return sshDualStep(unit)
+		return sshDualSetupStep(r, unit, x)
 	}
 	return sshUnit(unit).setupStep(r, x)
 }
 
 func sshServerCheckStep(unit string, x xrdpState) SetupStep {
 	if x.dual {
-		return sshDualStep(unit)
+		state := ""
+		if !x.active {
+			state = "; sshd is not running"
+		}
+		return sshDualStep(unit, state)
 	}
 	return sshUnit(unit).checkStep(x)
 }

@@ -203,8 +203,14 @@ func TestSetupSSH(t *testing.T) {
 		{"service started by hand, socket disabled: the service is enabled, not displaced", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
 			output: sshUp(sshSocket("disabled", "active", "disabled", "inactive"))},
 			[]string{"SSH server=changed", sshFwName + "=ok", "Tailscale IP=ok"}, []string{"systemctl enable --now ssh"}},
-		{"service enabled and stopped, socket enabled: manual, nothing enabled or disabled (#777)", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+		{"service and socket both enabled and stopped: the socket is started, still manual (#777)", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
 			output: sshUp(sshSocket("enabled", "inactive", "enabled", "inactive"))},
+			[]string{"SSH server=manual", sshFwName + "=ok", "Tailscale IP=ok"}, []string{"systemctl start ssh.socket"}},
+		{"service and socket both enabled, the socket cannot be started: failed (#777)", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(sshSocket("enabled", "inactive", "enabled", "inactive")), fail: map[string]bool{"systemctl start ssh.socket": true}},
+			[]string{"SSH server=failed", sshFwName + "=ok", "Tailscale IP=ok"}, []string{"systemctl start ssh.socket"}},
+		{"service idle, socket enabled and listening: manual, nothing started (#777)", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
+			output: sshUp(sshSocket("enabled", "inactive", "enabled", "active"))},
 			[]string{"SSH server=manual", sshFwName + "=ok", "Tailscale IP=ok"}, nil},
 		{"service enabled and running, socket enabled: manual, never disabled (#777)", sshOnly, &recordingRunner{elevated: true, onPath: sshOnPath,
 			output: sshUp(sshSocket("enabled", "active", "enabled", "active"))},
@@ -313,6 +319,37 @@ func TestSSHDualEnableFixKeepsTheSession(t *testing.T) {
 		if len(ran(r)) > 0 {
 			t.Errorf("check=%t: ran %q, want nothing disabled automatically", check, ran(r))
 		}
+	}
+}
+
+// TestSSHDualEnableStoppedSaysSo pins that setup does not leave sshd down on a
+// host with both units enabled and nothing listening: it starts the socket (the
+// enabled model there) and says so, and check, which is read-only, says sshd is
+// not running. Both stay manual for the dual enable (#777).
+func TestSSHDualEnableStoppedSaysSo(t *testing.T) {
+	newRunner := func() *recordingRunner {
+		return &recordingRunner{elevated: true, onPath: sshOnPath, output: sshUp(sshSocket("enabled", "inactive", "enabled", "inactive"))}
+	}
+	r := newRunner()
+	setup := setupFor("linux", sshOnly, r).Steps[0]
+	if setup.Outcome != OutcomeManual || !strings.Contains(setup.Message, "ssh.socket was started") || !strings.Contains(setup.Message, "both enabled") {
+		t.Errorf("setup step = %s %q, want manual naming the dual enable and the started socket", setup.Outcome, setup.Message)
+	}
+	if got := ran(r); !slices.Equal(got, []string{"systemctl start ssh.socket"}) {
+		t.Errorf("setup ran %q, want only the socket started: nothing enabled, the service untouched", got)
+	}
+	failing := newRunner()
+	failing.fail = map[string]bool{"systemctl start ssh.socket": true}
+	if s := setupFor("linux", sshOnly, failing).Steps[0]; s.Outcome != OutcomeFailed || !strings.Contains(s.Message, "both enabled") || !strings.Contains(s.Fix, "systemctl disable ssh.service") {
+		t.Errorf("failed start step = %s %q fix %q, want failed keeping the dual enable and its fix", s.Outcome, s.Message, s.Fix)
+	}
+	c := newRunner()
+	check := checkFor("linux", sshOnly, c).Steps[1]
+	if check.Outcome != OutcomeManual || !strings.Contains(check.Message, "both enabled") || !strings.Contains(check.Message, "not running") {
+		t.Errorf("check step = %s %q, want manual naming the dual enable and that sshd is not running", check.Outcome, check.Message)
+	}
+	if got := ran(c); len(got) > 0 {
+		t.Errorf("check ran %q", got)
 	}
 }
 
