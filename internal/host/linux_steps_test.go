@@ -2460,6 +2460,8 @@ func TestIP6Jumps(t *testing.T) {
 			note: "a jump INPUT makes under a match ts-bridge does not read: -A INPUT -m addrtype --dst-type LOCAL -j mine", reads: []string{"mine"}},
 		{name: "a jump under an ipset match is an unknown", input: "-A INPUT -m set --match-set allowed src -j mine", chains: map[string]string{"mine": open},
 			note: "a jump INPUT makes under a match ts-bridge does not read: -A INPUT -m set --match-set allowed src -j mine", reads: []string{"mine"}},
+		{name: "a jump naming the port under a mark match is an unknown", input: "-A INPUT -p tcp -m tcp --dport 3389 -m mark --mark 0x1 -j mine", chains: map[string]string{"mine": open},
+			note: "a jump INPUT makes under a match ts-bridge does not read: -A INPUT -p tcp -m tcp --dport 3389 -m mark --mark 0x1 -j mine", reads: []string{"mine"}},
 		{name: "a jump under a mark match to a missing chain is silent", input: "-A INPUT -m mark --mark 0x1 -j LOG", fail: map[string]string{"LOG": missing}, reads: []string{"LOG"}},
 		{name: "a jump under a mark match for another port is not an unknown", input: "-A INPUT -p tcp -m tcp --dport 22 -m mark --mark 0x1 -j mine", chains: map[string]string{"mine": open}},
 		{name: "a jump under a mark match held to one interface is not an unknown", input: "-A INPUT -i eth0 -m mark --mark 0x1 -j mine", chains: map[string]string{"mine": open}},
