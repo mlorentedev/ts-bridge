@@ -246,6 +246,11 @@ func readSSHPorts(r Runner) ([]int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sshd -T: %w", err)
 	}
+	return sshdPorts(out)
+}
+
+// sshdPorts is every port the `sshd -T` output names, on any OS.
+func sshdPorts(out []byte) ([]int, error) {
 	var ports []int
 	for _, line := range strings.Split(string(out), "\n") {
 		if n, ok := sshdPort(line); ok {

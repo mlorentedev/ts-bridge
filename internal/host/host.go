@@ -118,5 +118,5 @@ func IsElevated() bool {
 // SanitizeFirewallRule validates a firewall rule name.
 // Exported for use by cmd/cli/host.go for early validation.
 func SanitizeFirewallRule(name string) (string, error) {
-	return sanitizeFirewallRule(name)
+	return sanitizeRDPRule(name)
 }

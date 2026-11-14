@@ -33,7 +33,10 @@ recipes below register it.
   `host setup` and `host check` retain their stricter OS-step contract: on Linux they
   converge and check `ssh` (#521: the OpenSSH unit, or its `.socket` on a host whose `ssh.socket` is enabled, or where neither unit is enabled and the socket is not masked (#767); its port and a `tailscale0`-scoped
   firewall rule; a missing OpenSSH server is reported `manual`, never installed), and on
-  Windows they reject SSH declarations until that step lands. `host init` still
+  Windows they do the same with the OpenSSH Server capability (read, never installed), the
+  `sshd` service (Automatic, Running), `sshd -T` for a declared port other than 22, and a
+  tailnet-scoped `Tailscale-SSH-Ingress` rule; the installer's own `OpenSSH-Server-In-TCP`
+  rule is reported `manual` while it allows any address, never disabled. `host init` still
   generates an RDP-only file.
 
 ## 1. Write the host file
@@ -144,9 +147,10 @@ curl -s http://127.0.0.1:9099/health/ready
 
 The response lists each declared service and its `published` diagnostic. For an
 RDP-only file, `host check --json --config <path>` can read the same diagnostic.
-It still rejects a combined SSH/RDP file until #521 supplies the SSH OS steps;
-read serve's health endpoint directly for that file instead. Do not remove SSH
-from the file and count the RDP-only result as combined-service acceptance.
+It reads a combined SSH/RDP file on Windows and Linux since #521, and prints one line
+per declared service; serve's health endpoint remains the diagnostic that proves
+publication. Do not remove SSH from the file and count the RDP-only result as
+combined-service acceptance.
 
 `published` is a diagnostic: it trusts a responder that names the file's node,
 which proves the contract, not the process. The tailnet ACL governs who can

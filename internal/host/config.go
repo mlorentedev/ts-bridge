@@ -151,7 +151,7 @@ func LoadConfig() (Config, error) {
 	applyEnv(&cfg)
 
 	// Validate firewall rule name (hard — invalid names can't be sanitized).
-	if _, err := sanitizeFirewallRule(cfg.FirewallRule); err != nil {
+	if _, err := sanitizeRDPRule(cfg.FirewallRule); err != nil {
 		return Config{}, fmt.Errorf("TS_HOST_FIREWALL_RULE invalid: %w", err)
 	}
 
