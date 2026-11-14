@@ -294,7 +294,7 @@ func TestXRDP(t *testing.T) {
 			xrdpState{installed: true, readable: true, enabled: true, active: true}},
 		{"static unit", &recordingRunner{onPath: map[string]bool{"systemctl": true},
 			output: map[string]string{isEnabled: "static\n", isActive: "active\n"}},
-			xrdpState{installed: true, readable: true, enabled: true, active: true}},
+			xrdpState{installed: true, readable: true, enabled: true, active: true, static: true}},
 		{"indirect unit: an answer ts-bridge does not decide on", &recordingRunner{onPath: map[string]bool{"systemctl": true},
 			output: map[string]string{isEnabled: "indirect\n", isActive: "active\n"}},
 			xrdpState{installed: true, active: true, undecided: "indirect"}},
