@@ -35,26 +35,37 @@ func readSSH(r Runner) (string, xrdpState) {
 	return "", xrdpState{}
 }
 
-// withSocket folds the socket into the reading. Where the socket exists, the
-// service sits idle until the first connection while the socket listens, so
-// reading only the service would report drift on a host that answers, and
-// starting the service would leave it running outside the socket's activation.
-// The socket is then the unit to converge and the service is left alone. A
-// socket exists when systemctl reads it (is-enabled answers something other than
-// not-found, and a word ts-bridge interprets); one it cannot read is ignored, as
-// if absent, so those hosts keep the service behavior. A masked service stays
-// masked, and a masked socket is reported, never unmasked.
+// withSocket folds the socket into the reading where the socket is the host's
+// model for sshd. Then the service sits idle until the first connection while the
+// socket listens, so reading only the service would report drift on a host that
+// answers, and starting the service would leave it running outside the socket's
+// activation: the socket is the unit to converge and the service is left alone.
+// A socket exists when systemctl reads it (is-enabled answers something other
+// than not-found, and a word ts-bridge interprets); one it cannot read is
+// ignored, as if absent. A masked service stays masked, and a masked socket is
+// reported, never unmasked.
 func withSocket(r Runner, unit string, x xrdpState) (string, xrdpState) {
 	if !x.readable || x.masked || (x.enabled && x.active) {
 		return unit, x
 	}
 	sock := readUnit(r, unit+".socket", "sshd")
-	if !sock.readable {
+	if !sock.readable || !socketIsModel(x, sock) {
 		return unit, x
 	}
 	x.enabled, x.active = x.enabled || sock.enabled, x.active || sock.active
 	x.masked = sock.masked
 	return unit + ".socket", x
+}
+
+// socketIsModel is whether the socket, not the service, is how the operator runs
+// sshd. Debian 12 and Ubuntu 22.04 and earlier ship ssh.socket disabled beside an
+// enabled ssh.service, and the socket Conflicts= with the service: enabling it
+// there would leave both enabled at boot, and starting it would stop an sshd the
+// operator started by hand. So the socket leads only when it is enabled (static
+// counts) or masked, or when neither unit is enabled and the service is not
+// running, where there is no model to preserve and the socket is the choice (#767).
+func socketIsModel(svc, sock xrdpState) bool {
+	return sock.enabled || sock.masked || (!svc.enabled && !svc.active)
 }
 
 // sshUnit is the step text for the unit read; label names the unit so a host
