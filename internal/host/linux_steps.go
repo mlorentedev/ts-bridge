@@ -123,6 +123,9 @@ func checkRDP(cfg Config, r Runner, port int, result *CheckResult) {
 type xrdpState struct {
 	installed, readable, enabled, active, masked bool
 	undecided                                    string
+	// dual: the ssh service and its socket are both enabled (#777); set only by
+	// withSocket, which reads the socket.
+	dual bool
 }
 
 // readXRDP is readUnit for xrdp.
