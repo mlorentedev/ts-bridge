@@ -121,8 +121,8 @@ func runConnect(cmd *cobra.Command, args []string) error { //nolint:funlen,gocyc
 	// "ts-bridge connect" so the user never has to manually source it.
 	//
 	// Precedence is preserved: CLI flags > explicit env vars > .env > YAML > defaults.
-	// Load() writes into os.Setenv, and the merge chain reads from os.Getenv,
-	// so explicit env vars set before this call still win over .env values.
+	// Load() sets only variables that are not already set, and the merge chain
+	// reads from os.Getenv, so explicit env vars win over .env values (#801).
 	if err := envfile.Load(".env"); err != nil {
 		return fmt.Errorf("load .env: %w", err)
 	}
