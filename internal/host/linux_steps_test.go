@@ -79,7 +79,9 @@ const (
 	ufwActive = "Status: active\n"
 	iptRead   = "iptables -S INPUT"
 	// fwOpenJump sends INPUT to a chain of the operator's own (#762).
-	fwOpenJump  = "-A INPUT -j fw-open\n"
+	fwOpenJump = "-A INPUT -j fw-open\n"
+	// markJump is a jump under a match the jump parser does not model (#766).
+	markJump    = "-A INPUT -m mark --mark 0x1 -j fw-open\n"
 	fwOpenRead  = "iptables -S fw-open"
 	fwOpenAllow = "-A fw-open -p tcp -m tcp --dport 3389 -j ACCEPT\n"
 	iptChain    = "iptables -S ts-input"
@@ -584,6 +586,26 @@ func TestSetupForLinux(t *testing.T) {
 			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output "+fwOpenRead, "output tailscale ip -4"),
 			outcomes: []Outcome{OutcomeOK, OutcomeUnverified, OutcomeOK},
 			message:  fwOpenRead,
+		},
+		{
+			name:     "iptables, the scoped rule in place and a jump under a mark match: unverified (#766)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptScoped + markJump, iptChain: tsInputNoAccept, fwOpenRead: "-N fw-open\n" + fwOpenAllow})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output "+fwOpenRead, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeUnverified, OutcomeOK},
+			message:  strings.TrimSpace(markJump),
+		},
+		{
+			name:     "iptables, the scoped rule written beside a jump under a mark match: unverified (#766)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptEmpty + markJump, iptChain: tsInputNoAccept, fwOpenRead: "-N fw-open\n"})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output "+fwOpenRead, "run "+iptAppend, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeUnverified, OutcomeOK},
+			message:  strings.TrimSpace(markJump),
+		},
+		{
+			name:     "iptables, the scoped rule in place and a jump for replies: ok, nothing probed (#766)",
+			runner:   &recordingRunner{elevated: true, onPath: ipt, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j fw-open\n", iptChain: tsInputNoAccept, fwOpenRead: "-N fw-open\n" + fwOpenAllow})},
+			calls:    append(append([]string{}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output tailscale ip -4"),
+			outcomes: []Outcome{OutcomeOK, OutcomeOK, OutcomeOK},
 		},
 		{
 			name:     "iptables, an accept for every port but SSH is the only allow: scoped rule added, manual (#736 review round 3)",
@@ -1144,6 +1166,51 @@ func TestCheckForLinux(t *testing.T) {
 			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
 			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
 			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		// A jump under a qualifier the parser does not model may take every packet
+		// for the port, so what the chain admits is unknown (#766). A jump it does
+		// model as narrowing stays unread and silent.
+		{
+			name:     "iptables, a jump under a mark match reaches a chain: unverified (#766)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + markJump, iptChain: tsInputNoAccept, fwOpenRead: "-N fw-open\n" + fwOpenAllow})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output "+fwOpenRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  "a jump INPUT makes under a match ts-bridge does not read: " + strings.TrimSpace(markJump),
+		},
+		{
+			name:     "iptables, a jump under a mark match to a missing chain: ok (#766)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + markJump, iptChain: tsInputNoAccept}), exit: map[string]int{fwOpenRead: 1}, stderr: map[string]string{fwOpenRead: "iptables: No chain/target/match by that name.\n"}},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain, "output "+fwOpenRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "iptables, a jump for replies is no unknown: ok (#766)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j fw-open\n", iptChain: tsInputNoAccept, fwOpenRead: "-N fw-open\n" + fwOpenAllow})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "iptables, a mark jump held to another interface is no unknown: ok (#766)",
+			runner:   &recordingRunner{elevated: true, onPath: map[string]bool{"xrdp": true, "systemctl": true, "iptables": true}, output: linuxUp(map[string]string{iptRead: iptScoped + "-A INPUT -i eth0 -m mark --mark 0x1 -j fw-open\n", iptChain: tsInputNoAccept, fwOpenRead: "-N fw-open\n" + fwOpenAllow})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "lookpath iptables", "output "+iptRead, "output "+iptChain),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=ok"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes, FirewallOK: true}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true, FirewallOK: true},
+		},
+		{
+			name:     "ufw host, a jump under a mark match reaches a chain: unverified (#766)",
+			runner:   &recordingRunner{elevated: true, onPath: ufwHost, output: linuxUp(map[string]string{ufwAdded: ufwAddedHeader + ufwScopedAllow, iptRead: ufwHostInput + markJump, iptChain: tsInputNoAccept, fwOpenRead: "-N fw-open\n"})},
+			calls:    append(append([]string{"output tailscale ip -4"}, xrdpReads...), "lookpath ufw", "output "+ufwStatus, "output "+ufwAdded, "lookpath iptables", "output "+iptRead, "output "+iptChain, "output "+fwOpenRead),
+			steps:    []string{"Tailscale IP=ok", "xrdp service=ok", "Firewall configuration=unverified"},
+			services: []Service{{Kind: "rdp", Port: 3389, Enabled: true, Active: &yes}},
+			legacy:   CheckResult{TailscaleIP: "100.64.0.5", TailscaleUp: true, RDPPort: 3389, RDPEnabled: true},
+			message:  strings.TrimSpace(markJump),
 		},
 		{
 			name:     "ufw host, an operator chain that cannot be read: unverified (#762 review)",
@@ -2379,6 +2446,30 @@ func TestIP6Jumps(t *testing.T) {
 		{name: "a port jump held to established replies is not followed", input: "-A INPUT -p tcp -m tcp --dport 3389 -m conntrack --ctstate RELATED,ESTABLISHED -j mine", chains: map[string]string{"mine": open}},
 		{name: "a multiport jump naming the port", input: "-A INPUT -p tcp -m multiport --dports 22,3389 -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
 		{name: "a multiport jump not naming the port", input: "-A INPUT -p tcp -m multiport --dports 22,80 -j mine", chains: map[string]string{"mine": open}},
+		// A jump under a qualifier the parser does not model is an unknown, not a
+		// narrowing: it may take every packet for the port, so a chain that exists
+		// behind it is a note and is not walked (#766). The jumps it does model
+		// as narrowing stay silent.
+		{name: "a jump under a mark match is an unknown", input: "-A INPUT -m mark --mark 0x1 -j mine", chains: map[string]string{"mine": open},
+			note: "a jump INPUT makes under a match ts-bridge does not read: -A INPUT -m mark --mark 0x1 -j mine", reads: []string{"mine"}},
+		{name: "a jump under a limit match is an unknown", input: "-A INPUT -p tcp -m limit --limit 5/s -j mine", chains: map[string]string{"mine": open},
+			note: "a jump INPUT makes under a match ts-bridge does not read: -A INPUT -p tcp -m limit --limit 5/s -j mine", reads: []string{"mine"}},
+		{name: "a jump under a recent list match is an unknown", input: "-A INPUT -m recent --rcheck --seconds 60 -j mine", chains: map[string]string{"mine": open},
+			note: "a jump INPUT makes under a match ts-bridge does not read: -A INPUT -m recent --rcheck --seconds 60 -j mine", reads: []string{"mine"}},
+		{name: "a jump under an address type match is an unknown", input: "-A INPUT -m addrtype --dst-type LOCAL -j mine", chains: map[string]string{"mine": open},
+			note: "a jump INPUT makes under a match ts-bridge does not read: -A INPUT -m addrtype --dst-type LOCAL -j mine", reads: []string{"mine"}},
+		{name: "a jump under an ipset match is an unknown", input: "-A INPUT -m set --match-set allowed src -j mine", chains: map[string]string{"mine": open},
+			note: "a jump INPUT makes under a match ts-bridge does not read: -A INPUT -m set --match-set allowed src -j mine", reads: []string{"mine"}},
+		{name: "a jump naming the port under a mark match is an unknown", input: "-A INPUT -p tcp -m tcp --dport 3389 -m mark --mark 0x1 -j mine", chains: map[string]string{"mine": open},
+			note: "a jump INPUT makes under a match ts-bridge does not read: -A INPUT -p tcp -m tcp --dport 3389 -m mark --mark 0x1 -j mine", reads: []string{"mine"}},
+		{name: "a jump under a mark match to a missing chain is silent", input: "-A INPUT -m mark --mark 0x1 -j LOG", fail: map[string]string{"LOG": missing}, reads: []string{"LOG"}},
+		{name: "a jump under a mark match for another port is not an unknown", input: "-A INPUT -p tcp -m tcp --dport 22 -m mark --mark 0x1 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a jump under a mark match held to one interface is not an unknown", input: "-A INPUT -i eth0 -m mark --mark 0x1 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a jump under a mark match for another protocol is not an unknown", input: "-A INPUT -p udp -m mark --mark 0x1 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a jump under a mark match for replies is not an unknown", input: "-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -m mark --mark 0x1 -j mine", chains: map[string]string{"mine": open}},
+		{name: "a jump under a mark match to a chain walked anyway is no unknown", input: "-A INPUT -m mark --mark 0x1 -j mine\n-A INPUT -j mine", chains: map[string]string{"mine": open}, want: []string{open}, reads: []string{"mine"}},
+		{name: "a jump under a mark match inside a walked chain names that chain", input: "-A INPUT -j ts-input", chains: map[string]string{"ts-input": ip6TSInput + "-A ts-input -m mark --mark 0x1 -j mine", "mine": open},
+			note: "a jump ts-input makes under a match ts-bridge does not read: -A ts-input -m mark --mark 0x1 -j mine", reads: []string{"ts-input", "mine"}},
 		{name: "a chain that cannot be read is a note, INPUT still read", input: ip6Unscoped + "\n-A INPUT -j mine", fail: map[string]string{"mine": noMine}, want: []string{ip6Unscoped},
 			note: "ip6tables -S mine: ", said: "(" + strings.TrimSuffix(noMine, "\n") + ")", reads: []string{"mine"}},
 		// A port-less accept is the operator's posture, in a chain as in INPUT
@@ -2421,6 +2512,50 @@ func TestIP6Jumps(t *testing.T) {
 			}
 			if !slices.Equal(reads, tt.reads) {
 				t.Errorf("chains read = %q, want %q", reads, tt.reads)
+			}
+		})
+	}
+}
+
+// TestIP6JumpUnderUnmodelledMatch pins the step a v6 jump under a match the
+// parser does not model gives (#766): the exposure is unknown, so a converged
+// host reads unverified and firewall_ok is false, as for a v6 chain that
+// cannot be read (#763). A jump held to replies leaves the host ok.
+func TestIP6JumpUnderUnmodelledMatch(t *testing.T) {
+	const probe = "ip6tables -S mine"
+	tests := []struct {
+		name  string
+		jump  string
+		want  Outcome
+		reads bool
+	}{
+		{"a mark match", "-A INPUT -m mark --mark 0x1 -j mine", OutcomeUnverified, true},
+		{"replies only", "-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j mine", OutcomeOK, false},
+		{"another interface", "-A INPUT -i eth0 -j mine", OutcomeOK, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			newRunner := func() *recordingRunner {
+				return &recordingRunner{elevated: true, onPath: map[string]bool{"iptables": true, "ip6tables": true},
+					output: map[string]string{iptRead: iptScoped, iptChain: tsInputNoAccept, ip6Read: ip6Closed + tt.jump + "\n", ip6ChainRead: ip6TSInput, probe: "-N mine\n" + ip6InChain}}
+			}
+			r := newRunner()
+			setup := firewallSetupStep(r, 3389)
+			read := readLinuxFirewall(newRunner(), 3389)
+			check := firewallCheckStep(read, 3389)
+			for _, step := range []SetupStep{setup, check} {
+				if step.Outcome != tt.want {
+					t.Errorf("outcome %v (%q), want %v", step.Outcome, step.Message, tt.want)
+				}
+				if tt.reads && !strings.Contains(step.Message, tt.jump) {
+					t.Errorf("message %q does not name the jump %q", step.Message, tt.jump)
+				}
+			}
+			if got := slices.Contains(r.calls, "output "+probe); got != tt.reads {
+				t.Errorf("read the chain = %v, want %v (calls %v)", got, tt.reads, r.calls)
+			}
+			if got := linuxFirewallOK(read); got != (tt.want == OutcomeOK) {
+				t.Errorf("linuxFirewallOK = %v, want %v", got, tt.want == OutcomeOK)
 			}
 		})
 	}
