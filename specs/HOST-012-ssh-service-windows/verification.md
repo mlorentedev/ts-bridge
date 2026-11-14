@@ -50,3 +50,11 @@ No PowerShell ran in this change. These are the commands and the output shapes t
 ## Review
 
 Not yet reviewed. An independent review (`dotf spec review`, a reviewer from `harness/reviewer-pool.json`) is a precondition of archiving, not of this draft.
+
+## Promotion candidates
+
+Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
+
+- [x] Lesson for the repo's `docs/lessons/`? yes: `docs/lessons/lesson-061-2026-11-14.md` — a read that guards exposure must fail closed and be run against real rules on a guest; a fixture that passes dropped input through can encode the bug.
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? yes: `docs/adr/adr-017-host-desired-state.md` — Amendment B and §5 already record the Windows ssh decisions this spec implemented; nothing new to decide.
+- [x] New pattern candidate for `00_meta/patterns/`? no: fail-closed reads are already the ADR-017 §2 rule; the guest-shape check is ts-bridge's e2e practice.
