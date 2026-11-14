@@ -63,6 +63,21 @@ func TestWindowsReadsReachTheirParsers(t *testing.T) {
 			t.Fatalf("exposed group read: ok=%v outcome=%v, want manual", ok, step.Outcome)
 		}
 	})
+	t.Run("ssh capability", func(t *testing.T) {
+		for state, want := range map[string]bool{"Installed": true, "NotPresent": false} {
+			installed, err := readSSHCapability(scriptRunner{&recordingRunner{}, map[string]string{"state": state}})
+			if err != nil || installed != want {
+				t.Fatalf("state %s read as installed=%v err=%v, want %v", state, installed, err, want)
+			}
+		}
+	})
+	t.Run("ssh installer rule", func(t *testing.T) {
+		r := scriptRunner{&recordingRunner{}, map[string]string{"total": "1", "exposed": "1"}}
+		step, ok := sshInstallerRuleStep(22)(r, SetupStep{Name: sshWinFwName, Outcome: OutcomeOK})
+		if ok || step.Outcome != OutcomeManual {
+			t.Fatalf("exposed installer rule read: ok=%v outcome=%v, want manual", ok, step.Outcome)
+		}
+	})
 	t.Run("rdp deny", func(t *testing.T) {
 		for _, tt := range []struct {
 			name          string

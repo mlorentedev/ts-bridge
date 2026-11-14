@@ -77,7 +77,7 @@ type osCapability struct {
 }
 
 var osCapabilities = map[string]osCapability{
-	goosWindows: {kinds: []string{ServiceRDP}, power: true, firewallRule: true, serve: true, planned: map[string]string{ServiceSSH: "#521"}},
+	goosWindows: {kinds: []string{ServiceRDP, ServiceSSH}, power: true, firewallRule: true, serve: true},
 	goosLinux:   {kinds: []string{ServiceRDP, ServiceSSH}, serve: true},
 	goosDarwin:  {planned: map[string]string{ServiceSSH: "#459", ServiceVNC: "#459"}},
 }

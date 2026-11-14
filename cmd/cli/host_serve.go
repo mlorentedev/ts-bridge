@@ -52,8 +52,8 @@ the host file declares (host.services), each forwarded to 127.0.0.1:<port>
 on this host. Nothing else answers on the node (HOST-008, ADR-017 Amendment A).
 
 On Windows and Linux this includes already-provisioned SSH and RDP services.
-Serve does not configure them. The separate host setup/check commands still
-reject SSH declarations until their OS steps exist (#521).
+Serve does not configure them. The separate host setup/check commands converge
+and check SSH on Windows and Linux (#521) and reject it on macOS until #459.
 
 The host file must declare host.control_url and host.mesh: state_dir keeps the
 node identity (0700 root, or SYSTEM and Administrators on Windows), and
