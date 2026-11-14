@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"ts-bridge/internal/agent"
 	"ts-bridge/internal/config"
 )
 
@@ -144,16 +144,25 @@ func TestBrowserCommandAuthKeyFileErrorHasOnePrefix(t *testing.T) {
 	}
 }
 
-// The default profile lives under the per-user state directory ADR-018
-// resolves, never in the shared temp directory (#803).
+// The browser command's --user-data-dir default lives under the user's own
+// home directory, never in the shared temp directory (#803). It reads the
+// flag the command registers, so it sees the production wiring.
 func TestDefaultBrowserUserDataDirIsPerUser(t *testing.T) {
-	paths, err := agent.DefaultPaths()
+	u, err := user.Current()
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := defaultBrowserUserDataDir()
-	if want := filepath.Join(paths.Base, "browser"); got != want {
-		t.Fatalf("default user-data dir = %q, want %q", got, want)
+	flag := newBrowserCmd().Flags().Lookup("user-data-dir")
+	if flag == nil {
+		t.Fatal("browser has no --user-data-dir flag")
+	}
+	got := flag.DefValue
+	rel, err := filepath.Rel(u.HomeDir, got)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		t.Fatalf("default user-data dir %q is not inside the home directory %q", got, u.HomeDir)
+	}
+	if filepath.Base(got) != "browser" || filepath.Base(filepath.Dir(got)) != "ts-bridge" {
+		t.Fatalf("default user-data dir %q, want <state>/ts-bridge/browser", got)
 	}
 	if strings.HasPrefix(got, os.TempDir()) {
 		t.Fatalf("default user-data dir %q is under the shared temp dir", got)
