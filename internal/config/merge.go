@@ -90,6 +90,9 @@ func Merge(yamlCfg PartialConfig, flags FlagSet) (Config, error) { //nolint:funl
 	if err := validateModeInputs(yamlCfg, flags); err != nil {
 		return Config{}, err
 	}
+	if err := validateNoNegatives(yamlCfg, flags); err != nil {
+		return Config{}, err
+	}
 
 	cfg := defaults()
 	applyYAML(&cfg, yamlCfg)
@@ -247,7 +250,7 @@ func validateDialRetries(flags FlagSet, cfg Config) error {
 // validateIdleTimeout rejects a negative idle timeout.
 //
 // Only the flag layer can produce one: TS_IDLE_TIMEOUT goes through
-// nonNegativeDuration, and the YAML guard is `> 0`. Before #282 the flag guard
+// nonNegativeDuration, and validateNoNegatives refuses a negative idle_timeout. Before #282 the flag guard
 // was `>= 0`, which silently dropped a negative value rather than rejecting it;
 // now that a supplied flag is always applied, the check has to be explicit —
 // otherwise a negative deadline reaches the proxy and expires immediately.
@@ -384,8 +387,8 @@ func applyEnv(cfg *Config) {
 	}
 
 	// Duration fields.
-	applyEnvDuration(&cfg.ConnectTimeout, "TS_TIMEOUT", nil)
-	applyEnvDuration(&cfg.DrainTimeout, "TS_DRAIN_TIMEOUT", nil)
+	applyEnvDuration(&cfg.ConnectTimeout, "TS_TIMEOUT", positiveDuration)
+	applyEnvDuration(&cfg.DrainTimeout, "TS_DRAIN_TIMEOUT", positiveDuration)
 	applyEnvDuration(&cfg.IdleTimeout, "TS_IDLE_TIMEOUT", nonNegativeDuration)
 	applyEnvDuration(&cfg.DialTimeout, "TS_DIAL_TIMEOUT", positiveDuration)
 	applyEnvDuration(&cfg.DialBackoffBase, "TS_DIAL_BACKOFF_BASE", nonNegativeDuration)
