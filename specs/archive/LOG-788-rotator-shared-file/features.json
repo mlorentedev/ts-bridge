@@ -1,0 +1,30 @@
+[
+  {
+    "id": "LOG-788-rotator-shared-file-f1",
+    "behavior": "AC1: closing one rotator leaves the file another rotator writes in place, holding both rotators' lines",
+    "verification": "go test ./internal/logging/ -run '^TestFileRotator_CloseLeavesAPeersFileInPlace$' -count=1",
+    "state": "passing",
+    "evidence": "failed before the fix: the shared day file was gone after one rotator closed"
+  },
+  {
+    "id": "LOG-788-rotator-shared-file-f2",
+    "behavior": "AC2: an existing archive is never truncated or overwritten; a later run of the same day gets its own archive",
+    "verification": "go test ./internal/logging/ -run '^TestCompressDayNeverOverwritesAnArchive$' -count=1",
+    "state": "passing",
+    "evidence": "the original code truncated the archive to the last run (archive = \"run2\\n\")"
+  },
+  {
+    "id": "LOG-788-rotator-shared-file-f3",
+    "behavior": "AC3/AC4: the midnight rollover in Write compresses the past day through the Open path and never today",
+    "verification": "go test ./internal/logging/ -run '^TestFileRotator_MidnightRolloverCompressesThePastDayOnly$' -count=1",
+    "state": "passing",
+    "evidence": "failed before the fix: no archive for yesterday after crossing midnight"
+  },
+  {
+    "id": "LOG-788-rotator-shared-file-f4",
+    "behavior": "AC5: failed compression is retried once stale, never lost; a fresh claim is left alone; concurrent compressions never corrupt; a directory named like a log is ignored",
+    "verification": "go test ./internal/logging/ -run '^(TestFileRotator_FailedCompressionIsRetriedNotLost|TestFileRotator_LeavesAFreshClaimAlone|TestCompressDayConcurrentClaimsNeverCorrupt|TestFileRotator_LeavesADirectoryNamedLikeALog)$' -count=1",
+    "state": "passing",
+    "evidence": "round 2's append design corrupted the archive under concurrency (flate: corrupt input on test-windows); round 3 publishes one archive per compression"
+  }
+]

@@ -9,6 +9,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"ts-bridge/internal/config"
 )
 
 // maxBackoffAttempt caps the shift exponent before 2^attempt would overflow
@@ -24,7 +26,11 @@ type ReconnectDialer struct {
 	MaxRetries  int
 	BaseBackoff time.Duration
 	MaxBackoff  time.Duration
-	Logger      *slog.Logger
+	// AttemptTimeout bounds each attempt on its own (0: only the caller's
+	// context does). Without it a dial that hangs spends the caller's whole
+	// deadline on the first attempt and the retries never run (#805).
+	AttemptTimeout time.Duration
+	Logger         *slog.Logger
 }
 
 var _ Dialer = (*ReconnectDialer)(nil)
@@ -34,7 +40,7 @@ func (r *ReconnectDialer) Dial(ctx context.Context, network, address string) (ne
 	totalAttempts := r.MaxRetries + 1
 
 	for attempt := 0; attempt < totalAttempts; attempt++ {
-		conn, err := r.Inner.Dial(ctx, network, address)
+		conn, err := r.attempt(ctx, network, address)
 		if err == nil {
 			return conn, nil
 		}
@@ -72,6 +78,58 @@ func (r *ReconnectDialer) Dial(ctx context.Context, network, address string) (ne
 	}
 
 	return nil, fmt.Errorf("dial failed after %d attempts: %w", totalAttempts, lastErr)
+}
+
+// attempt is one dial under AttemptTimeout. Its own deadline expiring is a
+// transient failure; only the caller's ctx ending stops the retries.
+func (r *ReconnectDialer) attempt(ctx context.Context, network, address string) (net.Conn, error) {
+	if r.AttemptTimeout <= 0 {
+		return r.Inner.Dial(ctx, network, address)
+	}
+	attemptCtx, cancel := context.WithTimeout(ctx, r.AttemptTimeout)
+	defer cancel()
+	conn, err := r.Inner.Dial(attemptCtx, network, address)
+	if err != nil && attemptCtx.Err() != nil && ctx.Err() == nil {
+		// Cut off by this attempt's own deadline. The cause may look
+		// permanent (a lookup cut short is a *net.DNSError), so mark it.
+		return nil, &attemptTimeoutError{Cause: err}
+	}
+	return conn, err
+}
+
+// attemptTimeoutError is a dial that AttemptTimeout cut off while the
+// caller's context was still live. It is always retryable.
+type attemptTimeoutError struct{ Cause error }
+
+func (e *attemptTimeoutError) Error() string { return "dial attempt timed out: " + e.Cause.Error() }
+func (e *attemptTimeoutError) Unwrap() error { return e.Cause }
+
+// dialBudget is the caller-side deadline for one dial through a
+// ReconnectDialer built from cfg: every attempt's DialTimeout plus the longest
+// backoff (with jitter) before each retry. Zero DialTimeout means no deadline.
+// With the defaults (5s, 3 retries, 1s..30s backoff) it is 30.5s.
+func dialBudget(cfg config.Config) time.Duration {
+	if cfg.DialTimeout <= 0 {
+		return 0
+	}
+	retries := max(cfg.DialRetries, 0)
+	budget := time.Duration(retries+1) * cfg.DialTimeout
+	for i := range retries {
+		budget += maxBackoff(i, cfg.DialBackoffBase, cfg.DialBackoffMax)
+	}
+	return budget
+}
+
+// maxBackoff is the largest wait computeBackoff can return for attempt.
+func maxBackoff(attempt int, base, maxBackoff time.Duration) time.Duration {
+	if base <= 0 {
+		return 0
+	}
+	d := base << min(attempt, maxBackoffAttempt)
+	if d <= 0 || d > maxBackoff {
+		d = maxBackoff
+	}
+	return d + d/2
 }
 
 // computeBackoff returns the wait duration for the given retry attempt with
@@ -119,6 +177,10 @@ func (e *TerminalDialError) Unwrap() error { return e.Cause }
 // The default is "transient" — any unknown error is retried until MaxRetries.
 func isPermanentDialError(err error) bool {
 	if err == nil {
+		return false
+	}
+	var timedOut *attemptTimeoutError
+	if errors.As(err, &timedOut) {
 		return false
 	}
 	var addrErr *net.AddrError

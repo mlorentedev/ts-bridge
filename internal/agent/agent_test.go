@@ -2,7 +2,6 @@ package agent
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -16,12 +15,4 @@ func shortDir(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
-}
-
-// testPaths keeps the lock and the socket in separate directories under one
-// short root, as the defaults do on Linux.
-func testPaths(t *testing.T) Paths {
-	t.Helper()
-	root := shortDir(t)
-	return Paths{Base: filepath.Join(root, "b"), Run: filepath.Join(root, "r")}
 }

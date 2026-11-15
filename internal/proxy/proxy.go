@@ -80,24 +80,7 @@ func isIdleTimeoutErr(err error) bool {
 // cancel is called with a TerminalDialError when tsnet enters an irrecoverable
 // state; nil is safe (disables terminal propagation, used in tests).
 func AcceptLoop(listener net.Listener, dialer Dialer, cfg config.Config, wg *sync.WaitGroup, cancel context.CancelCauseFunc, logger *slog.Logger) error {
-	backoff := backoffMin
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			if errors.Is(err, net.ErrClosed) {
-				return nil
-			}
-
-			logger.Warn("accept error", "error", err, "backoff", backoff)
-			time.Sleep(backoff)
-			backoff = min(backoff*2, backoffMax)
-			continue
-		}
-
-		// Reset backoff on successful accept
-		backoff = backoffMin
-
+	return acceptEach(listener, logger, func(conn net.Conn) {
 		// Atomically claim a connection slot. The CAS loop in TryClaimConnection
 		// closes the check-then-act race where a burst of accepts could each
 		// observe (cur < cap) and all proceed past the limit.
@@ -107,7 +90,7 @@ func AcceptLoop(listener net.Listener, dialer Dialer, cfg config.Config, wg *syn
 				"max", cfg.MaxConnections,
 				"client", conn.RemoteAddr())
 			_ = conn.Close()
-			continue
+			return
 		}
 
 		wg.Add(1)
@@ -118,6 +101,29 @@ func AcceptLoop(listener net.Listener, dialer Dialer, cfg config.Config, wg *syn
 			defer telemetry.AddActiveConnection(-1)
 			handleConn(c, dialer, cfg, cancel, logger)
 		}(conn)
+	})
+}
+
+// acceptEach hands every accepted connection to handle until the listener
+// closes. A failed accept (EMFILE, ENFILE, a transient network error) is
+// logged and retried with exponential backoff rather than ending the loop:
+// the condition clears on its own, and stopping would take the bridge down
+// with it (#804). Both the TCP and the SOCKS5 loops use it.
+func acceptEach(listener net.Listener, logger *slog.Logger, handle func(net.Conn)) error {
+	backoff := backoffMin
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return nil
+			}
+			logger.Warn("accept error", "error", err, "backoff", backoff)
+			time.Sleep(backoff)
+			backoff = min(backoff*2, backoffMax)
+			continue
+		}
+		backoff = backoffMin
+		handle(conn)
 	}
 }
 
@@ -153,12 +159,12 @@ func handleConn(client net.Conn, dialer Dialer, cfg config.Config, cancel contex
 
 	logger.Info("connection opened", "client", addr)
 
-	// DialTimeout is intentionally smaller than ConnectTimeout: ConnectTimeout
-	// covers the one-time tsnet init (control plane handshake, can be slow),
-	// DialTimeout covers each per-connection target dial. With ReconnectDialer
-	// retrying, a large ConnectTimeout would let one stuck client hog a slot
-	// for many minutes; DialTimeout=5s keeps the worst case bounded.
-	ctx, dialCancel := context.WithTimeout(context.Background(), cfg.DialTimeout)
+	// DialTimeout bounds each dial attempt and dialBudget bounds the whole
+	// retried dial, so a blackholed target still gets every retry (#805) while
+	// one stuck client holds a slot for at most the budget (30.5s with the
+	// defaults). ConnectTimeout, the one-time tsnet init, is not used here: it
+	// would let one stuck client hold a slot for minutes.
+	ctx, dialCancel := context.WithTimeout(context.Background(), dialBudget(cfg))
 	defer dialCancel()
 
 	remote, err := dialer.Dial(ctx, "tcp", cfg.Target)

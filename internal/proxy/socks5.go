@@ -95,18 +95,11 @@ func AcceptSOCKS5Loop(
 	if resolve == nil {
 		return fmt.Errorf("SOCKS5 target resolver is required")
 	}
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			if errors.Is(err, net.ErrClosed) {
-				return nil
-			}
-			return fmt.Errorf("accept SOCKS5 connection: %w", err)
-		}
+	return acceptEach(listener, logger, func(conn net.Conn) {
 		if !telemetry.TryClaimConnection(cfg.MaxConnections) {
 			telemetry.AddRejectedConn()
 			_ = conn.Close()
-			continue
+			return
 		}
 		wg.Add(1)
 		go func() {
@@ -118,7 +111,7 @@ func AcceptSOCKS5Loop(
 				logger.Warn("SOCKS5 connection failed", "error", err)
 			}
 		}()
-	}
+	})
 }
 
 func handleSOCKS5Conn( //nolint:funlen,gocyclo // baseline #629
@@ -162,8 +155,8 @@ func handleSOCKS5Conn( //nolint:funlen,gocyclo // baseline #629
 
 	dialContext := context.Background()
 	dialCancel := func() {}
-	if cfg.DialTimeout > 0 {
-		dialContext, dialCancel = context.WithTimeout(dialContext, cfg.DialTimeout)
+	if budget := dialBudget(cfg); budget > 0 {
+		dialContext, dialCancel = context.WithTimeout(dialContext, budget)
 	}
 	defer dialCancel()
 	remote, err := dialer.Dial(dialContext, "tcp", target)
