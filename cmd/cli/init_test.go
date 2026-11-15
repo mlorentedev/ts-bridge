@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -992,5 +993,38 @@ func TestInitWithoutTTYIsActionable(t *testing.T) {
 	// Whatever the output format, a refused init writes nothing.
 	if entries, err := os.ReadDir("."); err != nil || len(entries) != 0 {
 		t.Errorf("working directory after a refused init: %v (err %v), want it empty", entries, err)
+	}
+}
+
+// init --format yaml must write only keys the YAML reader accepts. A port range
+// is not a YAML setting, so it goes to the companion .env as TS_PORT_RANGE,
+// which connect reads (#806).
+func TestWriteYAMLConfig_PortRangeRoundTrips(t *testing.T) {
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "ts-bridge.yaml")
+	f := initFlags{
+		AuthKey: "tskey-auth-test-secret", Target: "100.64.0.1:3389", Format: "yaml",
+		Config: yamlPath, PortRange: "33389-34388", Force: true,
+	}
+	if err := writeYAMLConfig(&cobra.Command{}, f); err != nil {
+		t.Fatalf("writeYAMLConfig: %v", err)
+	}
+
+	var warnings strings.Builder
+	config.SetLogger(slog.New(slog.NewTextHandler(&warnings, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { config.SetLogger(nil) })
+	if _, err := config.LoadYAMLConfig(yamlPath); err != nil {
+		t.Fatalf("LoadYAMLConfig: %v", err)
+	}
+	if warnings.Len() != 0 {
+		t.Errorf("the YAML init wrote is not fully read back: %s", warnings.String())
+	}
+
+	env, err := os.ReadFile(filepath.Join(tmpDir, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(env), "TS_PORT_RANGE=33389-34388\n") {
+		t.Errorf(".env does not carry the port range:\n%s", env)
 	}
 }
