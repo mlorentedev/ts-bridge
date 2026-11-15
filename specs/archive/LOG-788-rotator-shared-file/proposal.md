@@ -1,7 +1,7 @@
 ---
 id: "LOG-788-rotator-shared-file"
 type: spec
-status: verifying # draft | implementing | verifying | archived
+status: archived # draft | implementing | verifying | archived
 created: "2026-11-14"
 issue: "mlorentedev/ts-bridge#788"   # repo#NNN — GitHub issue / Project item that tracks this spec
 tags: [spec, proposal]
