@@ -550,6 +550,13 @@ func TestPrintCheckText_Service(t *testing.T) {
 			notWant: "port 0",
 		},
 		{
+			// No service means no firewall step ran: nothing failed (#797).
+			name:    "no service declared reports no firewall failure",
+			result:  host.CheckResult{},
+			want:    "Firewall:      n/a (no service declared)",
+			notWant: "Firewall:      ✗ NOT OK",
+		},
+		{
 			name: "enabled service reads as ok without elevation",
 			result: host.CheckResult{RDPPort: 3389, RDPEnabled: true, Services: []host.Service{
 				{Kind: host.ServiceRDP, Port: 3389, Enabled: true},

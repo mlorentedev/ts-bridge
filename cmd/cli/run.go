@@ -243,13 +243,7 @@ func runBridge( //nolint:funlen,gocyclo // baseline #629
 
 	tunnelStatus.MarkReady()
 	var activeConns sync.WaitGroup
-	dialer := &proxy.ReconnectDialer{
-		Inner:       server,
-		MaxRetries:  cfg.DialRetries,
-		BaseBackoff: cfg.DialBackoffBase,
-		MaxBackoff:  cfg.DialBackoffMax,
-		Logger:      logger,
-	}
+	dialer := newTargetDialer(cfg, server, logger)
 	var errAccept error
 	if cfg.SOCKS5Addr != "" {
 		resolver, resolveErr := socksTargetResolver(cfg)
@@ -571,4 +565,17 @@ func warnHealthExposure(log *slog.Logger, cfg config.Config) {
 		"addr", cfg.HealthAddr,
 		"endpoints", "/health/live, /health/ready (readiness reason), /metrics (connection counters)",
 		"authentication", "none")
+}
+
+// newTargetDialer retries target dials as cfg configures. AttemptTimeout is
+// cfg.DialTimeout, so a dial that hangs leaves the retries their turn (#805).
+func newTargetDialer(cfg config.Config, inner proxy.Dialer, logger *slog.Logger) *proxy.ReconnectDialer {
+	return &proxy.ReconnectDialer{
+		Inner:          inner,
+		MaxRetries:     cfg.DialRetries,
+		BaseBackoff:    cfg.DialBackoffBase,
+		MaxBackoff:     cfg.DialBackoffMax,
+		AttemptTimeout: cfg.DialTimeout,
+		Logger:         logger,
+	}
 }

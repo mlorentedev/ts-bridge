@@ -9,12 +9,15 @@ import (
 	"crypto/x509/pkix"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"math/big"
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -557,5 +560,54 @@ func assertBytes(t *testing.T, conn net.Conn, want []byte) {
 	}
 	if string(got) != string(want) {
 		t.Fatalf("bytes = %v, want %v", got, want)
+	}
+}
+
+// failOnceListener fails its first Accept with a transient error, as a
+// descriptor-exhausted accept does, then accepts normally.
+type failOnceListener struct {
+	net.Listener
+	failed atomic.Bool
+}
+
+func (l *failOnceListener) Accept() (net.Conn, error) {
+	if l.failed.CompareAndSwap(false, true) {
+		return nil, fmt.Errorf("accept tcp: %w", syscall.EMFILE)
+	}
+	return l.Listener.Accept()
+}
+
+// One failed accept must not stop the SOCKS5 proxy: the loop backs off and
+// keeps serving, as the TCP AcceptLoop does (#804).
+func TestAcceptSOCKS5Loop_SurvivesATransientAcceptError(t *testing.T) {
+	inner, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener := &failOnceListener{Listener: inner}
+	remote, remotePeer := net.Pipe()
+	t.Cleanup(func() { _ = remotePeer.Close() })
+	dialer := &mockDialer{dialFunc: func(context.Context, string, string) (net.Conn, error) { return remote, nil }}
+
+	var wg sync.WaitGroup
+	loopDone := make(chan error, 1)
+	go func() {
+		loopDone <- AcceptSOCKS5Loop(listener, dialer, config.Config{MaxConnections: 1}, directSOCKSTarget,
+			&wg, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}()
+
+	client, err := net.Dial("tcp", inner.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeAll(t, client, []byte{0x05, 0x01, 0x00})
+	assertBytes(t, client, []byte{0x05, 0x00})
+
+	_ = client.Close()
+	_ = remotePeer.Close()
+	_ = listener.Close()
+	wg.Wait()
+	if err := <-loopDone; err != nil {
+		t.Fatalf("AcceptSOCKS5Loop returned %v after a closed listener, want nil", err)
 	}
 }

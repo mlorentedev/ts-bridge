@@ -403,7 +403,9 @@ func TestFileRotatorCleanup_Retention(t *testing.T) {
 	for i := 1; i <= 10; i++ {
 		want = append(want, fmt.Sprintf("ts-bridge-2026-01-%02d.log.gz", i))
 	}
-	want = append(want, "ts-bridge-just-inside-age.log", "ts-bridge-today.log", "unrelated-old.log")
+	// Retention removes archives only: a .log of any age still holds lines
+	// no archive has, so it is compressed, never deleted (#788).
+	want = append(want, "ts-bridge-just-inside-age.log", "ts-bridge-just-outside-age.log", "ts-bridge-today.log", "unrelated-old.log")
 	sort.Strings(want)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("retained files:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

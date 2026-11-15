@@ -617,9 +617,8 @@ func buildYAMLContent(f initFlags) string {
 	if f.Instance != "" {
 		sb.WriteString(fmt.Sprintf("hostname: tsb-%s\n", config.SanitizeHostnameLabel(f.Instance)))
 	}
-	if f.PortRange != "" {
-		sb.WriteString(fmt.Sprintf("port_range: %s\n", f.PortRange))
-	}
+	// A port range is not a YAML setting: buildEnvContent writes it to the
+	// companion .env as TS_PORT_RANGE (#806).
 	return sb.String()
 }
 
@@ -697,6 +696,9 @@ func buildEnvContent(f initFlags, values map[string]string) string {
 	values["TS_TARGET"] = f.Target
 	if f.ControlURL != "" {
 		values["TS_CONTROL_URL"] = f.ControlURL
+	}
+	if f.PortRange != "" {
+		values["TS_PORT_RANGE"] = f.PortRange
 	}
 	delete(values, "TS_AUTHKEY")
 

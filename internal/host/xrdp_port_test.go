@@ -32,6 +32,7 @@ func TestXRDPPortStep(t *testing.T) {
 		{name: "converged on 3390", files: xrdpWith("3390"), declared: 3390, setup: OutcomeOK, check: OutcomeOK, included: true, message: "3390"},
 		{name: "xrdp moved off the declared default", files: xrdpWith("3390"), declared: 3389, setup: OutcomeChanged, check: OutcomeChanged, included: true, written: "port=3389", message: "3389"},
 		{name: "tcp:// form keeps its address", files: xrdpWith("tcp://.:3389"), declared: 3390, setup: OutcomeChanged, check: OutcomeChanged, included: true, written: "port=tcp://.:3390", message: "3390"},
+		{name: "an out-of-range port is not a TCP port", files: xrdpWith("99999"), declared: 99999, setup: OutcomeFailed, check: OutcomeFailed, included: true, message: "99999"},
 		{name: "vsock is not a TCP port", files: xrdpWith("vsock://-1:3389"), declared: 3390, setup: OutcomeFailed, check: OutcomeFailed, included: true, message: "vsock://-1:3389"},
 		{name: "no ini, 3390 declared", declared: 3390, setup: OutcomeFailed, check: OutcomeFailed, included: true, message: xrdpINIPath},
 		// With no [Globals] header there is nowhere to put port=: refuse rather

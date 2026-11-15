@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"ts-bridge/internal/config"
 )
 
 // recordingDialer is a Dialer test double that fails the first failuresBefore
@@ -281,5 +283,86 @@ func TestReconnectDialer_WrappedErrorPreservesInner(t *testing.T) {
 	}
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Errorf("inner error not preserved via errors.Is, got %v", err)
+	}
+}
+
+// hangingDialer blackholes its first hangs dials, as a dial to an offline
+// tailnet peer does: they block until their context ends. Later dials succeed.
+type hangingDialer struct {
+	hangs   int
+	hangErr error // returned by a hung dial instead of ctx.Err(), when set
+	calls   atomic.Int32
+}
+
+func (h *hangingDialer) Dial(ctx context.Context, _, _ string) (net.Conn, error) {
+	if int(h.calls.Add(1)) <= h.hangs {
+		<-ctx.Done()
+		if h.hangErr != nil {
+			return nil, h.hangErr
+		}
+		return nil, ctx.Err()
+	}
+	client, server := net.Pipe()
+	_ = server.Close()
+	return client, nil
+}
+
+// A dial that hangs must use only its own attempt's timeout, so the retries
+// still run inside the caller's budget (#805).
+func TestReconnectDialer_RetriesADialThatHangs(t *testing.T) {
+	inner := &hangingDialer{hangs: 2}
+	d := newReconnectDialer(inner, 3, time.Millisecond, time.Millisecond)
+	d.AttemptTimeout = 50 * time.Millisecond
+
+	cfg := config.Config{DialTimeout: d.AttemptTimeout, DialRetries: 3, DialBackoffBase: time.Millisecond, DialBackoffMax: time.Millisecond}
+	ctx, cancel := context.WithTimeout(context.Background(), dialBudget(cfg))
+	defer cancel()
+	conn, err := d.Dial(ctx, "tcp", "peer:22")
+	if err != nil {
+		t.Fatalf("Dial after two hung attempts: %v (attempts %d)", err, inner.calls.Load())
+	}
+	_ = conn.Close()
+	if got := inner.calls.Load(); got != 3 {
+		t.Fatalf("attempts = %d, want 3", got)
+	}
+}
+
+// A lookup cut off by the attempt's own deadline fails as a *net.DNSError,
+// which is otherwise permanent. While the caller's context is live it must
+// stay retryable, or one slow lookup stops the whole bridge (#815 review).
+func TestReconnectDialer_RetriesALookupCutOffByTheAttemptTimeout(t *testing.T) {
+	inner := &hangingDialer{hangs: 1, hangErr: &net.DNSError{Err: "i/o timeout", Name: "peer", IsTimeout: true}}
+	d := newReconnectDialer(inner, 2, time.Millisecond, time.Millisecond)
+	d.AttemptTimeout = 50 * time.Millisecond
+
+	conn, err := d.Dial(context.Background(), "tcp", "peer:22")
+	if err != nil {
+		t.Fatalf("Dial after a lookup cut off by the attempt timeout: %v (attempts %d)", err, inner.calls.Load())
+	}
+	_ = conn.Close()
+	if got := inner.calls.Load(); got != 2 {
+		t.Fatalf("attempts = %d, want 2", got)
+	}
+}
+
+func TestDialBudgetCoversEveryAttemptAndBackoff(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  config.Config
+		want time.Duration
+	}{
+		{"defaults", config.Config{DialTimeout: 5 * time.Second, DialRetries: 3, DialBackoffBase: time.Second, DialBackoffMax: 30 * time.Second},
+			20*time.Second + 10500*time.Millisecond},
+		{"backoff capped", config.Config{DialTimeout: time.Second, DialRetries: 2, DialBackoffBase: 4 * time.Second, DialBackoffMax: 5 * time.Second},
+			3*time.Second + 6*time.Second + 7500*time.Millisecond},
+		{"no retries", config.Config{DialTimeout: 5 * time.Second}, 5 * time.Second},
+		{"no dial timeout", config.Config{DialRetries: 3, DialBackoffBase: time.Second, DialBackoffMax: time.Second}, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := dialBudget(tt.cfg); got != tt.want {
+				t.Fatalf("dialBudget = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
