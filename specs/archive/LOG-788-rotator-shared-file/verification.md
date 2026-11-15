@@ -38,3 +38,12 @@ The red runs used the old `Close`/`compress` with only the clock seam added, so 
   - the Windows risk text was corrected.
 - The claim is an atomic rename to `<day>.log.<pid>.claimed`, not a lock file, so there is no stale lock to recover. A crash between the claim and the archive leaves the claimed file; the next rotation in any process retries it.
 - `Open` at start-up now compresses every past day left as a `.log`, not only the one a running process held. Before, a day whose process exited was never compressed, only deleted by age.
+
+## Promotion candidates
+
+Answer each line `yes: <path>`, naming the file you promoted, or `no: <reason>`.
+
+- [x] Lesson for the repo's `docs/lessons/`? yes: docs/lessons/lesson-063-2026-11-14.md
+- [x] ADR-worthy decision for the repo's `docs/adr/adr-XXX.md`? no: ADR-018 (Logs) already decides that a process never removes a file another process writes; this spec implements it.
+- [x] New pattern candidate for `00_meta/patterns/`? no: write-once publication of a shared artifact is established practice, and one occurrence here is not a cross-project recurrence.
+
