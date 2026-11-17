@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
 
 	"ts-bridge/internal/browser"
 	"ts-bridge/internal/config"
@@ -21,7 +23,7 @@ func RunBrowser(cfg config.Config, options BrowserOptions) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = pacServer.Shutdown(context.Background()) }()
+	defer closePACServer(pacServer)
 
 	if options.UserDataDir == "" {
 		return fmt.Errorf("no default browser profile directory could be resolved; pass --user-data-dir")
@@ -49,4 +51,14 @@ func RunBrowser(cfg config.Config, options BrowserOptions) error {
 		}
 		return nil
 	})
+}
+
+// closePACServer stops the PAC server within a bound: a browser that holds a
+// request open must not hang the exit, so a late Shutdown falls back to Close.
+func closePACServer(server *http.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if server.Shutdown(ctx) != nil {
+		_ = server.Close()
+	}
 }
