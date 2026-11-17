@@ -130,3 +130,24 @@ func scale(ds []time.Duration) []time.Duration {
 	}
 	return out
 }
+
+// When ctx ends while the tunnel has also exited, select picks either branch at
+// random. Both must close the tunnel, or its SOCKS listener stays open.
+func TestSupervisor_ClosesTheTunnelWhenCtxAndExitRace(t *testing.T) {
+	for i := range 200 {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		tunnel := newFakeTunnel()
+		tunnel.exit()
+		s := &Supervisor{
+			Start:     func(context.Context) (Tunnel, error) { return nil, errors.New("unused") },
+			Readiness: &fakeReadiness{},
+			OnExit:    func(error) {},
+			Base:      time.Millisecond, Max: time.Millisecond,
+		}
+		s.Run(ctx, tunnel)
+		if !tunnel.closed {
+			t.Fatalf("run %d: Run returned without closing the exited tunnel", i)
+		}
+	}
+}
