@@ -57,6 +57,9 @@ func (s *Supervisor) Run(ctx context.Context, running Tunnel) {
 		case <-running.Done():
 		}
 		if ctx.Err() != nil {
+			// ctx ended while the tunnel had also exited: select may take this
+			// branch, and the exited tunnel still holds its SOCKS listener.
+			_ = running.Close()
 			return
 		}
 		s.OnExit(fmt.Errorf("SSH bootstrap exited: %v", running.Err()))
