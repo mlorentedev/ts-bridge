@@ -178,6 +178,9 @@ func StartPACServer(address, pac string) (*http.Server, string, error) {
 	server := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       pacReadTimeout,
+		WriteTimeout:      pacReadTimeout,
+		IdleTimeout:       time.Minute,
 	}
 	go func() {
 		_ = server.Serve(listener)
@@ -283,3 +286,7 @@ func validatePACListener(address string) error {
 	}
 	return nil
 }
+
+// pacReadTimeout bounds how long one PAC request may take to arrive, body
+// included. A var so a test can shorten it.
+var pacReadTimeout = 10 * time.Second

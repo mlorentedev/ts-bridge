@@ -57,6 +57,9 @@ func StartServerWithReport(addr string, status *TunnelStatus, report Report, log
 		Addr:              addr,
 		Handler:           Handler(status, report),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       serverReadTimeout,
+		WriteTimeout:      serverReadTimeout,
+		IdleTimeout:       time.Minute,
 	}
 
 	go func() {
@@ -107,3 +110,7 @@ func Handler(status *TunnelStatus, report Report) http.Handler {
 
 	return mux
 }
+
+// serverReadTimeout bounds how long one request may take to arrive, body
+// included. A var so a test can shorten it.
+var serverReadTimeout = 10 * time.Second
