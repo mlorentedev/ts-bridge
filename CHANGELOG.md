@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.1.0](https://github.com/mlorentedev/ts-bridge/compare/v2.0.0...v2.1.0) (2026-11-18)
+
+
+### Features
+
+* **agent:** serve the local API over a per-user named pipe on Windows ([#800](https://github.com/mlorentedev/ts-bridge/issues/800)) ([e2bbb75](https://github.com/mlorentedev/ts-bridge/commit/e2bbb759f56ec838da60ba9c9387ff48f14cc47e))
+
+
+### Bug Fixes
+
+* **browser:** keep the default profile in the per-user state directory ([#812](https://github.com/mlorentedev/ts-bridge/issues/812)) ([74aefb7](https://github.com/mlorentedev/ts-bridge/commit/74aefb709ce99373289f8129fb8bd4d8ffc560c2))
+* **config:** keep TS_* variables set in the environment over .env ([#809](https://github.com/mlorentedev/ts-bridge/issues/809)) ([6258d68](https://github.com/mlorentedev/ts-bridge/commit/6258d6899c3f6cc0f9ca81d37df30f39462284b0))
+* **config:** refuse negative flag and YAML values, validate TS_TIMEOUT ([#819](https://github.com/mlorentedev/ts-bridge/issues/819)) ([0bd370b](https://github.com/mlorentedev/ts-bridge/commit/0bd370b10e16cd6e1ce8152b391c4e277666b58a))
+* **host:** refuse a port outside 1..65535 from --port and xrdp.ini ([#810](https://github.com/mlorentedev/ts-bridge/issues/810)) ([45f7ba2](https://github.com/mlorentedev/ts-bridge/commit/45f7ba2ce80487ba179da57f6ac669d52de7b488))
+* **host:** stop reporting the firewall as failed when no service is declared ([#798](https://github.com/mlorentedev/ts-bridge/issues/798)) ([1693014](https://github.com/mlorentedev/ts-bridge/commit/169301444135ac42c6e5606833e9ce130807de22))
+* **logging:** never compress a day another process is still writing ([#816](https://github.com/mlorentedev/ts-bridge/issues/816)) ([281fbea](https://github.com/mlorentedev/ts-bridge/commit/281fbea9413d657d1a9152539468de5330a5d673))
+* **proxy:** give each dial attempt its own timeout so retries run ([#815](https://github.com/mlorentedev/ts-bridge/issues/815)) ([965441a](https://github.com/mlorentedev/ts-bridge/commit/965441aa76a6fcb2994ff3e87b81c18036acdd40))
+* **proxy:** keep the SOCKS5 server accepting after a transient accept error ([#813](https://github.com/mlorentedev/ts-bridge/issues/813)) ([19fca18](https://github.com/mlorentedev/ts-bridge/commit/19fca18be17a261cb53f1a16ba9aa4500b62124f))
+* **serve:** close the exited tunnel when shutdown races the bootstrap exit ([#824](https://github.com/mlorentedev/ts-bridge/issues/824)) ([0dd93c3](https://github.com/mlorentedev/ts-bridge/commit/0dd93c378eb83f195718a23e987a2c261031d675))
+
 ## [2.0.0](https://github.com/mlorentedev/ts-bridge/compare/v1.20.0...v2.0.0) (2026-11-14)
 
 
