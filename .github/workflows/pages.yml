@@ -21,4 +21,4 @@ jobs:
       contents: read
       pages: write
       id-token: write
-    uses: mlorentedev/ci-workflows/.github/workflows/pages.yml@2355330358344bb08c0b7a305be4ed6488f23d0c # v0.6.0
+    uses: mlorentedev/ci-workflows/.github/workflows/pages.yml@fb5c58afa4249e5a0dd911bd443be1f361415d80 # v0.9.0
